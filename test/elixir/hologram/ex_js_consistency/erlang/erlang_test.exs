@@ -2082,10 +2082,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "float_to_binary/2" do
-    test ":short option" do
-      assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
-    end
-
     test "raises ArgumentError if the first argument is not a float" do
       assert_error ArgumentError, build_argument_error_msg(1, "not a float"), fn ->
         :erlang.float_to_binary(123, [:short])
@@ -2094,14 +2090,150 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a list"), fn ->
-        :erlang.float_to_binary(1.0, 123)
+        :erlang.float_to_binary(7.12, 123)
       end
     end
 
     test "raises ArgumentError if the second argument is not a proper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
-        :erlang.float_to_binary(1.0, [{:decimals, 4} | :compact])
+        :erlang.float_to_binary(7.12, [{:decimals, 4} | :compact])
       end
+    end
+
+    test "raises ArgumentError if the second argument has invalid option in list" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [:abc])
+      end
+    end
+
+    test "raises ArgumentError if scientific option is not an integer" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:scientific, "abc"}])
+      end
+    end
+
+    test "raises ArgumentError if decimals option is not an integer" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:decimals, "abc"}])
+      end
+    end
+
+    test "raises ArgumentError if decimals option is less than zero" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:decimals, -1}])
+      end
+    end
+
+    test "default format - input > 1" do
+      assert :erlang.float_to_binary(7000.12, []) == "7.00011999999999989086e+03"
+    end
+
+    test "default format - input < 1" do
+      assert :erlang.float_to_binary(0.099, []) == "9.90000000000000046629e-02"
+    end
+
+    test "default format - input is positive zero" do
+      assert :erlang.float_to_binary(+0.0, []) == "0.00000000000000000000e+00"
+    end
+
+    test "default format - input is negative zero" do
+      assert :erlang.float_to_binary(-0.0, []) == "-0.00000000000000000000e+00"
+    end
+
+    test ":short format - input > 1" do
+      assert :erlang.float_to_binary(7.12, [:short]) == "7.12"
+    end
+
+    test ":short format - input < 1" do
+      assert :erlang.float_to_binary(0.099, [:short]) == "0.099"
+    end
+
+    test ":short format - input is positive zero" do
+      assert :erlang.float_to_binary(+0.0, [:short]) == "0.0"
+    end
+
+    test ":short format - input is negative zero" do
+      assert :erlang.float_to_binary(-0.0, [:short]) == "-0.0"
+    end
+
+    test ":decimals format - preserve trailing zeroes in whole number part" do
+      assert :erlang.float_to_binary(7000.12, [{:decimals, 0}]) == "7000"
+    end
+
+    test ":decimals format - input > 1" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}]) == "7.1200"
+    end
+
+    test ":decimals format - input < 1" do
+      assert :erlang.float_to_binary(0.099, [{:decimals, 4}]) == "0.0990"
+    end
+
+    test ":decimals format - input is positive zero" do
+      assert :erlang.float_to_binary(+0.0, [{:decimals, 4}]) == "0.0000"
+    end
+
+    test ":decimals format - input is negative zero" do
+      assert :erlang.float_to_binary(-0.0, [{:decimals, 4}]) == "-0.0000"
+    end
+
+    test "compact :decimals format - input > 1" do
+      x = 7.12
+      expected = "7.12"
+      assert :erlang.float_to_binary(x, [{:decimals, 4}, :compact]) == expected
+      assert :erlang.float_to_binary(x, [:compact, {:decimals, 4}]) == expected
+    end
+
+    test "compact :decimals format - input < 1" do
+      x = 0.099
+      expected = "0.099"
+      assert :erlang.float_to_binary(x, [{:decimals, 4}, :compact]) == expected
+      assert :erlang.float_to_binary(x, [:compact, {:decimals, 4}]) == expected
+    end
+
+    test "compact :decimals format - input is positive zero" do
+      x = +0.0
+      expected = "0.0"
+      assert :erlang.float_to_binary(x, [{:decimals, 4}, :compact]) == expected
+      assert :erlang.float_to_binary(x, [:compact, {:decimals, 4}]) == expected
+    end
+
+    test "compact :decimals format - input is negative zero" do
+      x = -0.0
+      expected = "-0.0"
+      assert :erlang.float_to_binary(x, [{:decimals, 4}, :compact]) == expected
+      assert :erlang.float_to_binary(x, [:compact, {:decimals, 4}]) == expected
+    end
+
+    test ":scientific format - input > 1 to positive digits of precision" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}]) == "7.120e+00"
+    end
+
+    test ":scientific format - input < 1 to positive digits of precision" do
+      assert :erlang.float_to_binary(0.099, [{:scientific, 3}]) == "9.900e-02"
+    end
+
+    test ":scientific format - input > 1 to negative digits of precision" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, -3}]) == "7.120000e+00"
+    end
+
+    test ":scientific format - input < 1 to negative digits of precision" do
+      assert :erlang.float_to_binary(0.099, [{:scientific, -3}]) == "9.900000e-02"
+    end
+
+    test ":scientific format - input is positive zero to positive digits of precision" do
+      assert :erlang.float_to_binary(+0.0, [{:scientific, 3}]) == "0.000e+00"
+    end
+
+    test ":scientific format - input is negative zero to positive digits of precision" do
+      assert :erlang.float_to_binary(-0.0, [{:scientific, 3}]) == "-0.000e+00"
+    end
+
+    test ":scientific format - input is positive zero to negative digits of precision" do
+      assert :erlang.float_to_binary(+0.0, [{:scientific, -3}]) == "0.000000e+00"
+    end
+
+    test ":scientific format - input is negative zero to negative digits of precision" do
+      assert :erlang.float_to_binary(-0.0, [{:scientific, -3}]) == "-0.000000e+00"
     end
   end
 

@@ -695,17 +695,85 @@ const Erlang = {
       );
     }
 
-    // TODO: implement other options
-    if (
-      opts.data.length != 1 ||
-      !Interpreter.isStrictlyEqual(opts.data[0], Type.atom("short"))
-    ) {
-      throw new HologramInterpreterError(
-        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
-      );
+    let decimals = null;
+    let scientific = 20; // erlang default
+    let isCompact = false;
+    let isShort = false;
+
+    // Parse options
+    for (const opt of opts.data) {
+      if (Interpreter.isStrictlyEqual(opt, Type.atom("short"))) {
+        isShort = true;
+      } else if (Interpreter.isStrictlyEqual(opt, Type.atom("compact"))) {
+        isCompact = true;
+      } else if (Type.isTuple(opt) && opt.data.length === 2) {
+        const key = opt.data[0];
+        const value = opt.data[1];
+        if (
+          Interpreter.isStrictlyEqual(key, Type.atom("decimals")) &&
+          Type.isInteger(value) &&
+          value.value >= 0n
+        ) {
+          decimals = Number(value.value);
+        } else if (
+          Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
+          Type.isInteger(value)
+        ) {
+          scientific = Number(value.value);
+        } else {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+          );
+        }
+      } else {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      }
     }
 
-    return Type.bitstring(float.value.toString());
+    // Check if we have negative zero (JavaScript preserves signed zero)
+    const isNegativeZero = Object.is(float.value, -0);
+
+    let result;
+
+    if (isShort) {
+      // For :short format, Erlang uses exponential notation for |x| < 0.001 or |x| >= 1e21
+      const absVal = Math.abs(float.value);
+      if ((absVal > 0 && absVal < 0.001) || absVal >= 1e21) {
+        // Use exponential notation with maximum precision to match Erlang
+        result = float.value.toExponential();
+        // Remove trailing zeros after decimal point
+        result = result.replace(/(\.\d*?)0+e/, "$1e").replace(/\.e/, "e");
+      } else {
+        result = float.value.toString();
+        // For zero values with :short format, ensure we get "0.0" not "0"
+        if (result === "0") {
+          result = "0.0";
+        }
+      }
+    } else if (decimals !== null) {
+      result = float.value.toFixed(decimals);
+      if (isCompact && decimals > 0) {
+        result = result.replace(/0+$/, "").replace(/\.$/, ".0");
+      }
+    } else {
+      // For negative scientific, Erlang uses fixed precision of 6 decimal places
+      // (as per Erlang/OTP behavior for distinguishing floating point values)
+      const precision = scientific < 0 ? 6 : scientific;
+      result = float.value.toExponential(precision);
+      // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
+      // JavaScript may use e+0, e-4, so we need to pad the exponent
+      result = result.replace(/e([+-])(\d)$/, "e$10$2");
+    }
+
+    // Preserve negative zero sign if needed
+    // JavaScript's toString/toFixed/toExponential lose the sign of -0, so we restore it
+    if (isNegativeZero && !result.startsWith("-")) {
+      result = "-" + result;
+    }
+
+    return Type.bitstring(result);
   },
   // End float_to_binary/2
   // Deps: []
