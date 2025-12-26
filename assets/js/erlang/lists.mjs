@@ -195,7 +195,7 @@ const Erlang_Lists = {
       return tuples;
     }
 
-    const sorted = tuples.data.sort((tuple1, tuple2) =>
+    const sorted = tuples.data.toSorted((tuple1, tuple2) =>
       Interpreter.compareTerms(
         Erlang["element/2"](index, tuple1),
         Erlang["element/2"](index, tuple2),
@@ -205,7 +205,7 @@ const Erlang_Lists = {
     return Type.list(sorted);
   },
   // End keysort/2
-  // Depts: [:erlang.member/2]
+  // Deps: [:erlang.element/2]
 
   // Start map/2
   "map/2": function (fun, list) {
