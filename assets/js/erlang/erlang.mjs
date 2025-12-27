@@ -828,9 +828,10 @@ const Erlang = {
     }
 
     // Erlang enforces a 256-byte buffer limit for the result
-    if (result.length > 256) {
+    // Native Erlang reports this as "2nd argument: invalid option in list"
+    if (result.length >= 256) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "float value out of range"),
+        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
       );
     }
 

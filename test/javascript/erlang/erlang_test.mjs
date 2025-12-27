@@ -3462,6 +3462,14 @@ describe("Erlang", () => {
         assert.deepStrictEqual(result, expected);
       });
 
+      it("input is negative", () => {
+        const input = Type.float(-inputBetween1And10.value);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("-3.3333333333333335");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
       it("decimal is shorter than exponential", () => {
         // 0.001: Decimal "0.001" (5 chars) vs Exponential "1.0e-3" (6 chars) → decimal wins
         const input = Type.float(0.001);
@@ -3610,6 +3618,45 @@ describe("Erlang", () => {
 
         assert.deepStrictEqual(result, expected);
       });
+
+      it("accepts compact option with decimals 0", () => {
+        const opts = Type.list([
+          Type.atom("compact"),
+          Type.tuple([Type.atom("decimals"), Type.integer(0)]),
+        ]);
+
+        const result = float_to_binary(Type.float(128.0), opts);
+        const expected = Type.bitstring("128");
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
+
+    it("allows result with exactly 255 bytes (boundary condition)", () => {
+      // Test boundary: 1.0 with decimals=253 → "1." + 253 zeros = 255 chars (allowed)
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(253)]),
+      ]);
+
+      const result = float_to_binary(Type.float(1.0), opts);
+
+      assert.strictEqual(result.text.length, 255);
+      assert.strictEqual(result.text, "1." + "0".repeat(253));
+    });
+
+    it("raises ArgumentError if result exceeds 255-byte buffer limit", () => {
+      // Native Erlang enforces a 256-byte buffer limit (result must be < 256) but reports it as
+      // "2nd argument: invalid option in list" rather than a clearer error message
+      // Test boundary: 10.0 with decimals=253 → "10." + 253 zeros = 256 chars (not allowed)
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(253)]),
+      ]);
+
+      assertBoxedError(
+        () => float_to_binary(Type.float(10.0), opts),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+      );
     });
 
     describe("args type validation", () => {

@@ -2364,6 +2364,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.float_to_binary(0.0, [:short]) == "0.0"
     end
 
+    test ":short option, input is negative" do
+      assert :erlang.float_to_binary(-@input_between_1_and_10, [:short]) ==
+               "-3.3333333333333335"
+    end
+
     test ":short option, decimal is shorter than exponential" do
       # 0.001: Decimal "0.001" (5 chars) vs Exponential "1.0e-3" (6 chars) → decimal wins
       assert :erlang.float_to_binary(0.001, [:short]) == "0.001"
@@ -2441,6 +2446,29 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test ":compact option, order of options doesn't matter" do
       assert :erlang.float_to_binary(128.5, [{:decimals, 4}, :compact]) == "128.5"
+    end
+
+    test ":compact option, accepts compact option with decimals 0" do
+      assert :erlang.float_to_binary(128.0, [:compact, {:decimals, 0}]) == "128"
+    end
+
+    test "allows result with exactly 255 bytes (boundary condition)" do
+      # Test boundary: 1.0 with decimals=253 → "1." + 253 zeros = 255 chars (allowed)
+      result = :erlang.float_to_binary(1.0, [{:decimals, 253}])
+
+      assert String.length(result) == 255
+      assert result == "1." <> String.duplicate("0", 253)
+    end
+
+    test "raises ArgumentError if result exceeds 255-byte buffer limit" do
+      # Native Erlang enforces a 256-byte buffer limit (result must be < 256) but reports it as
+      # "2nd argument: invalid option in list" rather than a clearer error message
+      # Test boundary: 10.0 with decimals=253 → "10." + 253 zeros = 256 chars (not allowed)
+      expected_msg = build_argument_error_msg(2, "invalid option in list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.float_to_binary(10.0, [{:decimals, 253}])
+      end
     end
 
     test "raises ArgumentError if the first argument is not a float" do
