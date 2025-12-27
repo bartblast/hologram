@@ -3324,6 +3324,28 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("multiple formats - use last format {:scientific}", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+      ]);
+      const result = float_to_binary(Type.float(7.12), opts);
+      const expected = Type.bitstring("7.120e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple formats - use last format {:decimals}", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
+      const result = float_to_binary(Type.float(7.12), opts);
+      const expected = Type.bitstring("7.1200");
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("floor/1", () => {

@@ -699,6 +699,7 @@ const Erlang = {
     let scientific = 20; // erlang default
     let isCompact = false;
     let isShort = false;
+    let lastFormatOption = null; // Track which format option was set last
 
     // Parse options
     for (const opt of opts.data) {
@@ -716,12 +717,14 @@ const Erlang = {
           value.value <= 253n
         ) {
           decimals = Number(value.value);
+          lastFormatOption = "decimals";
         } else if (
           Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
           Type.isInteger(value) &&
           value.value <= 249n
         ) {
           scientific = Number(value.value);
+          lastFormatOption = "scientific";
         } else {
           Interpreter.raiseArgumentError(
             Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
@@ -754,7 +757,8 @@ const Erlang = {
           result = "0.0";
         }
       }
-    } else if (decimals !== null) {
+    } else if (lastFormatOption === "decimals") {
+      // Use decimals format (when decimals was the last format option set)
       // JavaScript's toFixed() has a limit of 100, but Erlang allows up to 253.
       // For values > 100, we use toFixed(100) and manually pad with zeros.
       if (decimals > 100) {
@@ -769,6 +773,7 @@ const Erlang = {
         result = result.replace(/0+$/, "").replace(/\.$/, ".0");
       }
     } else {
+      // Use scientific format (default or when scientific was the last format option set)
       // For negative scientific, Erlang uses fixed precision of 6 decimal places
       // (as per Erlang/OTP behavior for distinguishing floating point values)
       const precision = scientific < 0 ? 6 : scientific;
