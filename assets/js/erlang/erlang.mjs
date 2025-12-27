@@ -740,18 +740,48 @@ const Erlang = {
     let result;
 
     if (isShort) {
-      // For :short format, Erlang uses exponential notation for |x| < 0.001 or |x| >= 1e21
       const absVal = Math.abs(float.value);
-      if ((absVal > 0 && absVal < 0.001) || absVal >= 1e21) {
-        // Use exponential notation with maximum precision to match Erlang
+
+      // For values >= 2^53, always use exponential notation
+      // 2^53 = 9007199254740992 is the point where JavaScript loses integer precision
+      if (absVal >= 9_007_199_254_740_992) {
         result = float.value.toExponential();
-        // Remove trailing zeros after decimal point
-        result = result.replace(/(\.\d*?)0+e/, "$1e").replace(/\.e/, "e");
+        // Format exponent: remove + sign (e.g., e+15 → e15), keep - sign as-is
+        result = result.replace(/e\+/, "e");
       } else {
-        result = float.value.toString();
-        // For zero values with :short format, ensure we get "0.0" not "0"
-        if (result === "0") {
-          result = "0.0";
+        // For values < 2^53, compare character counts of decimal vs exponential
+        // and choose the shorter representation (decimal wins ties per Erlang spec)
+        let decimalResult = float.value.toString();
+
+        // For zero values, ensure we get "0.0" not "0"
+        if (decimalResult === "0") {
+          decimalResult = "0.0";
+        }
+
+        // For large integers without decimal point, add ".0" for proper format
+        if (
+          absVal >= 1 &&
+          !decimalResult.includes(".") &&
+          !decimalResult.includes("e")
+        ) {
+          decimalResult += ".0";
+        }
+
+        // Generate exponential representation (JavaScript's default keeps significant digits)
+        let expResult = float.value.toExponential();
+        // Ensure mantissa has at least one decimal digit (e.g., "9e-4" → "9.0e-4")
+        // This matches Erlang's comparison behavior for short mode
+        if (!expResult.match(/\./)) {
+          expResult = expResult.replace(/e/, ".0e");
+        }
+        // Format exponent: remove + sign (e.g., e+4 → e4), keep - sign as-is
+        expResult = expResult.replace(/e\+/, "e");
+
+        // Choose the representation with fewer characters (decimal wins ties)
+        if (expResult.length < decimalResult.length) {
+          result = expResult;
+        } else {
+          result = decimalResult;
         }
       }
     } else if (decimals !== null) {

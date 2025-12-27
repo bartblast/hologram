@@ -2364,6 +2364,44 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.float_to_binary(0.0, [:short]) == "0.0"
     end
 
+    test ":short option, decimal is shorter than exponential" do
+      # 0.001: Decimal "0.001" (5 chars) vs Exponential "1.0e-3" (6 chars) → decimal wins
+      assert :erlang.float_to_binary(0.001, [:short]) == "0.001"
+    end
+
+    test ":short option, exponential is shorter than decimal" do
+      # 0.00099: Decimal "0.00099" (7 chars) vs Exponential "9.9e-4" (6 chars) → exponential wins
+      assert :erlang.float_to_binary(0.00099, [:short]) == "9.9e-4"
+    end
+
+    test ":short option, tie - decimal wins" do
+      # 0.0009: Decimal "0.0009" (6 chars) vs Exponential "9.0e-4" (6 chars) → decimal wins tie
+      assert :erlang.float_to_binary(0.0009, [:short]) == "0.0009"
+    end
+
+    test ":short option, value at 2^53 boundary uses exponential" do
+      # 2^53 = 9_007_199_254_740_992
+      assert :erlang.float_to_binary(9_007_199_254_740_992.0, [:short]) == "9.007199254740992e15"
+    end
+
+    test ":short option, value below 2^53 boundary uses decimal" do
+      # 2^53 - 1 = 9_007_199_254_740_991
+      assert :erlang.float_to_binary(9_007_199_254_740_991.0, [:short]) ==
+               "9007199254740991.0"
+    end
+
+    test ":short option, value at -2^53 boundary uses exponential" do
+      # -2^53 = -9_007_199_254_740_992
+      assert :erlang.float_to_binary(-9_007_199_254_740_992.0, [:short]) ==
+               "-9.007199254740992e15"
+    end
+
+    test ":short option, value above -2^53 boundary uses decimal" do
+      # -2^53 + 1 = -9_007_199_254_740_991
+      assert :erlang.float_to_binary(-9_007_199_254_740_991.0, [:short]) ==
+               "-9007199254740991.0"
+    end
+
     test ":compact option, input > 10, infinite" do
       assert :erlang.float_to_binary(@input_above_10, [:compact, {:decimals, 4}]) == "333.3333"
     end

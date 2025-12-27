@@ -3461,6 +3461,69 @@ describe("Erlang", () => {
 
         assert.deepStrictEqual(result, expected);
       });
+
+      it("decimal is shorter than exponential", () => {
+        // 0.001: Decimal "0.001" (5 chars) vs Exponential "1.0e-3" (6 chars) → decimal wins
+        const input = Type.float(0.001);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("0.001");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("exponential is shorter than decimal", () => {
+        // 0.00099: Decimal "0.00099" (7 chars) vs Exponential "9.9e-4" (6 chars) → exponential wins
+        const input = Type.float(0.00099);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("9.9e-4");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("tie - decimal wins", () => {
+        // 0.0009: Decimal "0.0009" (6 chars) vs Exponential "9.0e-4" (6 chars) → decimal wins tie
+        const input = Type.float(0.0009);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("0.0009");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("value at 2^53 boundary uses exponential", () => {
+        // 2^53 = 9_007_199_254_740_992
+        const input = Type.float(9_007_199_254_740_992.0);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("9.007199254740992e15");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("value below 2^53 boundary uses decimal", () => {
+        // 2^53 - 1 = 9_007_199_254_740_991
+        const input = Type.float(9_007_199_254_740_991.0);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("9007199254740991.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("value at -2^53 boundary uses exponential", () => {
+        // -2^53 = -9_007_199_254_740_992
+        const input = Type.float(-9_007_199_254_740_992.0);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("-9.007199254740992e15");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("value above -2^53 boundary uses decimal", () => {
+        // -2^53 + 1 = -9_007_199_254_740_991
+        const input = Type.float(-9_007_199_254_740_991.0);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("-9007199254740991.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
 
     describe(":compact option", () => {
