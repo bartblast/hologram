@@ -772,7 +772,20 @@ const Erlang = {
       // For negative scientific, Erlang uses fixed precision of 6 decimal places
       // (as per Erlang/OTP behavior for distinguishing floating point values)
       const precision = scientific < 0 ? 6 : scientific;
-      result = float.value.toExponential(precision);
+      // JavaScript's toExponential() has a limit of 100, but Erlang allows up to 249.
+      // For values > 100, we use toExponential(100) and manually pad with zeros.
+      if (precision > 100) {
+        result = float.value.toExponential(100);
+        // Extract mantissa and exponent parts
+        const [mantissa, exponent] = result.split("e");
+        // Count current digits after decimal point
+        const currentDigits = mantissa.split(".")[1].length;
+        // Add the remaining zeros needed
+        const additionalZeros = precision - currentDigits;
+        result = mantissa + "0".repeat(additionalZeros) + "e" + exponent;
+      } else {
+        result = float.value.toExponential(precision);
+      }
       // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
       // JavaScript may use e+0, e-4, so we need to pad the exponent
       result = result.replace(/e([+-])(\d)$/, "e$10$2");
