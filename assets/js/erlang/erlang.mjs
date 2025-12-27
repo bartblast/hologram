@@ -695,8 +695,14 @@ const Erlang = {
       );
     }
 
+    const SHORT_EXPONENTIAL_THRESHOLD = 9_007_199_254_740_992.0; // 2^53 - Erlang always uses exponential notation at this boundary
+    const JS_PRECISION_LIMIT = 100; // Max precision for toFixed() and toExponential()
+    const ERLANG_BUFFER_LIMIT = 256;
+    const ERLANG_DEFAULT_SCIENTIFIC = 20;
+    const FIXED_PRECISION_FOR_NEGATIVE = 6;
+
     let decimals = null;
-    let scientific = 20; // erlang default
+    let scientific = ERLANG_DEFAULT_SCIENTIFIC;
     let isCompact = false;
     let isShort = false;
 
@@ -704,29 +710,35 @@ const Erlang = {
     for (const opt of opts.data) {
       if (Interpreter.isStrictlyEqual(opt, Type.atom("short"))) {
         isShort = true;
-      } else if (Interpreter.isStrictlyEqual(opt, Type.atom("compact"))) {
+        continue;
+      }
+
+      if (Interpreter.isStrictlyEqual(opt, Type.atom("compact"))) {
         isCompact = true;
-      } else if (Type.isTuple(opt) && opt.data.length === 2) {
-        const key = opt.data[0];
-        const value = opt.data[1];
-        if (
-          Interpreter.isStrictlyEqual(key, Type.atom("decimals")) &&
-          Type.isInteger(value) &&
-          value.value >= 0n &&
-          value.value <= 253n
-        ) {
-          decimals = Number(value.value);
-        } else if (
-          Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
-          Type.isInteger(value) &&
-          value.value <= 249n
-        ) {
-          scientific = Number(value.value);
-        } else {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-          );
-        }
+        continue;
+      }
+
+      if (!Type.isTuple(opt) || opt.data.length !== 2) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      }
+
+      const [key, value] = opt.data;
+
+      if (
+        Interpreter.isStrictlyEqual(key, Type.atom("decimals")) &&
+        Type.isInteger(value) &&
+        value.value >= 0n &&
+        value.value <= 253n
+      ) {
+        decimals = Number(value.value);
+      } else if (
+        Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
+        Type.isInteger(value) &&
+        value.value <= 249n
+      ) {
+        scientific = Number(value.value);
       } else {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
@@ -742,24 +754,19 @@ const Erlang = {
     if (isShort) {
       const absVal = Math.abs(float.value);
 
-      // For values >= 2^53, always use exponential notation
-      // 2^53 = 9007199254740992 is the point where JavaScript loses integer precision
-      if (absVal >= 9_007_199_254_740_992) {
+      if (absVal >= SHORT_EXPONENTIAL_THRESHOLD) {
+        // For values >= 2^53, always use exponential notation per Erlang spec
         result = float.value.toExponential();
-        // Format exponent: remove + sign (e.g., e+15 → e15), keep - sign as-is
-        result = result.replace(/e\+/, "e");
       } else {
         // For values < 2^53, compare character counts of decimal vs exponential
         // and choose the shorter representation (decimal wins ties per Erlang spec)
+
         let decimalResult = float.value.toString();
 
-        // For zero values, ensure we get "0.0" not "0"
+        // Ensure decimal point exists for proper float format
         if (decimalResult === "0") {
           decimalResult = "0.0";
-        }
-
-        // For large integers without decimal point, add ".0" for proper format
-        if (
+        } else if (
           absVal >= 1 &&
           !decimalResult.includes(".") &&
           !decimalResult.includes("e")
@@ -767,57 +774,54 @@ const Erlang = {
           decimalResult += ".0";
         }
 
-        // Generate exponential representation (JavaScript's default keeps significant digits)
         let expResult = float.value.toExponential();
+
         // Ensure mantissa has at least one decimal digit (e.g., "9e-4" → "9.0e-4")
-        // This matches Erlang's comparison behavior for short mode
-        if (!expResult.match(/\./)) {
+        if (!expResult.includes(".")) {
           expResult = expResult.replace(/e/, ".0e");
         }
-        // Format exponent: remove + sign (e.g., e+4 → e4), keep - sign as-is
-        expResult = expResult.replace(/e\+/, "e");
 
         // Choose the representation with fewer characters (decimal wins ties)
-        if (expResult.length < decimalResult.length) {
-          result = expResult;
-        } else {
-          result = decimalResult;
-        }
+        result =
+          expResult.length < decimalResult.length ? expResult : decimalResult;
+      }
+
+      // Format exponent: remove + sign (e.g., e+15 → e15), keep - sign as-is
+      if (result.includes("e")) {
+        result = result.replace(/e\+/, "e");
       }
     } else if (decimals !== null) {
       // JavaScript's toFixed() has a limit of 100, but Erlang allows up to 253.
       // For values > 100, we use toFixed(100) and manually pad with zeros.
-      if (decimals > 100) {
-        result = float.value.toFixed(100);
-        // Add the remaining zeros needed
-        const additionalZeros = decimals - 100;
+      if (decimals > JS_PRECISION_LIMIT) {
+        result = float.value.toFixed(JS_PRECISION_LIMIT);
+        const additionalZeros = decimals - JS_PRECISION_LIMIT;
         result = result + "0".repeat(additionalZeros);
       } else {
         result = float.value.toFixed(decimals);
       }
+
       if (isCompact && decimals > 0) {
         result = result.replace(/0+$/, "").replace(/\.$/, ".0");
       }
     } else {
       // For negative scientific, Erlang uses fixed precision of 6 decimal places
-      // (as per Erlang/OTP behavior for distinguishing floating point values)
-      const precision = scientific < 0 ? 6 : scientific;
+      const precision =
+        scientific < 0 ? FIXED_PRECISION_FOR_NEGATIVE : scientific;
+
       // JavaScript's toExponential() has a limit of 100, but Erlang allows up to 249.
       // For values > 100, we use toExponential(100) and manually pad with zeros.
-      if (precision > 100) {
-        result = float.value.toExponential(100);
-        // Extract mantissa and exponent parts
+      if (precision > JS_PRECISION_LIMIT) {
+        result = float.value.toExponential(JS_PRECISION_LIMIT);
         const [mantissa, exponent] = result.split("e");
-        // Count current digits after decimal point
         const currentDigits = mantissa.split(".")[1].length;
-        // Add the remaining zeros needed
         const additionalZeros = precision - currentDigits;
         result = mantissa + "0".repeat(additionalZeros) + "e" + exponent;
       } else {
         result = float.value.toExponential(precision);
       }
+
       // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
-      // JavaScript may use e+0, e-4, so we need to pad the exponent
       result = result.replace(/e([+-])(\d)$/, "e$10$2");
     }
 
@@ -828,8 +832,7 @@ const Erlang = {
     }
 
     // Erlang enforces a 256-byte buffer limit for the result
-    // Native Erlang reports this as "2nd argument: invalid option in list"
-    if (result.length >= 256) {
+    if (result.length >= ERLANG_BUFFER_LIMIT) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
       );
