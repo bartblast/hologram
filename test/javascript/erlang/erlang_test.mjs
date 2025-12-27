@@ -2948,381 +2948,646 @@ describe("Erlang", () => {
   describe("float_to_binary/2", () => {
     const float_to_binary = Erlang["float_to_binary/2"];
 
-    it("raises ArgumentError if the first argument is not a float", () => {
-      assertBoxedError(
-        () =>
-          float_to_binary(Type.integer(123), Type.list([Type.atom("short")])),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a float"),
-      );
+    const inputAbove10 = Type.float(1000 / 3);
+    const inputBetween1And10 = Type.float(10 / 3);
+    const inputBelow1 = Type.float(1 / 30);
+
+    const input128 = Type.float(128.0);
+    const input2 = Type.float(2.0);
+    const input05 = Type.float(0.5);
+    const input00625 = Type.float(0.0625);
+
+    const positiveZero = Type.float(+0.0);
+    const negativeZero = Type.float(-0.0);
+    const unsignedZero = Type.float(0.0);
+
+    // default format is equivalent to [{:scientific, 20}]
+    describe("default format", () => {
+      const opts = Type.list();
+
+      it("input > 10, padding not needed", () => {
+        const result = float_to_binary(inputAbove10, opts);
+        const expected = Type.bitstring("3.33333333333333314386e+02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input > 10, padding needed", () => {
+        const result = float_to_binary(input128, opts);
+        const expected = Type.bitstring("1.28000000000000000000e+02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, padding not needed", () => {
+        const result = float_to_binary(inputBetween1And10, opts);
+        const expected = Type.bitstring("3.33333333333333348136e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, padding needed", () => {
+        const result = float_to_binary(input2, opts);
+        const expected = Type.bitstring("2.00000000000000000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, padding not needed", () => {
+        const result = float_to_binary(inputBelow1, opts);
+        const expected = Type.bitstring("3.33333333333333328707e-02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, padding needed", () => {
+        const result = float_to_binary(input00625, opts);
+        const expected = Type.bitstring("6.25000000000000000000e-02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed positive zero", () => {
+        const result = float_to_binary(positiveZero, opts);
+        const expected = Type.bitstring("0.00000000000000000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed negative zero", () => {
+        const result = float_to_binary(negativeZero, opts);
+        const expected = Type.bitstring("-0.00000000000000000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is unsigned zero", () => {
+        const result = float_to_binary(unsignedZero, opts);
+        const expected = Type.bitstring("0.00000000000000000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is negative", () => {
+        const input = Type.float(-inputBetween1And10.value);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("-3.33333333333333348136e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
 
-    it("raises ArgumentError if the second argument is not a list", () => {
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), Type.integer(123)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a list"),
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not a proper list", () => {
-      const opts = Type.improperList([
+    describe(":decimals option", () => {
+      const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-        Type.atom("compact"),
       ]);
 
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), opts),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
-      );
+      it("input > 10, padding not needed", () => {
+        const result = float_to_binary(inputAbove10, opts);
+        const expected = Type.bitstring("333.3333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input > 10, padding needed", () => {
+        const result = float_to_binary(input128, opts);
+        const expected = Type.bitstring("128.0000");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, padding not needed", () => {
+        const result = float_to_binary(inputBetween1And10, opts);
+        const expected = Type.bitstring("3.3333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, padding needed", () => {
+        const result = float_to_binary(input2, opts);
+        const expected = Type.bitstring("2.0000");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, padding not needed", () => {
+        const result = float_to_binary(inputBelow1, opts);
+        const expected = Type.bitstring("0.0333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, padding needed", () => {
+        const result = float_to_binary(input05, opts);
+        const expected = Type.bitstring("0.5000");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed positive zero", () => {
+        const result = float_to_binary(positiveZero, opts);
+        const expected = Type.bitstring("0.0000");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed negative zero", () => {
+        const result = float_to_binary(negativeZero, opts);
+        const expected = Type.bitstring("-0.0000");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is unsigned zero", () => {
+        const result = float_to_binary(unsignedZero, opts);
+        const expected = Type.bitstring("0.0000");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is negative", () => {
+        const input = Type.float(-inputBetween1And10.value);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("-3.3333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("accepts option value 0 (the min allowed value)", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.integer(0)]),
+        ]);
+
+        const result = float_to_binary(Type.float(123.45), opts);
+        const expected = Type.bitstring("123");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("accepts option value 253 (the max allowed value)", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.integer(253)]),
+        ]);
+
+        const result = float_to_binary(inputBelow1, opts);
+
+        const expected = Type.bitstring(
+          "0.033333333333333332870740406406184774823486804962158203125" +
+            "0".repeat(196),
+        );
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("raises ArgumentError if option is not an integer", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.float(1.23)]),
+        ]);
+
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, opts),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      });
+
+      it("raises ArgumentError if option is less than zero", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.integer(-1)]),
+        ]);
+
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, opts),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      });
+
+      it("raises ArgumentError if option is greater than 253", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.integer(254)]),
+        ]);
+
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, opts),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      });
     });
 
-    it("raises ArgumentError if the second argument has invalid option in list", () => {
-      const opts = Type.list([Type.atom("abc")]);
-
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), opts),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-      );
-    });
-
-    it("raises ArgumentError if scientific option is not an integer", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.bitstring("abc")]),
+    describe(":scientific option", () => {
+      const optsPositive = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
       ]);
 
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), opts),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-      );
-    });
-
-    it("raises ArgumentError if decimals option is not an integer", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.bitstring("abc")]),
+      const optsZero = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(0)]),
       ]);
 
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), opts),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-      );
-    });
-
-    it("raises ArgumentError if decimals option is less than zero", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(-1)]),
+      const optsNegative = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(-4)]),
       ]);
 
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), opts),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-      );
+      it("positive option value, input > 10, padding not needed", () => {
+        const result = float_to_binary(inputAbove10, optsPositive);
+        const expected = Type.bitstring("3.3333e+02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input > 10, padding needed", () => {
+        const result = float_to_binary(input128, optsPositive);
+        const expected = Type.bitstring("1.2800e+02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input between 1 and 10, padding not needed", () => {
+        const result = float_to_binary(inputBetween1And10, optsPositive);
+        const expected = Type.bitstring("3.3333e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input between 1 and 10, padding needed", () => {
+        const result = float_to_binary(input2, optsPositive);
+        const expected = Type.bitstring("2.0000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input < 1, padding not needed", () => {
+        const result = float_to_binary(inputBelow1, optsPositive);
+        const expected = Type.bitstring("3.3333e-02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input < 1, padding needed", () => {
+        const result = float_to_binary(input00625, optsPositive);
+        const expected = Type.bitstring("6.2500e-02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input is signed positive zero", () => {
+        const result = float_to_binary(positiveZero, optsPositive);
+        const expected = Type.bitstring("0.0000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input is signed negative zero", () => {
+        const result = float_to_binary(negativeZero, optsPositive);
+        const expected = Type.bitstring("-0.0000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input is unsigned zero", () => {
+        const result = float_to_binary(unsignedZero, optsPositive);
+        const expected = Type.bitstring("0.0000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive option value, input is negative", () => {
+        const input = Type.float(-inputBetween1And10.value);
+        const result = float_to_binary(input, optsPositive);
+        const expected = Type.bitstring("-3.3333e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("zero option value, input > 10", () => {
+        const result = float_to_binary(inputAbove10, optsZero);
+        const expected = Type.bitstring("3e+02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("zero option value, input between 1 and 10", () => {
+        const result = float_to_binary(inputBetween1And10, optsZero);
+        const expected = Type.bitstring("3e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("zero option value, input < 1", () => {
+        const result = float_to_binary(inputBelow1, optsZero);
+        const expected = Type.bitstring("3e-02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input > 10, padding not needed", () => {
+        const result = float_to_binary(inputAbove10, optsNegative);
+        const expected = Type.bitstring("3.333333e+02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input > 10, padding needed", () => {
+        const result = float_to_binary(input128, optsNegative);
+        const expected = Type.bitstring("1.280000e+02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input between 1 and 10, padding not needed", () => {
+        const result = float_to_binary(inputBetween1And10, optsNegative);
+        const expected = Type.bitstring("3.333333e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input between 1 and 10, padding needed", () => {
+        const result = float_to_binary(input2, optsNegative);
+        const expected = Type.bitstring("2.000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input < 1, padding not needed", () => {
+        const result = float_to_binary(inputBelow1, optsNegative);
+        const expected = Type.bitstring("3.333333e-02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input < 1, padding needed", () => {
+        const result = float_to_binary(input00625, optsNegative);
+        const expected = Type.bitstring("6.250000e-02");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input is signed positive zero", () => {
+        const result = float_to_binary(positiveZero, optsNegative);
+        const expected = Type.bitstring("0.000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input is signed negative zero", () => {
+        const result = float_to_binary(negativeZero, optsNegative);
+        const expected = Type.bitstring("-0.000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input is unsigned zero", () => {
+        const result = float_to_binary(unsignedZero, optsNegative);
+        const expected = Type.bitstring("0.000000e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative option value, input is negative", () => {
+        const input = Type.float(-inputBetween1And10.value);
+        const result = float_to_binary(input, optsNegative);
+        const expected = Type.bitstring("-3.333333e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("accepts option value 249 (the max allowed value)", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("scientific"), Type.integer(249)]),
+        ]);
+
+        const result = float_to_binary(inputBetween1And10, opts);
+
+        const expected = Type.bitstring(
+          "3.333333333333333481363069950020872056484222412109375" +
+            "0".repeat(198) +
+            "e+00",
+        );
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("raises ArgumentError if option is not an integer", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("scientific"), Type.float(1.23)]),
+        ]);
+
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, opts),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      });
+
+      it("raises ArgumentError if option is greater than 249", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("scientific"), Type.integer(250)]),
+        ]);
+
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, opts),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      });
     });
 
-    it("raises ArgumentError if decimals option is greater than 253", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(254)]),
-      ]);
-
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), opts),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-      );
-    });
-
-    it("raises ArgumentError if scientific option is greater than 249", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(250)]),
-      ]);
-
-      assertBoxedError(
-        () => float_to_binary(Type.float(7.12), opts),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
-      );
-    });
-
-    it("default format - input > 1", () => {
-      const opts = Type.list([]);
-      const result = float_to_binary(Type.float(7000.12), opts);
-      const expected = Type.bitstring("7.00011999999999989086e+03");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("default format - input < 1", () => {
-      const opts = Type.list([]);
-      const result = float_to_binary(Type.float(0.099), opts);
-      const expected = Type.bitstring("9.90000000000000046629e-02");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("default format - input is positive zero", () => {
-      const opts = Type.list([]);
-      const result = float_to_binary(Type.float(+0.0), opts);
-      const expected = Type.bitstring("0.00000000000000000000e+00");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("default format - input is negative zero", () => {
-      const opts = Type.list([]);
-      const result = float_to_binary(Type.float(-0.0), opts);
-      const expected = Type.bitstring("-0.00000000000000000000e+00");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":short format - input > 1", () => {
+    describe(":short option", () => {
       const opts = Type.list([Type.atom("short")]);
-      const result = float_to_binary(Type.float(7.12), opts);
-      const expected = Type.bitstring("7.12");
 
-      assert.deepStrictEqual(result, expected);
+      it("input > 10, infinite", () => {
+        const result = float_to_binary(inputAbove10, opts);
+        const expected = Type.bitstring("333.3333333333333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input > 10, finite", () => {
+        const input = Type.float(128.5);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("128.5");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, infinite", () => {
+        const result = float_to_binary(inputBetween1And10, opts);
+        const expected = Type.bitstring("3.3333333333333335");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, finite", () => {
+        const input = Type.float(8.5);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("8.5");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, infinite", () => {
+        const result = float_to_binary(inputBelow1, opts);
+        const expected = Type.bitstring("0.03333333333333333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, finite", () => {
+        const input = Type.float(0.25);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("0.25");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed positive zero", () => {
+        const result = float_to_binary(positiveZero, opts);
+        const expected = Type.bitstring("0.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed negative zero", () => {
+        const result = float_to_binary(negativeZero, opts);
+        const expected = Type.bitstring("-0.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is unsigned zero", () => {
+        const result = float_to_binary(unsignedZero, opts);
+        const expected = Type.bitstring("0.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
 
-    it(":short format - input < 1", () => {
-      const opts = Type.list([Type.atom("short")]);
-      const result = float_to_binary(Type.float(0.099), opts);
-      const expected = Type.bitstring("0.099");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":short format - input is positive zero", () => {
-      const opts = Type.list([Type.atom("short")]);
-      const result = float_to_binary(Type.float(+0.0), opts);
-      const expected = Type.bitstring("0.0");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":short format - input is negative zero", () => {
-      const opts = Type.list([Type.atom("short")]);
-      const result = float_to_binary(Type.float(-0.0), opts);
-      const expected = Type.bitstring("-0.0");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":decimals format - preserve trailing zeroes in whole number part", () => {
+    describe(":compact option", () => {
       const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(0)]),
-      ]);
-      const result = float_to_binary(Type.float(7000.12), opts);
-      const expected = Type.bitstring("7000");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":decimals format - input > 1", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-      ]);
-      const result = float_to_binary(Type.float(7.12), opts);
-      const expected = Type.bitstring("7.1200");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":decimals format - input < 1", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-      ]);
-      const result = float_to_binary(Type.float(0.099), opts);
-      const expected = Type.bitstring("0.0990");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":decimals format - input is positive zero", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-      ]);
-      const result = float_to_binary(Type.float(+0.0), opts);
-      const expected = Type.bitstring("0.0000");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":decimals format - input is negative zero", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-      ]);
-      const result = float_to_binary(Type.float(-0.0), opts);
-      const expected = Type.bitstring("-0.0000");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":decimals format - decimals > 100 (manual padding)", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(150)]),
-      ]);
-      const result = float_to_binary(Type.float(1.5), opts);
-      // Should be "1.5" followed by 149 zeros
-      const expected = Type.bitstring("1.5" + "0".repeat(149));
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("compact :decimals format - input > 1", () => {
-      const x = Type.float(7.12);
-      const opts1 = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-        Type.atom("compact"),
-      ]);
-      const opts2 = Type.list([
         Type.atom("compact"),
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
       ]);
-      const result1 = float_to_binary(x, opts1);
-      const result2 = float_to_binary(x, opts2);
-      const expected = Type.bitstring("7.12");
 
-      assert.deepStrictEqual(result1, expected);
-      assert.deepStrictEqual(result2, expected);
+      it("input > 10, infinite", () => {
+        const result = float_to_binary(inputAbove10, opts);
+        const expected = Type.bitstring("333.3333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input > 10, finite", () => {
+        const input = Type.float(128.5);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("128.5");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, infinite", () => {
+        const result = float_to_binary(inputBetween1And10, opts);
+        const expected = Type.bitstring("3.3333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input between 1 and 10, finite", () => {
+        const input = Type.float(8.5);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("8.5");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, infinite", () => {
+        const result = float_to_binary(inputBelow1, opts);
+        const expected = Type.bitstring("0.0333");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input < 1, finite", () => {
+        const input = Type.float(0.25);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("0.25");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed positive zero", () => {
+        const result = float_to_binary(positiveZero, opts);
+        const expected = Type.bitstring("0.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is signed negative zero", () => {
+        const result = float_to_binary(negativeZero, opts);
+        const expected = Type.bitstring("-0.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("input is unsigned zero", () => {
+        const result = float_to_binary(unsignedZero, opts);
+        const expected = Type.bitstring("0.0");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("order of options doesn't matter", () => {
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+          Type.atom("compact"),
+        ]);
+
+        const input = Type.float(128.5);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("128.5");
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
 
-    it("compact :decimals format - input < 1", () => {
-      const x = Type.float(0.099);
-      const opts1 = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-        Type.atom("compact"),
-      ]);
-      const opts2 = Type.list([
-        Type.atom("compact"),
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-      ]);
-      const result1 = float_to_binary(x, opts1);
-      const result2 = float_to_binary(x, opts2);
-      const expected = Type.bitstring("0.099");
+    describe("args type validation", () => {
+      it("raises ArgumentError if the first argument is not a float", () => {
+        const opts = Type.list([Type.atom("short")]);
 
-      assert.deepStrictEqual(result1, expected);
-      assert.deepStrictEqual(result2, expected);
-    });
+        assertBoxedError(
+          () => float_to_binary(integer123, opts),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a float"),
+        );
+      });
 
-    it("compact :decimals format - input is positive zero", () => {
-      const x = Type.float(+0.0);
-      const opts1 = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-        Type.atom("compact"),
-      ]);
-      const opts2 = Type.list([
-        Type.atom("compact"),
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-      ]);
-      const result1 = float_to_binary(x, opts1);
-      const result2 = float_to_binary(x, opts2);
-      const expected = Type.bitstring("0.0");
+      it("raises ArgumentError if the second argument is not a list", () => {
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, integer123),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a list"),
+        );
+      });
 
-      assert.deepStrictEqual(result1, expected);
-      assert.deepStrictEqual(result2, expected);
-    });
+      it("raises ArgumentError if the second argument is not a proper list", () => {
+        const opts = Type.improperList([
+          Type.atom("compact"),
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        ]);
 
-    it("compact :decimals format - input is negative zero", () => {
-      const x = Type.float(-0.0);
-      const opts1 = Type.list([
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-        Type.atom("compact"),
-      ]);
-      const opts2 = Type.list([
-        Type.atom("compact"),
-        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-      ]);
-      const result1 = float_to_binary(x, opts1);
-      const result2 = float_to_binary(x, opts2);
-      const expected = Type.bitstring("-0.0");
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, opts),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+        );
+      });
 
-      assert.deepStrictEqual(result1, expected);
-      assert.deepStrictEqual(result2, expected);
-    });
-
-    it(":scientific format - input > 1 to positive digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
-      ]);
-      const result = float_to_binary(Type.float(7.12), opts);
-      const expected = Type.bitstring("7.120e+00");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":scientific format - input < 1 to positive digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
-      ]);
-      const result = float_to_binary(Type.float(0.099), opts);
-      const expected = Type.bitstring("9.900e-02");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":scientific format - input > 1 to negative digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
-      ]);
-      const result = float_to_binary(Type.float(7.12), opts);
-      const expected = Type.bitstring("7.120000e+00");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":scientific format - input < 1 to negative digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
-      ]);
-      const result = float_to_binary(Type.float(0.099), opts);
-      const expected = Type.bitstring("9.900000e-02");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":scientific format - input is positive zero to positive digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
-      ]);
-      const result = float_to_binary(Type.float(+0.0), opts);
-      const expected = Type.bitstring("0.000e+00");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":scientific format - input is negative zero to positive digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
-      ]);
-      const result = float_to_binary(Type.float(-0.0), opts);
-      const expected = Type.bitstring("-0.000e+00");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":scientific format - input is positive zero to negative digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
-      ]);
-      const result = float_to_binary(Type.float(+0.0), opts);
-      const expected = Type.bitstring("0.000000e+00");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it(":scientific format - input is negative zero to negative digits of precision", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
-      ]);
-      const result = float_to_binary(Type.float(-0.0), opts);
-      const expected = Type.bitstring("-0.000000e+00");
-
-      assert.deepStrictEqual(result, expected);
+      it("raises ArgumentError if the second argument has invalid option in list", () => {
+        assertBoxedError(
+          () => float_to_binary(inputAbove10, Type.list([atomAbc])),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      });
     });
   });
 
