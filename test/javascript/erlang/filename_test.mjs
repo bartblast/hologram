@@ -4,7 +4,6 @@ import {
   assert,
   assertBoxedError,
   defineGlobalErlangAndElixirModules,
-  iolist,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
@@ -101,7 +100,7 @@ describe("Erlang_Filename", () => {
     it("atom input", () => {
       const filename = Type.atom("path/to/file.txt");
       const result = basename(filename);
-      const expected = iolist("file.txt");
+      const expected = Type.iolist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -124,7 +123,7 @@ describe("Erlang_Filename", () => {
       ]);
 
       const result = basename(filename);
-      const expected = iolist("file.txt");
+      const expected = Type.iolist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
