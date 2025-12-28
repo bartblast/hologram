@@ -218,6 +218,12 @@ export default class Type {
     return {type: "integer", value: value};
   }
 
+  static iolist(string) {
+    return Type.list(
+      Array.from(string, (char) => Type.integer(char.codePointAt(0))),
+    );
+  }
+
   static isAlias(term) {
     return Type.isAtom(term) && term.value.startsWith("Elixir.");
   }

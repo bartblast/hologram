@@ -536,6 +536,52 @@ describe("Type", () => {
     });
   });
 
+  describe("iolist()", () => {
+    it("converts ASCII string to list of character code points", () => {
+      const result = Type.iolist("abc");
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts string with special characters to list of code points", () => {
+      const result = Type.iolist("a\nb");
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(10),
+        Type.integer(98),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts Unicode string to list of code points", () => {
+      const result = Type.iolist("😀全息图");
+
+      const expected = Type.list([
+        Type.integer(128512),
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts empty string to empty list", () => {
+      const result = Type.iolist("");
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("isAlias()", () => {
     it("returns true if the term is a module alias", () => {
       const term = Type.alias("Aaa.Bbb");
