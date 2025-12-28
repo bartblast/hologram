@@ -18,8 +18,8 @@ defmodule Hologram.MixProject do
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
       setup: [
         "deps.get",
-        "cmd cd assets && npm install",
-        "cmd cd test/features && mix deps.get"
+        "cmd --cd assets npm install",
+        "cmd --cd test/features mix deps.get"
       ],
       t: ["test", "test.js"],
       "test.js": [&test_js/1]
