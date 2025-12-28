@@ -102,6 +102,63 @@ describe("Erlang_Binary", () => {
     });
   });
 
+  describe("first/1", () => {
+    const first = Erlang_Binary["first/1"];
+    it("returns first byte of a single-byte binary", () => {
+      const segment = Bitstring.fromBytes([42]);
+      const result = first(segment);
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("returns first byte of a multi-byte binary", () => {
+      const segment = Bitstring.fromBytes([5, 4, 3]);
+      const result = first(segment);
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("returns first byte of a text string", () => {
+      const segment = Bitstring.fromText("ELIXIR");
+      const result = first(segment);
+      assert.deepStrictEqual(result, Type.integer(69));
+    });
+
+    it("returns first byte of UTF-8 multi-byte character", () => {
+      const segment = Bitstring.fromText("é");
+      const result = first(segment);
+      assert.deepStrictEqual(result, Type.integer(195));
+    });
+
+    it("raises ArgumentError if subject is not a bitstring", () => {
+      assertBoxedError(
+        () => first(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if subject is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => first(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "is a bitstring (expected a binary)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if subject is a zero-sized binary", () => {
+      assertBoxedError(
+        () => first(Type.bitstring([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "a zero-sized binary is not allowed",
+        ),
+      );
+    });
+  });
+
   describe("copy/2", () => {
     const testedFun = Erlang_Binary["copy/2"];
 
