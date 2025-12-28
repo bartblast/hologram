@@ -9,6 +9,42 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   @moduletag :consistency
 
+  describe "from_list/2" do
+    test "creates a set from an empty list with version 2 option" do
+      result = :sets.from_list([], [{:version, 2}])
+      assert result == %{}
+    end
+
+    test "creates a set from a list with elements and version 2 option" do
+      result = :sets.from_list([1, 2, 3], [{:version, 2}])
+      assert result == %{1 => [], 2 => [], 3 => []}
+    end
+
+    test "creates a set from a list with duplicate elements" do
+      result = :sets.from_list([1, 2, 1, 3], [{:version, 2}])
+      assert result == %{1 => [], 2 => [], 3 => []}
+    end
+
+    test "raises ArgumentError when list is not a list" do
+      assert_raise ArgumentError, fn ->
+        :sets.from_list(:invalid, [{:version, 2}])
+      end
+    end
+
+    test "raises ArgumentError when list is an improper list" do
+      assert_raise ArgumentError, fn ->
+        :sets.from_list([1 | 2], [{:version, 2}])
+      end
+    end
+  end
+
+  describe "new/1" do
+    test "creates a new empty set with version 2 option" do
+      result = :sets.new([{:version, 2}])
+      assert result == %{}
+    end
+  end
+
   describe "to_list/1" do
     test "returns an empty list if given an empty set" do
       set = :sets.new(version: 2)
