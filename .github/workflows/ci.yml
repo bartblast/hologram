@@ -153,7 +153,7 @@ jobs:
       # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
       - name: Check lib JavaScript, JSON & YAML code formatted
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+        run: mix format.js.check
 
       # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
       - name: Check lib doc and spec coverage

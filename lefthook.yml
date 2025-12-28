@@ -4,6 +4,6 @@ pre-commit:
     check_lib_elixir_code_formatted:
       run: mix format --check-formatted
     check_lib_javascript_and_json_code_formatted:
-      run: assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+      run: mix format.js.check
     check_app_elixir_code_formatted:
       run: cd test/features && mix format --check-formatted
