@@ -122,7 +122,8 @@ jobs:
       - name: Download lib JavaScript deps
         uses: nick-fields/retry@v3
         with:
-          command: cd assets; npm clean-install
+          command: cd assets && npm clean-install
+          shell: bash
           timeout_minutes: 3
           max_attempts: 10
 
@@ -153,7 +154,7 @@ jobs:
       # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
       - name: Check lib JavaScript, JSON & YAML code formatted
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+        run: mix format.js.check
 
       # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
       - name: Check lib doc and spec coverage
@@ -326,6 +327,7 @@ jobs:
         with:
           # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
           command: cd test/features && mix deps.get
+          shell: bash
           timeout_minutes: 3
           max_attempts: 10
 

@@ -31,6 +31,7 @@ Website: https://hologram.page
 * Ian Asaff, [@montague](https://github.com/montague)
 * Juozas Norkus, [@jozuas](https://github.com/jozuas)
 * Thomas, [@thomaswhyyou](https://github.com/thomaswhyyou)
+* Max, [@Makesesama](https://github.com/Makesesama)
 
 Thank you to **all other** sponsors for supporting the project!
 
