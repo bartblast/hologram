@@ -705,11 +705,13 @@ const Erlang = {
     let scientific = ERLANG_DEFAULT_SCIENTIFIC;
     let isCompact = false;
     let isShort = false;
+    let lastFormatOption = null; // Track the last format option specified
 
     // Parse options
     for (const opt of opts.data) {
       if (Interpreter.isStrictlyEqual(opt, Type.atom("short"))) {
         isShort = true;
+        lastFormatOption = "short";
         continue;
       }
 
@@ -733,17 +735,32 @@ const Erlang = {
         value.value <= 253n
       ) {
         decimals = Number(value.value);
+        lastFormatOption = "decimals";
       } else if (
         Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
         Type.isInteger(value) &&
         value.value <= 249n
       ) {
         scientific = Number(value.value);
+        lastFormatOption = "scientific";
       } else {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       }
+    }
+
+    // Reset format options based on the last format option specified
+    // Only keep the last format option, reset others to defaults
+    if (lastFormatOption === "short") {
+      decimals = null;
+      scientific = ERLANG_DEFAULT_SCIENTIFIC;
+    } else if (lastFormatOption === "decimals") {
+      isShort = false;
+      scientific = ERLANG_DEFAULT_SCIENTIFIC;
+    } else if (lastFormatOption === "scientific") {
+      isShort = false;
+      decimals = null;
     }
 
     // Check if we have negative zero (JavaScript preserves signed zero)

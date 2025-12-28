@@ -2494,6 +2494,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         :erlang.float_to_binary(@input_above_10, [:abc])
       end
     end
+
+    test "multiple formats - use last format {:scientific}" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}, {:scientific, 3}]) == "7.120e+00"
+    end
+
+    test "multiple formats - use last format {:decimals}" do
+      assert :erlang.float_to_binary(7.12, [:short, {:decimals, 4}]) == "7.1200"
+    end
+
+    test "multiple formats - use last format {:short}" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}, :short]) == "7.12"
+    end
   end
 
   describe "floor/1" do

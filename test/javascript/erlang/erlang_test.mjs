@@ -3699,6 +3699,47 @@ describe("Erlang", () => {
         );
       });
     });
+
+    describe("multiple formats - use last format option", () => {
+      it("{:decimals, 4} and {:scientific, 3} → uses :scientific", () => {
+        const input = Type.float(7.12);
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+          Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+        ]);
+
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.120e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it(":short and {:decimals, 4} → uses :decimals", () => {
+        const input = Type.float(7.12);
+        const opts = Type.list([
+          Type.atom("short"),
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        ]);
+
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.1200");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("{:scientific, 3} and :short → uses :short", () => {
+        const input = Type.float(7.12);
+        const opts = Type.list([
+          Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+          Type.atom("short"),
+        ]);
+
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
   });
 
   describe("floor/1", () => {
