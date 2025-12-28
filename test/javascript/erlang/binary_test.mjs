@@ -19,6 +19,7 @@ const atomAbc = Type.atom("abc");
 const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer3 = Type.integer(3);
+const integer123 = Type.integer(123);
 
 const bytesBasedEmptyBinary = Bitstring.fromBytes([]);
 const textBasedEmptyBinary = Bitstring.fromText("");
@@ -242,33 +243,38 @@ describe("Erlang_Binary", () => {
 
   describe("first/1", () => {
     const first = Erlang_Binary["first/1"];
+
     it("returns first byte of a single-byte binary", () => {
-      const segment = Bitstring.fromBytes([42]);
-      const result = first(segment);
+      const subject = Bitstring.fromBytes([42]);
+      const result = first(subject);
+
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
     it("returns first byte of a multi-byte binary", () => {
-      const segment = Bitstring.fromBytes([5, 4, 3]);
-      const result = first(segment);
+      const subject = Bitstring.fromBytes([5, 4, 3]);
+      const result = first(subject);
+
       assert.deepStrictEqual(result, Type.integer(5));
     });
 
-    it("returns first byte of a text string", () => {
-      const segment = Bitstring.fromText("ELIXIR");
-      const result = first(segment);
+    it("returns first byte of a text-based binary", () => {
+      const subject = Bitstring.fromText("ELIXIR");
+      const result = first(subject);
+
       assert.deepStrictEqual(result, Type.integer(69));
     });
 
     it("returns first byte of UTF-8 multi-byte character", () => {
-      const segment = Bitstring.fromText("é");
-      const result = first(segment);
+      const subject = Bitstring.fromText("é");
+      const result = first(subject);
+
       assert.deepStrictEqual(result, Type.integer(195));
     });
 
     it("raises ArgumentError if subject is not a bitstring", () => {
       assertBoxedError(
-        () => first(Type.integer(123)),
+        () => first(integer123),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
@@ -285,7 +291,7 @@ describe("Erlang_Binary", () => {
       );
     });
 
-    it("raises ArgumentError if subject is a zero-sized binary", () => {
+    it("raises ArgumentError if subject is an empty binary", () => {
       assertBoxedError(
         () => first(Type.bitstring([])),
         "ArgumentError",

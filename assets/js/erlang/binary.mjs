@@ -99,7 +99,7 @@ const Erlang_Binary = {
   // Start first/1
   "first/1": (subject) => {
     if (!Type.isBinary(subject)) {
-      let message = Type.isBitstring(subject)
+      const message = Type.isBitstring(subject)
         ? "is a bitstring (expected a binary)"
         : "not a binary";
 

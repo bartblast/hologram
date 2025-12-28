@@ -143,7 +143,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.first(<<5, 4, 3>>) == 5
     end
 
-    test "returns first byte of a text string" do
+    test "returns first byte of a text-based binary" do
       assert :binary.first("ELIXIR") == 69
     end
 
@@ -163,7 +163,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    {:binary, :first, [<<1::1, 0::1, 1::1>>]}
     end
 
-    test "raises ArgumentError if subject is a zero-sized binary" do
+    test "raises ArgumentError if subject is an empty binary" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "a zero-sized binary is not allowed"),
                    {:binary, :first, [<<>>]}
