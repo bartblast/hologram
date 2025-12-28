@@ -1,5 +1,6 @@
 "use strict";
 
+import Erlang_Lists from "./lists.mjs";
 import Erlang_Maps from "./maps.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -12,44 +13,32 @@ import Type from "../type.mjs";
 const Erlang_Sets = {
   // Start _validate_opts/3
   "_validate_opts/3": (opts, source, args) => {
-    const raiseFunctionClauseError = () => {
+    if (!Type.isList(opts)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(source, args),
       );
-    };
-
-    if (!Type.isList(opts)) {
-      raiseFunctionClauseError();
     }
 
-    if (opts.data.length === 0) {
+    const versionOpt = Erlang_Lists["keyfind/3"](
+      Type.atom("version"),
+      Type.integer(1),
+      opts,
+    );
+
+    if (Type.isBoolean(versionOpt) && versionOpt.value === "false") {
       return;
     }
 
-    if (opts.data.length !== 1) {
-      raiseFunctionClauseError();
-    }
-
-    const opt = opts.data[0];
-
-    if (!Type.isTuple(opt) || opt.data.length !== 2) {
-      raiseFunctionClauseError();
-    }
-
-    const [key, value] = opt.data;
-
-    if (!Type.isAtom(key) || key.value !== "version") {
-      raiseFunctionClauseError();
-    }
+    const value = versionOpt.data[1];
 
     if (!Type.isInteger(value)) {
-      raiseFunctionClauseError();
+      return;
     }
 
     const version = Number(value.value);
 
-    if (version !== 1 && version !== 2) {
-      raiseFunctionClauseError();
+    if (version === 2) {
+      return;
     }
 
     if (version === 1) {
@@ -57,9 +46,11 @@ const Erlang_Sets = {
         ":sets version 1 is not supported in Hologram, use [{:version, 2}] option",
       );
     }
+
+    Interpreter.raiseCaseClauseError(value);
   },
   // End _validate_opts/3
-  // Deps: []
+  // Deps: [:lists.keyfind/3]
 
   // Start from_list/2
   "from_list/2": (list, opts) => {

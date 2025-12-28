@@ -43,6 +43,16 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       result = :sets.new([{:version, 2}])
       assert result == %{}
     end
+
+    test "ignores invalid option keys (doesn't raise)" do
+      :sets.new([{:invalid, 2}])
+    end
+
+    test "raises CaseClauseError when version is invalid" do
+      assert_raise CaseClauseError, fn ->
+        :sets.new([{:version, 3}])
+      end
+    end
   end
 
   describe "to_list/1" do

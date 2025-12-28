@@ -91,6 +91,23 @@ describe("Erlang_Sets", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("creates a new empty set with empty opts (defaults to version 2)", () => {
+      const result = new_1(Type.list([]));
+      const expected = Type.map([]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("ignores invalid option keys", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("invalid"), Type.integer(2)]),
+      ]);
+      const result = new_1(opts);
+      const expected = Type.map([]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises FunctionClauseError when opts is not a list", () => {
       const opts = Type.atom("invalid");
 
@@ -101,7 +118,7 @@ describe("Erlang_Sets", () => {
       );
     });
 
-    it("raises HologramInterpreterError when version is not 2", () => {
+    it("raises HologramInterpreterError when version is 1", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("version"), Type.integer(1)]),
       ]);
@@ -110,6 +127,17 @@ describe("Erlang_Sets", () => {
         () => new_1(opts),
         HologramInterpreterError,
         ":sets version 1 is not supported in Hologram, use [{:version, 2}] option",
+      );
+    });
+
+    it("raises CaseClauseError when version is invalid", () => {
+      const version = Type.integer(3);
+      const opts = Type.list([Type.tuple([Type.atom("version"), version])]);
+
+      assertBoxedError(
+        () => new_1(opts),
+        "CaseClauseError",
+        "no case clause matching: " + Interpreter.inspect(version),
       );
     });
   });
