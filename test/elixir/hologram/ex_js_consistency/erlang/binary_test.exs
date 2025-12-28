@@ -57,42 +57,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
   end
 
-  describe "first/1" do
-    test "returns first byte of a single-byte binary" do
-      assert :binary.first(<<42>>) == 42
-    end
-
-    test "returns first byte of a multi-byte binary" do
-      assert :binary.first(<<5, 4, 3>>) == 5
-    end
-
-    test "returns first byte of a text string" do
-      assert :binary.first("ELIXIR") == 69
-    end
-
-    test "returns first byte of UTF-8 multi-byte character" do
-      assert :binary.first("é") == 195
-    end
-
-    test "raises ArgumentError if subject is not a bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a binary"),
-                   {:binary, :first, [123]}
-    end
-
-    test "raises ArgumentError if subject is a non-binary bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
-                   {:binary, :first, [<<1::1, 0::1, 1::1>>]}
-    end
-
-    test "raises ArgumentError if subject is a zero-sized binary" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "a zero-sized binary is not allowed"),
-                   {:binary, :first, [<<>>]}
-    end
-  end
-
   describe "copy/2" do
     test "text-based, empty binary, zero times" do
       assert :binary.copy("", 0) == ""
@@ -167,6 +131,42 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "out of range"),
                    {:binary, :copy, ["hello", -1]}
+    end
+  end
+
+  describe "first/1" do
+    test "returns first byte of a single-byte binary" do
+      assert :binary.first(<<42>>) == 42
+    end
+
+    test "returns first byte of a multi-byte binary" do
+      assert :binary.first(<<5, 4, 3>>) == 5
+    end
+
+    test "returns first byte of a text string" do
+      assert :binary.first("ELIXIR") == 69
+    end
+
+    test "returns first byte of UTF-8 multi-byte character" do
+      assert :binary.first("é") == 195
+    end
+
+    test "raises ArgumentError if subject is not a bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:binary, :first, [123]}
+    end
+
+    test "raises ArgumentError if subject is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
+                   {:binary, :first, [<<1::1, 0::1, 1::1>>]}
+    end
+
+    test "raises ArgumentError if subject is a zero-sized binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "a zero-sized binary is not allowed"),
+                   {:binary, :first, [<<>>]}
     end
   end
 end
