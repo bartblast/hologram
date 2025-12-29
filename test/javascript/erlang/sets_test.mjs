@@ -147,6 +147,44 @@ describe("Erlang_Sets", () => {
     });
   });
 
+  describe("is_element/2", () => {
+    const is_element_2 = Erlang_Sets["is_element/2"];
+
+    it("returns true if element is in the set", () => {
+      const result = is_element_2(integer2, set123);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
+    it("returns false if element is not in the set", () => {
+      const integer42 = Type.integer(42);
+      const result = is_element_2(integer42, set123);
+
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+
+    it("returns false for empty set", () => {
+      const emptySet = Type.map();
+      const result = is_element_2(Type.atom("any"), emptySet);
+
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+
+    it("raises FunctionClauseError if argument is not a set", () => {
+      const elem = Type.atom("elem");
+      const notASet = Type.atom("not_a_set");
+
+      assertBoxedError(
+        () => is_element_2(elem, notASet),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
+          elem,
+          notASet,
+        ]),
+      );
+    });
+  });
+
   describe("new/1", () => {
     const new_1 = Erlang_Sets["new/1"];
 

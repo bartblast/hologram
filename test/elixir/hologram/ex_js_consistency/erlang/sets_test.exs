@@ -73,6 +73,31 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "is_element/2" do
+    test "returns true if element is in the set" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      assert :sets.is_element(2, set) == true
+    end
+
+    test "returns false if element is not in the set" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      assert :sets.is_element(42, set) == false
+    end
+
+    test "returns false for empty set" do
+      set = :sets.new([{:version, 2}])
+      assert :sets.is_element(:any, set) == false
+    end
+
+    test "raises FunctionClauseError if argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.is_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_element(:elem, :not_a_set)
+      end
+    end
+  end
+
   describe "new/1" do
     setup do
       [opts: [{:version, 2}]]
