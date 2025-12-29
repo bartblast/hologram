@@ -279,6 +279,21 @@ const Erlang_Maps = {
   },
   // End values/1
   // Deps: []
+
+  // Start take/2
+  "take/2": (key, map1) => {
+    const SENTINEL = Symbol("not_found");
+    const value = Erlang_Maps["get/3"](key, map1, SENTINEL);
+
+    if (value === SENTINEL) {
+      return Type.atom("error");
+    }
+
+    const map2 = Erlang_Maps["remove/2"](key, map1);
+    return Type.tuple([value, map2]);
+  },
+  // End take/2
+  // Deps: [:maps.get/3, :maps.remove/2]
 };
 
 export default Erlang_Maps;
