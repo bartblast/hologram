@@ -2,7 +2,7 @@ defmodule HologramFeatureTests.TypesPage do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
-  import Hologram.Commons.TestUtils, only: [pid: 1]
+  import Hologram.Commons.TestUtils, only: [pid: 1, ref: 1]
   import Kernel, except: [inspect: 1]
 
   route "/types"
@@ -37,6 +37,8 @@ defmodule HologramFeatureTests.TypesPage do
       <button id="map" $click="map"> map </button>
       <button id="pid (client origin)" $click="pid (client origin)"> pid (client origin) </button>
       <button id="pid (server origin)" $click={command: :"pid (server origin)"}> pid (server origin) </button>
+      <button id="reference (client origin)" $click="reference (client origin)"> reference (client origin) </button>
+      <button id="reference (server origin)" $click={command: :"reference (server origin)"}> reference (server origin) </button>
       <button id="tuple" $click="tuple"> tuple </button>
     </p>
     <p>
@@ -122,8 +124,9 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
-  def action(:"pid (server origin) result", params, component) do
-    put_state(component, :result, params.term)
+  def action(:"reference (client origin)", _params, component) do
+    term = ref("0.1.2.3")
+    put_command(component, :echo, term: term)
   end
 
   def action(:"remote function capture (client origin)", _params, component) do
@@ -179,7 +182,12 @@ defmodule HologramFeatureTests.TypesPage do
 
   def command(:"pid (server origin)", _params, server) do
     term = pid("0.11.222")
-    put_action(server, :"pid (server origin) result", term: term)
+    put_action(server, :result, term: term)
+  end
+
+  def command(:"reference (server origin)", _params, server) do
+    term = ref("0.2.3.4")
+    put_action(server, :result, term: term)
   end
 
   def command(:"remote function capture (client origin) echo", params, server) do

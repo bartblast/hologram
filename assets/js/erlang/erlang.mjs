@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import ERTS from "../erts.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -338,8 +339,60 @@ const Erlang = {
     return Type.integer(integer1.value | integer2.value);
   },
   // End bor/2
-  // Deps: []
 
+  // Start binary_part/3
+  "binary_part/3": (subject, start, length) => {
+    if (!Type.isBinary(subject)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const totalBytes = Bitstring.calculateBitCount(subject) / 8;
+
+    if (start.value < 0n || start.value > totalBytes) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    const isReverse = length.value < 0n;
+
+    const outOfRangeForward =
+      !isReverse && start.value + length.value > totalBytes;
+
+    const outOfRangeReverse = isReverse && start.value + length.value < 0n;
+
+    if (outOfRangeForward || outOfRangeReverse) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    }
+
+    const actualStart = isReverse ? start.value + length.value : start.value;
+    const actualLength = isReverse ? -length.value : length.value;
+
+    return Bitstring.takeChunk(
+      subject,
+      Number(actualStart) * 8,
+      Number(actualLength) * 8,
+    );
+  },
+  // End binary_part/3
+
+  // Deps: []
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
@@ -470,6 +523,21 @@ const Erlang = {
   // End binary_to_integer/2
   // Deps: []
 
+  // Start binary_to_list/1
+  "binary_to_list/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+
+    return Type.list(Array.from(binary.bytes).map((b) => Type.integer(b)));
+  },
+  // End binary_to_list/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
@@ -481,6 +549,28 @@ const Erlang = {
     return Type.integer(Bitstring.calculateBitCount(term));
   },
   // End bit_size/1
+  // Deps: []
+
+  // Start bsr/2
+  "bsr/2": (integer, shift) => {
+    if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
+      const arg1 = Interpreter.inspect(integer);
+      const arg2 = Interpreter.inspect(shift);
+
+      Interpreter.raiseArithmeticError(`Bitwise.bsr(${arg1}, ${arg2})`);
+    }
+
+    const integerValue = integer.value;
+    const shiftValue = shift.value;
+
+    if (shiftValue < 0n) {
+      // Erlang's bsr with negative shift is equivalent to bsl with positive shift
+      return Type.integer(integerValue << -shiftValue);
+    } else {
+      return Type.integer(integerValue >> shiftValue);
+    }
+  },
+  // End bsr/2
   // Deps: []
 
   // Start byte_size/1
@@ -583,6 +673,21 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // Start float/1
+  "float/1": (number) => {
+    if (Type.isInteger(number)) {
+      return Type.float(Number(number.value));
+    } else if (Type.isFloat(number)) {
+      return number;
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End float/1
+  // Deps: []
+
   // Start float_to_binary/2
   "float_to_binary/2": (float, opts) => {
     if (!Type.isFloat(float)) {
@@ -603,19 +708,169 @@ const Erlang = {
       );
     }
 
-    // TODO: implement other options
-    if (
-      opts.data.length != 1 ||
-      !Interpreter.isStrictlyEqual(opts.data[0], Type.atom("short"))
-    ) {
-      throw new HologramInterpreterError(
-        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
+    const SHORT_EXPONENTIAL_THRESHOLD = 9_007_199_254_740_992.0; // 2^53 - Erlang always uses exponential notation at this boundary
+    const JS_PRECISION_LIMIT = 100; // Max precision for toFixed() and toExponential()
+    const ERLANG_BUFFER_LIMIT = 256;
+    const ERLANG_DEFAULT_SCIENTIFIC = 20;
+    const FIXED_PRECISION_FOR_NEGATIVE = 6;
+
+    let decimals = null;
+    let scientific = ERLANG_DEFAULT_SCIENTIFIC;
+    let isCompact = false;
+    let isShort = false;
+
+    // Parse options
+    for (const opt of opts.data) {
+      if (Interpreter.isStrictlyEqual(opt, Type.atom("short"))) {
+        isShort = true;
+        continue;
+      }
+
+      if (Interpreter.isStrictlyEqual(opt, Type.atom("compact"))) {
+        isCompact = true;
+        continue;
+      }
+
+      if (!Type.isTuple(opt) || opt.data.length !== 2) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      }
+
+      const [key, value] = opt.data;
+
+      if (
+        Interpreter.isStrictlyEqual(key, Type.atom("decimals")) &&
+        Type.isInteger(value) &&
+        value.value >= 0n &&
+        value.value <= 253n
+      ) {
+        decimals = Number(value.value);
+      } else if (
+        Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
+        Type.isInteger(value) &&
+        value.value <= 249n
+      ) {
+        scientific = Number(value.value);
+      } else {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      }
+    }
+
+    // Check if we have negative zero (JavaScript preserves signed zero)
+    const isNegativeZero = Object.is(float.value, -0);
+
+    let result;
+
+    if (isShort) {
+      const absVal = Math.abs(float.value);
+
+      if (absVal >= SHORT_EXPONENTIAL_THRESHOLD) {
+        // For values >= 2^53, always use exponential notation per Erlang spec
+        result = float.value.toExponential();
+      } else {
+        // For values < 2^53, compare character counts of decimal vs exponential
+        // and choose the shorter representation (decimal wins ties per Erlang spec)
+
+        let decimalResult = float.value.toString();
+
+        // Ensure decimal point exists for proper float format
+        if (decimalResult === "0") {
+          decimalResult = "0.0";
+        } else if (
+          absVal >= 1 &&
+          !decimalResult.includes(".") &&
+          !decimalResult.includes("e")
+        ) {
+          decimalResult += ".0";
+        }
+
+        let expResult = float.value.toExponential();
+
+        // Ensure mantissa has at least one decimal digit (e.g., "9e-4" → "9.0e-4")
+        if (!expResult.includes(".")) {
+          expResult = expResult.replace(/e/, ".0e");
+        }
+
+        // Choose the representation with fewer characters (decimal wins ties)
+        result =
+          expResult.length < decimalResult.length ? expResult : decimalResult;
+      }
+
+      // Format exponent: remove + sign (e.g., e+15 → e15), keep - sign as-is
+      if (result.includes("e")) {
+        result = result.replace(/e\+/, "e");
+      }
+    } else if (decimals !== null) {
+      // JavaScript's toFixed() has a limit of 100, but Erlang allows up to 253.
+      // For values > 100, we use toFixed(100) and manually pad with zeros.
+      if (decimals > JS_PRECISION_LIMIT) {
+        result = float.value.toFixed(JS_PRECISION_LIMIT);
+        const additionalZeros = decimals - JS_PRECISION_LIMIT;
+        result = result + "0".repeat(additionalZeros);
+      } else {
+        result = float.value.toFixed(decimals);
+      }
+
+      if (isCompact && decimals > 0) {
+        result = result.replace(/0+$/, "").replace(/\.$/, ".0");
+      }
+    } else {
+      // For negative scientific, Erlang uses fixed precision of 6 decimal places
+      const precision =
+        scientific < 0 ? FIXED_PRECISION_FOR_NEGATIVE : scientific;
+
+      // JavaScript's toExponential() has a limit of 100, but Erlang allows up to 249.
+      // For values > 100, we use toExponential(100) and manually pad with zeros.
+      if (precision > JS_PRECISION_LIMIT) {
+        result = float.value.toExponential(JS_PRECISION_LIMIT);
+        const [mantissa, exponent] = result.split("e");
+        const currentDigits = mantissa.split(".")[1].length;
+        const additionalZeros = precision - currentDigits;
+        result = mantissa + "0".repeat(additionalZeros) + "e" + exponent;
+      } else {
+        result = float.value.toExponential(precision);
+      }
+
+      // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
+      result = result.replace(/e([+-])(\d)$/, "e$10$2");
+    }
+
+    // Preserve negative zero sign if needed
+    // JavaScript's toString/toFixed/toExponential lose the sign of -0, so we restore it
+    if (isNegativeZero && !result.startsWith("-")) {
+      result = "-" + result;
+    }
+
+    // Erlang enforces a 256-byte buffer limit for the result
+    if (result.length >= ERLANG_BUFFER_LIMIT) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
       );
     }
 
-    return Type.bitstring(float.value.toString());
+    return Type.bitstring(result);
   },
   // End float_to_binary/2
+  // Deps: []
+
+  // Start floor/1
+  "floor/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    return Type.integer(Math.floor(number.value));
+  },
+  // End floor/1
   // Deps: []
 
   // Start hd/1
@@ -687,6 +942,37 @@ const Erlang = {
     return Type.bitstring(str);
   },
   // End integer_to_binary/2
+  // Deps: []
+
+  // Start integer_to_list/1
+  "integer_to_list/1": (integer) => {
+    return Erlang["integer_to_list/2"](integer, Type.integer(10));
+  },
+  // End integer_to_list/1
+  // Deps: [:erlang.integer_to_list/2]
+
+  // Start integer_to_list/2
+  "integer_to_list/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    const text = integer.value.toString(Number(base.value)).toUpperCase();
+
+    return Bitstring.toCodepoints(Type.bitstring(text));
+  },
+  // End integer_to_list/2
   // Deps: []
 
   // TODO: test
@@ -893,6 +1179,85 @@ const Erlang = {
     );
   },
   // End list_to_pid/1
+  // Deps: []
+
+  // Start list_to_ref/1
+  "list_to_ref/1": (codePoints) => {
+    if (!Type.isProperList(codePoints)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    const areCodePointsValid = codePoints.data.every(
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+    );
+
+    if (!areCodePointsValid) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    const segments = codePoints.data.map((codePoint) =>
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
+    );
+
+    const regex = /^#Ref<([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)>$/;
+    const matches = Bitstring.toText(Type.bitstring(segments)).match(regex);
+
+    if (matches === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    const localIncarnationId = Number(matches[1]);
+
+    // The idWords in the string representation are in reversed order
+    const idWords = [
+      Number(matches[4]),
+      Number(matches[3]),
+      Number(matches[2]),
+    ];
+
+    const refInfo = ERTS.nodeTable.getNodeAndCreation(localIncarnationId);
+
+    if (refInfo === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    return Type.reference(refInfo.node, refInfo.creation, idWords);
+  },
+  // End list_to_ref/1
+  // Deps: []
+
+  // Start make_ref/0
+  "make_ref/0": () => {
+    const node = ERTS.nodeTable.CLIENT_NODE;
+    const creation = 0;
+
+    // TODO: implement ID words similarly to how it's done in Erlang
+    const idWords = [
+      Utils.randomUint32(),
+      Utils.randomUint32(),
+      ERTS.referenceSequence.next(),
+    ];
+
+    return Type.reference(node, creation, idWords);
+  },
+  // End make_ref/0
   // Deps: []
 
   // Start make_tuple/2
@@ -1122,6 +1487,24 @@ const Erlang = {
     return isProper ? Type.list(data) : Type.improperList(data);
   },
   // End tl/1
+  // Deps: []
+
+  // Start trunc/1
+  "trunc/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isFloat(number)) {
+      // Erlang :erlang.trunc/1 converts -0 to 0 while JavaScript Math.trunc() does not
+      return Type.integer(Math.trunc(number.value) + 0);
+    }
+
+    return number;
+  },
+  // End trunc/1
   // Deps: []
 
   // Start tuple_to_list/1

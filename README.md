@@ -6,19 +6,34 @@ Website: https://hologram.page
 
 ## Sponsors
 
+### Innovation Partner Tier
+
+* Sheharyar Naseer, [@sheharyarn](https://github.com/sheharyarn)
+
 ### Framework Visionary Tier
 
 * [@absowoot](https://github.com/absowoot)
+* Uzair Aslam, [@uzairaslam196](https://github.com/uzairaslam196)
+* Oban, [@oban-bg](https://github.com/oban-bg)
+* Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
+* Robert Urbańczyk, [@robertu](https://github.com/robertu)
 
 ### Early Adopter Tier
 
 * Daniel Calancea, [@D4no0](https://github.com/D4no0)
 * Darren Black, [@totaltrash](https://github.com/totaltrash)
 * [@jzimmek](https://github.com/jzimmek)
-* Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 * Nicholas Moen, [@arcanemachine](https://github.com/arcanemachine)
+* [@pasila](https://github.com/pasila)
+* Jonatan Männchen, [@maennchen](https://github.com/maennchen)
+* Douglas Manzelmann, [@douglasmanzelmann](https://github.com/douglasmanzelmann)
+* James Harton, [@jimsynz](https://github.com/jimsynz)
+* Ian Asaff, [@montague](https://github.com/montague)
+* Juozas Norkus, [@jozuas](https://github.com/jozuas)
+* Thomas, [@thomaswhyyou](https://github.com/thomaswhyyou)
+* Max, [@Makesesama](https://github.com/Makesesama)
 
-Thank you to all other sponsors for supporting the project!
+Thank you to **all other** sponsors for supporting the project!
 
 If you find Hologram useful and would like to support its development, consider becoming a sponsor! Your contributions help improve the project and keep it alive.
 
