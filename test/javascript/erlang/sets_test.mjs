@@ -21,10 +21,7 @@ const integer1 = freeze(Type.integer(1));
 const integer2 = freeze(Type.integer(2));
 const integer3 = freeze(Type.integer(3));
 const float2 = freeze(Type.float(2.0));
-
-const versionTwoOpts = freeze(
-  Type.list([Type.tuple([Type.atom("version"), Type.integer(2)])]),
-);
+const opts = freeze(Type.keywordList([[Type.atom("version"), integer2]]));
 
 const set123 = freeze(
   Type.map([
@@ -42,103 +39,186 @@ describe("Erlang_Sets", () => {
   describe("from_list/2", () => {
     const from_list_2 = Erlang_Sets["from_list/2"];
 
-    it("creates a set from an empty list with version 2 option", () => {
-      const result = from_list_2(Type.list([]), versionTwoOpts);
+    it("creates a set from an empty list", () => {
+      const result = from_list_2(Type.list(), opts);
 
-      assert.deepStrictEqual(result, Type.map([]));
+      assert.deepStrictEqual(result, Type.map());
     });
 
-    it("creates a set from a list with elements and version 2 option", () => {
+    it("creates a set from a non-empty list", () => {
       const list = Type.list([integer1, integer2, integer3]);
-      const result = from_list_2(list, versionTwoOpts);
+      const result = from_list_2(list, opts);
 
       assert.deepStrictEqual(result, set123);
     });
 
     it("creates a set from a list with duplicate elements", () => {
       const list = Type.list([integer1, integer2, integer1, integer3]);
-      const result = from_list_2(list, versionTwoOpts);
+      const result = from_list_2(list, opts);
 
       assert.deepStrictEqual(result, set123);
     });
 
-    it("raises ArgumentError when list is not a list", () => {
+    it("ignores invalid options", () => {
+      const opts = Type.keywordList([
+        [Type.atom("invalid"), integer1],
+        [Type.atom("version"), integer2],
+      ]);
+
+      const result = from_list_2(emptyList, opts);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("raises ArgumentError if the first argument is not a list", () => {
       assertBoxedError(
-        () => from_list_2(Type.atom("invalid"), versionTwoOpts),
+        () => from_list_2(Type.atom("invalid"), opts),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
-    it("raises ArgumentError when list is an improper list", () => {
+    it("raises ArgumentError if the first argument is an improper list", () => {
       const list = Type.improperList([integer1, integer2]);
 
       assertBoxedError(
-        () => from_list_2(list, versionTwoOpts),
+        () => from_list_2(list, opts),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
       );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a list", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":proplists.get_value/3",
+        [Type.atom("version"), Type.atom("invalid"), integer1],
+      );
+
+      assertBoxedError(
+        () => from_list_2(emptyList, Type.atom("invalid")),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the second argument is an a improper list", () => {
+      const opts = Type.improperList([integer1, integer2]);
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":proplists.get_value/3",
+      );
+
+      assertBoxedError(
+        () => from_list_2(emptyList, opts),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises CaseClauseError for invalid versions", () => {
+      const opts = Type.keywordList([[Type.atom("version"), atomAbc]]);
+
+      assertBoxedError(
+        () => from_list_2(emptyList, opts),
+        "CaseClauseError",
+        "no case clause matching: :abc",
+      );
+    });
+
+    describe("client-only behaviour", () => {
+      it("raises HologramInterpreterError if version 1 is used", () => {
+        const opts = Type.keywordList([[Type.atom("version"), integer1]]);
+
+        assert.throw(
+          () => from_list_2(emptyList, opts),
+          HologramInterpreterError,
+          "Hologram doesn't support :sets version 1",
+        );
+      });
+
+      it("raises HologramInterpreterError if version is not specified", () => {
+        assert.throw(
+          () => from_list_2(emptyList, emptyList),
+          HologramInterpreterError,
+          "Hologram requires to specify :sets version explicitely",
+        );
+      });
     });
   });
 
   describe("new/1", () => {
     const new_1 = Erlang_Sets["new/1"];
 
-    it("creates a new empty set with version 2 option", () => {
-      const result = new_1(versionTwoOpts);
-      const expected = Type.map([]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("creates a new empty set with empty opts (defaults to version 2)", () => {
-      const result = new_1(Type.list([]));
-      const expected = Type.map([]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("ignores invalid option keys", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("invalid"), Type.integer(2)]),
-      ]);
+    it("creates a new set", () => {
       const result = new_1(opts);
-      const expected = Type.map([]);
 
-      assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, Type.map());
     });
 
-    it("raises FunctionClauseError when opts is not a list", () => {
-      const opts = Type.atom("invalid");
+    it("ignores invalid options", () => {
+      const opts = Type.keywordList([
+        [Type.atom("invalid"), integer1],
+        [Type.atom("version"), integer2],
+      ]);
+
+      const result = new_1(opts);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("raises FunctionClauseError if the first argument is not a list", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":proplists.get_value/3",
+        [Type.atom("version"), Type.atom("invalid"), integer1],
+      );
 
       assertBoxedError(
-        () => new_1(opts),
+        () => new_1(Type.atom("invalid")),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.new/1", [opts]),
+        expectedMsg,
       );
     });
 
-    it("raises HologramInterpreterError when version is 1", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("version"), Type.integer(1)]),
-      ]);
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the first argument is an a improper list", () => {
+      const opts = Type.improperList([integer1, integer2]);
 
-      assert.throw(
-        () => new_1(opts),
-        HologramInterpreterError,
-        ":sets version 1 is not supported in Hologram, use [{:version, 2}] option",
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":proplists.get_value/3",
       );
+
+      assertBoxedError(() => new_1(opts), "FunctionClauseError", expectedMsg);
     });
 
-    it("raises CaseClauseError when version is invalid", () => {
-      const version = Type.integer(3);
-      const opts = Type.list([Type.tuple([Type.atom("version"), version])]);
+    it("raises CaseClauseError for invalid versions", () => {
+      const opts = Type.keywordList([[Type.atom("version"), atomAbc]]);
 
       assertBoxedError(
         () => new_1(opts),
         "CaseClauseError",
-        "no case clause matching: " + Interpreter.inspect(version),
+        "no case clause matching: :abc",
       );
+    });
+
+    describe("client-only behaviour", () => {
+      it("raises HologramInterpreterError if version 1 is used", () => {
+        const opts = Type.keywordList([[Type.atom("version"), integer1]]);
+
+        assert.throw(
+          () => new_1(opts),
+          HologramInterpreterError,
+          "Hologram doesn't support :sets version 1",
+        );
+      });
+
+      it("raises HologramInterpreterError if version is not specified", () => {
+        assert.throw(
+          () => new_1(emptyList),
+          HologramInterpreterError,
+          "Hologram requires to specify :sets version explicitely",
+        );
+      });
     });
   });
 
@@ -146,18 +226,17 @@ describe("Erlang_Sets", () => {
     const to_list = Erlang_Sets["to_list/1"];
 
     it("returns an empty list if given an empty set", () => {
-      const set = Type.map();
-
+      const set = Erlang_Sets["new/1"](opts);
       const result = to_list(set);
 
       assert.deepStrictEqual(result, emptyList);
     });
 
     it("returns a list of values if given a non-empty set", () => {
-      const set = Type.map([
-        [integer1, emptyList],
-        [float2, emptyList],
-      ]);
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, float2]),
+        opts,
+      );
 
       const result = to_list(set);
       const sortedResult = Erlang_Lists["sort/1"](result);

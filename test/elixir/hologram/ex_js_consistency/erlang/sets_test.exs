@@ -10,47 +10,103 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
   @moduletag :consistency
 
   describe "from_list/2" do
-    test "creates a set from an empty list with version 2 option" do
-      result = :sets.from_list([], [{:version, 2}])
-      assert result == %{}
+    setup do
+      [opts: [{:version, 2}]]
     end
 
-    test "creates a set from a list with elements and version 2 option" do
-      result = :sets.from_list([1, 2, 3], [{:version, 2}])
+    test "creates a set from an empty list", %{opts: opts} do
+      assert :sets.from_list([], opts) == %{}
+    end
+
+    test "creates a set from a non-empty list", %{opts: opts} do
+      result = :sets.from_list([1, 2, 3], opts)
       assert result == %{1 => [], 2 => [], 3 => []}
     end
 
-    test "creates a set from a list with duplicate elements" do
-      result = :sets.from_list([1, 2, 1, 3], [{:version, 2}])
+    test "creates a set from a list with duplicate elements", %{opts: opts} do
+      result = :sets.from_list([1, 2, 1, 3], opts)
       assert result == %{1 => [], 2 => [], 3 => []}
     end
 
-    test "raises ArgumentError when list is not a list" do
-      assert_raise ArgumentError, fn ->
-        :sets.from_list(:invalid, [{:version, 2}])
+    test "ignores invalid options" do
+      assert :sets.from_list([], invalid: 1, version: 2) == %{}
+    end
+
+    test "raises ArgumentError if the first argument is not a list", %{opts: opts} do
+      expected_msg = build_argument_error_msg(1, "not a list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :sets.from_list(:invalid, opts)
       end
     end
 
-    test "raises ArgumentError when list is an improper list" do
-      assert_raise ArgumentError, fn ->
-        :sets.from_list([1 | 2], [{:version, 2}])
+    test "raises ArgumentError if the first argument is an improper list", %{opts: opts} do
+      expected_msg = build_argument_error_msg(1, "not a proper list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :sets.from_list([1 | 2], opts)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list" do
+      expected_msg =
+        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.from_list([], :invalid)
+      end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the second argument is an a improper list" do
+      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.from_list([], [1 | 2])
+      end
+    end
+
+    test "raises CaseClauseError for invalid versions" do
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+        :sets.from_list([], version: :abc)
       end
     end
   end
 
   describe "new/1" do
-    test "creates a new empty set with version 2 option" do
-      result = :sets.new([{:version, 2}])
-      assert result == %{}
+    setup do
+      [opts: [{:version, 2}]]
     end
 
-    test "ignores invalid option keys (doesn't raise)" do
-      :sets.new([{:invalid, 2}])
+    test "creates a new set", %{opts: opts} do
+      assert :sets.new(opts) == %{}
     end
 
-    test "raises CaseClauseError when version is invalid" do
-      assert_raise CaseClauseError, fn ->
-        :sets.new([{:version, 3}])
+    test "ignores invalid options" do
+      assert :sets.new(invalid: 1, version: 2) == %{}
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
+      expected_msg =
+        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.new(:invalid)
+      end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the first argument is an a improper list" do
+      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.new([1 | 2])
+      end
+    end
+
+    test "raises CaseClauseError for invalid versions" do
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+        :sets.new(version: :abc)
       end
     end
   end
