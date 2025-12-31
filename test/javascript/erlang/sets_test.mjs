@@ -226,18 +226,17 @@ describe("Erlang_Sets", () => {
     const to_list = Erlang_Sets["to_list/1"];
 
     it("returns an empty list if given an empty set", () => {
-      const set = Type.map();
-
+      const set = Erlang_Sets["new/1"](opts);
       const result = to_list(set);
 
       assert.deepStrictEqual(result, emptyList);
     });
 
     it("returns a list of values if given a non-empty set", () => {
-      const set = Type.map([
-        [integer1, emptyList],
-        [float2, emptyList],
-      ]);
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, float2]),
+        opts,
+      );
 
       const result = to_list(set);
       const sortedResult = Erlang_Lists["sort/1"](result);
