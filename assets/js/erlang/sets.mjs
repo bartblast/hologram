@@ -11,62 +11,68 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Sets = {
-  // Start _validate_opts/3
-  "_validate_opts/3": (opts, source, args) => {
+  // Start _validate_opts/1
+  "_validate_opts/1": (opts) => {
     if (!Type.isList(opts)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(source, args),
+        Interpreter.buildFunctionClauseErrorMsg(":proplists.get_value/3", [
+          Type.atom("version"),
+          opts,
+          Type.integer(1),
+        ]),
       );
     }
 
-    const versionOpt = Erlang_Lists["keyfind/3"](
+    if (Type.isImproperList(opts)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":proplists.get_value/3"),
+      );
+    }
+
+    const versionOptTuple = Erlang_Lists["keyfind/3"](
       Type.atom("version"),
       Type.integer(1),
       opts,
     );
 
-    if (Type.isBoolean(versionOpt) && versionOpt.value === "false") {
-      return;
-    }
-
-    const value = versionOpt.data[1];
-
-    if (!Type.isInteger(value)) {
-      return;
-    }
-
-    const version = Number(value.value);
-
-    if (version === 2) {
-      return;
-    }
-
-    if (version === 1) {
+    if (Type.isFalse(versionOptTuple)) {
       throw new HologramInterpreterError(
-        ":sets version 1 is not supported in Hologram, use [{:version, 2}] option",
+        "Hologram requires to specify :sets version explicitely",
       );
     }
 
-    Interpreter.raiseCaseClauseError(value);
+    const version = versionOptTuple.data[1];
+
+    if (Type.isInteger(version)) {
+      if (version.value === 2n) return;
+
+      if (version.value === 1n) {
+        throw new HologramInterpreterError(
+          "Hologram doesn't support :sets version 1",
+        );
+      }
+    }
+
+    Interpreter.raiseCaseClauseError(version);
   },
-  // End _validate_opts/3
+  // End _validate_opts/1
   // Deps: [:lists.keyfind/3]
 
   // Start from_list/2
   "from_list/2": (list, opts) => {
-    Erlang_Sets["_validate_opts/3"](opts, ":sets.from_list/2", [list, opts]);
-    return Erlang_Maps["from_keys/2"](list, Type.list([]));
+    Erlang_Sets["_validate_opts/1"](opts);
+    return Erlang_Maps["from_keys/2"](list, Type.list());
   },
   // End from_list/2
-  // Deps: [:sets._validate_opts/3, :maps.from_keys/2]
+  // Deps: [:maps.from_keys/2, :sets._validate_opts/1]
 
   // Start new/1
-  "new/1": (options) => {
-    Erlang_Sets["_validate_opts/3"](options, ":sets.new/1", [options]);
+  "new/1": (opts) => {
+    Erlang_Sets["_validate_opts/1"](opts);
     return Type.map();
   },
   // End new/1
-  // Deps: [:sets._validate_opts/3]
+  // Deps: [:sets._validate_opts/1]
 
   // Start to_list/1
   "to_list/1": (set) => {
