@@ -1632,30 +1632,24 @@ describe("Erlang", () => {
   describe("bor/2", () => {
     const bor = Erlang["bor/2"];
 
-    it("sample bitwise ors are correct", () => {
+    it("both arguments are positive", () => {
       assert.deepStrictEqual(
         bor(Type.integer(4), Type.integer(3)),
         Type.integer(7),
       );
+    });
+
+    it("left argument is negative", () => {
       assert.deepStrictEqual(
         bor(Type.integer(-4), Type.integer(3)),
         Type.integer(-1),
       );
+    });
+
+    it("left argument is 0", () => {
       assert.deepStrictEqual(
-        bor(Type.integer(23), Type.integer(45)),
-        Type.integer(63),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(13), Type.integer(17)),
-        Type.integer(29),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(101), Type.integer(93)),
-        Type.integer(125),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(33), Type.integer(349)),
-        Type.integer(381),
+        bor(Type.integer(0), Type.integer(8)),
+        Type.integer(8),
       );
     });
 

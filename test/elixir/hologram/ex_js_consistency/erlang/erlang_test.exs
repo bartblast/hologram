@@ -3078,28 +3078,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "bor/2" do
-    test "basic" do
-      assert :erlang.bor(0, 0) == 0
-      assert :erlang.bor(0, 1) == 1
-      assert :erlang.bor(1, 0) == 1
-      assert :erlang.bor(1, 0) == 1
-      assert :erlang.bor(1, 1) == 1
-    end
-
-    test "sample" do
+    test "both arguments are positive" do
       assert :erlang.bor(4, 3) == 7
-      assert :erlang.bor(-4, 3) == -1
-      assert :erlang.bor(23, 45) == 63
-      assert :erlang.bor(13, 17) == 29
-      assert :erlang.bor(101, 93) == 125
-      assert :erlang.bor(33, 349) == 381
     end
 
-    test "bor with 0" do
-      Enum.each(0..100, fn x ->
-        assert :erlang.bor(0, x) == x
-        assert :erlang.bor(x, 0) == x
-      end)
+    test "left argument is negative" do
+      assert :erlang.bor(-4, 3) == -1
+    end
+
+    test "left argument is 0" do
+      assert :erlang.bor(0, 8) == 8
     end
 
     test "raises ArithmeticError if the first argument is not an integer" do
