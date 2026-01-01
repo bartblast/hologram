@@ -1,5 +1,6 @@
 "use strict";
 
+import _ from "lodash";
 import Erlang_Lists from "./lists.mjs";
 import Erlang_Maps from "./maps.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
@@ -86,6 +87,37 @@ const Erlang_Sets = {
   },
   // End to_list/1
   // Deps: [:maps.keys/1]
+
+  // Start is_subset/2
+  "is_subset/2": (set1, set2) => {
+    if (!Type.isMap(set1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set1]),
+      );
+    }
+    if (!Type.isMap(set2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set2]),
+      );
+    }
+
+    const isSubset = (subset, superset) => {
+      return subset.every((subItem) =>
+        superset.some((superItem) => _.isEqual(subItem, superItem)),
+      );
+    };
+
+    const set1Array = Erlang_Sets["to_list/1"](set1).data;
+
+    if (set1Array.length == 0) {
+      return Type.boolean(true);
+    }
+
+    const set2Array = Erlang_Sets["to_list/1"](set2).data;
+    return Type.boolean(isSubset(set1Array, set2Array));
+  },
+  // End is_subset/2
+  // Deps: [:sets.to_list/1]
 };
 
 export default Erlang_Sets;
