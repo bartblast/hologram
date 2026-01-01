@@ -18,8 +18,6 @@ Website: https://hologram.page
 
 [Curiosum](https://www.curiosum.com)
 
----
-
 ### Milestones Sponsor
 
 <a href="https://erlef.org" target="_blank">
@@ -31,8 +29,6 @@ Website: https://hologram.page
 </a>
 
 [Erlang Ecosystem Foundation](https://erlef.org)
-
----
 
 ### Innovation Partner Tier
 
