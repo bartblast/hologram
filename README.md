@@ -6,6 +6,30 @@ Website: https://hologram.page
 
 ## Sponsors
 
+### Main Sponsor
+
+<a href="https://www.curiosum.com" target="_blank">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/curiosum_logo_horizontal_mono_white.png">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/curiosum_logo_horizontal_mono_black.png">
+    <img src=".sponsors/curiosum_logo_horizontal_mono_black.png" alt="Curiosum" height="80">
+  </picture>
+</a>
+
+[Curiosum](https://www.curiosum.com)
+
+### Milestones Sponsor
+
+<a href="https://erlef.org" target="_blank">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".sponsors/eef_logo_vertical_white.png">
+    <source media="(prefers-color-scheme: light)" srcset=".sponsors/eef_logo_vertical_black.png">
+    <img src=".sponsors/eef_logo_vertical_black.png" alt="Erlang Ecosystem Foundation" height="80">
+  </picture>
+</a>
+
+[Erlang Ecosystem Foundation](https://erlef.org)
+
 ### Innovation Partner Tier
 
 * Sheharyar Naseer, [@sheharyarn](https://github.com/sheharyarn)
