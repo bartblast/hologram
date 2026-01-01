@@ -975,6 +975,18 @@ const Erlang = {
   },
   // End tuple_to_list/1
   // Deps: []
+  // Start list_to_tuple/1
+  "list_to_tuple/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    return Type.tuple(list.data);
+  },
+  // End list_to_tuple/1
+  // Deps: []
 };
 
 export default Erlang;
