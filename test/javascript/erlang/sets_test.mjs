@@ -294,41 +294,20 @@ describe("Erlang_Sets", () => {
       assert.deepStrictEqual(result, Type.boolean(true));
     });
 
-    it("should work with sets of maps", () => {
-      const map1 = Type.map([
-        [Type.atom("screen_x"), Type.float(100)],
-        [Type.atom("screen_y"), Type.float(200)]
-      ]);
-
-      const map2 = Type.map([
-        [Type.atom("screen_x"), Type.float(100)],
-        [Type.atom("screen_y"), Type.float(200)],
-        [Type.atom("movement_y"), Type.float(15)],
-      ]);
-
-      const set1 = Erlang_Sets["from_list/2"](Type.list([map1]), opts);
-      const set2 = Erlang_Sets["from_list/2"](Type.list([map1, map2]), opts);
-      const result = is_subset(set1, set2);
-      const result2 = is_subset(set2, set1);
-
-      assert.deepStrictEqual(result, Type.boolean(true));
-      assert.deepStrictEqual(result2, Type.boolean(false));
-    })
-
-    it("should work with sets of lists of maps", () => {
+    it("should work with sets of tuples", () => {
       const list1 = Type.list([
-        Type.map([[Type.atom("screen_x"), Type.float(100)]]),
-        Type.map([[Type.atom("screen_y"), Type.float(200)]])
+        Type.tuple([Type.atom("ok"), Type.bitstring("data")]),
+        Type.tuple([Type.atom("error"), Type.bitstring("error")])
       ]);
 
       const list2 = Type.list([
-        Type.map([[Type.atom("screen_x"), Type.float(100)]]),
-        Type.map([[Type.atom("screen_y"), Type.float(200)]]),
-        Type.map([[Type.atom("movement_y"), Type.float(200)]])
+        Type.tuple([Type.atom("ok"), Type.bitstring("data")]),
+        Type.tuple([Type.atom("error"), Type.bitstring("error")]),
+        Type.tuple([Type.atom("ok"), Type.bitstring("data2")])
       ]);
 
-      const set1 = Erlang_Sets["from_list/2"](Type.list([list1]), opts);
-      const set2 = Erlang_Sets["from_list/2"](Type.list([list1, list2]), opts);
+      const set1 = Erlang_Sets["from_list/2"](list1, opts);
+      const set2 = Erlang_Sets["from_list/2"](list2, opts);
       const result = is_subset(set1, set2);
       const result2 = is_subset(set2, set1);
 

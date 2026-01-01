@@ -1,6 +1,5 @@
 "use strict";
 
-import _ from "lodash";
 import Erlang_Lists from "./lists.mjs";
 import Erlang_Maps from "./maps.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
@@ -103,7 +102,9 @@ const Erlang_Sets = {
 
     const isSubset = (subset, superset) => {
       return subset.every((subItem) =>
-        superset.some((superItem) => _.isEqual(subItem, superItem)),
+        superset.some(
+          (superItem) => Interpreter.compareTerms(subItem, superItem) == 0,
+        ),
       );
     };
 
