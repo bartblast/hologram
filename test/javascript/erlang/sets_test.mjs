@@ -258,4 +258,108 @@ describe("Erlang_Sets", () => {
       );
     });
   });
+
+  describe("is_subset/2", () => {
+    const is_subset = Erlang_Sets["is_subset/2"];
+
+    it("should always return true if set1 is an empty set", () => {
+      const set1 = Erlang_Sets["new/1"](opts);
+      const set2 = Erlang_Sets["new/1"](opts);
+      const result = is_subset(set1, set2);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
+    it("should return false if not all elements in set1 are in set2", () => {
+      const set1 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1)]), opts);
+      const set2 = Erlang_Sets["new/1"](opts);
+      const result = is_subset(set1, set2);
+
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+
+    it("should return true if both sets are the same", () => {
+      const set1 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1), Type.integer(2)]), opts);
+      const set2 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1), Type.integer(2)]), opts);
+      const result = is_subset(set1, set2);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
+    it("should return true if all elements in set1 are in set2", () => {
+      const set1 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1)]), opts);
+      const set2 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1), Type.integer(2)]), opts);
+      const result = is_subset(set1, set2);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
+    it("should work with sets of maps", () => {
+      const map1 = Type.map([
+        [Type.atom("screen_x"), Type.float(100)],
+        [Type.atom("screen_y"), Type.float(200)]
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("screen_x"), Type.float(100)],
+        [Type.atom("screen_y"), Type.float(200)],
+        [Type.atom("movement_y"), Type.float(15)],
+      ]);
+
+      const set1 = Erlang_Sets["from_list/2"](Type.list([map1]), opts);
+      const set2 = Erlang_Sets["from_list/2"](Type.list([map1, map2]), opts);
+      const result = is_subset(set1, set2);
+      const result2 = is_subset(set2, set1);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+      assert.deepStrictEqual(result2, Type.boolean(false));
+    })
+
+    it("should work with sets of lists of maps", () => {
+      const list1 = Type.list([
+        Type.map([[Type.atom("screen_x"), Type.float(100)]]),
+        Type.map([[Type.atom("screen_y"), Type.float(200)]])
+      ]);
+
+      const list2 = Type.list([
+        Type.map([[Type.atom("screen_x"), Type.float(100)]]),
+        Type.map([[Type.atom("screen_y"), Type.float(200)]]),
+        Type.map([[Type.atom("movement_y"), Type.float(200)]])
+      ]);
+
+      const set1 = Erlang_Sets["from_list/2"](Type.list([list1]), opts);
+      const set2 = Erlang_Sets["from_list/2"](Type.list([list1, list2]), opts);
+      const result = is_subset(set1, set2);
+      const result2 = is_subset(set2, set1);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+      assert.deepStrictEqual(result2, Type.boolean(false));
+    })
+
+    it("raises FunctionClauseError if the first argument is not a set", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.to_list/1",
+        [atomAbc],
+      );
+
+      assertBoxedError(
+        () => is_subset(atomAbc, Erlang_Sets["new/1"](opts)),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.to_list/1",
+        [atomAbc],
+      );
+
+      assertBoxedError(
+        () => is_subset(Erlang_Sets["new/1"](opts), atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
 });
