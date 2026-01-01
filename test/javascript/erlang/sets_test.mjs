@@ -271,7 +271,10 @@ describe("Erlang_Sets", () => {
     });
 
     it("should return false if not all elements in set1 are in set2", () => {
-      const set1 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1)]), opts);
+      const set1 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1)]),
+        opts,
+      );
       const set2 = Erlang_Sets["new/1"](opts);
       const result = is_subset(set1, set2);
 
@@ -279,16 +282,28 @@ describe("Erlang_Sets", () => {
     });
 
     it("should return true if both sets are the same", () => {
-      const set1 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1), Type.integer(2)]), opts);
-      const set2 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1), Type.integer(2)]), opts);
+      const set1 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(2)]),
+        opts,
+      );
+      const set2 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(2)]),
+        opts,
+      );
       const result = is_subset(set1, set2);
 
       assert.deepStrictEqual(result, Type.boolean(true));
     });
 
     it("should return true if all elements in set1 are in set2", () => {
-      const set1 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1)]), opts);
-      const set2 = Erlang_Sets["from_list/2"](Type.list([Type.integer(1), Type.integer(2)]), opts);
+      const set1 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1)]),
+        opts,
+      );
+      const set2 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(2)]),
+        opts,
+      );
       const result = is_subset(set1, set2);
 
       assert.deepStrictEqual(result, Type.boolean(true));
@@ -297,13 +312,13 @@ describe("Erlang_Sets", () => {
     it("should work with sets of tuples", () => {
       const list1 = Type.list([
         Type.tuple([Type.atom("ok"), Type.bitstring("data")]),
-        Type.tuple([Type.atom("error"), Type.bitstring("error")])
+        Type.tuple([Type.atom("error"), Type.bitstring("error")]),
       ]);
 
       const list2 = Type.list([
         Type.tuple([Type.atom("ok"), Type.bitstring("data")]),
         Type.tuple([Type.atom("error"), Type.bitstring("error")]),
-        Type.tuple([Type.atom("ok"), Type.bitstring("data2")])
+        Type.tuple([Type.atom("ok"), Type.bitstring("data2")]),
       ]);
 
       const set1 = Erlang_Sets["from_list/2"](list1, opts);
@@ -313,7 +328,7 @@ describe("Erlang_Sets", () => {
 
       assert.deepStrictEqual(result, Type.boolean(true));
       assert.deepStrictEqual(result2, Type.boolean(false));
-    })
+    });
 
     it("raises FunctionClauseError if the first argument is not a set", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
