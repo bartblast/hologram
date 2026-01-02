@@ -13,7 +13,7 @@ import Utils from "../../../assets/js/utils.mjs";
 defineGlobalErlangAndElixirModules();
 
 // IMPORTANT!
-// Each JavaScript test has a related Elixir consistency test in test/elixir/ex_js_consistency/erlang/binary_test.exs
+// Each JavaScript test has a related Elixir consistency test in test/elixir/ex_js_consistency/erlang/string_test.exs
 // Always update both together.
 
 describe("Erlang_String", () => {

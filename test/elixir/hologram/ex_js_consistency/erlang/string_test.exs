@@ -1,7 +1,7 @@
 defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   @moduledoc """
   IMPORTANT!
-  Each Elixir consistency test has a related JavaScript test in test/javascript/erlang/binary_test.mjs
+  Each Elixir consistency test has a related JavaScript test in test/javascript/erlang/string_test.mjs
   Always update both together.
   """
 
