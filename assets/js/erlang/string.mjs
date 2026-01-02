@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Unicode from "./unicode.mjs";
 import Erlang_UnicodeUtil from "./unicode_util.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -78,20 +79,24 @@ const Erlang_String = {
 
   // Start replace/3
   "replace/3": (string, pattern, replacement) => {
-    const replace = Erlang_String["replace/4"];
-
-    return replace(string, pattern, replacement, Type.atom("leading"));
+    return Erlang_String["replace/4"](string, pattern, replacement, Type.atom("leading"));
   },
   // End replace/3
   // Deps: [:string.replace/4]
 
   // Start replace/4
   "replace/4": (string, pattern, replacement, direction) => {
-    if (!Type.isBinary(string)) {
+    // The first three arguments of Erlang :string.replace are actually of type unicode:chardata, 
+    // we need to convert them to binaries in order to make validation and to convert them to text
+    const stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
+
+    if (!Type.isBinary(stringBinary)) {
       Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
     }
 
-    if (!Type.isBinary(pattern)) {
+    const patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
+
+    if (!Type.isBinary(patternBinary)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -100,7 +105,9 @@ const Erlang_String = {
       );
     }
 
-    if (!Type.isBinary(replacement)) {
+    const replacementBinary = Erlang_Unicode["characters_to_binary/1"](replacement);
+
+    if (!Type.isBinary(replacementBinary)) {
       throw new HologramInterpreterError(
         "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
       );
@@ -110,12 +117,12 @@ const Erlang_String = {
       Interpreter.raiseCaseClauseError(direction);
     }
 
-    const stringText = Bitstring.toText(string);
-    const patternText = Bitstring.toText(pattern);
-    const replacementText = Bitstring.toText(replacement);
+    const stringText = Bitstring.toText(stringBinary);
+    const patternText = Bitstring.toText(patternBinary);
+    const replacementText = Bitstring.toText(replacementBinary);
 
-    if (Bitstring.isEmpty(pattern) || !stringText.includes(patternText)) {
-      return Type.list([string]);
+    if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
+      return Type.list([stringBinary]);
     }
 
     let splittedStringList, index;
@@ -153,7 +160,7 @@ const Erlang_String = {
     return Type.list(splittedStringList);
   },
   // End replace/4
-  // Deps: []
+  // Deps: [:unicode.characters_to_binary/1]
 
   // Start titlecase/1
   "titlecase/1": (subject) => {
