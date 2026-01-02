@@ -211,7 +211,7 @@ describe("Erlang_String", () => {
 
   describe("replace/4", () => {
     const replace = Erlang_String["replace/4"];
-    const string_test = Type.bitstring("Hello World !");
+    const string = Type.bitstring("Hello World !");
 
     it("raises MatchError if the first argument is not a string", () => {
       assertBoxedError(
@@ -245,7 +245,7 @@ describe("Erlang_String", () => {
       assert.throw(
         () =>
           replace(
-            string_test,
+            string,
             Type.bitstring(" "),
             Type.atom("_"),
             Type.atom("all"),
@@ -271,29 +271,29 @@ describe("Erlang_String", () => {
 
     it("returns unchanged string inside a list if the pattern is empty", () => {
       const result = replace(
-        string_test,
+        string,
         Type.bitstring(""),
         Type.bitstring("."),
         Type.atom("all"),
       );
 
-      assert.deepStrictEqual(result, Type.list([string_test]));
+      assert.deepStrictEqual(result, Type.list([string]));
     });
 
     it("returns unchanged string inside a list if the pattern is not present inside the string", () => {
       const result = replace(
-        string_test,
+        string,
         Type.bitstring("_"),
         Type.bitstring("."),
         Type.atom("all"),
       );
 
-      assert.deepStrictEqual(result, Type.list([string_test]));
+      assert.deepStrictEqual(result, Type.list([string]));
     });
 
     it("returns a list of each words separated by the replacement with the direction set to :all", () => {
       const result = replace(
-        string_test,
+        string,
         Type.bitstring(" "),
         Type.bitstring("."),
         Type.atom("all"),
@@ -307,7 +307,7 @@ describe("Erlang_String", () => {
 
     it("returns a three-elements list with the first word at the beginning and the tail at the end when the direction is set to :leading", () => {
       const result = replace(
-        string_test,
+        string,
         Type.bitstring(" "),
         Type.bitstring("."),
         Type.atom("leading"),
@@ -318,7 +318,7 @@ describe("Erlang_String", () => {
 
     it("returns a three-elements list with the last word at the end and the rest at the beginning when the direction is set to :trailing", () => {
       const result = replace(
-        string_test,
+        string,
         Type.bitstring(" "),
         Type.bitstring("."),
         Type.atom("trailing"),
