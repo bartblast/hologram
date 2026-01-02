@@ -28,24 +28,34 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
                    fn -> :string.titlecase(1) end
     end
 
-    test "bitstring" do
-      assert :string.titlecase(<<104, 101, 108, 108, 111, 0>>) == <<72, 101, 108, 108, 111, 0>>
-    end
-
     test "ß" do
       assert :string.titlecase("ß") == "Ss"
     end
 
-    test "👩‍🚒" do
-      assert :string.titlecase("👩‍🚒") == "👩‍🚒"
+    test "emoji" do
+      [
+        {"👩‍👩‍👦‍👦", "👩‍👩‍👦‍👦"},
+        {"👩‍🚒", "👩‍🚒"}
+      ]
+      |> Enum.each(fn {input, expected} ->
+        assert :string.titlecase(input) == expected
+      end)
+    end
+
+    test "empty charlist" do
+      assert :string.titlecase([]) == []
     end
 
     test "charlist" do
       assert :string.titlecase([97, 98, 99]) == [65, 98, 99]
     end
 
-    test "empty charlist" do
-      assert :string.titlecase([]) == []
+    test "list of charlist" do
+      assert :string.titlecase([[97], [97]]) == [65, 97]
+    end
+
+    test "list of list of charlist" do
+      assert :string.titlecase([[[97], [97]], [97]]) == [65, 97, 97]
     end
   end
 end

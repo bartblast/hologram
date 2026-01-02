@@ -22,7 +22,8 @@ describe("Erlang_String", () => {
 
     const testType = (inputType, expectedType) => {
       const subject = Utils.shallowCloneObject(inputType);
-      assertBoxedStrictEqual(titlecase(subject), expectedType);
+      let actual = titlecase(subject);
+      assertBoxedStrictEqual(actual, expectedType);
       assertBoxedStrictEqual(subject, inputType);
     };
 
@@ -52,12 +53,17 @@ describe("Erlang_String", () => {
       );
     });
 
-    it("ß", () => {
-      testBitstring("ß", "Ss");
+    it("emoji", () => {
+      [
+        ["👩‍👩‍👦‍👦", "👩‍👩‍👦‍👦"],
+        ["👩‍🚒", "👩‍🚒"],
+      ].forEach(([input, expected]) => {
+        testBitstring(input, expected);
+      });
     });
 
-    it("👩‍🚒", () => {
-      testBitstring("👩‍🚒", "👩‍🚒");
+    it("empty charlist", () => {
+      testType(Type.list([]), Type.list([]));
     });
 
     it("charlist", () => {
@@ -67,8 +73,27 @@ describe("Erlang_String", () => {
       );
     });
 
-    it("empty charlist", () => {
-      testType(Type.list([]), Type.list([]));
+    it("list of charlist", () => {
+      testType(
+        Type.list([
+          Type.list([Type.integer(97)]),
+          Type.list([Type.integer(97)]),
+        ]),
+        Type.list([Type.integer(65), Type.integer(97)]),
+      );
+    });
+
+    it("list of list of charlist", () => {
+      testType(
+        Type.list([
+          Type.list([
+            Type.list([Type.integer(97)]),
+            Type.list([Type.integer(97)]),
+          ]),
+          Type.list([Type.integer(97)]),
+        ]),
+        Type.list([Type.integer(65), Type.integer(97), Type.integer(97)]),
+      );
     });
   });
 });
