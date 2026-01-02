@@ -15,7 +15,7 @@ import Type from "../../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 // IMPORTANT!
-// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs
+// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/string_test.exs
 // Always update both together.
 
 describe("Erlang_String", () => {
