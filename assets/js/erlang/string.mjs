@@ -44,8 +44,6 @@ const Erlang_String = {
 
         return Bitstring.fromText(list.join(""));
       }
-
-      console.log(subject, "not text, not empty");
     }
 
     if (Type.isList(subject)) {
