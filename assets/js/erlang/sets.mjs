@@ -91,12 +91,12 @@ const Erlang_Sets = {
   "is_subset/2": (set1, set2) => {
     if (!Type.isMap(set1)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set1]),
+        Interpreter.buildFunctionClauseErrorMsg(":sets.is_subset/2", [set1]),
       );
     }
     if (!Type.isMap(set2)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set2]),
+        Interpreter.buildFunctionClauseErrorMsg(":sets.is_subset/2", [set2]),
       );
     }
 

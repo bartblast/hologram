@@ -332,7 +332,7 @@ describe("Erlang_Sets", () => {
 
     it("raises FunctionClauseError if the first argument is not a set", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.to_list/1",
+        ":sets.is_subset/2",
         [atomAbc],
       );
 
@@ -345,7 +345,7 @@ describe("Erlang_Sets", () => {
 
     it("raises FunctionClauseError if the second argument is not a set", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.to_list/1",
+        ":sets.is_subset/2",
         [atomAbc],
       );
 
