@@ -100,7 +100,7 @@ describe("Erlang_Filename", () => {
     it("atom input", () => {
       const filename = Type.atom("path/to/file.txt");
       const result = basename(filename);
-      const expected = Type.iolist("file.txt");
+      const expected = Type.charlist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -123,7 +123,7 @@ describe("Erlang_Filename", () => {
       ]);
 
       const result = basename(filename);
-      const expected = Type.iolist("file.txt");
+      const expected = Type.charlist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
