@@ -76,8 +76,8 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "replace/3" do
-    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end when the direction is set to :leading" do
-      result = :string.replace("Hello World !", " ", "_", :leading)
+    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end" do
+      result = :string.replace("Hello World !", " ", "_")
 
       assert result == ["Hello", "_", "World !"]
     end

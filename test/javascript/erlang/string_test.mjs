@@ -196,11 +196,11 @@ describe("Erlang_String", () => {
 
   describe("replace/3", () => {
     const replace = Erlang_String["replace/3"];
-    const string_test = Type.bitstring("Hello World !");
+    const string = Type.bitstring("Hello World !");
 
     it("returns a three-elements list with the first word at the beginning, the replacement at the middle and the tail at the end", () => {
       const result = replace(
-        string_test,
+        string,
         Type.bitstring(" "),
         Type.bitstring("."),
       );
@@ -305,7 +305,7 @@ describe("Erlang_String", () => {
       );
     });
 
-    it("returns a two-elements list with the first word at the beginning and the tail at the end when the direction is set to :leading", () => {
+    it("returns a three-elements list with the first word at the beginning and the tail at the end when the direction is set to :leading", () => {
       const result = replace(
         string_test,
         Type.bitstring(" "),
@@ -316,7 +316,7 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["Hello", ".", "World !"]));
     });
 
-    it("returns a two-elements list with the last word at the end and the rest at the beginning when the direction is set to :trailing", () => {
+    it("returns a three-elements list with the last word at the end and the rest at the beginning when the direction is set to :trailing", () => {
       const result = replace(
         string_test,
         Type.bitstring(" "),
