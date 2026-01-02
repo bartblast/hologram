@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
   freeze,
 } from "../support/helpers.mjs";
@@ -35,6 +36,288 @@ const set123 = Erlang_Sets["from_list/2"](
 // Always update both together.
 
 describe("Erlang_Sets", () => {
+  describe("filter/2", () => {
+    const filter_2 = Erlang_Sets["filter/2"];
+
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("elem")],
+          guards: [],
+          body: (context) => {
+            return Erlang[">/2"](context.vars.elem, integer2);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("filters elements from a non-empty set", () => {
+      const result = filter_2(fun, set123);
+
+      assert.deepStrictEqual(
+        result,
+        freeze(Type.map([[integer3, Type.list([])]])),
+      );
+    });
+
+    it("returns an empty set if the predicate filters out all elements", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(10n));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = filter_2(fun, set123);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("returns the same set if the predicate matches all elements", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(0n));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = filter_2(fun, set123);
+
+      assert.deepStrictEqual(result, set123);
+    });
+
+    it("filters elements from an empty set", () => {
+      const result = filter_2(fun, Type.map());
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.filter/2",
+        [Type.atom("invalid"), set123],
+      );
+
+      assertBoxedError(
+        () => filter_2(Type.atom("invalid"), set123),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with wrong arity", () => {
+      const wrongArityFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("x"),
+              Type.variablePattern("y"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang["==/2"](context.vars.x, context.vars.y);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.filter/2",
+        [wrongArityFun, set123],
+      );
+
+      assertBoxedError(
+        () => filter_2(wrongArityFun, set123),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.filter/2",
+        [fun, atomAbc],
+      );
+
+      assertBoxedError(
+        () => filter_2(fun, atomAbc),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises ErlangError if the predicate does not return a boolean", () => {
+      const badFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang["*/2"](Type.integer(2n), context.vars.elem);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const singleElementSet = freeze(Type.map([[integer1, Type.list([])]]));
+
+      const expectedMsg = Interpreter.buildErlangErrorMsg(
+        `{:bad_filter, ${Interpreter.inspect(integer2)}}`,
+      );
+
+      assertBoxedError(
+        () => filter_2(badFun, singleElementSet),
+        "ErlangError",
+        expectedMsg,
+      );
+    });
+
+    it("filters elements with floats", () => {
+      const float1 = freeze(Type.float(1.5));
+      const float2 = freeze(Type.float(2.5));
+      const float3 = freeze(Type.float(3.5));
+      const setFloats = freeze(
+        Type.map([
+          [float1, Type.list([])],
+          [float2, Type.list([])],
+          [float3, Type.list([])],
+        ]),
+      );
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.float(2.0));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = filter_2(fun, setFloats);
+
+      assert.deepStrictEqual(
+        result,
+        freeze(
+          Type.map([
+            [float2, Type.list([])],
+            [float3, Type.list([])],
+          ]),
+        ),
+      );
+    });
+
+    it("filters elements with atoms", () => {
+      const atomFoo = freeze(Type.atom("foo"));
+      const atomBar = freeze(Type.atom("bar"));
+      const atomBaz = freeze(Type.atom("baz"));
+      const setAtoms = freeze(
+        Type.map([
+          [atomFoo, Type.list([])],
+          [atomBar, Type.list([])],
+          [atomBaz, Type.list([])],
+        ]),
+      );
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Type.boolean(
+                !Interpreter.isStrictlyEqual(context.vars.elem, atomFoo),
+              );
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = filter_2(fun, setAtoms);
+
+      assert.deepStrictEqual(
+        result,
+        freeze(
+          Type.map([
+            [atomBar, Type.list([])],
+            [atomBaz, Type.list([])],
+          ]),
+        ),
+      );
+    });
+
+    it("filters elements with mixed types", () => {
+      const atomValue = freeze(Type.atom("atom"));
+      const stringValue = freeze(Type.string("string"));
+      const floatValue = freeze(Type.float(1.5));
+      const intValue = freeze(Type.integer(42n));
+
+      const setMixed = freeze(
+        Type.map([
+          [atomValue, Type.list([])],
+          [stringValue, Type.list([])],
+          [floatValue, Type.list([])],
+          [intValue, Type.list([])],
+        ]),
+      );
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Type.boolean(
+                Type.isFloat(context.vars.elem) ||
+                  Type.isInteger(context.vars.elem),
+              );
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = filter_2(fun, setMixed);
+
+      assert.deepStrictEqual(
+        result,
+        freeze(
+          Type.map([
+            [floatValue, Type.list([])],
+            [intValue, Type.list([])],
+          ]),
+        ),
+      );
+    });
+  });
+
   describe("from_list/2", () => {
     const from_list_2 = Erlang_Sets["from_list/2"];
 

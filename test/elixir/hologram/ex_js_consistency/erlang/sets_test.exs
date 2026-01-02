@@ -9,6 +9,83 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   @moduletag :consistency
 
+  describe "filter/2" do
+    setup do
+      [set: :sets.from_list([1, 2, 3], version: 2)]
+    end
+
+    test "filters elements from a non-empty set", %{set: set} do
+      result = :sets.filter(fn x -> x > 2 end, set)
+
+      assert result == %{3 => []}
+    end
+
+    test "returns an empty set if the predicate filters out all elements", %{set: set} do
+      result = :sets.filter(fn x -> x > 10 end, set)
+
+      assert result == %{}
+    end
+
+    test "returns the same set if the predicate matches all elements", %{set: set} do
+      result = :sets.filter(fn x -> x > 0 end, set)
+
+      # Since sets don't guarantee order, we need to compare as maps
+      assert result == set
+    end
+
+    test "filters elements from an empty set" do
+      set = :sets.new(version: 2)
+      result = :sets.filter(fn x -> x > 0 end, set)
+
+      assert result == %{}
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      set = :sets.from_list([1, 2, 3], version: 2)
+
+      assert_error FunctionClauseError, ~r/no function clause matching in :sets\.filter\/2/, fn ->
+        :sets.filter(:invalid, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set" do
+      fun = fn x -> x > 0 end
+
+      assert_error FunctionClauseError, ~r/no function clause matching in :sets\.filter\/2/, fn ->
+        :sets.filter(fun, :abc)
+      end
+    end
+
+    test "raises ErlangError if the predicate does not return a boolean" do
+      set = :sets.from_list([1, 2, 3], version: 2)
+
+      assert_error ErlangError, ~r/bad_filter/, fn ->
+        :sets.filter(fn _x -> :not_a_boolean end, set)
+      end
+    end
+
+    test "filters elements with floats" do
+      set = :sets.from_list([1.5, 2.5, 3.5], version: 2)
+      result = :sets.filter(fn x -> x > 2.0 end, set)
+
+      assert result == %{2.5 => [], 3.5 => []}
+    end
+
+    test "filters elements with atoms" do
+      set = :sets.from_list([:foo, :bar, :baz], version: 2)
+      result = :sets.filter(fn x -> x != :foo end, set)
+
+      assert result == %{bar: [], baz: []}
+    end
+
+    test "filters elements with mixed types" do
+      set = :sets.from_list([:atom, "string", 1.5, 42], version: 2)
+      result = :sets.filter(fn x -> is_number(x) end, set)
+
+      assert result == %{1.5 => [], 42 => []}
+    end
+  end
+
   describe "from_list/2" do
     setup do
       [opts: [{:version, 2}]]
