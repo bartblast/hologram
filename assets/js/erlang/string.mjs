@@ -123,8 +123,8 @@ const Erlang_String = {
       case "all":
         splittedStringList = stringText
           .split(patternText)
-          .flatMap((elem, index) => {
-            return index === 0 ? elem : [replacementText, elem];
+          .flatMap((elem, idx) => {
+            return idx === 0 ? elem : [replacementText, elem];
           });
         break;
 
