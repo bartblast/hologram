@@ -202,10 +202,10 @@ describe("Erlang_String", () => {
       const result = replace(
         string,
         Type.bitstring(" "),
-        Type.bitstring("."),
+        Type.bitstring("_"),
       );
 
-      assert.deepStrictEqual(result, Type.list(["Hello", ".", "World !"]));
+      assert.deepStrictEqual(result, Type.list(["Hello", "_", "World !"]));
     });
   });
 
@@ -219,7 +219,7 @@ describe("Erlang_String", () => {
           replace(
             Type.atom("hello_world"),
             Type.bitstring("_"),
-            Type.bitstring("."),
+            Type.bitstring(" "),
             Type.atom("all"),
           ),
         "MatchError",
@@ -231,9 +231,9 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () =>
           replace(
-            Type.bitstring("hello_world"),
+            Type.bitstring("Hello_World_!"),
             Type.atom("_"),
-            Type.bitstring("."),
+            Type.bitstring(" "),
             Type.atom("all"),
           ),
         "ArgumentError",
@@ -259,9 +259,9 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () =>
           replace(
-            Type.bitstring("hello world"),
+            Type.bitstring("Hello World !"),
             Type.bitstring(" "),
-            Type.bitstring("."),
+            Type.bitstring("_"),
             Type.bitstring("all"),
           ),
         "CaseClauseError",
@@ -273,7 +273,7 @@ describe("Erlang_String", () => {
       const result = replace(
         string,
         Type.bitstring(""),
-        Type.bitstring("."),
+        Type.bitstring("_"),
         Type.atom("all"),
       );
 
@@ -283,8 +283,8 @@ describe("Erlang_String", () => {
     it("returns unchanged string inside a list if the pattern is not present inside the string", () => {
       const result = replace(
         string,
-        Type.bitstring("_"),
         Type.bitstring("."),
+        Type.bitstring("_"),
         Type.atom("all"),
       );
 
@@ -295,13 +295,13 @@ describe("Erlang_String", () => {
       const result = replace(
         string,
         Type.bitstring(" "),
-        Type.bitstring("."),
+        Type.bitstring("_"),
         Type.atom("all"),
       );
 
       assert.deepStrictEqual(
         result,
-        Type.list(["Hello", ".", "World", ".", "!"]),
+        Type.list(["Hello", "_", "World", "_", "!"]),
       );
     });
 
@@ -309,22 +309,22 @@ describe("Erlang_String", () => {
       const result = replace(
         string,
         Type.bitstring(" "),
-        Type.bitstring("."),
+        Type.bitstring("_"),
         Type.atom("leading"),
       );
 
-      assert.deepStrictEqual(result, Type.list(["Hello", ".", "World !"]));
+      assert.deepStrictEqual(result, Type.list(["Hello", "_", "World !"]));
     });
 
     it("returns a three-elements list with the last word at the end and the rest at the beginning when the direction is set to :trailing", () => {
       const result = replace(
         string,
         Type.bitstring(" "),
-        Type.bitstring("."),
+        Type.bitstring("_"),
         Type.atom("trailing"),
       );
 
-      assert.deepStrictEqual(result, Type.list(["Hello World", ".", "!"]));
+      assert.deepStrictEqual(result, Type.list(["Hello World", "_", "!"]));
     });
   });
 
