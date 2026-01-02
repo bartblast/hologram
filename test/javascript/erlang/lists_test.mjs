@@ -555,8 +555,16 @@ describe("Erlang_Lists", () => {
     });
 
     it("sorts the list by the middle element of each tuple", () => {
-      const tuple1 = Type.tuple([Type.atom("a"), Type.integer(2), Type.atom("c")]);
-      const tuple2 = Type.tuple([Type.atom("b"), Type.integer(1), Type.atom("d")]);
+      const tuple1 = Type.tuple([
+        Type.atom("a"),
+        Type.integer(2),
+        Type.atom("c"),
+      ]);
+      const tuple2 = Type.tuple([
+        Type.atom("b"),
+        Type.integer(1),
+        Type.atom("d"),
+      ]);
       const result = keysort(Type.integer(2), Type.list([tuple2, tuple1]));
 
       assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
