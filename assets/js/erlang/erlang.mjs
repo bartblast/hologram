@@ -977,7 +977,7 @@ const Erlang = {
   // Deps: []
   // Start list_to_tuple/1
   "list_to_tuple/1": (list) => {
-    if (!Type.isList(list)) {
+    if (!Type.isProperList(list)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
