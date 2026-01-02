@@ -633,11 +633,12 @@ describe("Erlang_Lists", () => {
       contextFixture(),
     );
 
-    const acc = Type.list([]);
+    const acc = Type.list();
 
     it("reduces empty list", () => {
       const result = foldr(fun, acc, emptyList);
-      assert.deepStrictEqual(result, acc);
+
+      assert.deepStrictEqual(result, emptyList);
     });
 
     it("reduces non-empty list", () => {
@@ -646,6 +647,7 @@ describe("Erlang_Lists", () => {
         Type.integer(2),
         Type.integer(3),
       ]);
+
       const result = foldr(fun, acc, list);
 
       assert.deepStrictEqual(
@@ -654,7 +656,6 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.foldr/3",
@@ -696,19 +697,16 @@ describe("Erlang_Lists", () => {
       );
     });
 
+    // Client error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is not a list", () => {
       assertBoxedError(
         () => foldr(fun, acc, Type.atom("abc")),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
-          fun,
-          acc,
-          Type.atom("abc"),
-        ]),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
       );
     });
 
-    // Client error message is intentionally different than server error message.
+    // Client error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is an improper list", () => {
       const improperList = Type.improperList([
         Type.integer(1),
@@ -719,11 +717,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldr(fun, acc, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
-          fun,
-          acc,
-          improperList.data.at(-1),
-        ]),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
       );
     });
   });

@@ -258,7 +258,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert :lists.foldr(fun, [], [1, 2, 3]) == [1, 2, 3]
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is not an anonymous function" do
       expected_msg = build_function_clause_error_msg(":lists.foldr/3", [:abc, [], []])
 
@@ -267,7 +266,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 2" do
       expected_msg = ~r"""
       no function clause matching in :lists\.foldr/3
@@ -310,7 +308,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
       expected_msg = ~r"""
       no function clause matching in :lists\.foldr_1/3

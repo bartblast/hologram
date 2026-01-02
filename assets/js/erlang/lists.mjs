@@ -143,23 +143,10 @@ const Erlang_Lists = {
       );
     }
 
-    if (!Type.isList(list)) {
+    if (!Type.isList(list) || !Type.isProperList(list)) {
+      // Client error message is intentionally simplified.
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
-          fun,
-          initialAcc,
-          list,
-        ]),
-      );
-    }
-
-    if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
-          fun,
-          initialAcc,
-          list.data.at(-1),
-        ]),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
       );
     }
 
