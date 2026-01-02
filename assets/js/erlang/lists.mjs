@@ -144,7 +144,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isList(list) || !Type.isProperList(list)) {
-      // Client error message is intentionally simplified.
+      // Client-side error message is intentionally simplified.
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
       );

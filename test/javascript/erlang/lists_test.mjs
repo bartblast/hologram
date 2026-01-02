@@ -697,7 +697,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally simplified.
+    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is not a list", () => {
       assertBoxedError(
         () => foldr(fun, acc, Type.atom("abc")),
@@ -706,7 +706,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally simplified.
+    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is an improper list", () => {
       const improperList = Type.improperList([
         Type.integer(1),
