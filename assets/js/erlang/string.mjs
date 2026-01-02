@@ -122,7 +122,7 @@ const Erlang_String = {
     const replacementText = Bitstring.toText(replacementBinary);
 
     if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
-      return Type.list([stringBinary]);
+      return Type.list([string]);
     }
 
     let splittedStringList, index;
