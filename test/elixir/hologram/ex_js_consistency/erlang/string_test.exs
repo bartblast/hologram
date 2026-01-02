@@ -76,7 +76,7 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "replace/3" do
-    test "returns a three-elements list with the first word at the begining, the replacement in the middle and the tail at the end when the direction is set to :leading" do
+    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end when the direction is set to :leading" do
       result = :string.replace("Hello World !", " ", "_", :leading)
 
       assert result == ["Hello", "_", "World !"]
@@ -104,13 +104,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       end
     end
 
-    test "returns inchanged string inside a list if the pattern is empty" do
+    test "returns unchanged string inside a list if the pattern is empty" do
       result = :string.replace("Hello World !", "", "_", :all)
 
       assert result == ["Hello World !"]
     end
 
-    test "returns inchanged string inside a list if the pattern is not present inside the string" do
+    test "returns unchanged string inside a list if the pattern is not present inside the string" do
       result = :string.replace("Hello World !", ".", "_", :all)
 
       assert result == ["Hello World !"]
@@ -122,13 +122,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert result == ["Hello", "_", "World", "_", "!"]
     end
 
-    test "returns a three-elements list with the first word at the begining, the replacement in the middle and the tail at the end when the direction is set to :leading" do
+    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end when the direction is set to :leading" do
       result = :string.replace("Hello World !", " ", "_", :leading)
 
       assert result == ["Hello", "_", "World !"]
     end
 
-    test "returns a three-elements list with the last word at the end, the replacement in the middle and the rest at the begining when the direction is set to :trailing" do
+    test "returns a three-elements list with the last word at the end, the replacement in the middle and the rest at the beginning when the direction is set to :trailing" do
       result = :string.replace("Hello World !", " ", "_", :trailing)
 
       assert result == ["Hello World", "_", "!"]
