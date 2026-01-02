@@ -8,6 +8,36 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Lists = {
+  // Start any/2
+  "any/2": (fun, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", []),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseCaseClauseError(list);
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [list]),
+      );
+    }
+
+    for (let i = 0; i < list.data.length; i++) {
+      const res = Interpreter.callAnonymousFunction(fun, [list.data[i]]);
+      if (Type.isTrue(res)) {
+        return Type.boolean(true);
+      }
+    }
+
+    return Type.boolean(false);
+  },
+  // End any/2
+  // Deps: []
+
   // Start filter/2
   "filter/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
@@ -92,6 +122,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(list)) {
+      // Client-side error message is intentionally simplified.
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
       );
@@ -103,6 +134,81 @@ const Erlang_Lists = {
     );
   },
   // End foldl/3
+  // Deps: []
+
+  // Start foldr/3
+  "foldr/3": function (fun, initialAcc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list) || !Type.isProperList(list)) {
+      // Client-side error message is intentionally simplified.
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
+      );
+    }
+
+    return list.data.reduceRight(
+      (acc, elem) => Interpreter.callAnonymousFunction(fun, [elem, acc]),
+      initialAcc,
+    );
+  },
+  // End foldr/3
+  // Deps: []
+
+  // Start keydelete/3
+  "keydelete/3": function (key, index, tuples) {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          arguments,
+        ),
+      );
+    }
+
+    if (index.value < 1n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          arguments,
+        ),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
+          key,
+          index,
+          thirdArg,
+        ]),
+      );
+    }
+
+    let result = tuples.data;
+
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        result = [...tuples.data.slice(0, i), ...tuples.data.slice(i + 1)];
+        break;
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End keydelete/3
   // Deps: []
 
   // Start keyfind/3
@@ -214,6 +320,35 @@ const Erlang_Lists = {
   // End member/2
   // Deps: []
 
+  // Start min/1
+  "min/1": (list) => {
+    if (!Type.isList(list) || list.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
+      );
+    }
+
+    // Notice that the error message says :lists.min/2 (not :lists.min/1)
+    // :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/2", [list]),
+      );
+    }
+
+    let min = list.data[0];
+
+    for (let i = 1; i < list.data.length; i++) {
+      if (Interpreter.compareTerms(list.data[i], min) < 0) {
+        min = list.data[i];
+      }
+    }
+
+    return min;
+  },
+  // End min/1
+  // Deps: []
+
   // Start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
@@ -274,9 +409,54 @@ const Erlang_Lists = {
       );
     }
 
-    return Type.list(list.data.sort(Interpreter.compareTerms));
+    return Type.list(list.data.slice().sort(Interpreter.compareTerms));
   },
   // End sort/1
+  // Deps: []
+
+  // Client-side implementation uses simplified error details (for improper list with 2+ elements case)
+  // Start sort/2
+  "sort/2": (fun, list) => {
+    // Only validate that the first argument is an anonymous function (type check)
+    // Let arity validation happen naturally when the function is called
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseError(
+        "BadFunctionError",
+        `expected a function, got: ${Interpreter.inspect(fun)}`,
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [fun, list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      let errorMsg;
+
+      // Match server behavior for improper lists:
+      // - For lists with 1 element, raise error in :lists.sort/2
+      // - For lists with 2+ elements, raise error in :lists.fsplit_1/6
+      errorMsg =
+        list.data.length <= 2
+          ? Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [
+              fun,
+              list,
+            ])
+          : Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
+
+      Interpreter.raiseFunctionClauseError(errorMsg);
+    }
+
+    return Type.list(
+      list.data.slice().sort((a, b) => {
+        const result = Interpreter.callAnonymousFunction(fun, [a, b]);
+        return Type.isTrue(result) ? -1 : 1;
+      }),
+    );
+  },
+  // End sort/2
   // Deps: []
 };
 

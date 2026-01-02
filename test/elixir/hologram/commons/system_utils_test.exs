@@ -19,19 +19,25 @@ defmodule Hologram.Commons.SystemUtilsTest do
       [test_dir: test_dir]
     end
 
+    # Note: We use 'elixir --version' instead of 'echo' because on Windows,
+    # echo.exe has flaky I/O buffering, causing intermittent test failures
+    # where output is not captured.
     test "executes a command by name from PATH" do
-      {result, exit_status} = cmd_cross_platform("echo", ["hello"], [])
+      {result, exit_status} = cmd_cross_platform("elixir", ["--version"], [])
 
       assert exit_status == 0
-      assert String.trim_trailing(result) == "hello"
+      assert result =~ "Elixir"
     end
 
+    # Note: We use 'elixir --version' instead of 'echo' because on Windows,
+    # echo.exe has flaky I/O buffering, causing intermittent test failures
+    # where output is not captured.
     test "executes a command with full path" do
-      echo_path = System.find_executable("echo")
-      {result, exit_status} = cmd_cross_platform(echo_path, ["world"], [])
+      command_path = System.find_executable("elixir")
+      {result, exit_status} = cmd_cross_platform(command_path, ["--version"], [])
 
       assert exit_status == 0
-      assert String.trim_trailing(result) == "world"
+      assert result =~ "Elixir"
     end
 
     test "returns non-zero exit status for failing commands" do

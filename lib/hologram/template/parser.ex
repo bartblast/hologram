@@ -94,7 +94,7 @@ defmodule Hologram.Template.Parser do
             delimiter_stack: list(delimiter),
             node_type: :attribute | :block | :public_comment | :tag | :text,
             prev_status: Parser.status() | nil,
-            processed_tags: [],
+            processed_tags: list(Parser.parsed_tag()),
             processed_tokens: list(Tokenizer.token()),
             raw?: boolean,
             script?: boolean,
@@ -646,13 +646,17 @@ defmodule Hologram.Template.Parser do
   def parse_tokens(%{raw?: false} = context, :text, [{:symbol, "{%raw}"} = token | rest]) do
     context
     |> add_processed_token(token)
+    |> add_processed_tag({:block_start, "raw"})
     |> enable_raw_mode()
     |> parse_tokens(:text, rest)
   end
 
   def parse_tokens(%{raw?: true} = context, :text, [{:symbol, "{/raw}"} = token | rest]) do
     context
+    |> maybe_add_text_tag()
+    |> reset_token_buffer()
     |> add_processed_token(token)
+    |> add_processed_tag({:block_end, "raw"})
     |> disable_raw_mode()
     |> parse_tokens(:text, rest)
   end

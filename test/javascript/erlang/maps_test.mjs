@@ -35,6 +35,42 @@ const mapA1B2 = freeze(
 // Always update both together.
 
 describe("Erlang_Maps", () => {
+  describe("find/2", () => {
+    const find = Erlang_Maps["find/2"];
+
+    it("key exists in map", () => {
+      const key = Type.atom("two");
+      const value = Type.integer(2);
+
+      const map = Type.map([
+        [Type.atom("one"), Type.integer(1)],
+        [key, value],
+      ]);
+
+      const result = find(key, map);
+
+      assert.deepStrictEqual(result, value);
+    });
+
+    it("key does not exist in map", () => {
+      const key = Type.atom("hello");
+      const map = Type.map([[Type.atom("one"), Type.integer(1)]]);
+
+      const result = find(key, map);
+      const expected = Type.atom("error");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      assertBoxedError(
+        () => find(Type.string("a"), Type.integer(1)),
+        "BadMapError",
+        "expected a map, got: 1",
+      );
+    });
+  });
+
   describe("fold/3", () => {
     const fold = Erlang_Maps["fold/3"];
 
@@ -117,6 +153,51 @@ describe("Erlang_Maps", () => {
         () => fold(fun, Type.integer(10), Type.atom("abc")),
         "BadMapError",
         "expected a map, got: :abc",
+      );
+    });
+  });
+
+  describe("from_keys/2", () => {
+    const from_keys = Erlang_Maps["from_keys/2"];
+
+    it("creates a map with multiple keys", () => {
+      const keys = Type.list([atomA, atomB]);
+      const result = from_keys(keys, integer1);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [atomA, integer1],
+          [atomB, integer1],
+        ]),
+      );
+    });
+
+    it("creates a map with a single key", () => {
+      const result = from_keys(Type.list([atomA]), integer1);
+
+      assert.deepStrictEqual(result, Type.map([[atomA, integer1]]));
+    });
+
+    it("creates an empty map if the list of keys is empty", () => {
+      const result = from_keys(Type.list(), integer1);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("raises ArgumentError if the first argument is not a list", () => {
+      assertBoxedError(
+        () => from_keys(atomA, integer1),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not a proper list", () => {
+      assertBoxedError(
+        () => from_keys(Type.improperList([atomA, atomB]), integer1),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
   });
@@ -711,6 +792,31 @@ describe("Erlang_Maps", () => {
     it("raises BadMapError if the third argument is not a map", () => {
       assertBoxedError(
         () => fun(Type.atom("a"), Type.integer(1), Type.atom("abc")),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+  });
+
+  describe("values/1", () => {
+    const fun = Erlang_Maps["values/1"];
+
+    it("empty map", () => {
+      assert.deepStrictEqual(fun(Type.map()), Type.list());
+    });
+
+    it("non-empty map", () => {
+      const map = Type.map([
+        [atomA, integer1],
+        [atomB, integer2],
+      ]);
+
+      assert.deepStrictEqual(fun(map), Type.list([integer1, integer2]));
+    });
+
+    it("not a map", () => {
+      assertBoxedError(
+        () => fun(atomAbc),
         "BadMapError",
         "expected a map, got: :abc",
       );

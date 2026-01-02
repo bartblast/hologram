@@ -1048,6 +1048,41 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, raw block" do
+    test "empty raw block removes block markers from AST" do
+      parse = [
+        {:block_start, "raw"},
+        {:block_end, "raw"}
+      ]
+
+      assert build_ast(parse) == []
+    end
+
+    test "preserves text inside raw block as separate text nodes without merging" do
+      parse = [
+        {:text, "before"},
+        {:block_start, "raw"},
+        {:text, "during"},
+        {:block_end, "raw"},
+        {:text, "after"}
+      ]
+
+      assert build_ast(parse) == [{:text, "before"}, {:text, "during"}, {:text, "after"}]
+    end
+
+    test "literal string \"raw\" as text content does not interfere with raw block processing" do
+      parse = [
+        {:text, "raw"},
+        {:block_start, "raw"},
+        {:text, "raw"},
+        {:block_end, "raw"},
+        {:text, "raw"}
+      ]
+
+      assert build_ast(parse) == [{:text, "raw"}, {:text, "raw"}, {:text, "raw"}]
+    end
+  end
+
   describe "build_ast/1, substitute module attributes" do
     test "non-nested list" do
       tags = [{:expression, "{[1, @a, 2, @b]}"}]

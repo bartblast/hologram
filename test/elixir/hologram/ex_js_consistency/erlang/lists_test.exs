@@ -9,6 +9,64 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   @moduletag :consistency
 
+  describe "any/2" do
+    test "returns true if the first item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [3, 1, 2, 0])
+    end
+
+    test "returns true if the middle item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [0, 1, 3, 2, 0])
+    end
+
+    test "returns true if the last item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [0, 1, 0, 2, 3])
+    end
+
+    test "returns false if none of the items results in true when supplied to the anonymous function" do
+      assert :lists.any(&(&1 > 5), [0, 1, 2, 3, 4]) == false
+    end
+
+    test "returns false for empty list" do
+      assert :lists.any(&(&1 > 2), []) == false
+    end
+
+    test "raises FunctionClauseError if the first arg is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.any/2", [:not_function, [1, 2, 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.any(:not_function, [1, 2, 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the first arg is an anonymous function with arity different than 1" do
+      fun = &(&1 == &2)
+
+      expected_msg =
+        build_function_clause_error_msg(":lists.any/2", [fun, [1, 2, 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.any(fun, [1, 2, 3])
+      end
+    end
+
+    test "raises CaseClauseError if the second argument is not a list" do
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+        :lists.any(&(&1 > 2), :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list" do
+      fun = &(&1 > 2)
+
+      expected_msg =
+        build_function_clause_error_msg(":lists.any_1/2", [fun, 3])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.any(fun, [1, 2 | 3])
+      end
+    end
+  end
+
   describe "filter/2" do
     setup do
       [fun: fn elem -> elem > 1 end]
@@ -114,27 +172,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   describe "foldl/3" do
     setup do
-      [fun: fn elem, acc -> acc + elem end]
+      [fun: fn elem, acc -> [elem | acc] end]
     end
 
     test "reduces empty list", %{fun: fun} do
-      assert :lists.foldl(fun, 0, []) == 0
+      assert :lists.foldl(fun, [], []) == []
     end
 
     test "reduces non-empty list", %{fun: fun} do
-      assert :lists.foldl(fun, 0, [1, 2, 3]) == 6
+      assert :lists.foldl(fun, [], [1, 2, 3]) == [3, 2, 1]
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is not an anonymous function" do
-      expected_msg = build_function_clause_error_msg(":lists.foldl/3", [:abc, 0, []])
+      expected_msg = build_function_clause_error_msg(":lists.foldl/3", [:abc, [], []])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.foldl(:abc, 0, [])
+        :lists.foldl(:abc, [], [])
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 2" do
       expected_msg = ~r"""
       no function clause matching in :lists\.foldl/3
@@ -145,24 +201,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
           #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test foldl/3 raises FunctionClauseError if the first argument is an anonymous function with arity different than 2"/1>
 
           # 2
-          0
+          \[\]
 
           # 3
           \[\]
       """s
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.foldl(fn x -> x end, 0, [])
+        :lists.foldl(fn x -> x end, [], [])
       end
     end
 
     test "raises CaseClauseError if the third argument is not a list", %{fun: fun} do
       assert_error CaseClauseError, "no case clause matching: :abc", fn ->
-        :lists.foldl(fun, 0, :abc)
+        :lists.foldl(fun, [], :abc)
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
       expected_msg = ~r"""
       no function clause matching in :lists\.foldl_1/3
@@ -173,7 +228,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
           #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
 
           # 2
-          3
+          \[2, 1\]
 
           # 3
           3
@@ -182,8 +237,177 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError,
                    expected_msg,
                    fn ->
-                     :lists.foldl(fun, 0, [1, 2 | 3])
+                     :lists.foldl(fun, [], [1, 2 | 3])
                    end
+    end
+  end
+
+  describe "foldr/3" do
+    setup do
+      [fun: fn elem, acc -> [elem | acc] end]
+    end
+
+    test "reduces empty list", %{fun: fun} do
+      assert :lists.foldr(fun, [], []) == []
+    end
+
+    test "reduces non-empty list", %{fun: fun} do
+      assert :lists.foldr(fun, [], [1, 2, 3]) == [1, 2, 3]
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.foldr/3", [:abc, [], []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foldr(:abc, [], [])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 2" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foldr/3
+
+      The following arguments were given to :lists\.foldr/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test foldr/3 raises FunctionClauseError if the first argument is an anonymous function with arity different than 2"/1>
+
+          # 2
+          \[\]
+
+          # 3
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foldr(fn x -> x end, [], [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is not a list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foldr_1/3
+
+      The following arguments were given to :lists\.foldr_1/3:
+
+          # 1
+          #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          \[\]
+
+          # 3
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foldr(fun, [], :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foldr_1/3
+
+      The following arguments were given to :lists\.foldr_1/3:
+
+          # 1
+          #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          \[\]
+
+          # 3
+          3
+      """s
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn ->
+                     :lists.foldr(fun, [], [1, 2 | 3])
+                   end
+    end
+  end
+
+  describe "keydelete/3" do
+    test "returns the original list if tuples list is empty" do
+      assert :lists.keydelete(:c, 1, []) == []
+    end
+
+    test "single tuple, no match" do
+      assert :lists.keydelete(:c, 1, [{:a, 2, 3.0}]) == [{:a, 2, 3.0}]
+    end
+
+    test "single tuple, match at first index" do
+      assert :lists.keydelete(:a, 1, [{:a, 2, 3.0}]) == []
+    end
+
+    test "single tuple, match at middle index" do
+      assert :lists.keydelete(:b, 2, [{1, :b, 3.0}]) == []
+    end
+
+    test "single tuple, match at last index" do
+      assert :lists.keydelete(:c, 3, [{1, 2.0, :c}]) == []
+    end
+
+    test "multiple tuples, no match" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keydelete(:c, 1, tuples) == [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match first tuple" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match middle tuple" do
+      tuples = [{:d, :e, :f}, {:a, 2, 3.0}, {:g, :h, :i}]
+
+      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match last tuple" do
+      tuples = [{:d, :e, :f}, {:g, :h, :i}, {:a, 2, 3.0}]
+
+      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "applies non-strict comparison" do
+      assert :lists.keydelete(2, 1, [{2.0}]) == []
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:a, 2.0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 2.0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:a, 0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [:a, 1, {{:b}, {:c}}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 1, {{:b}, {:c}})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [:a, 1, {:d}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 1, [{:b}, {:c} | {:d}])
+      end
     end
   end
 
@@ -373,6 +597,62 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "min/1" do
+    test "returns the element from a list of length 1" do
+      assert :lists.min([3]) == 3
+    end
+
+    test "returns the smaller element from a list of size 2 with first being smallest" do
+      assert :lists.min([1, 3]) == 1
+    end
+
+    test "returns the smaller element from a list of size 2 with second being smallest" do
+      assert :lists.min([3, 1]) == 1
+    end
+
+    test "returns the element from a list of size 2 when both are the same" do
+      assert :lists.min([3, 3]) == 3
+    end
+
+    test "applies structural comparison" do
+      list = Enum.shuffle([:a, 2.0, 3, "d", pid("0.1.2"), {0, 1}])
+
+      assert :lists.min(list) == 2.0
+    end
+
+    test "returns the smallest element from a large list with many duplicates" do
+      list = Enum.shuffle([1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5])
+
+      assert :lists.min(list) == 1
+    end
+
+    test "raises FunctionClauseError if the argument is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.min/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.min(:abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an improper list" do
+      # Notice that the error message says :lists.min/2 (not :lists.min/1)
+      # :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1
+      expected_msg = build_function_clause_error_msg(":lists.min/2")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.min([1, 2 | 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an empty list" do
+      expected_msg = build_function_clause_error_msg(":lists.min/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.min([])
+      end
+    end
+  end
+
   describe "reverse/1" do
     test "returns a list with the elements in the argument in reverse order" do
       assert :lists.reverse([1, 2, 3]) == [3, 2, 1]
@@ -460,6 +740,82 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.sort([1, 2 | 3])
+      end
+    end
+  end
+
+  describe "sort/2" do
+    setup do
+      [fun: fn a, b -> a <= b end]
+    end
+
+    test "sorts list using custom comparison function", %{fun: fun} do
+      assert :lists.sort(fun, [3, 1, 4, 2]) == [1, 2, 3, 4]
+    end
+
+    test "returns empty list when sorting empty list", %{fun: fun} do
+      assert :lists.sort(fun, []) == []
+    end
+
+    test "returns same list when sorting single element list", %{fun: fun} do
+      assert :lists.sort(fun, [5]) == [5]
+    end
+
+    test "returns same list when already sorted", %{fun: fun} do
+      assert :lists.sort(fun, [1, 2, 3, 4]) == [1, 2, 3, 4]
+    end
+
+    test "preserves duplicate elements", %{fun: fun} do
+      assert :lists.sort(fun, [3, 1, 2, 1, 3]) == [1, 1, 2, 3, 3]
+    end
+
+    test "sorts list in reverse order" do
+      fun = fn a, b -> a >= b end
+
+      assert :lists.sort(fun, [3, 1, 4, 2]) == [4, 3, 2, 1]
+    end
+
+    test "raises BadFunctionError if the first argument is not a function" do
+      expected_msg = "expected a function, got: :abc"
+
+      assert_error BadFunctionError, expected_msg, fn ->
+        :lists.sort(:abc, [1, 2])
+      end
+    end
+
+    test "raises BadArityError if the first argument is a function with wrong arity" do
+      expected_msg = ~r/with arity 1 called with 2 arguments \(\d+, \d+\)/
+
+      assert_error BadArityError, expected_msg, fn ->
+        :lists.sort(fn x -> x end, [1, 2])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list", %{fun: fun} do
+      expected_msg = build_function_clause_error_msg(":lists.sort/2", [fun, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort(fun, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list with 2 elements",
+         %{fun: fun} do
+      expected_msg = build_function_clause_error_msg(":lists.sort/2", [fun, [1 | 2]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort(fun, [1 | 2])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list with at least 3 elements",
+         %{
+           fun: fun
+         } do
+      expected_msg = build_function_clause_error_msg(":lists.fsplit_1/6", [2, 1, fun, 3, [], []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort(fun, [1, 2 | 3])
       end
     end
   end

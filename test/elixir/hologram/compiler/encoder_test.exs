@@ -1579,11 +1579,42 @@ defmodule Hologram.Compiler.EncoderTest do
     assert encode_ir(ir) == ~s/Type.port("nonode@nohost", [0, 11])/
   end
 
-  test "reference" do
-    # #Reference<0.1.2.3>
-    ir = %IR.ReferenceType{value: ref("0.1.2.3")}
+  describe "reference" do
+    test "NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT (tag 119)" do
+      # Build reference binary in Erlang External Term Format:
+      # 131 - VERSION_NUMBER
+      # 90 - NEWER_REFERENCE_EXT tag
+      # 3::16 - number of ID words (big-endian 16-bit)
+      # 119 - SMALL_ATOM_UTF8_EXT tag for node name
+      # 13::8 - node name length (8-bit)
+      # "nonode@nohost" - node name bytes
+      # 0::32 - creation number (32-bit)
+      # 1::32, 2::32, 3::32 - three ID words (each 32-bit)
+      binary = <<131, 90, 3::16, 119, 13::8, "nonode@nohost", 0::32, 1::32, 2::32, 3::32>>
 
-    assert encode_ir(ir) == ~s/Type.reference("nonode@nohost", [0, 1, 2, 3])/
+      ref = :erlang.binary_to_term(binary, [:safe])
+      ir = %IR.ReferenceType{value: ref}
+
+      assert encode_ir(ir) == ~s/Type.reference("nonode@nohost", 0, [1, 2, 3])/
+    end
+
+    test "NEWER_REFERENCE_EXT with ATOM_EXT (tag 100)" do
+      # Build reference binary in Erlang External Term Format:
+      # 131 - VERSION_NUMBER
+      # 90 - NEWER_REFERENCE_EXT tag
+      # 3::16 - number of ID words (big-endian 16-bit)
+      # 100 - ATOM_EXT tag for node name (Latin-1 encoded)
+      # 13::16 - node name length (16-bit)
+      # "nonode@nohost" - node name bytes
+      # 0::32 - creation number (32-bit)
+      # 1::32, 2::32, 3::32 - three ID words (each 32-bit)
+      binary = <<131, 90, 3::16, 100, 13::16, "nonode@nohost", 0::32, 1::32, 2::32, 3::32>>
+
+      ref = :erlang.binary_to_term(binary, [:safe])
+      ir = %IR.ReferenceType{value: ref}
+
+      assert encode_ir(ir) == ~s/Type.reference("nonode@nohost", 0, [1, 2, 3])/
+    end
   end
 
   describe "remote function call" do
@@ -2224,7 +2255,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "reference" do
-      assert encode_term!(ref("0.1.2.3")) == ~s/Type.reference("nonode@nohost", [0, 1, 2, 3])/
+      assert encode_term!(ref("0.1.2.3")) == ~s/Type.reference("nonode@nohost", 0, [3, 2, 1])/
     end
 
     test "tuple" do

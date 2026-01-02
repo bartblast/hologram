@@ -7,10 +7,18 @@ import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
+import Erlang_Elixir_Aliases from "../../../assets/js/erlang/elixir_aliases.mjs";
+import Erlang_Elixir_Locals from "../../../assets/js/erlang/elixir_locals.mjs";
+import Erlang_Filename from "../../../assets/js/erlang/filename.mjs";
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
+import Erlang_Math from "../../../assets/js/erlang/math.mjs";
 import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
+import Erlang_Rand from "../../../assets/js/erlang/rand.mjs";
+import Erlang_Re from "../../../assets/js/erlang/re.mjs";
+import Erlang_Sets from "../../../assets/js/erlang/sets.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
@@ -35,38 +43,49 @@ export function assertBoxedError(
   expectedErrorType,
   expectedErrorMessage,
 ) {
-  let isErrorThrown = false;
-  let isAnyAssertFailed = false;
-  let failMessage = `\nexpected:\n${expectedErrorType}: ${expectedErrorMessage}\n`;
+  const isRegex = expectedErrorMessage instanceof RegExp;
+
+  const expectedMessageDisplay = isRegex
+    ? expectedErrorMessage.toString()
+    : expectedErrorMessage;
+
+  const failMessagePrefix = `\nexpected:\n${expectedErrorType}: ${expectedMessageDisplay}\n`;
+
+  let error;
 
   try {
     callable();
-  } catch (error) {
-    isErrorThrown = true;
-
-    const errorStruct = Type.errorStruct(
-      expectedErrorType,
-      expectedErrorMessage,
-    );
-
-    if (!(error instanceof HologramBoxedError)) {
-      isAnyAssertFailed = true;
-      failMessage += `but got:\n${error.name}: ${error.message}`;
-    } else if (!Interpreter.isStrictlyEqual(error.struct, errorStruct)) {
-      isAnyAssertFailed = true;
-
-      const receivedErrorType = Interpreter.getErrorType(error);
-      const receivedErrorMessage = Interpreter.getErrorMessage(error);
-      failMessage += `but got:\n${receivedErrorType}: ${receivedErrorMessage}`;
-    }
+  } catch (e) {
+    error = e;
   }
 
-  if (isErrorThrown) {
-    if (isAnyAssertFailed) {
-      assert.fail(failMessage);
-    }
-  } else {
-    assert.fail(failMessage + "but got no error");
+  if (!error) {
+    assert.fail(failMessagePrefix + "but got no error");
+  }
+
+  if (!(error instanceof HologramBoxedError)) {
+    assert.fail(
+      failMessagePrefix + `but got:\n${error.name}: ${error.message}`,
+    );
+  }
+
+  const receivedErrorType = Interpreter.getErrorType(error);
+  const receivedErrorMessage = Interpreter.getErrorMessage(error);
+
+  const typeMatches = receivedErrorType === expectedErrorType;
+
+  const messageMatches = isRegex
+    ? expectedErrorMessage.test(receivedErrorMessage)
+    : Interpreter.isStrictlyEqual(
+        error.struct,
+        Type.errorStruct(expectedErrorType, expectedErrorMessage),
+      );
+
+  if (!typeMatches || !messageMatches) {
+    assert.fail(
+      failMessagePrefix +
+        `but got:\n${receivedErrorType}: ${receivedErrorMessage}`,
+    );
   }
 }
 
@@ -228,10 +247,18 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.hologram ??= {};
 
   globalThis.Erlang = Erlang;
+  globalThis.Erlang_Binary = Erlang_Binary;
   globalThis.Erlang_Code = Erlang_Code;
+  globalThis.Erlang_Elixir_Aliases = Erlang_Elixir_Aliases;
+  globalThis.Erlang_Elixir_Locals = Erlang_Elixir_Locals;
+  globalThis.Erlang_Filename = Erlang_Filename;
   globalThis.Erlang_Lists = Erlang_Lists;
   globalThis.Erlang_Maps = Erlang_Maps;
+  globalThis.Erlang_Math = Erlang_Math;
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
+  globalThis.Erlang_Rand = Erlang_Rand;
+  globalThis.Erlang_Re = Erlang_Re;
+  globalThis.Erlang_Sets = Erlang_Sets;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Code = Elixir_Code;
   globalThis.Elixir_Enum = defineElixirEnumModule();

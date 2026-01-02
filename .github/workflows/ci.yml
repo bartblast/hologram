@@ -79,7 +79,7 @@ jobs:
 
       # Step: Checkout the code.
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       # Step: Setup Node.js.
       - name: Set up Node.js
@@ -92,7 +92,7 @@ jobs:
       # Step: Define how to cache the lib Elixir dependencies.
       - name: Cache lib Elixir deps
         id: cache-lib-elixir-deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         env:
           cache-name: cache-lib-elixir-deps
         with:
@@ -102,7 +102,7 @@ jobs:
       # Step: Define how to cache the lib Elixir build.
       - name: Cache lib Elixir build
         id: cache-lib-elixir-build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         env:
           cache-name: cache-lib-elixir-build
         with:
@@ -122,7 +122,8 @@ jobs:
       - name: Download lib JavaScript deps
         uses: nick-fields/retry@v3
         with:
-          command: cd assets; npm clean-install
+          command: cd assets && npm clean-install
+          shell: bash
           timeout_minutes: 3
           max_attempts: 10
 
@@ -153,7 +154,7 @@ jobs:
       # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
       - name: Check lib JavaScript, JSON & YAML code formatted
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+        run: mix format.js.check
 
       # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
       - name: Check lib doc and spec coverage
@@ -174,7 +175,7 @@ jobs:
       # Cache key is based on Erlang/Elixir version and the mix.lock hash.
       - name: Restore lib Dialyzer PLT cache
         id: restore-lib-dialyzer-plt-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           key: |
             dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
@@ -192,7 +193,7 @@ jobs:
       # so we separate the cache restore and save steps in case running dialyzer fails.
       - name: Save lib Dialyzer PLT cache
         id: save-lib-dialyzer-plt-cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         with:
           key: |
@@ -289,7 +290,7 @@ jobs:
 
       # Step: Checkout the code.
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       # Step: Setup Node.js.
       - name: Set up Node.js
@@ -302,7 +303,7 @@ jobs:
       # Step: Define how to cache the feature tests app Elixir dependencies.
       - name: Cache feature tests app Elixir deps
         id: cache-feature-tests-app-elixir-deps
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         env:
           cache-name: cache-feature-tests-app-elixir-deps
         with:
@@ -312,7 +313,7 @@ jobs:
       # Step: Define how to cache the feature tests app Elixir build.
       - name: Cache feature tests app Elixir build
         id: cache-feature-tests-app-elixir-build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         env:
           cache-name: cache-feature-tests-app-elixir-build
         with:
@@ -326,6 +327,7 @@ jobs:
         with:
           # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
           command: cd test/features && mix deps.get
+          shell: bash
           timeout_minutes: 3
           max_attempts: 10
 
@@ -357,7 +359,7 @@ jobs:
       # Cache key is based on Erlang/Elixir version and the mix.lock hash.
       - name: Restore feature tests app Dialyzer PLT cache
         id: restore-feature-tests-app-dialyzer-plt-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           key: |
             dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
@@ -375,7 +377,7 @@ jobs:
       # so we separate the cache restore and save steps in case running dialyzer fails.
       - name: Save feature tests app Dialyzer PLT cache
         id: save-feature-tests-app-dialyzer-plt-cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         with:
           key: |
@@ -401,7 +403,7 @@ jobs:
       - name: Archive fail screenshots
         # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
         if: success() || failure()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/features/tmp/screenshots
