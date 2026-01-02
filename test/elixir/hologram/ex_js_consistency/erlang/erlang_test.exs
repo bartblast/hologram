@@ -1953,6 +1953,67 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "bxor/2" do
+    test "valid arguments" do
+      # 5 = 0b0101, 3 = 0b0011, 6 = 0b0110
+      assert :erlang.bxor(5, 3) == 6
+    end
+
+    test "both arguments are zero" do
+      assert :erlang.bxor(0, 0) == 0
+    end
+
+    test "left argument is zero" do
+      assert :erlang.bxor(0, 5) == 5
+    end
+
+    test "right argument is zero" do
+      assert :erlang.bxor(5, 0) == 5
+    end
+
+    test "same values result in zero" do
+      assert :erlang.bxor(5, 5) == 0
+    end
+
+    test "left argument is negative" do
+      # 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      assert :erlang.bxor(-5, 5) == -2
+    end
+
+    test "right argument is negative" do
+      # 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      assert :erlang.bxor(5, -5) == -2
+    end
+
+    test "both arguments are negative" do
+      # -5 = ...11111011, -3 = ...11111101, xor = ...00000110 = 6
+      assert :erlang.bxor(-5, -3) == 6
+    end
+
+    test "works with large numbers" do
+      # 18014398509481983 = 0b111111111111111111111111111111111111111111111111111111
+      # 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+      # xor result         = 0b000000000000000000000000000000000000000000000000000001 = 1
+
+      left = 18_014_398_509_481_983
+      right = 18_014_398_509_481_982
+
+      assert :erlang.bxor(left, right) == 1
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bxor(5.0, 3)",
+                   {:erlang, :bxor, [5.0, 3]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
+                   {:erlang, :bxor, [5, 3.0]}
+    end
+  end
+
   describe "byte_size/1" do
     test "empty bitstring" do
       assert :erlang.byte_size("") == 0

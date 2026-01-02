@@ -2733,6 +2733,98 @@ describe("Erlang", () => {
     });
   });
 
+  describe("bxor/2", () => {
+    const testedFun = Erlang["bxor/2"];
+
+    it("valid arguments", () => {
+      // 5 = 0b0101, 3 = 0b0011, 6 = 0b0110
+      const result = testedFun(integer5, integer3);
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("both arguments are zero", () => {
+      const result = testedFun(integer0, integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is zero", () => {
+      const result = testedFun(integer0, integer5);
+
+      assert.deepStrictEqual(result, integer5);
+    });
+
+    it("right argument is zero", () => {
+      const result = testedFun(integer5, integer0);
+
+      assert.deepStrictEqual(result, integer5);
+    });
+
+    it("same values result in zero", () => {
+      const result = testedFun(integer5, integer5);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is negative", () => {
+      const left = Type.integer(-5);
+
+      // 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      const result = testedFun(left, integer5);
+
+      assert.deepStrictEqual(result, Type.integer(-2));
+    });
+
+    it("right argument is negative", () => {
+      const right = Type.integer(-5);
+
+      // 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      const result = testedFun(integer5, right);
+
+      assert.deepStrictEqual(result, Type.integer(-2));
+    });
+
+    it("both arguments are negative", () => {
+      const left = Type.integer(-5);
+      const right = Type.integer(-3);
+
+      // -5 = ...11111011, -3 = ...11111101, xor = ...00000110 = 6
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("works with large numbers", () => {
+      // 18014398509481983 = 0b111111111111111111111111111111111111111111111111111111
+      // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+      // xor result         = 0b000000000000000000000000000000000000000000000000000001 = 1
+
+      const left = Type.integer(18014398509481983n);
+      const right = Type.integer(18014398509481982n);
+
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(float5, integer3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bxor(5.0, 3)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(integer5, float3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
+      );
+    });
+  });
+
   describe("byte_size/1", () => {
     const byte_size = Erlang["byte_size/1"];
 
