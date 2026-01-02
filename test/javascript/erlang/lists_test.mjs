@@ -546,10 +546,10 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(result, input);
     });
 
-    it("sorts the list by the last element of each tuple", () => {
+    it("sorts the list by the first element of each tuple", () => {
       const tuple1 = Type.tuple([Type.atom("b"), Type.integer(1)]);
       const tuple2 = Type.tuple([Type.atom("a"), Type.integer(2)]);
-      const result = keysort(Type.integer(1), Type.list([tuple2, tuple1]));
+      const result = keysort(Type.integer(1), Type.list([tuple1, tuple2]));
 
       assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
     });
@@ -565,7 +565,7 @@ describe("Erlang_Lists", () => {
         Type.integer(1),
         Type.atom("d"),
       ]);
-      const result = keysort(Type.integer(2), Type.list([tuple2, tuple1]));
+      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
 
       assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
     });
@@ -573,7 +573,7 @@ describe("Erlang_Lists", () => {
     it("sorts the list by the last element of each tuple", () => {
       const tuple1 = Type.tuple([Type.atom("a"), Type.integer(2)]);
       const tuple2 = Type.tuple([Type.atom("b"), Type.integer(1)]);
-      const result = keysort(Type.integer(2), Type.list([tuple2, tuple1]));
+      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
 
       assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
     });
