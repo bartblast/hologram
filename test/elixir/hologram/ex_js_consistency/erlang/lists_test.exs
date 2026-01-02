@@ -172,27 +172,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   describe "foldl/3" do
     setup do
-      [fun: fn elem, acc -> acc + elem end]
+      [fun: fn elem, acc -> [elem | acc] end]
     end
 
     test "reduces empty list", %{fun: fun} do
-      assert :lists.foldl(fun, 0, []) == 0
+      assert :lists.foldl(fun, [], []) == []
     end
 
     test "reduces non-empty list", %{fun: fun} do
-      assert :lists.foldl(fun, 0, [1, 2, 3]) == 6
+      assert :lists.foldl(fun, [], [1, 2, 3]) == [3, 2, 1]
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is not an anonymous function" do
-      expected_msg = build_function_clause_error_msg(":lists.foldl/3", [:abc, 0, []])
+      expected_msg = build_function_clause_error_msg(":lists.foldl/3", [:abc, [], []])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.foldl(:abc, 0, [])
+        :lists.foldl(:abc, [], [])
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 2" do
       expected_msg = ~r"""
       no function clause matching in :lists\.foldl/3
@@ -203,24 +201,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
           #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test foldl/3 raises FunctionClauseError if the first argument is an anonymous function with arity different than 2"/1>
 
           # 2
-          0
+          \[\]
 
           # 3
           \[\]
       """s
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.foldl(fn x -> x end, 0, [])
+        :lists.foldl(fn x -> x end, [], [])
       end
     end
 
     test "raises CaseClauseError if the third argument is not a list", %{fun: fun} do
       assert_error CaseClauseError, "no case clause matching: :abc", fn ->
-        :lists.foldl(fun, 0, :abc)
+        :lists.foldl(fun, [], :abc)
       end
     end
 
-    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
       expected_msg = ~r"""
       no function clause matching in :lists\.foldl_1/3
@@ -231,7 +228,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
           #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
 
           # 2
-          3
+          \[2, 1\]
 
           # 3
           3
@@ -240,7 +237,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError,
                    expected_msg,
                    fn ->
-                     :lists.foldl(fun, 0, [1, 2 | 3])
+                     :lists.foldl(fun, [], [1, 2 | 3])
                    end
     end
   end

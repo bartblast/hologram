@@ -519,18 +519,19 @@ describe("Erlang_Lists", () => {
           ],
           guards: [],
           body: (context) => {
-            return Erlang["+/2"](context.vars.acc, context.vars.elem);
+            return Type.list([context.vars.elem, ...context.vars.acc.data]);
           },
         },
       ],
       contextFixture(),
     );
 
-    const acc = Type.integer(0);
+    const acc = Type.list();
 
     it("reduces empty list", () => {
       const result = foldl(fun, acc, emptyList);
-      assert.deepStrictEqual(result, acc);
+
+      assert.deepStrictEqual(result, emptyList);
     });
 
     it("reduces non-empty list", () => {
@@ -539,12 +540,18 @@ describe("Erlang_Lists", () => {
         Type.integer(2),
         Type.integer(3),
       ]);
+
       const result = foldl(fun, acc, list);
 
-      assert.deepStrictEqual(result, Type.integer(6));
+      const expected = Type.list([
+        Type.integer(3),
+        Type.integer(2),
+        Type.integer(1),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.foldl/3",
@@ -558,7 +565,6 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
       const fun = Type.anonymousFunction(
         1,
@@ -594,19 +600,16 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
+    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
       assertBoxedError(
-        () =>
-          foldl(
-            fun,
-            acc,
-            Type.improperList([
-              Type.integer(1),
-              Type.integer(2),
-              Type.integer(3),
-            ]),
-          ),
+        () => foldl(fun, acc, list),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
       );
@@ -650,10 +653,13 @@ describe("Erlang_Lists", () => {
 
       const result = foldr(fun, acc, list);
 
-      assert.deepStrictEqual(
-        result,
-        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-      );
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
@@ -669,7 +675,6 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
       const fun = Type.anonymousFunction(
         1,

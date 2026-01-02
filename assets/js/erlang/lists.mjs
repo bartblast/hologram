@@ -122,6 +122,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(list)) {
+      // Client-side error message is intentionally simplified.
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
       );
