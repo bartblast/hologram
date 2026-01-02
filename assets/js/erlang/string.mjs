@@ -138,7 +138,6 @@ const Erlang_String = {
         break;
 
       case "leading":
-      default:
         index = stringText.indexOf(patternText);
         splittedStringList = [
           stringText.slice(0, index),
@@ -146,6 +145,9 @@ const Erlang_String = {
           stringText.slice(index + patternText.length),
         ];
         break;
+
+      default:
+        Interpreter.raiseCaseClauseError(direction.value)
     }
 
     return Type.list(splittedStringList);
