@@ -559,6 +559,86 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "mapfoldl/3" do
+    setup do
+      [fun: fn elem, acc -> {elem * 10, acc + elem} end]
+    end
+
+    test "mapfolds empty list", %{fun: fun} do
+      assert :lists.mapfoldl(fun, 0, []) == {[], 0}
+    end
+
+    test "mapfolds non-empty list", %{fun: fun} do
+      assert :lists.mapfoldl(fun, 0, [1, 2, 3]) == {[10, 20, 30], 6}
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.mapfoldl/3", [:abc, 0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(:abc, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 2" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.mapfoldl/3
+
+      The following arguments were given to :lists\.mapfoldl/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test mapfoldl/3 raises FunctionClauseError if the first argument is an anonymous function with arity different than 2"/1>
+
+          # 2
+          0
+
+          # 3
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(fn x -> x end, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is not a list", %{fun: fun} do
+      expected_msg =
+        build_function_clause_error_msg(":lists.mapfoldl_1/3", [fun, 0, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(fun, 0, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.mapfoldl_1/3
+
+      The following arguments were given to :lists\.mapfoldl_1/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          3
+
+          # 3
+          3
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(fun, 0, [1, 2 | 3])
+      end
+    end
+
+    test "raises MatchError if the anonymous function does not return a 2-element tuple" do
+      assert_error MatchError, "no match of right hand side value: 1", fn ->
+        :lists.mapfoldl(fn x, acc -> x + acc end, 0, [1])
+      end
+    end
+  end
+
   describe "member/2" do
     test "is a member of a proper list" do
       assert :lists.member(2, [1, 2, 3]) == true
