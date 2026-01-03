@@ -1599,10 +1599,11 @@ describe("Erlang", () => {
       // Number.MAX_SAFE_INTEGER = 9007199254740991
       // = 0b11111111111111111111111111111111111111111111111111111
       //
-      // 2 * 9007199254740991 = 18014398509481983
+      // 2 * 9007199254740991 + 1 = 18014398509481983
       // = 0b111111111111111111111111111111111111111111111111111111
       //
-      // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+      // 2 * 9007199254740991 = 18014398509481982
+      // = 0b111111111111111111111111111111111111111111111111111110
 
       const left = Type.integer(18014398509481983n);
       const right = Type.integer(18014398509481982n);
@@ -1625,47 +1626,6 @@ describe("Erlang", () => {
         () => testedFun(integer5, float3),
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
-      );
-    });
-  });
-
-  describe("bor/2", () => {
-    const bor = Erlang["bor/2"];
-
-    it("both arguments are positive", () => {
-      assert.deepStrictEqual(
-        bor(Type.integer(4), Type.integer(3)),
-        Type.integer(7),
-      );
-    });
-
-    it("left argument is negative", () => {
-      assert.deepStrictEqual(
-        bor(Type.integer(-4), Type.integer(3)),
-        Type.integer(-1),
-      );
-    });
-
-    it("left argument is 0", () => {
-      assert.deepStrictEqual(
-        bor(Type.integer(0), Type.integer(8)),
-        Type.integer(8),
-      );
-    });
-
-    it("raises ArithmeticError if the first argument is not an integer", () => {
-      assertBoxedError(
-        () => bor(atomAbc, integer1),
-        "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
-      );
-    });
-
-    it("raises ArithmeticError if the second argument is not an integer", () => {
-      assertBoxedError(
-        () => bor(integer1, atomAbc),
-        "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
       );
     });
   });
@@ -2595,6 +2555,93 @@ describe("Erlang", () => {
         () => bit_size(myAtom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    });
+  });
+
+  describe("bor/2", () => {
+    const bor = Erlang["bor/2"];
+
+    it("both arguments are positive", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(3)),
+        Type.integer(7),
+      );
+    });
+
+    it("both arguments are zero", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(0), Type.integer(0)),
+        Type.integer(0),
+      );
+    });
+
+    it("left argument is zero", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(0), Type.integer(8)),
+        Type.integer(8),
+      );
+    });
+
+    it("right argument is zero", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(0)),
+        Type.integer(4),
+      );
+    });
+
+    it("left argument is negative", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(-4), Type.integer(3)),
+        Type.integer(-1),
+      );
+    });
+
+    it("right argument is negative", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(-3)),
+        Type.integer(-3),
+      );
+    });
+
+    it("both arguments are negative", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(-4), Type.integer(-3)),
+        Type.integer(-3),
+      );
+    });
+
+    it("works with large numbers", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      // = 0b11111111111111111111111111111111111111111111111111111
+      //
+      // 2 * 9007199254740991 + 1 = 18014398509481983
+      // = 0b111111111111111111111111111111111111111111111111111111
+      //
+      // 2 * 9007199254740991 = 18014398509481982
+      // = 0b111111111111111111111111111111111111111111111111111110
+
+      const left = Type.integer(18_014_398_509_481_983n);
+      const right = Type.integer(18_014_398_509_481_982n);
+
+      const result = bor(left, right);
+
+      assert.deepStrictEqual(result, left);
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(float1, integer2),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(1.0, 2)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(integer1, float2),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
       );
     });
   });

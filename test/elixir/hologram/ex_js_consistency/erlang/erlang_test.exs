@@ -1349,10 +1349,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       # Number.MAX_SAFE_INTEGER = 9007199254740991
       # = 0b11111111111111111111111111111111111111111111111111111
       #
-      # 2 * 9007199254740991 = 18014398509481983
+      # 2 * 9007199254740991 + 1 = 18014398509481983
       # = 0b111111111111111111111111111111111111111111111111111111
       #
-      # 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+      # 2 * 9007199254740991 = 18014398509481982
+      # = 0b111111111111111111111111111111111111111111111111111110
 
       left = 18_014_398_509_481_983
       right = 18_014_398_509_481_982
@@ -1834,6 +1835,64 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a bitstring"),
                    {:erlang, :bit_size, [:abc]}
+    end
+  end
+
+  describe "bor/2" do
+    test "both arguments are positive" do
+      assert :erlang.bor(4, 3) == 7
+    end
+
+    test "both arguments are zero" do
+      assert :erlang.bor(0, 0) == 0
+    end
+
+    test "left argument is zero" do
+      assert :erlang.bor(0, 8) == 8
+    end
+
+    test "right argument is zero" do
+      assert :erlang.bor(4, 0) == 4
+    end
+
+    test "left argument is negative" do
+      assert :erlang.bor(-4, 3) == -1
+    end
+
+    test "right argument is negative" do
+      assert :erlang.bor(4, -3) == -3
+    end
+
+    test "both arguments are negative" do
+      assert :erlang.bor(-4, -3) == -3
+    end
+
+    test "works with large numbers" do
+      # Number.MAX_SAFE_INTEGER = 9007199254740991
+      # = 0b11111111111111111111111111111111111111111111111111111
+      #
+      # 2 * 9007199254740991 + 1 = 18014398509481983
+      # = 0b111111111111111111111111111111111111111111111111111111
+      #
+      # 2 * 9007199254740991 = 18014398509481982
+      # = 0b111111111111111111111111111111111111111111111111111110
+
+      left = 18_014_398_509_481_983
+      right = 18_014_398_509_481_982
+
+      assert :erlang.bor(left, right) == left
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(1.0, 2)",
+                   {:erlang, :bor, [1.0, 2]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
+                   {:erlang, :bor, [1, 2.0]}
     end
   end
 
@@ -3074,32 +3133,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a boolean" do
       assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
-    end
-  end
-
-  describe "bor/2" do
-    test "both arguments are positive" do
-      assert :erlang.bor(4, 3) == 7
-    end
-
-    test "left argument is negative" do
-      assert :erlang.bor(-4, 3) == -1
-    end
-
-    test "left argument is 0" do
-      assert :erlang.bor(0, 8) == 8
-    end
-
-    test "raises ArithmeticError if the first argument is not an integer" do
-      assert_error ArithmeticError,
-                   "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
-                   {:erlang, :bor, [:abc, 1]}
-    end
-
-    test "raises ArithmeticError if the second argument is not an integer" do
-      assert_error ArithmeticError,
-                   "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
-                   {:erlang, :bor, [1, :abc]}
     end
   end
 
