@@ -2466,49 +2466,68 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                "-9007199254740991.0"
     end
 
-    test ":compact option, input > 10, infinite" do
+    test ":compact option by itself is same as default format" do
+      assert :erlang.float_to_binary(@input_above_10, [:compact]) ==
+               :erlang.float_to_binary(@input_above_10, [])
+    end
+
+    test ":compact :decimals option, input > 10, infinite" do
       assert :erlang.float_to_binary(@input_above_10, [:compact, {:decimals, 4}]) == "333.3333"
     end
 
-    test ":compact option, input > 10, finite" do
+    test ":compact :decimals option, input > 10, finite" do
       assert :erlang.float_to_binary(128.5, [:compact, {:decimals, 4}]) == "128.5"
     end
 
-    test ":compact option, input between 1 and 10, infinite" do
+    test ":compact :decimals option, input between 1 and 10, infinite" do
       assert :erlang.float_to_binary(@input_between_1_and_10, [:compact, {:decimals, 4}]) ==
                "3.3333"
     end
 
-    test ":compact option, input between 1 and 10, finite" do
+    test ":compact :decimals option, input between 1 and 10, finite" do
       assert :erlang.float_to_binary(8.5, [:compact, {:decimals, 4}]) == "8.5"
     end
 
-    test ":compact option, input < 1, infinite" do
+    test ":compact :decimals option, input < 1, infinite" do
       assert :erlang.float_to_binary(@input_below_1, [:compact, {:decimals, 4}]) == "0.0333"
     end
 
-    test ":compact option, input < 1, finite" do
+    test ":compact :decimals option, input < 1, finite" do
       assert :erlang.float_to_binary(0.25, [:compact, {:decimals, 4}]) == "0.25"
     end
 
-    test ":compact option, input is signed positive zero" do
+    test ":compact :decimals option, input is signed positive zero" do
       assert :erlang.float_to_binary(+0.0, [:compact, {:decimals, 4}]) == "0.0"
     end
 
-    test ":compact option, input is signed negative zero" do
+    test ":compact :decimals option, input is signed negative zero" do
       assert :erlang.float_to_binary(-0.0, [:compact, {:decimals, 4}]) == "-0.0"
     end
 
-    test ":compact option, input is unsigned zero" do
+    test ":compact :decimals option, input is unsigned zero" do
       assert :erlang.float_to_binary(0.0, [:compact, {:decimals, 4}]) == "0.0"
     end
 
-    test ":compact option, order of options doesn't matter" do
+    test ":compact :decimals option, order of options doesn't matter" do
       assert :erlang.float_to_binary(128.5, [{:decimals, 4}, :compact]) == "128.5"
     end
 
-    test ":compact option, accepts compact option with decimals 0" do
+    test ":compact :decimals option, accepts compact option with decimals 0" do
       assert :erlang.float_to_binary(128.0, [:compact, {:decimals, 0}]) == "128"
+    end
+
+    test ":compact :scientific option same as :scientific" do
+      result = :erlang.float_to_binary(@input_above_10, [{:scientific, 4}])
+
+      assert result == :erlang.float_to_binary(@input_above_10, [{:scientific, 4}, :compact])
+      assert result == :erlang.float_to_binary(@input_above_10, [:compact, {:scientific, 4}])
+    end
+
+    test ":compact :short option same as :short" do
+      result = :erlang.float_to_binary(@input_above_10, [:short])
+
+      assert result == :erlang.float_to_binary(@input_above_10, [:short, :compact])
+      assert result == :erlang.float_to_binary(@input_above_10, [:compact, :short])
     end
 
     test "allows result with exactly 255 bytes (boundary condition)" do
@@ -2552,6 +2571,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
         :erlang.float_to_binary(@input_above_10, [:abc])
       end
+    end
+
+    test "multiple formats - use last format :scientific" do
+      result = "7.120e+00"
+      assert result == :erlang.float_to_binary(7.12, [{:decimals, 4}, {:scientific, 3}])
+      assert result == :erlang.float_to_binary(7.12, [{:decimals, 4}, {:scientific, 3}, :compact])
+    end
+
+    test "multiple formats - use last format :decimals" do
+      assert :erlang.float_to_binary(7.12, [:short, {:decimals, 4}]) == "7.1200"
+    end
+
+    test "multiple formats - use last format :compact :decimals" do
+      result = "7.12"
+      assert result == :erlang.float_to_binary(7.12, [:compact, :short, {:decimals, 4}])
+      assert result == :erlang.float_to_binary(7.12, [:short, {:decimals, 4}, :compact])
+    end
+
+    test "multiple formats - use last format :short" do
+      result = "7.12"
+      assert result == :erlang.float_to_binary(7.12, [{:scientific, 3}, :short])
+      assert result == :erlang.float_to_binary(7.12, [{:scientific, 3}, :short, :compact])
     end
   end
 

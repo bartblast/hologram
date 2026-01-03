@@ -3622,6 +3622,16 @@ describe("Erlang", () => {
       });
     });
 
+    it(":compact option by itself is same as default format", () => {
+      const optsCompact = Type.list([Type.atom("compact")]);
+      const optsDefault = Type.list();
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsCompact),
+        float_to_binary(inputAbove10, optsDefault),
+      );
+    });
+
     describe(":compact option", () => {
       const opts = Type.list([
         Type.atom("compact"),
@@ -3720,6 +3730,54 @@ describe("Erlang", () => {
       });
     });
 
+    it(":compact :scientific option same as :scientific", () => {
+      const optsScientific = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+      ]);
+      const optsScientificCompact = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+      const optsCompactScientific = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+      ]);
+
+      const result = float_to_binary(inputAbove10, optsScientific);
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsScientificCompact),
+        result,
+      );
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsCompactScientific),
+        result,
+      );
+    });
+
+    it(":compact :short option same as :short", () => {
+      const optsShort = Type.list([Type.atom("short")]);
+      const optsShortCompact = Type.list([
+        Type.atom("short"),
+        Type.atom("compact"),
+      ]);
+      const optsCompactShort = Type.list([
+        Type.atom("compact"),
+        Type.atom("short"),
+      ]);
+
+      const result = float_to_binary(inputAbove10, optsShort);
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsShortCompact),
+        result,
+      );
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsCompactShort),
+        result,
+      );
+    });
+
     it("allows result with exactly 255 bytes (boundary condition)", () => {
       // Test boundary: 1.0 with decimals=253 → "1." + 253 zeros = 255 chars (allowed)
       const opts = Type.list([
@@ -3784,6 +3842,72 @@ describe("Erlang", () => {
           () => float_to_binary(inputAbove10, Type.list([atomAbc])),
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+        );
+      });
+    });
+
+    describe("multiple formats - use last format option", () => {
+      it("{:decimals, 4} and {:scientific, 3} → uses :scientific", () => {
+        const input = Type.float(7.12);
+        const opts = Type.list([
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+          Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+        ]);
+
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.120e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it(":short and {:decimals, 4} → uses :decimals", () => {
+        const input = Type.float(7.12);
+        const opts = Type.list([
+          Type.atom("short"),
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        ]);
+
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.1200");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("{:scientific, 3} and :short → uses :short", () => {
+        const input = Type.float(7.12);
+        const opts = Type.list([
+          Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+          Type.atom("short"),
+        ]);
+
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it(":compact :decimals option - use last format :compact :decimals", () => {
+        const input = Type.float(7.12);
+        const optsCompactShortDecimals = Type.list([
+          Type.atom("compact"),
+          Type.atom("short"),
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        ]);
+        const optsShortDecimalsCompact = Type.list([
+          Type.atom("short"),
+          Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+          Type.atom("compact"),
+        ]);
+
+        const result = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(
+          float_to_binary(input, optsCompactShortDecimals),
+          result,
+        );
+        assert.deepStrictEqual(
+          float_to_binary(input, optsShortDecimalsCompact),
+          result,
         );
       });
     });
