@@ -185,6 +185,41 @@ const Erlang_Maps = {
   // End merge/2
   // Deps: []
 
+  // Start merge_with/3
+  "merge_with/3": (combiner, map1, map2) => {
+    if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const accInitial = Type.map(Object.values(map1.data));
+
+    const result = Object.values(map2.data).reduce((accMap, [key, value2]) => {
+      const value1 = Erlang_Maps["get/3"](key, accMap, null);
+      const newValue =
+        value1 !== null
+          ? Interpreter.callAnonymousFunction(combiner, [key, value1, value2])
+          : value2;
+      return Erlang_Maps["put/3"](key, newValue, accMap);
+    }, accInitial);
+
+    return result;
+  },
+  // End merge_with/3
+  // Deps: [:maps.get/3, :maps.put/3]
+
   // Start next/1
   "next/1": (iterator) => {
     if (!Type.isIterator(iterator)) {

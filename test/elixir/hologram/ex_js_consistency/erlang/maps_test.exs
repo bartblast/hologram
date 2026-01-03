@@ -261,6 +261,90 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "merge_with/3" do
+    setup do
+      [combiner: fn _k, v1, v2 -> v1 + v2 end]
+    end
+
+    test "combines overlapping keys with combiner", %{combiner: combiner} do
+      map_1 = %{a: 1, b: 2}
+      map_2 = %{b: 3, c: 4}
+
+      assert :maps.merge_with(combiner, map_1, map_2) == %{a: 1, b: 5, c: 4}
+    end
+
+    test "when all keys overlap", %{combiner: combiner} do
+      map_1 = %{a: 1, b: 2}
+      map_2 = %{a: 10, b: 20}
+
+      assert :maps.merge_with(combiner, map_1, map_2) == %{a: 11, b: 22}
+    end
+
+    test "when no keys overlap", %{combiner: combiner} do
+      map_1 = %{a: 1}
+      map_2 = %{b: 2}
+
+      assert :maps.merge_with(combiner, map_1, map_2) == %{a: 1, b: 2}
+    end
+
+    test "when first map is empty", %{combiner: combiner} do
+      map_1 = %{}
+      map_2 = %{a: 1, b: 2}
+
+      assert :maps.merge_with(combiner, map_1, map_2) == %{a: 1, b: 2}
+    end
+
+    test "when second map is empty", %{combiner: combiner} do
+      map_1 = %{a: 1, b: 2}
+      map_2 = %{}
+
+      assert :maps.merge_with(combiner, map_1, map_2) == %{a: 1, b: 2}
+    end
+
+    test "when both maps are empty", %{combiner: combiner} do
+      assert :maps.merge_with(combiner, %{}, %{}) == %{}
+    end
+
+    test "handles mixed key and value types" do
+      list_combiner = fn _k, v1, v2 -> [v1, v2] end
+
+      map_1 = %{:atom_key => 1, "string_key" => 2.5}
+      map_2 = %{:atom_key => 10, 123 => "value"}
+
+      result = :maps.merge_with(list_combiner, map_1, map_2)
+
+      assert result == %{:atom_key => [1, 10], "string_key" => 2.5, 123 => "value"}
+    end
+
+    test "raises ArgumentError if the first argument is not an anonymous function" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun that takes three arguments"),
+                   fn ->
+                     :maps.merge_with(:not_a_function, %{a: 1}, %{b: 2})
+                   end
+    end
+
+    test "raises ArgumentError if the first argument is an anonymous function with arity different than 3" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun that takes three arguments"),
+                   fn ->
+                     :maps.merge_with(fn x, y -> x + y end, %{a: 1}, %{b: 2})
+                   end
+    end
+
+    test "raises BadMapError if the second argument is not a map", %{combiner: combiner} do
+      assert_error BadMapError, "expected a map, got: 123", fn ->
+        :maps.merge_with(combiner, 123, %{a: 1})
+      end
+    end
+
+    test "raises BadMapError if the third argument is not a map", %{combiner: combiner} do
+      assert_error BadMapError, "expected a map, got: 123", fn ->
+        :maps.merge_with(combiner, %{a: 1}, 123)
+      end
+    end
+  end
+
   describe "next/1" do
     test "initial iterator with empty map" do
       result =
