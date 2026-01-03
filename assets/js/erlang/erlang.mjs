@@ -719,13 +719,13 @@ const Erlang = {
     let scientific = ERLANG_DEFAULT_SCIENTIFIC;
     let isCompact = false;
     let isShort = false;
-    let lastFormatOption = null; // Track the last format option specified
+    let lastOpt = null;
 
     // Parse options
     for (const opt of opts.data) {
       if (Interpreter.isStrictlyEqual(opt, Type.atom("short"))) {
         isShort = true;
-        lastFormatOption = "short";
+        lastOpt = "short";
         continue;
       }
 
@@ -749,14 +749,14 @@ const Erlang = {
         value.value <= 253n
       ) {
         decimals = Number(value.value);
-        lastFormatOption = "decimals";
+        lastOpt = "decimals";
       } else if (
         Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
         Type.isInteger(value) &&
         value.value <= 249n
       ) {
         scientific = Number(value.value);
-        lastFormatOption = "scientific";
+        lastOpt = "scientific";
       } else {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
@@ -764,15 +764,14 @@ const Erlang = {
       }
     }
 
-    // Reset format options based on the last format option specified
-    // Only keep the last format option, reset others to defaults
-    if (lastFormatOption === "short") {
+    // Only keep the last formatting option, reset others to defaults
+    if (lastOpt === "short") {
       decimals = null;
       scientific = ERLANG_DEFAULT_SCIENTIFIC;
-    } else if (lastFormatOption === "decimals") {
+    } else if (lastOpt === "decimals") {
       isShort = false;
       scientific = ERLANG_DEFAULT_SCIENTIFIC;
-    } else if (lastFormatOption === "scientific") {
+    } else if (lastOpt === "scientific") {
       isShort = false;
       decimals = null;
     }
