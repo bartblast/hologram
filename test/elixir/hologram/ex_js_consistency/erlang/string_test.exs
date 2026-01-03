@@ -137,25 +137,25 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     test "when pattern is at the start of the string" do
       result = :string.replace("Hello", "He", "A", :leading)
 
-      assert result == ["A", "llo"]
+      assert result == ["", "A", "llo"]
     end
 
     test "when pattern is at the end of the string" do
       result = :string.replace("Hello", "lo", "p", :trailing)
 
-      assert result == ["Hel", "p"]
+      assert result == ["Hel", "p", ""]
     end
 
     test "with consecutive pattern" do
       result = :string.replace("lololo", "lo", "ha", :all)
 
-      assert result == ["ha", "ha", "ha"]
+      assert result == ["", "ha", "", "ha", "", "ha", ""]
     end
 
     test "with unicode pattern" do
       result = :string.replace("Hello 👋 World", "👋", "🌍", :all)
 
-      assert result == ["Hello", "🌍", "World"]
+      assert result == ["Hello ", "🌍", " World"]
     end
   end
 

@@ -336,7 +336,7 @@ describe("Erlang_String", () => {
         Type.atom("leading")
       );
 
-      assert.deepStrictEqual(result, Type.list(["A", "llo"]));
+      assert.deepStrictEqual(result, Type.list(["", "A", "llo"]));
     });
 
     it("returns a list when patterns is at the end of the string", () => {
@@ -347,7 +347,7 @@ describe("Erlang_String", () => {
         Type.atom("trailing")
       );
 
-      assert.deepStrictEqual(result, Type.list(["Hel", "p"]));
+      assert.deepStrictEqual(result, Type.list(["Hel", "p", ""]));
     });
 
     it("returns when patterns are consecutive", () => {
@@ -358,7 +358,7 @@ describe("Erlang_String", () => {
         Type.atom("all")
       );
 
-      assert.deepStrictEqual(result, Type.list(["ha", "ha", "ha"]));
+      assert.deepStrictEqual(result, Type.list(["", "ha", "", "ha", "", "ha", ""]));
     });
 
     it("returns when patterns are unicode", () => {
@@ -369,7 +369,7 @@ describe("Erlang_String", () => {
         Type.atom("all")
       );
 
-      assert.deepStrictEqual(["Hello", "🌍", "World"]);
+      assert.deepStrictEqual(["Hello ", "🌍", " World"]);
     });
   });
 
