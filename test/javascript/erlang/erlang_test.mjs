@@ -1629,6 +1629,47 @@ describe("Erlang", () => {
     });
   });
 
+  describe("bor/2", () => {
+    const bor = Erlang["bor/2"];
+
+    it("both arguments are positive", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(3)),
+        Type.integer(7),
+      );
+    });
+
+    it("left argument is negative", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(-4), Type.integer(3)),
+        Type.integer(-1),
+      );
+    });
+
+    it("left argument is 0", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(0), Type.integer(8)),
+        Type.integer(8),
+      );
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(atomAbc, integer1),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(integer1, atomAbc),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
+      );
+    });
+  });
+
   describe("binary_part/3", () => {
     const binary_part = Erlang["binary_part/3"];
 

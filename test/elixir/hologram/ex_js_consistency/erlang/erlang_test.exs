@@ -3077,6 +3077,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "bor/2" do
+    test "both arguments are positive" do
+      assert :erlang.bor(4, 3) == 7
+    end
+
+    test "left argument is negative" do
+      assert :erlang.bor(-4, 3) == -1
+    end
+
+    test "left argument is 0" do
+      assert :erlang.bor(0, 8) == 8
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
+                   {:erlang, :bor, [:abc, 1]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
+                   {:erlang, :bor, [1, :abc]}
+    end
+  end
+
   describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true
