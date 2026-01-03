@@ -335,7 +335,7 @@ describe("Erlang_Binary", () => {
   describe("_aho_corasick_pattern_matcher", () => {
     it("builds trie structure for multiple patterns", () => {
       const pattern1 = Bitstring.fromBytes([104, 101]); // "he"
-      const pattern2 = Bitstring.fromBytes([115, 104, 101]); // "she
+      const pattern2 = Bitstring.fromBytes([115, 104, 101]); // "she"
       const patternList = Type.list([pattern1, pattern2]);
       const result = Erlang_Binary._aho_corasick_pattern_matcher(patternList);
       assert(Type.isCompiledPattern(result));
