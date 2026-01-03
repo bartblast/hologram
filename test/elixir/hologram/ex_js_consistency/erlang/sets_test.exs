@@ -166,4 +166,111 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
   end
+
+  describe "fold/3" do
+    setup do
+      [opts: [{:version, 2}]]
+    end
+
+    test "folds over an empty set and returns the initial accumulator", %{opts: opts} do
+      set = :sets.new(opts)
+      fun = fn _elem, acc -> acc end
+
+      result = :sets.fold(fun, 1, set)
+
+      assert result == 1
+    end
+
+    test "folds over a set with a single element", %{opts: opts} do
+      set = :sets.from_list([2], opts)
+
+      fun = fn elem, acc ->
+        # Verify we're getting the actual element, not undefined
+        assert elem == 2
+        [elem | acc]
+      end
+
+      result = :sets.fold(fun, [], set)
+
+      assert result == [2]
+    end
+
+    test "folds over a set with multiple elements (integers)", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+
+      fun = fn elem, acc ->
+        # Verify element is not nil and is an integer
+        assert is_integer(elem), "Element should be an integer, got: #{inspect(elem)}"
+        [elem | acc]
+      end
+
+      result = :sets.fold(fun, [], set)
+      sorted_result = Enum.sort(result)
+
+      assert sorted_result == [1, 2, 3]
+    end
+
+    test "folds over a set with mixed numeric types (integers and floats)", %{opts: opts} do
+      set = :sets.from_list([1, 2.0, 3], opts)
+
+      fun = fn elem, acc ->
+        # Verify element is a number (would fail if nil/undefined)
+        assert is_number(elem), "Element should be a number, got: #{inspect(elem)}"
+        elem + acc
+      end
+
+      result = :sets.fold(fun, 0, set)
+      # 1 + 2.0 + 3 = 6.0
+      assert result == 6.0
+    end
+
+    test "folds over a set with mixed types (atom, integer, float, tuple)", %{
+      opts: opts
+    } do
+      set = :sets.from_list([:x, 2, 2.0, {1, 2}], opts)
+
+      fun = fn elem, acc ->
+        # Verify element is not nil (would be nil/undefined with the bug)
+        assert elem != nil, "Element should not be nil"
+        [elem | acc]
+      end
+
+      result = :sets.fold(fun, [], set)
+
+      # Verify the length is correct since order is undefined in sets
+      assert length(result) == 4
+    end
+
+    test "folds with accumulator transformation", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+
+      fun = fn elem, acc ->
+        # Verify element is an integer (would be nil with the bug)
+        assert is_integer(elem), "Element should be an integer, got: #{inspect(elem)}"
+        acc + elem
+      end
+
+      result = :sets.fold(fun, 0, set)
+      # 1 + 2 + 3 = 6 (would be 0 with the bug since nil + 0 fails)
+      assert result == 6
+    end
+
+    test "raises FunctionClauseError if the function argument is not a function", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [:not_a_function, 0, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(:not_a_function, 0, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the set argument is not a set" do
+      fun = fn _elem, acc -> acc end
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [fun, 0, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(fun, 0, :not_a_set)
+      end
+    end
+  end
 end
