@@ -870,7 +870,7 @@ describe("Erlang_Lists", () => {
             Type.tuple([]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
           Type.atom("abc"),
           Type.integer(1),
           Type.atom("xyz"),

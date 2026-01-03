@@ -206,43 +206,35 @@ const Erlang_Lists = {
       );
     }
 
-    if (!Type.isList(tuples)) {
+    if (!Type.isProperList(tuples)) {
+      const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keyreplace/4",
-          arguments,
+          ":lists.keyreplace3/4",
+          [key, index, thirdArg, newtuple],
         ),
       );
     }
 
-    if (!Type.isProperList(tuples)) {
-      const thirdArg = tuples.data.at(-1);
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
-          key,
-          index,
-          thirdArg,
+    let result = tuples.data;
+
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        result = [
+          ...tuples.data.slice(0, i),
           newtuple,
-        ]),
-      );
-    }
-
-    const result = [];
-    let found = false;
-
-    for (const tuple of tuples.data) {
-      if (!found && Type.isTuple(tuple)) {
-        if (
-          tuple.data.length >= index.value &&
-          Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
-        ) {
-          found = true;
-          result.push(newtuple);
-          continue;
-        }
+          ...tuples.data.slice(i + 1),
+        ];
+        break;
       }
-      result.push(tuple);
     }
+
     return Type.list(result);
   },
   // End keyreplace/4
