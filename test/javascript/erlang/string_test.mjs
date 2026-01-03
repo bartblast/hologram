@@ -9,6 +9,7 @@ import {
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_String from "../../../assets/js/erlang/string.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
+import { it } from "node:test";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -321,10 +322,54 @@ describe("Erlang_String", () => {
         string,
         Type.bitstring(" "),
         Type.bitstring("_"),
-        Type.atom("trailing"),
+        Type.atom("trailing")
       );
 
       assert.deepStrictEqual(result, Type.list(["Hello World", "_", "!"]));
+    });
+
+    it("returns a list when patterns is at the start of the string", () => {
+      const result = replace(
+        Type.bitstring("Hello"),
+        Type.bitstring("He"),
+        Type.bitstring("A"),
+        Type.atom("leading")
+      );
+
+      assert.deepStrictEqual(result, Type.list(["A", "llo"]));
+    });
+
+    it("returns a list when patterns is at the end of the string", () => {
+      const result = replace(
+        Type.bitstring("Hello"),
+        Type.bitstring("lo"),
+        Type.bitstring("p"),
+        Type.atom("trailing")
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hel", "p"]));
+    });
+
+    it("returns when patterns are consecutive", () => {
+      const result = replace(
+        Type.bitstring("lololo"),
+        Type.bitstring("lo"),
+        Type.bitstring("ha"),
+        Type.atom("all")
+      );
+
+      assert.deepStrictEqual(result, Type.list(["ha", "ha", "ha"]));
+    });
+
+    it("returns when patterns are unicode", () => {
+      const result = replace(
+        Type.bitstring("Hello 👋 World"),
+        Type.bitstring("👋"),
+        Type.bitstring("🌍"),
+        Type.atom("all")
+      );
+
+      assert.deepStrictEqual(["Hello", "🌍", "World"]);
     });
   });
 
