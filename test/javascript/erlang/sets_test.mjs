@@ -270,6 +270,13 @@ describe("Erlang_Sets", () => {
       assert.deepStrictEqual(result, Type.boolean(true));
     });
 
+    it("should always return true if set1 is empty and set2 isn't", () => {
+      const set1 = Erlang_Sets["new/1"](opts);
+      const result = is_subset(set1, set123);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
     it("should return false if not all elements in set1 are in set2", () => {
       const set1 = Erlang_Sets["from_list/2"](
         Type.list([Type.integer(1)]),
