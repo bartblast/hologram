@@ -136,4 +136,85 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
   end
+
+  describe "is_subset/2" do
+    setup do
+      empty_set = :sets.new(version: 2)
+      set123 = :sets.from_list([1, 2, 3], version: 2)
+
+      [empty_set: empty_set, set123: set123]
+    end
+
+    test "should always return true if set1 is an empty set", ctx do
+      assert :sets.is_subset(ctx.empty_set, ctx.empty_set)
+    end
+
+    test "should always return true if set1 is empty and set2 isn't", ctx do
+      assert :sets.is_subset(ctx.empty_set, ctx.set123)
+    end
+
+    test "should return false if not all elements in set1 are in set2", ctx do
+      set1 = :sets.from_list([1], version: 2)
+      refute :sets.is_subset(set1, ctx.empty_set)
+    end
+
+    test "should return true if both sets are the same" do
+      set1 = :sets.from_list([1, 2], version: 2)
+      set2 = :sets.from_list([1, 2], version: 2)
+      assert :sets.is_subset(set1, set2)
+    end
+
+    test "should return true if all elements in set1 are in set2" do
+      set1 = :sets.from_list([1], version: 2)
+      set2 = :sets.from_list([1, 2], version: 2)
+      assert :sets.is_subset(set1, set2)
+    end
+
+    test "should work with sets of tuples" do
+      set1 = :sets.from_list([{:ok, "data"}, {:error, "error"}], version: 2)
+      set2 = :sets.from_list([{:ok, "data"}, {:error, "error"}, {:ok, "data2"}], version: 2)
+
+      assert :sets.is_subset(set1, set2)
+      refute :sets.is_subset(set2, set1)
+    end
+
+    test "raises FunctionClauseError if the first argument is not a set", ctx do
+      expected_msg = ~r"""
+      no function clause matching in :sets\.fold/3
+
+      The following arguments were given to :sets\.fold/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in :sets\.is_subset/2>
+
+          # 2
+          true
+
+          # 3
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(:abc, ctx.set123)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", ctx do
+      expected_msg = ~r"""
+      no function clause matching in :sets\.is_element/2
+
+      The following arguments were given to :sets\.is_element/2:
+
+          # 1
+          1
+
+          # 2
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(ctx.set123, :abc)
+      end
+    end
+  end
 end
