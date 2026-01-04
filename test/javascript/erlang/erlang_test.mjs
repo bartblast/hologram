@@ -1593,7 +1593,11 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(applyModuleAlias, nonexistentFun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(applyModuleAlias, "nonexistent_fun", 2)
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          applyModuleAlias,
+          "nonexistent_fun",
+          2,
+        ),
       );
     });
   });
