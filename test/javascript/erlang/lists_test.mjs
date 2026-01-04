@@ -1103,6 +1103,43 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("is stable (preserves order of elements)", () => {
+      const tuple1 = Type.tuple([Type.integer(1), Type.atom("a")]);
+      const tuple2 = Type.tuple([Type.integer(1), Type.atom("b")]);
+      const tuple3 = Type.tuple([Type.integer(1), Type.atom("c")]);
+      const tuple4 = Type.tuple([Type.integer(1), Type.atom("d")]);
+      const tuple5 = Type.tuple([Type.integer(2), Type.atom("e")]);
+      const tuple6 = Type.tuple([Type.integer(3), Type.atom("f")]);
+      const tuple7 = Type.tuple([Type.integer(3), Type.atom("g")]);
+      const tuple8 = Type.tuple([Type.integer(4), Type.atom("h")]);
+
+      const tuples = Type.list([
+        tuple8,
+        tuple1,
+        tuple2,
+        tuple6,
+        tuple7,
+        tuple3,
+        tuple4,
+        tuple5,
+      ]);
+
+      const result = keysort(Type.integer(1), tuples);
+
+      const expected = Type.list([
+        tuple1,
+        tuple2,
+        tuple3,
+        tuple4,
+        tuple5,
+        tuple6,
+        tuple7,
+        tuple8,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises FunctionClauseError if the first argument is not an integer", () => {
       assertBoxedError(
         () => keysort(Type.float(1.0), emptyList),
@@ -1114,12 +1151,23 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises FunctionClauseError if the first argument is not a positive integer", () => {
+    it("raises FunctionClauseError if the first argument is zero integer", () => {
       assertBoxedError(
         () => keysort(Type.integer(0), emptyList),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
           Type.integer(0),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is a negative integer", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(-1), emptyList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          Type.integer(-1),
           emptyList,
         ]),
       );

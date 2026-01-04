@@ -524,16 +524,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert :lists.keysort(2, [{:a, 2}, {:b, 1}]) === [{:b, 1}, {:a, 2}]
     end
 
+    test "is stable (preserves order of elements)" do
+      tuples = [{4, :h}, {1, :a}, {1, :b}, {3, :f}, {3, :g}, {1, :c}, {1, :d}, {2, :e}]
+      result = :lists.keysort(1, tuples)
+      expected = [{1, :a}, {1, :b}, {1, :c}, {1, :d}, {2, :e}, {3, :f}, {3, :g}, {4, :h}]
+
+      assert result == expected
+    end
+
     test "raises FunctionClauseError if the first argument is not an integer" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":lists.keysort/2", [1.0, []]),
                    fn -> :lists.keysort(1.0, []) end
     end
 
-    test "raises FunctionClauseError if the first argument is not a positive integer" do
+    test "raises FunctionClauseError if the first argument is zero integer" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":lists.keysort/2", [0, []]),
                    fn -> :lists.keysort(0, []) end
+    end
+
+    test "raises FunctionClauseError if the first argument is a negative integer" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.keysort/2", [-1, []]),
+                   fn -> :lists.keysort(-1, []) end
     end
 
     test "raises CaseClauseError if the second argument is not a list" do
