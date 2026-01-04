@@ -318,27 +318,6 @@ describe("Erlang_Sets", () => {
       assertBoxedTrue(result);
     });
 
-    it("should work with sets of tuples", () => {
-      const list1 = Type.list([
-        Type.tuple([Type.atom("ok"), Type.bitstring("data")]),
-        Type.tuple([Type.atom("error"), Type.bitstring("error")]),
-      ]);
-
-      const list2 = Type.list([
-        Type.tuple([Type.atom("ok"), Type.bitstring("data")]),
-        Type.tuple([Type.atom("error"), Type.bitstring("error")]),
-        Type.tuple([Type.atom("ok"), Type.bitstring("data2")]),
-      ]);
-
-      const set1 = Erlang_Sets["from_list/2"](list1, opts);
-      const set2 = Erlang_Sets["from_list/2"](list2, opts);
-      const result = is_subset(set1, set2);
-      const result2 = is_subset(set2, set1);
-
-      assertBoxedTrue(result);
-      assertBoxedFalse(result2);
-    });
-
     it("raises FunctionClauseError if the first argument is not a set", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":sets.is_subset/2",

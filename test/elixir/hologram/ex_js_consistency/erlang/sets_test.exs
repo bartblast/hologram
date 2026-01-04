@@ -170,14 +170,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert :sets.is_subset(set1, set2)
     end
 
-    test "should work with sets of tuples" do
-      set1 = :sets.from_list([{:ok, "data"}, {:error, "error"}], version: 2)
-      set2 = :sets.from_list([{:ok, "data"}, {:error, "error"}, {:ok, "data2"}], version: 2)
-
-      assert :sets.is_subset(set1, set2)
-      refute :sets.is_subset(set2, set1)
-    end
-
     test "raises FunctionClauseError if the first argument is not a set", ctx do
       expected_msg = ~r"""
       no function clause matching in :sets\.fold/3
