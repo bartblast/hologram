@@ -146,6 +146,61 @@ describe("Erlang_Sets", () => {
     });
   });
 
+  describe("del_element/2", () => {
+    const del_element_2 = Erlang_Sets["del_element/2"];
+
+    it("removes an existing element from the set", () => {
+      const set = Type.map([
+        [integer1, Type.list([])],
+        [integer2, Type.list([])],
+        [integer3, Type.list([])],
+      ]);
+
+      const result = del_element_2(integer2, set);
+
+      const expected = Type.map([
+        [integer1, Type.list([])],
+        [integer3, Type.list([])],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns the same set if element is not present", () => {
+      const set = Type.map([
+        [integer1, Type.list([])],
+        [integer2, Type.list([])],
+        [integer3, Type.list([])],
+      ]);
+
+      const integer42 = Type.integer(42);
+      const result = del_element_2(integer42, set);
+
+      assert.deepStrictEqual(result, set);
+    });
+
+    it("returns empty set when removing from empty set", () => {
+      const emptySet = Type.map();
+      const result = del_element_2(Type.atom("any"), emptySet);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("raises FunctionClauseError if argument is not a set", () => {
+      const elem = Type.atom("elem");
+      const notASet = Type.atom("not_a_set");
+
+      assertBoxedError(
+        () => del_element_2(elem, notASet),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
+          elem,
+          notASet,
+        ]),
+      );
+    });
+  });
+
   describe("is_element/2", () => {
     const is_element_2 = Erlang_Sets["is_element/2"];
 
