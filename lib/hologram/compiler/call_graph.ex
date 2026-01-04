@@ -36,6 +36,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :split_binary, 2}, {:erlang, :byte_size, 1}},
     {{:filename, :basename, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
+    {{:lists, :keysort, 2}, {:erlang, :element, 2}},
     {{:maps, :get, 2}, {:maps, :get, 3}},
     {{:maps, :update, 3}, {:maps, :is_key, 2}},
     {{:maps, :update, 3}, {:maps, :put, 3}},

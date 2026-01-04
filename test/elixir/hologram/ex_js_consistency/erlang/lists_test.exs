@@ -495,6 +495,89 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keysort/2" do
+    test "returns the empty list if the input is the empty list" do
+      assert :lists.keysort(3, []) === []
+    end
+
+    test "returns the unchanged one-element list even if the index is out of range of the tuple" do
+      assert :lists.keysort(3, [{:a}]) === [{:a}]
+    end
+
+    test "returns the unchanged one-element list even if the element is not a tuple" do
+      assert :lists.keysort(3, [:a]) === [:a]
+    end
+
+    test "sorts the list by the first element of each tuple" do
+      assert :lists.keysort(1, [{:b, 1}, {:a, 2}]) === [{:a, 2}, {:b, 1}]
+    end
+
+    test "sorts the list by the middle element of each tuple" do
+      assert :lists.keysort(2, [{:a, 2, :c}, {:b, 1, :d}]) === [{:b, 1, :d}, {:a, 2, :c}]
+    end
+
+    test "sorts the list by the last element of each tuple" do
+      assert :lists.keysort(2, [{:a, 2}, {:b, 1}]) === [{:b, 1}, {:a, 2}]
+    end
+
+    test "raises FunctionClauseError if the first argument is not an integer" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.keysort/2", [:a, []]),
+                   fn -> :lists.keysort(:a, []) end
+    end
+
+    test "raises FunctionClauseError if the first argument is not a positive integer" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.keysort/2", [0, []]),
+                   fn -> :lists.keysort(0, []) end
+    end
+
+    test "raises CaseClauseError if the second argument is not a list" do
+      assert_error CaseClauseError,
+                   "no case clause matching: :a",
+                   fn -> :lists.keysort(1, :a) end
+    end
+
+    test "raises CaseClauseError if the second argument is a two-element improper list" do
+      assert_error CaseClauseError,
+                   "no case clause matching: [1 | 2]",
+                   fn -> :lists.keysort(1, [1 | 2]) end
+    end
+
+    test "raises FunctionClauseError if the second argument is a larger improper list of tuples" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.keysplit_1/8", [
+                     1,
+                     {:a},
+                     :a,
+                     {:b},
+                     :b,
+                     {:c},
+                     [],
+                     []
+                   ]),
+                   fn -> :lists.keysort(1, [{:a}, {:b} | {:c}]) end
+    end
+
+    test "raises ArgumentError if the second argument is a larger improper list of non tuples" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   fn -> :lists.keysort(1, [1, 2 | 3]) end
+    end
+
+    test "raises ArgumentError if an element of the list is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   fn -> :lists.keysort(1, [{:a}, :b]) end
+    end
+
+    test "raises ArgumentError if the index is out of range of a tuple in the list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   fn -> :lists.keysort(1, [{:a}, {}]) end
+    end
+  end
+
   describe "map/2" do
     setup do
       [fun: fn elem -> elem * 10 end]

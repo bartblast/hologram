@@ -1036,6 +1036,151 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keysort/2", () => {
+    const keysort = Erlang_Lists["keysort/2"];
+
+    it("returns the empty list if the input is the empty list", () => {
+      const result = keysort(Type.integer(3), emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("returns the unchanged one-element list even if the index is out of range of the tuple", () => {
+      const input = Type.list([Type.tuple([Type.atom("a")])]);
+      const result = keysort(Type.integer(3), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("returns the unchanged one-element list even if the element is not a tuple", () => {
+      const input = Type.list([Type.atom("a")]);
+      const result = keysort(Type.integer(3), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("sorts the list by the first element of each tuple", () => {
+      const tuple1 = Type.tuple([Type.atom("b"), Type.integer(1)]);
+      const tuple2 = Type.tuple([Type.atom("a"), Type.integer(2)]);
+      const result = keysort(Type.integer(1), Type.list([tuple1, tuple2]));
+
+      assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
+    });
+
+    it("sorts the list by the middle element of each tuple", () => {
+      const tuple1 = Type.tuple([
+        Type.atom("a"),
+        Type.integer(2),
+        Type.atom("c"),
+      ]);
+      const tuple2 = Type.tuple([
+        Type.atom("b"),
+        Type.integer(1),
+        Type.atom("d"),
+      ]);
+      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
+
+      assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
+    });
+
+    it("sorts the list by the last element of each tuple", () => {
+      const tuple1 = Type.tuple([Type.atom("a"), Type.integer(2)]);
+      const tuple2 = Type.tuple([Type.atom("b"), Type.integer(1)]);
+      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
+
+      assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
+    });
+
+    it("raises FunctionClauseError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => keysort(Type.atom("a"), emptyList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          Type.atom("a"),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is not a positive integer", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(0), emptyList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          Type.integer(0),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises CaseClauseError if the second argument is not a list", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(1), Type.atom("a")),
+        "CaseClauseError",
+        "no case clause matching: :a",
+      );
+    });
+
+    it("raises CaseClauseError if the second argument is a two-element improper list", () => {
+      assertBoxedError(
+        () =>
+          keysort(
+            Type.integer(1),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "CaseClauseError",
+        "no case clause matching: [1 | 2]",
+      );
+    });
+
+    // The details of the error differ from the Erlang implementation, where it is raised from various private helper functions
+    it("raises FunctionClauseError if the second argument is a larger improper list of tuples", () => {
+      const index = Type.integer(1);
+      const input = Type.improperList([
+        Type.tuple([Type.atom("a")]),
+        Type.tuple([Type.atom("b")]),
+        Type.tuple([Type.atom("c")]),
+      ]);
+
+      assertBoxedError(
+        () => keysort(index, input),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          index,
+          input,
+        ]),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is a larger improper list of non tuples", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(1), improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if an element of the list is not a tuple", () => {
+      const input = Type.list([Type.tuple([Type.atom("a")]), Type.atom("b")]);
+
+      assertBoxedError(
+        () => keysort(Type.integer(1), input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if the index is out of range of a tuple in the list", () => {
+      const input = Type.list([Type.tuple([Type.atom("a")]), Type.tuple()]);
+
+      assertBoxedError(
+        () => keysort(Type.integer(1), input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("map/2", () => {
     const fun = Type.anonymousFunction(
       1,
