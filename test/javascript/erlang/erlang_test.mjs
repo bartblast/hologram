@@ -1599,10 +1599,11 @@ describe("Erlang", () => {
       // Number.MAX_SAFE_INTEGER = 9007199254740991
       // = 0b11111111111111111111111111111111111111111111111111111
       //
-      // 2 * 9007199254740991 = 18014398509481983
+      // 2 * 9007199254740991 + 1 = 18014398509481983
       // = 0b111111111111111111111111111111111111111111111111111111
       //
-      // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+      // 2 * 9007199254740991 = 18014398509481982
+      // = 0b111111111111111111111111111111111111111111111111111110
 
       const left = Type.integer(18014398509481983n);
       const right = Type.integer(18014398509481982n);
@@ -2554,6 +2555,93 @@ describe("Erlang", () => {
         () => bit_size(myAtom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    });
+  });
+
+  describe("bor/2", () => {
+    const bor = Erlang["bor/2"];
+
+    it("both arguments are positive", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(3)),
+        Type.integer(7),
+      );
+    });
+
+    it("both arguments are zero", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(0), Type.integer(0)),
+        Type.integer(0),
+      );
+    });
+
+    it("left argument is zero", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(0), Type.integer(8)),
+        Type.integer(8),
+      );
+    });
+
+    it("right argument is zero", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(0)),
+        Type.integer(4),
+      );
+    });
+
+    it("left argument is negative", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(-4), Type.integer(3)),
+        Type.integer(-1),
+      );
+    });
+
+    it("right argument is negative", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(-3)),
+        Type.integer(-3),
+      );
+    });
+
+    it("both arguments are negative", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(-4), Type.integer(-3)),
+        Type.integer(-3),
+      );
+    });
+
+    it("works with large numbers", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      // = 0b11111111111111111111111111111111111111111111111111111
+      //
+      // 2 * 9007199254740991 + 1 = 18014398509481983
+      // = 0b111111111111111111111111111111111111111111111111111111
+      //
+      // 2 * 9007199254740991 = 18014398509481982
+      // = 0b111111111111111111111111111111111111111111111111111110
+
+      const left = Type.integer(18_014_398_509_481_983n);
+      const right = Type.integer(18_014_398_509_481_982n);
+
+      const result = bor(left, right);
+
+      assert.deepStrictEqual(result, left);
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(float1, integer2),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(1.0, 2)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(integer1, float2),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
       );
     });
   });
@@ -3534,7 +3622,17 @@ describe("Erlang", () => {
       });
     });
 
-    describe(":compact option", () => {
+    it(":compact option by itself is same as default format", () => {
+      const optsCompact = Type.list([Type.atom("compact")]);
+      const optsDefault = Type.list();
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsCompact),
+        float_to_binary(inputAbove10, optsDefault),
+      );
+    });
+
+    describe(":compact + :decimals option", () => {
       const opts = Type.list([
         Type.atom("compact"),
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
@@ -3627,6 +3725,122 @@ describe("Erlang", () => {
 
         const result = float_to_binary(Type.float(128.0), opts);
         const expected = Type.bitstring("128");
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
+
+    it(":compact option is ignored when used with :scientific option", () => {
+      const optsScientific = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+      ]);
+
+      const optsScientificCompact = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+
+      const optsCompactScientific = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+      ]);
+
+      const scientificResult = float_to_binary(inputAbove10, optsScientific);
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsScientificCompact),
+        scientificResult,
+      );
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsCompactScientific),
+        scientificResult,
+      );
+    });
+
+    it(":compact option is ignored when used with :short option", () => {
+      const optsShort = Type.list([Type.atom("short")]);
+
+      const optsShortCompact = Type.list([
+        Type.atom("short"),
+        Type.atom("compact"),
+      ]);
+
+      const optsCompactShort = Type.list([
+        Type.atom("compact"),
+        Type.atom("short"),
+      ]);
+
+      const shortResult = float_to_binary(inputAbove10, optsShort);
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsShortCompact),
+        shortResult,
+      );
+
+      assert.deepStrictEqual(
+        float_to_binary(inputAbove10, optsCompactShort),
+        shortResult,
+      );
+    });
+
+    describe("multiple opts", () => {
+      const input = Type.float(7.12);
+
+      const compactOpt = Type.atom("compact");
+      const decimalsOpt = Type.tuple([Type.atom("decimals"), Type.integer(4)]);
+
+      const scientificOpt = Type.tuple([
+        Type.atom("scientific"),
+        Type.integer(3),
+      ]);
+
+      const shortOpt = Type.atom("short");
+
+      it("last opt is :scientific", () => {
+        const opts = Type.list([decimalsOpt, scientificOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.120e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :scientific followed by :compact", () => {
+        const opts = Type.list([decimalsOpt, scientificOpt, compactOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.120e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :decimals", () => {
+        const opts = Type.list([shortOpt, decimalsOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.1200");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :decimals followed by :compact", () => {
+        const opts = Type.list([shortOpt, decimalsOpt, compactOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :short", () => {
+        const opts = Type.list([scientificOpt, shortOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :short followed by :compact", () => {
+        const opts = Type.list([scientificOpt, shortOpt, compactOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
 
         assert.deepStrictEqual(result, expected);
       });
