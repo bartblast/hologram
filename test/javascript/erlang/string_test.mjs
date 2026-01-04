@@ -200,11 +200,7 @@ describe("Erlang_String", () => {
     const string = Type.bitstring("Hello World !");
 
     it("returns a three-elements list with the first word at the beginning, the replacement at the middle and the tail at the end", () => {
-      const result = replace(
-        string,
-        Type.bitstring(" "),
-        Type.bitstring("_"),
-      );
+      const result = replace(string, Type.bitstring(" "), Type.bitstring("_"));
 
       assert.deepStrictEqual(result, Type.list(["Hello", "_", "World !"]));
     });
@@ -322,7 +318,7 @@ describe("Erlang_String", () => {
         string,
         Type.bitstring(" "),
         Type.bitstring("_"),
-        Type.atom("trailing")
+        Type.atom("trailing"),
       );
 
       assert.deepStrictEqual(result, Type.list(["Hello World", "_", "!"]));
@@ -333,7 +329,7 @@ describe("Erlang_String", () => {
         Type.bitstring("Hello"),
         Type.bitstring("He"),
         Type.bitstring("A"),
-        Type.atom("leading")
+        Type.atom("leading"),
       );
 
       assert.deepStrictEqual(result, Type.list(["", "A", "llo"]));
@@ -344,7 +340,7 @@ describe("Erlang_String", () => {
         Type.bitstring("Hello"),
         Type.bitstring("lo"),
         Type.bitstring("p"),
-        Type.atom("trailing")
+        Type.atom("trailing"),
       );
 
       assert.deepStrictEqual(result, Type.list(["Hel", "p", ""]));
@@ -355,10 +351,13 @@ describe("Erlang_String", () => {
         Type.bitstring("lololo"),
         Type.bitstring("lo"),
         Type.bitstring("ha"),
-        Type.atom("all")
+        Type.atom("all"),
       );
 
-      assert.deepStrictEqual(result, Type.list(["", "ha", "", "ha", "", "ha", ""]));
+      assert.deepStrictEqual(
+        result,
+        Type.list(["", "ha", "", "ha", "", "ha", ""]),
+      );
     });
 
     it("returns when patterns are unicode", () => {
@@ -366,7 +365,7 @@ describe("Erlang_String", () => {
         Type.bitstring("Hello 👋 World"),
         Type.bitstring("👋"),
         Type.bitstring("🌍"),
-        Type.atom("all")
+        Type.atom("all"),
       );
 
       assert.deepStrictEqual(["Hello ", "🌍", " World"]);

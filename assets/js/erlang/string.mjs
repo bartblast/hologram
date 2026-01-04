@@ -79,14 +79,19 @@ const Erlang_String = {
 
   // Start replace/3
   "replace/3": (string, pattern, replacement) => {
-    return Erlang_String["replace/4"](string, pattern, replacement, Type.atom("leading"));
+    return Erlang_String["replace/4"](
+      string,
+      pattern,
+      replacement,
+      Type.atom("leading"),
+    );
   },
   // End replace/3
   // Deps: [:string.replace/4]
 
   // Start replace/4
   "replace/4": (string, pattern, replacement, direction) => {
-    // The first three arguments of Erlang :string.replace are actually of type unicode:chardata, 
+    // The first three arguments of Erlang :string.replace are actually of type unicode:chardata,
     // we need to convert them to binaries in order to make validation and to convert them to text
     const stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
 
@@ -105,7 +110,8 @@ const Erlang_String = {
       );
     }
 
-    const replacementBinary = Erlang_Unicode["characters_to_binary/1"](replacement);
+    const replacementBinary =
+      Erlang_Unicode["characters_to_binary/1"](replacement);
 
     if (!Type.isBinary(replacementBinary)) {
       throw new HologramInterpreterError(
@@ -154,7 +160,7 @@ const Erlang_String = {
         break;
 
       default:
-        Interpreter.raiseCaseClauseError(direction.value)
+        Interpreter.raiseCaseClauseError(direction.value);
     }
 
     return Type.list(splittedStringList);
