@@ -1516,7 +1516,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, Type.integer(3));
     });
 
-    it("invokes a function with multiple arguments (4)", () => {
+    it("invokes a function with 4 arguments", () => {
       const args = Type.list([
         Type.integer(1),
         Type.integer(2),

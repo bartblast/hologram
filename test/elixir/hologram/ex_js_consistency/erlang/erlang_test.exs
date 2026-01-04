@@ -1298,11 +1298,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.apply(__MODULE__, :apply3_target_fun_1, [5]) == 10
     end
 
-    test "invokes the named function with the provided arguments" do
+    test "invokes a function with 2 arguments" do
       assert :erlang.apply(__MODULE__, :apply3_target_fun_2, [1, 2]) == 3
     end
 
-    test "invokes a function with multiple arguments (4)" do
+    test "invokes a function with 4 arguments" do
       assert :erlang.apply(__MODULE__, :apply3_target_fun_4, [1, 2, 3, 4]) == 10
     end
 
