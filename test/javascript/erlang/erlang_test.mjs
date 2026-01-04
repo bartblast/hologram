@@ -1586,22 +1586,16 @@ describe("Erlang", () => {
       );
     });
 
-    // commented out because Interpreter.isEqual() doesn't handle null values yet
-    // TODO: fix this
-    // it("raises UndefinedFunctionError if the function doesn't exist", () => {
-    //   const args = Type.list([Type.integer(1), Type.integer(2)]);
-    //   const nonexistentFun = Type.atom("nonexistent_fun");
+    it("raises UndefinedFunctionError if the function doesn't exist", () => {
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+      const nonexistentFun = Type.atom("nonexistent_fun");
 
-    //   assertBoxedError(
-    //     () => apply(applyModuleAlias, nonexistentFun, args),
-    //     "UndefinedFunctionError",
-    //     Interpreter.buildUndefinedFunctionErrorMsg(
-    //       applyModuleAlias,
-    //       "nonexistent_fun",
-    //       2,
-    //     ),
-    //   );
-    // });
+      assertBoxedError(
+        () => apply(applyModuleAlias, nonexistentFun, args),
+        "UndefinedFunctionError",
+        Interpreter.buildUndefinedFunctionErrorMsg(applyModuleAlias, "nonexistent_fun", 2)
+      );
+    });
   });
 
   describe("atom_to_binary/1", () => {

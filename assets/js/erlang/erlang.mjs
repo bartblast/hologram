@@ -296,7 +296,7 @@ const Erlang = {
       );
     }
 
-    const context = Interpreter.buildContext();
+    const context = Interpreter.buildContext({module: Type.alias("Elixir")});
     return Interpreter.callNamedFunction(module, func, args, context);
   },
   // End apply/3
