@@ -66,6 +66,22 @@ const Erlang_Sets = {
   // End from_list/2
   // Deps: [:maps.from_keys/2, :sets._validate_opts/1]
 
+  // Start is_element/2
+  "is_element/2": (element, set) => {
+    if (!Type.isMap(set)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
+          element,
+          set,
+        ]),
+      );
+    }
+
+    return Erlang_Maps["is_key/2"](element, set);
+  },
+  // End is_element/2
+  // Deps: [:maps.is_key/2]
+
   // Start new/1
   "new/1": (opts) => {
     Erlang_Sets["_validate_opts/1"](opts);
