@@ -118,21 +118,20 @@ const Erlang_Sets = {
       return Type.boolean(true);
     }
 
-    const isSubset = (subset, superset) => {
-      return subset.every((subItem) =>
-        superset.some(
-          (superItem) => Interpreter.compareTerms(subItem, superItem) == 0,
-        ),
-      );
-    };
-
     const set1Array = Erlang_Sets["to_list/1"](set1).data;
 
-    const set2Array = Erlang_Sets["to_list/1"](set2).data;
-    return Type.boolean(isSubset(set1Array, set2Array));
+    return Type.boolean(
+      set1Array.every(
+        (item) =>
+          Interpreter.compareTerms(
+            Erlang_Sets["is_element/2"](item, set2),
+            Type.boolean(true),
+          ) == 0,
+      ),
+    );
   },
   // End is_subset/2
-  // Deps: [:sets.to_list/1]
+  // Deps: [:sets.to_list/1, :sets.is_element/2]
 };
 
 export default Erlang_Sets;
