@@ -3,6 +3,8 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedTrue,
+  assertBoxedFalse,
   defineGlobalErlangAndElixirModules,
   freeze,
 } from "../support/helpers.mjs";
@@ -267,14 +269,14 @@ describe("Erlang_Sets", () => {
       const set2 = Erlang_Sets["new/1"](opts);
       const result = is_subset(set1, set2);
 
-      assert.deepStrictEqual(result, Type.boolean(true));
+      assertBoxedTrue(result);
     });
 
     it("should always return true if set1 is empty and set2 isn't", () => {
       const set1 = Erlang_Sets["new/1"](opts);
       const result = is_subset(set1, set123);
 
-      assert.deepStrictEqual(result, Type.boolean(true));
+      assertBoxedTrue(result);
     });
 
     it("should return false if not all elements in set1 are in set2", () => {
@@ -285,7 +287,7 @@ describe("Erlang_Sets", () => {
       const set2 = Erlang_Sets["new/1"](opts);
       const result = is_subset(set1, set2);
 
-      assert.deepStrictEqual(result, Type.boolean(false));
+      assertBoxedFalse(result);
     });
 
     it("should return true if both sets are the same", () => {
@@ -299,7 +301,7 @@ describe("Erlang_Sets", () => {
       );
       const result = is_subset(set1, set2);
 
-      assert.deepStrictEqual(result, Type.boolean(true));
+      assertBoxedTrue(result);
     });
 
     it("should return true if all elements in set1 are in set2", () => {
@@ -313,7 +315,7 @@ describe("Erlang_Sets", () => {
       );
       const result = is_subset(set1, set2);
 
-      assert.deepStrictEqual(result, Type.boolean(true));
+      assertBoxedTrue(result);
     });
 
     it("should work with sets of tuples", () => {
@@ -333,8 +335,8 @@ describe("Erlang_Sets", () => {
       const result = is_subset(set1, set2);
       const result2 = is_subset(set2, set1);
 
-      assert.deepStrictEqual(result, Type.boolean(true));
-      assert.deepStrictEqual(result2, Type.boolean(false));
+      assertBoxedTrue(result);
+      assertBoxedFalse(result2);
     });
 
     it("raises FunctionClauseError if the first argument is not a set", () => {
