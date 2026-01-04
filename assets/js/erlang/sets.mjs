@@ -89,7 +89,7 @@ const Erlang_Sets = {
 
   // Start is_subset/2
   "is_subset/2": (set1, set2) => {
-    if (!Type.isMap(set1)) {
+    if (!Type.isMap(set1) || !Type.isMap(set2)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":sets.is_subset/2", [
           set1,
@@ -97,13 +97,9 @@ const Erlang_Sets = {
         ]),
       );
     }
-    if (!Type.isMap(set2)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_subset/2", [
-          set1,
-          set2,
-        ]),
-      );
+
+    if (set1.data.length === 0) {
+      return Type.boolean(true);
     }
 
     const isSubset = (subset, superset) => {
@@ -115,10 +111,6 @@ const Erlang_Sets = {
     };
 
     const set1Array = Erlang_Sets["to_list/1"](set1).data;
-
-    if (set1Array.length == 0) {
-      return Type.boolean(true);
-    }
 
     const set2Array = Erlang_Sets["to_list/1"](set2).data;
     return Type.boolean(isSubset(set1Array, set2Array));
