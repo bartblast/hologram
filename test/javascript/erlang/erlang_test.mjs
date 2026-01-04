@@ -1600,6 +1600,24 @@ describe("Erlang", () => {
         ),
       );
     });
+
+    it("raises UndefinedFunctionError if the function doesn't exist with the given arity", () => {
+      const args = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assertBoxedError(
+        () => apply(applyModuleAlias, funName, args),
+        "UndefinedFunctionError",
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          applyModuleAlias,
+          "my_fun",
+          3,
+        ),
+      );
+    });
   });
 
   describe("atom_to_binary/1", () => {
