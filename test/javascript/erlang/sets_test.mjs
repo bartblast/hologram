@@ -3,6 +3,8 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedFalse,
+  assertBoxedTrue,
   defineGlobalErlangAndElixirModules,
   freeze,
 } from "../support/helpers.mjs";
@@ -23,12 +25,9 @@ const integer3 = freeze(Type.integer(3));
 const float2 = freeze(Type.float(2.0));
 const opts = freeze(Type.keywordList([[Type.atom("version"), integer2]]));
 
-const set123 = freeze(
-  Type.map([
-    [integer1, Type.list([])],
-    [integer2, Type.list([])],
-    [integer3, Type.list([])],
-  ]),
+const set123 = Erlang_Sets["from_list/2"](
+  Type.list([integer1, integer2, integer3]),
+  opts,
 );
 
 // IMPORTANT!
@@ -153,24 +152,32 @@ describe("Erlang_Sets", () => {
     it("returns true if element is in the set", () => {
       const result = is_element_2(integer2, set123);
 
-      assert.deepStrictEqual(result, Type.boolean(true));
+      assertBoxedTrue(result);
     });
 
     it("returns false if element is not in the set", () => {
       const integer42 = Type.integer(42);
       const result = is_element_2(integer42, set123);
 
-      assert.deepStrictEqual(result, Type.boolean(false));
+      assertBoxedFalse(result);
     });
 
     it("returns false for empty set", () => {
-      const emptySet = Type.map();
+      const emptySet = Erlang_Sets["new/1"](opts);
       const result = is_element_2(Type.atom("any"), emptySet);
 
-      assert.deepStrictEqual(result, Type.boolean(false));
+      assertBoxedFalse(result);
     });
 
-    it("raises FunctionClauseError if argument is not a set", () => {
+    it("uses strict matching (integer vs float)", () => {
+      const set = Erlang_Sets["from_list/2"](Type.list([integer1]), opts);
+
+      const result = is_element_2(Type.float(1.0), set);
+
+      assertBoxedFalse(result);
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
       const elem = Type.atom("elem");
       const notASet = Type.atom("not_a_set");
 
