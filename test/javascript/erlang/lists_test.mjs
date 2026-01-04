@@ -1045,6 +1045,13 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(result, emptyList);
     });
 
+    it("returns the unchanged one-element list", () => {
+      const input = Type.list([Type.tuple([Type.atom("a"), Type.integer(2)])]);
+      const result = keysort(Type.integer(1), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
     it("returns the unchanged one-element list even if the index is out of range of the tuple", () => {
       const input = Type.list([Type.tuple([Type.atom("a")])]);
       const result = keysort(Type.integer(3), input);
@@ -1063,8 +1070,9 @@ describe("Erlang_Lists", () => {
       const tuple1 = Type.tuple([Type.atom("b"), Type.integer(1)]);
       const tuple2 = Type.tuple([Type.atom("a"), Type.integer(2)]);
       const result = keysort(Type.integer(1), Type.list([tuple1, tuple2]));
+      const expected = Type.list([tuple2, tuple1]);
 
-      assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
+      assert.deepStrictEqual(result, expected);
     });
 
     it("sorts the list by the middle element of each tuple", () => {
@@ -1073,30 +1081,34 @@ describe("Erlang_Lists", () => {
         Type.integer(2),
         Type.atom("c"),
       ]);
+
       const tuple2 = Type.tuple([
         Type.atom("b"),
         Type.integer(1),
         Type.atom("d"),
       ]);
-      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
 
-      assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
+      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
+      const expected = Type.list([tuple2, tuple1]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("sorts the list by the last element of each tuple", () => {
       const tuple1 = Type.tuple([Type.atom("a"), Type.integer(2)]);
       const tuple2 = Type.tuple([Type.atom("b"), Type.integer(1)]);
       const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
+      const expected = Type.list([tuple2, tuple1]);
 
-      assert.deepStrictEqual(result, Type.list([tuple2, tuple1]));
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises FunctionClauseError if the first argument is not an integer", () => {
       assertBoxedError(
-        () => keysort(Type.atom("a"), emptyList),
+        () => keysort(Type.float(1.0), emptyList),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
-          Type.atom("a"),
+          Type.float(1.0),
           emptyList,
         ]),
       );
@@ -1133,9 +1145,10 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // The details of the error differ from the Erlang implementation, where it is raised from various private helper functions
+    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the second argument is a larger improper list of tuples", () => {
       const index = Type.integer(1);
+
       const input = Type.improperList([
         Type.tuple([Type.atom("a")]),
         Type.tuple([Type.atom("b")]),
@@ -1145,10 +1158,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(index, input),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
-          index,
-          input,
-        ]),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
       );
     });
 
@@ -1170,7 +1180,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises ArgumentError if the index is out of range of a tuple in the list", () => {
+    it("raises ArgumentError if the index is out of range for any tuple in the list", () => {
       const input = Type.list([Type.tuple([Type.atom("a")]), Type.tuple()]);
 
       assertBoxedError(

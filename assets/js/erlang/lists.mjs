@@ -277,18 +277,13 @@ const Erlang_Lists = {
       Interpreter.raiseCaseClauseError(tuples);
     }
 
-    // The Erlang implementation raises different errors based on the shape of the improper list.
-    // This is an approximation attempting to raise the same type of error, but the details are different.
-    // The Erlang implementation uses multiple private functions from which the errors sometimes originate.
     if (Type.isImproperList(tuples)) {
       if (tuples.data.length === 2) {
         Interpreter.raiseCaseClauseError(tuples);
-      } else if (Type.isTuple(tuples.data[0]) && Type.isTuple(tuples.data[1])) {
+      } else if (tuples.data.every((item) => Type.isTuple(item))) {
+        // Client-side error message is intentionally simplified.
         Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
-            index,
-            tuples,
-          ]),
+          Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
         );
       } else {
         Interpreter.raiseArgumentError(

@@ -500,6 +500,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert :lists.keysort(3, []) === []
     end
 
+    test "returns the unchanged one-element list" do
+      assert :lists.keysort(1, [{:a, 2}]) === [{:a, 2}]
+    end
+
     test "returns the unchanged one-element list even if the index is out of range of the tuple" do
       assert :lists.keysort(3, [{:a}]) === [{:a}]
     end
@@ -522,8 +526,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises FunctionClauseError if the first argument is not an integer" do
       assert_error FunctionClauseError,
-                   build_function_clause_error_msg(":lists.keysort/2", [:a, []]),
-                   fn -> :lists.keysort(:a, []) end
+                   build_function_clause_error_msg(":lists.keysort/2", [1.0, []]),
+                   fn -> :lists.keysort(1.0, []) end
     end
 
     test "raises FunctionClauseError if the first argument is not a positive integer" do
@@ -545,18 +549,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the second argument is a larger improper list of tuples" do
-      assert_error FunctionClauseError,
-                   build_function_clause_error_msg(":lists.keysplit_1/8", [
-                     1,
-                     {:a},
-                     :a,
-                     {:b},
-                     :b,
-                     {:c},
-                     [],
-                     []
-                   ]),
-                   fn -> :lists.keysort(1, [{:a}, {:b} | {:c}]) end
+      expected_msg =
+        build_function_clause_error_msg(":lists.keysplit_1/8", [
+          1,
+          {:a},
+          :a,
+          {:b},
+          :b,
+          {:c},
+          [],
+          []
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keysort(1, [{:a}, {:b} | {:c}])
+      end
     end
 
     test "raises ArgumentError if the second argument is a larger improper list of non tuples" do
@@ -571,7 +578,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn -> :lists.keysort(1, [{:a}, :b]) end
     end
 
-    test "raises ArgumentError if the index is out of range of a tuple in the list" do
+    test "raises ArgumentError if the index is out of range for any tuple in the list" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    fn -> :lists.keysort(1, [{:a}, {}]) end
