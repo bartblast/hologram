@@ -160,7 +160,7 @@ const Erlang_String = {
         break;
 
       default:
-        Interpreter.raiseCaseClauseError(direction.value);
+        Interpreter.raiseCaseClauseError(direction);
     }
 
     return Type.list(splittedStringList);
