@@ -58,11 +58,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
   end
 
   describe "floor/1" do
-    test "rounds positive float with fractional part up" do
+    test "rounds positive float with fractional part down" do
       assert :math.floor(1.23) == 1.0
     end
 
-    test "rounds negative float with fractional part up toward zero" do
+    test "rounds negative float with fractional part down" do
       assert :math.floor(-1.23) == -2.0
     end
 
