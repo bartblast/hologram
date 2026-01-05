@@ -67,10 +67,10 @@ export default class Interpreter {
   }
 
   // TODO: include attempted function clauses info
-  static buildFunctionClauseErrorMsg(funName, args = []) {
+  static buildFunctionClauseErrorMsg(funName, args = null) {
     let argsInfo = "";
 
-    if (args.length > 0) {
+    if (args && args.length > 0) {
       argsInfo = Array.from(args).reduce(
         (acc, arg, idx) =>
           `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,

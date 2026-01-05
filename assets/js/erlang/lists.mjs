@@ -122,6 +122,7 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(list)) {
+      // Client-side error message is intentionally simplified.
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
       );
@@ -133,6 +134,29 @@ const Erlang_Lists = {
     );
   },
   // End foldl/3
+  // Deps: []
+
+  // Start foldr/3
+  "foldr/3": function (fun, initialAcc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list) || !Type.isProperList(list)) {
+      // Client-side error message is intentionally simplified.
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
+      );
+    }
+
+    return list.data.reduceRight(
+      (acc, elem) => Interpreter.callAnonymousFunction(fun, [elem, acc]),
+      initialAcc,
+    );
+  },
+  // End foldr/3
   // Deps: []
 
   // Start keydelete/3
@@ -238,6 +262,52 @@ const Erlang_Lists = {
   // End keymember/3
   // Deps: [:lists.keyfind/3]
 
+  // Start keysort/2
+  "keysort/2": (index, tuples) => {
+    if (!Type.isInteger(index) || index.value <= 0n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          index,
+          tuples,
+        ]),
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseCaseClauseError(tuples);
+    }
+
+    if (Type.isImproperList(tuples)) {
+      if (tuples.data.length === 2) {
+        Interpreter.raiseCaseClauseError(tuples);
+      } else if (tuples.data.every((item) => Type.isTuple(item))) {
+        // Client-side error message is intentionally simplified.
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
+        );
+      } else {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        );
+      }
+    }
+
+    if (tuples.data.length < 2) {
+      return tuples;
+    }
+
+    const sorted = tuples.data.toSorted((tuple1, tuple2) =>
+      Interpreter.compareTerms(
+        Erlang["element/2"](index, tuple1),
+        Erlang["element/2"](index, tuple2),
+      ),
+    );
+
+    return Type.list(sorted);
+  },
+  // End keysort/2
+  // Deps: [:erlang.element/2]
+
   // Start map/2
   "map/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
@@ -261,6 +331,63 @@ const Erlang_Lists = {
     );
   },
   // End map/2
+  // Deps: []
+
+  // Start mapfoldl/3
+  "mapfoldl/3": function (fun, initialAcc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.mapfoldl_1/3",
+          arguments,
+        ),
+      );
+    }
+
+    const isProperList = Type.isProperList(list);
+
+    const elementsCount = isProperList
+      ? list.data.length
+      : Math.max(list.data.length - 1, 0);
+
+    let acc = initialAcc;
+    const mappedElements = [];
+
+    for (let i = 0; i < elementsCount; ++i) {
+      const result = Interpreter.callAnonymousFunction(fun, [
+        list.data[i],
+        acc,
+      ]);
+
+      if (!Type.isTuple(result) || result.data.length !== 2) {
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(result));
+      }
+
+      mappedElements.push(result.data[0]);
+      acc = result.data[1];
+    }
+
+    if (!isProperList) {
+      const improperTail = list.data.at(-1);
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3", [
+          fun,
+          acc,
+          improperTail,
+        ]),
+      );
+    }
+
+    return Type.tuple([Type.list(mappedElements), acc]);
+  },
+  // End mapfoldl/3
   // Deps: []
 
   // Start member/2
@@ -385,16 +512,20 @@ const Erlang_Lists = {
       );
     }
 
-    return Type.list(list.data.sort(Interpreter.compareTerms));
+    return Type.list(list.data.slice().sort(Interpreter.compareTerms));
   },
   // End sort/1
   // Deps: []
 
-  //Start sort/2
+  // Client-side implementation uses simplified error details (for improper list with 2+ elements case)
+  // Start sort/2
   "sort/2": (fun, list) => {
-    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [fun, list]),
+    // Only validate that the first argument is an anonymous function (type check)
+    // Let arity validation happen naturally when the function is called
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseError(
+        "BadFunctionError",
+        `expected a function, got: ${Interpreter.inspect(fun)}`,
       );
     }
 
@@ -405,20 +536,31 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2"),
-      );
+      let errorMsg;
+
+      // Match server behavior for improper lists:
+      // - For lists with 1 element, raise error in :lists.sort/2
+      // - For lists with 2+ elements, raise error in :lists.fsplit_1/6
+      errorMsg =
+        list.data.length <= 2
+          ? Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [
+              fun,
+              list,
+            ])
+          : Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
+
+      Interpreter.raiseFunctionClauseError(errorMsg);
     }
 
     return Type.list(
-      list.data.sort((a, b) => {
+      list.data.slice().sort((a, b) => {
         const result = Interpreter.callAnonymousFunction(fun, [a, b]);
         return Type.isTrue(result) ? -1 : 1;
       }),
     );
   },
-  //End sort/2
-  //Deps: []
+  // End sort/2
+  // Deps: []
 };
 
 export default Erlang_Lists;

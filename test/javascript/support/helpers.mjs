@@ -301,12 +301,6 @@ export function inspectJs(term) {
   return term;
 }
 
-export function iolist(string) {
-  return Type.list(
-    Array.from(string, (char) => Type.integer(char.codePointAt(0))),
-  );
-}
-
 export function putAction(component, action) {
   return Erlang_Maps["put/3"](Type.atom("next_action"), action, component);
 }

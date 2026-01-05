@@ -96,6 +96,34 @@ const Erlang_Binary = {
   // End copy/2
   // Deps: []
 
+  // Start first/1
+  "first/1": (subject) => {
+    if (!Type.isBinary(subject)) {
+      const message = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, message),
+      );
+    }
+
+    if (Bitstring.isEmpty(subject)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "a zero-sized binary is not allowed",
+        ),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(subject);
+
+    return Type.integer(subject.bytes[0]);
+  },
+  // End first/1
+  // Deps: []
+
   // Start last/1
   "last/1": (subject) => {
     if (!Type.isBinary(subject)) {
@@ -103,7 +131,9 @@ const Erlang_Binary = {
         ? "is a bitstring (expected a binary)"
         : "not a binary";
 
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, msg)
+      );
     }
 
     if (subject.bytes.length < 1) {
@@ -114,6 +144,8 @@ const Erlang_Binary = {
         ),
       );
     }
+
+    Bitstring.maybeSetBytesFromText(subject);
 
     return Type.integer(subject.bytes[subject.bytes.length - 1]);
   },

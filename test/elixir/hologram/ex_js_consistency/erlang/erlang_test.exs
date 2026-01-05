@@ -1349,10 +1349,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       # Number.MAX_SAFE_INTEGER = 9007199254740991
       # = 0b11111111111111111111111111111111111111111111111111111
       #
-      # 2 * 9007199254740991 = 18014398509481983
+      # 2 * 9007199254740991 + 1 = 18014398509481983
       # = 0b111111111111111111111111111111111111111111111111111111
       #
-      # 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+      # 2 * 9007199254740991 = 18014398509481982
+      # = 0b111111111111111111111111111111111111111111111111111110
 
       left = 18_014_398_509_481_983
       right = 18_014_398_509_481_982
@@ -1837,6 +1838,64 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "bor/2" do
+    test "both arguments are positive" do
+      assert :erlang.bor(4, 3) == 7
+    end
+
+    test "both arguments are zero" do
+      assert :erlang.bor(0, 0) == 0
+    end
+
+    test "left argument is zero" do
+      assert :erlang.bor(0, 8) == 8
+    end
+
+    test "right argument is zero" do
+      assert :erlang.bor(4, 0) == 4
+    end
+
+    test "left argument is negative" do
+      assert :erlang.bor(-4, 3) == -1
+    end
+
+    test "right argument is negative" do
+      assert :erlang.bor(4, -3) == -3
+    end
+
+    test "both arguments are negative" do
+      assert :erlang.bor(-4, -3) == -3
+    end
+
+    test "works with large numbers" do
+      # Number.MAX_SAFE_INTEGER = 9007199254740991
+      # = 0b11111111111111111111111111111111111111111111111111111
+      #
+      # 2 * 9007199254740991 + 1 = 18014398509481983
+      # = 0b111111111111111111111111111111111111111111111111111111
+      #
+      # 2 * 9007199254740991 = 18014398509481982
+      # = 0b111111111111111111111111111111111111111111111111111110
+
+      left = 18_014_398_509_481_983
+      right = 18_014_398_509_481_982
+
+      assert :erlang.bor(left, right) == left
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(1.0, 2)",
+                   {:erlang, :bor, [1.0, 2]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
+                   {:erlang, :bor, [1, 2.0]}
+    end
+  end
+
   describe "bsr/2" do
     test "common usage" do
       # 16 = 0b00010000, 8 = 0b00001000
@@ -2082,8 +2141,440 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "float_to_binary/2" do
-    test ":short option" do
-      assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
+    @input_above_10 1000 / 3
+    @input_between_1_and_10 10 / 3
+    @input_below_1 1 / 30
+
+    # default format is equaivalent to [{:scientific, 20}]
+
+    test "default format, input > 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_above_10, []) == "3.33333333333333314386e+02"
+    end
+
+    test "default format, input > 10, padding needed" do
+      assert :erlang.float_to_binary(128.0, []) == "1.28000000000000000000e+02"
+    end
+
+    test "default format, input between 1 and 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_between_1_and_10, []) == "3.33333333333333348136e+00"
+    end
+
+    test "default format, input between 1 and 10, padding needed" do
+      assert :erlang.float_to_binary(2.0, []) == "2.00000000000000000000e+00"
+    end
+
+    test "default format, input < 1, padding not needed" do
+      assert :erlang.float_to_binary(@input_below_1, []) == "3.33333333333333328707e-02"
+    end
+
+    test "default format, input < 1, padding needed" do
+      assert :erlang.float_to_binary(0.0625, []) == "6.25000000000000000000e-02"
+    end
+
+    test "default format, input is signed positive zero" do
+      assert :erlang.float_to_binary(+0.0, []) == "0.00000000000000000000e+00"
+    end
+
+    test "default format, input is signed negative zero" do
+      assert :erlang.float_to_binary(-0.0, []) == "-0.00000000000000000000e+00"
+    end
+
+    test "default format, input is unsigned zero" do
+      assert :erlang.float_to_binary(0.0, []) == "0.00000000000000000000e+00"
+    end
+
+    test "default format, input is negative" do
+      assert :erlang.float_to_binary(-@input_between_1_and_10, []) ==
+               "-3.33333333333333348136e+00"
+    end
+
+    test ":decimals option, input > 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_above_10, [{:decimals, 4}]) == "333.3333"
+    end
+
+    test ":decimals option, input > 10, padding needed" do
+      assert :erlang.float_to_binary(128.0, [{:decimals, 4}]) == "128.0000"
+    end
+
+    test ":decimals option, input between 1 and 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_between_1_and_10, [{:decimals, 4}]) == "3.3333"
+    end
+
+    test ":decimals option, input between 1 and 10, padding needed" do
+      assert :erlang.float_to_binary(2.0, [{:decimals, 4}]) == "2.0000"
+    end
+
+    test ":decimals option, input < 1, padding not needed" do
+      assert :erlang.float_to_binary(@input_below_1, [{:decimals, 4}]) == "0.0333"
+    end
+
+    test ":decimals option, input < 1, padding needed" do
+      assert :erlang.float_to_binary(0.5, [{:decimals, 4}]) == "0.5000"
+    end
+
+    test ":decimals option, input is signed positive zero" do
+      assert :erlang.float_to_binary(+0.0, [{:decimals, 4}]) == "0.0000"
+    end
+
+    test ":decimals option, input is signed negative zero" do
+      assert :erlang.float_to_binary(-0.0, [{:decimals, 4}]) == "-0.0000"
+    end
+
+    test ":decimals option, input is unsigned zero" do
+      assert :erlang.float_to_binary(0.0, [{:decimals, 4}]) == "0.0000"
+    end
+
+    test ":decimals option, input is negative" do
+      assert :erlang.float_to_binary(-@input_between_1_and_10, [{:decimals, 4}]) == "-3.3333"
+    end
+
+    test ":decimals option, accepts option value 0 (the min allowed value)" do
+      assert :erlang.float_to_binary(123.45, [{:decimals, 0}]) == "123"
+    end
+
+    test ":decimals option, accepts option value 253 (the max allowed value)" do
+      result = :erlang.float_to_binary(@input_below_1, [{:decimals, 253}])
+
+      expected =
+        "0.033333333333333332870740406406184774823486804962158203125" <>
+          String.duplicate("0", 196)
+
+      assert result == expected
+    end
+
+    test ":decimals option, raises ArgumentError if option is not an integer" do
+      expected_msg = build_argument_error_msg(2, "invalid option in list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.float_to_binary(@input_above_10, [{:decimals, 1.23}])
+      end
+    end
+
+    test ":decimals option, raises ArgumentError if option is less than zero" do
+      expected_msg = build_argument_error_msg(2, "invalid option in list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.float_to_binary(@input_above_10, [{:decimals, -1}])
+      end
+    end
+
+    test ":decimals option, raises ArgumentError if option is greater than 253" do
+      expected_msg = build_argument_error_msg(2, "invalid option in list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.float_to_binary(@input_above_10, [{:decimals, 254}])
+      end
+    end
+
+    test ":scientific option, positive option value, input > 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_above_10, [{:scientific, 4}]) == "3.3333e+02"
+    end
+
+    test ":scientific option, positive option value, input > 10, padding needed" do
+      assert :erlang.float_to_binary(128.0, [{:scientific, 4}]) == "1.2800e+02"
+    end
+
+    test ":scientific option, positive option value, input between 1 and 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_between_1_and_10, [{:scientific, 4}]) == "3.3333e+00"
+    end
+
+    test ":scientific option, positive option value, input between 1 and 10, padding needed" do
+      assert :erlang.float_to_binary(2.0, [{:scientific, 4}]) == "2.0000e+00"
+    end
+
+    test ":scientific option, positive option value, input < 1, padding not needed" do
+      assert :erlang.float_to_binary(@input_below_1, [{:scientific, 4}]) == "3.3333e-02"
+    end
+
+    test ":scientific option, positive option value, input < 1, padding needed" do
+      assert :erlang.float_to_binary(0.0625, [{:scientific, 4}]) == "6.2500e-02"
+    end
+
+    test ":scientific option, positive option value, input is signed positive zero" do
+      assert :erlang.float_to_binary(+0.0, [{:scientific, 4}]) == "0.0000e+00"
+    end
+
+    test ":scientific option, positive option value, input is signed negative zero" do
+      assert :erlang.float_to_binary(-0.0, [{:scientific, 4}]) == "-0.0000e+00"
+    end
+
+    test ":scientific option, positive option value, input is unsigned zero" do
+      assert :erlang.float_to_binary(0.0, [{:scientific, 4}]) == "0.0000e+00"
+    end
+
+    test ":scientific option, positive option value, input is negative" do
+      assert :erlang.float_to_binary(-@input_between_1_and_10, [{:scientific, 4}]) ==
+               "-3.3333e+00"
+    end
+
+    test ":scientific option, zero option value, input > 10" do
+      assert :erlang.float_to_binary(@input_above_10, [{:scientific, 0}]) == "3e+02"
+    end
+
+    test ":scientific option, zero option value, input between 1 and 10" do
+      assert :erlang.float_to_binary(@input_between_1_and_10, [{:scientific, 0}]) == "3e+00"
+    end
+
+    test ":scientific option, zero option value, input < 1" do
+      assert :erlang.float_to_binary(@input_below_1, [{:scientific, 0}]) == "3e-02"
+    end
+
+    test ":scientific option, negative option value, input > 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_above_10, [{:scientific, -4}]) == "3.333333e+02"
+    end
+
+    test ":scientific option, negative option value, input > 10, padding needed" do
+      assert :erlang.float_to_binary(128.0, [{:scientific, -4}]) == "1.280000e+02"
+    end
+
+    test ":scientific option, negative option value, input between 1 and 10, padding not needed" do
+      assert :erlang.float_to_binary(@input_between_1_and_10, [{:scientific, -4}]) ==
+               "3.333333e+00"
+    end
+
+    test ":scientific option, negative option value, input between 1 and 10, padding needed" do
+      assert :erlang.float_to_binary(2.0, [{:scientific, -4}]) == "2.000000e+00"
+    end
+
+    test ":scientific option, negative option value, input < 1, padding not needed" do
+      assert :erlang.float_to_binary(@input_below_1, [{:scientific, -4}]) == "3.333333e-02"
+    end
+
+    test ":scientific option, negative option value, input < 1, padding needed" do
+      assert :erlang.float_to_binary(0.0625, [{:scientific, -4}]) == "6.250000e-02"
+    end
+
+    test ":scientific option, negative option value, input is signed positive zero" do
+      assert :erlang.float_to_binary(+0.0, [{:scientific, -4}]) == "0.000000e+00"
+    end
+
+    test ":scientific option, negative option value, input is signed negative zero" do
+      assert :erlang.float_to_binary(-0.0, [{:scientific, -4}]) == "-0.000000e+00"
+    end
+
+    test ":scientific option, negative option value, input is unsigned zero" do
+      assert :erlang.float_to_binary(0.0, [{:scientific, -4}]) == "0.000000e+00"
+    end
+
+    test ":scientific option, negative option value, input is negative" do
+      assert :erlang.float_to_binary(-@input_between_1_and_10, [{:scientific, -4}]) ==
+               "-3.333333e+00"
+    end
+
+    test ":scientific option, accepts option value 249 (the max allowed value)" do
+      result = :erlang.float_to_binary(@input_between_1_and_10, [{:scientific, 249}])
+
+      expected =
+        "3.333333333333333481363069950020872056484222412109375" <>
+          String.duplicate("0", 198) <> "e+00"
+
+      assert result == expected
+    end
+
+    test ":scientific option, raises ArgumentError if option is not an integer" do
+      expected_msg = build_argument_error_msg(2, "invalid option in list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.float_to_binary(@input_above_10, [{:scientific, 1.23}])
+      end
+    end
+
+    test ":scientific option, raises ArgumentError if option is greater than 249" do
+      expected_msg = build_argument_error_msg(2, "invalid option in list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.float_to_binary(@input_above_10, [{:scientific, 250}])
+      end
+    end
+
+    test ":short option, input > 10, infinite" do
+      assert :erlang.float_to_binary(@input_above_10, [:short]) == "333.3333333333333"
+    end
+
+    test ":short option, input > 10, finite" do
+      assert :erlang.float_to_binary(128.5, [:short]) == "128.5"
+    end
+
+    test ":short option, input between 1 and 10, infinite" do
+      assert :erlang.float_to_binary(@input_between_1_and_10, [:short]) == "3.3333333333333335"
+    end
+
+    test ":short option, input between 1 and 10, finite" do
+      assert :erlang.float_to_binary(8.5, [:short]) == "8.5"
+    end
+
+    test ":short option, input < 1, infinite" do
+      assert :erlang.float_to_binary(@input_below_1, [:short]) == "0.03333333333333333"
+    end
+
+    test ":short option, input < 1, finite" do
+      assert :erlang.float_to_binary(0.25, [:short]) == "0.25"
+    end
+
+    test ":short option, input is signed positive zero" do
+      assert :erlang.float_to_binary(+0.0, [:short]) == "0.0"
+    end
+
+    test ":short option, input is signed negative zero" do
+      assert :erlang.float_to_binary(-0.0, [:short]) == "-0.0"
+    end
+
+    test ":short option, input is unsigned zero" do
+      assert :erlang.float_to_binary(0.0, [:short]) == "0.0"
+    end
+
+    test ":short option, input is negative" do
+      assert :erlang.float_to_binary(-@input_between_1_and_10, [:short]) ==
+               "-3.3333333333333335"
+    end
+
+    test ":short option, decimal is shorter than exponential" do
+      # 0.001: Decimal "0.001" (5 chars) vs Exponential "1.0e-3" (6 chars) → decimal wins
+      assert :erlang.float_to_binary(0.001, [:short]) == "0.001"
+    end
+
+    test ":short option, exponential is shorter than decimal" do
+      # 0.00099: Decimal "0.00099" (7 chars) vs Exponential "9.9e-4" (6 chars) → exponential wins
+      assert :erlang.float_to_binary(0.00099, [:short]) == "9.9e-4"
+    end
+
+    test ":short option, tie - decimal wins" do
+      # 0.0009: Decimal "0.0009" (6 chars) vs Exponential "9.0e-4" (6 chars) → decimal wins tie
+      assert :erlang.float_to_binary(0.0009, [:short]) == "0.0009"
+    end
+
+    test ":short option, value at 2^53 boundary uses exponential" do
+      # 2^53 = 9_007_199_254_740_992
+      assert :erlang.float_to_binary(9_007_199_254_740_992.0, [:short]) == "9.007199254740992e15"
+    end
+
+    test ":short option, value below 2^53 boundary uses decimal" do
+      # 2^53 - 1 = 9_007_199_254_740_991
+      assert :erlang.float_to_binary(9_007_199_254_740_991.0, [:short]) ==
+               "9007199254740991.0"
+    end
+
+    test ":short option, value at -2^53 boundary uses exponential" do
+      # -2^53 = -9_007_199_254_740_992
+      assert :erlang.float_to_binary(-9_007_199_254_740_992.0, [:short]) ==
+               "-9.007199254740992e15"
+    end
+
+    test ":short option, value above -2^53 boundary uses decimal" do
+      # -2^53 + 1 = -9_007_199_254_740_991
+      assert :erlang.float_to_binary(-9_007_199_254_740_991.0, [:short]) ==
+               "-9007199254740991.0"
+    end
+
+    test ":compact option by itself is same as default format" do
+      assert :erlang.float_to_binary(@input_above_10, [:compact]) ==
+               :erlang.float_to_binary(@input_above_10, [])
+    end
+
+    test ":compact + :decimals option, input > 10, infinite" do
+      assert :erlang.float_to_binary(@input_above_10, [:compact, {:decimals, 4}]) == "333.3333"
+    end
+
+    test ":compact + :decimals option, input > 10, finite" do
+      assert :erlang.float_to_binary(128.5, [:compact, {:decimals, 4}]) == "128.5"
+    end
+
+    test ":compact + :decimals option, input between 1 and 10, infinite" do
+      assert :erlang.float_to_binary(@input_between_1_and_10, [:compact, {:decimals, 4}]) ==
+               "3.3333"
+    end
+
+    test ":compact + :decimals option, input between 1 and 10, finite" do
+      assert :erlang.float_to_binary(8.5, [:compact, {:decimals, 4}]) == "8.5"
+    end
+
+    test ":compact + :decimals option, input < 1, infinite" do
+      assert :erlang.float_to_binary(@input_below_1, [:compact, {:decimals, 4}]) == "0.0333"
+    end
+
+    test ":compact + :decimals option, input < 1, finite" do
+      assert :erlang.float_to_binary(0.25, [:compact, {:decimals, 4}]) == "0.25"
+    end
+
+    test ":compact + :decimals option, input is signed positive zero" do
+      assert :erlang.float_to_binary(+0.0, [:compact, {:decimals, 4}]) == "0.0"
+    end
+
+    test ":compact + :decimals option, input is signed negative zero" do
+      assert :erlang.float_to_binary(-0.0, [:compact, {:decimals, 4}]) == "-0.0"
+    end
+
+    test ":compact + :decimals option, input is unsigned zero" do
+      assert :erlang.float_to_binary(0.0, [:compact, {:decimals, 4}]) == "0.0"
+    end
+
+    test ":compact + :decimals option, order of options doesn't matter" do
+      assert :erlang.float_to_binary(128.5, [{:decimals, 4}, :compact]) == "128.5"
+    end
+
+    test ":compact + :decimals option, accepts compact option with decimals 0" do
+      assert :erlang.float_to_binary(128.0, [:compact, {:decimals, 0}]) == "128"
+    end
+
+    test ":compact option is ignored when used with :scientific option" do
+      scientific_result = :erlang.float_to_binary(@input_above_10, [{:scientific, 4}])
+
+      assert :erlang.float_to_binary(@input_above_10, [{:scientific, 4}, :compact]) ==
+               scientific_result
+
+      assert :erlang.float_to_binary(@input_above_10, [:compact, {:scientific, 4}]) ==
+               scientific_result
+    end
+
+    test ":compact option is ignored when used with :short option" do
+      short_result = :erlang.float_to_binary(@input_above_10, [:short])
+
+      assert :erlang.float_to_binary(@input_above_10, [:short, :compact]) == short_result
+      assert :erlang.float_to_binary(@input_above_10, [:compact, :short]) == short_result
+    end
+
+    test "multiple opts - last opt is :scientific" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}, {:scientific, 3}]) == "7.120e+00"
+    end
+
+    test "multiple opts - last opt is :scientific followed by :compact" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}, {:scientific, 3}, :compact]) ==
+               "7.120e+00"
+    end
+
+    test "multiple opts - last opt is :decimals" do
+      assert :erlang.float_to_binary(7.12, [:short, {:decimals, 4}]) == "7.1200"
+    end
+
+    test "multiple opts - last opt is :decimals followed by :compact" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}, {:decimals, 4}, :compact]) == "7.12"
+    end
+
+    test "multiple opts - last opt is :short" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}, :short]) == "7.12"
+    end
+
+    test "multiple opts - last opt is :short followed by :compact" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}, :short, :compact]) == "7.12"
+    end
+
+    test "allows result with exactly 255 bytes (boundary condition)" do
+      # Test boundary: 1.0 with decimals=253 → "1." + 253 zeros = 255 chars (allowed)
+      result = :erlang.float_to_binary(1.0, [{:decimals, 253}])
+
+      assert String.length(result) == 255
+      assert result == "1." <> String.duplicate("0", 253)
+    end
+
+    test "raises ArgumentError if result exceeds 255-byte buffer limit" do
+      # Native Erlang enforces a 256-byte buffer limit (result must be < 256) but reports it as
+      # "2nd argument: invalid option in list" rather than a clearer error message
+      # Test boundary: 10.0 with decimals=253 → "10." + 253 zeros = 256 chars (not allowed)
+      expected_msg = build_argument_error_msg(2, "invalid option in list")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.float_to_binary(10.0, [{:decimals, 253}])
+      end
     end
 
     test "raises ArgumentError if the first argument is not a float" do
@@ -2094,14 +2585,68 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a list"), fn ->
-        :erlang.float_to_binary(1.0, 123)
+        :erlang.float_to_binary(@input_above_10, 123)
       end
     end
 
     test "raises ArgumentError if the second argument is not a proper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
-        :erlang.float_to_binary(1.0, [{:decimals, 4} | :compact])
+        :erlang.float_to_binary(@input_above_10, [:compact | {:decimals, 4}])
       end
+    end
+
+    test "raises ArgumentError if the second argument has invalid option in list" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(@input_above_10, [:abc])
+      end
+    end
+  end
+
+  describe "floor/1" do
+    test "rounds positive float with fractional part down" do
+      assert :erlang.floor(1.23) == 1
+    end
+
+    test "rounds negative float with fractional part down" do
+      assert :erlang.floor(-1.23) == -2
+    end
+
+    test "keeps positive float without fractional part unchanged" do
+      assert :erlang.floor(1.0) == 1
+    end
+
+    test "keeps negative float without fractional part unchanged" do
+      assert :erlang.floor(-1.0) == -1
+    end
+
+    test "keeps signed negative zero float unchanged" do
+      assert :erlang.floor(-0.0) == 0
+    end
+
+    test "keeps signed positive zero float unchanged" do
+      assert :erlang.floor(+0.0) == 0
+    end
+
+    test "keeps unsigned zero float unchanged" do
+      assert :erlang.floor(0.0) == 0
+    end
+
+    test "keeps positive integer unchanged" do
+      assert :erlang.floor(1) == 1
+    end
+
+    test "keeps negative integer unchanged" do
+      assert :erlang.floor(-1) == -1
+    end
+
+    test "keeps zero integer unchanged" do
+      assert :erlang.floor(0) == 0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :floor, [:abc]}
     end
   end
 

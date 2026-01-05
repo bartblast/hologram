@@ -19,6 +19,7 @@ const atomAbc = Type.atom("abc");
 const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer3 = Type.integer(3);
+const integer123 = Type.integer(123);
 
 const bytesBasedBinary = Bitstring.fromBytes([5, 19, 72, 33]);
 const bytesBasedEmptyBinary = Bitstring.fromBytes([]);
@@ -239,10 +240,99 @@ describe("Erlang_Binary", () => {
     });
   });
 
+  describe("first/1", () => {
+    const first = Erlang_Binary["first/1"];
+
+    it("returns first byte of a single-byte binary", () => {
+      const subject = Bitstring.fromBytes([42]);
+      const result = first(subject);
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("returns first byte of a multi-byte binary", () => {
+      const subject = Bitstring.fromBytes([5, 4, 3]);
+      const result = first(subject);
+
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("returns first byte of a text-based binary", () => {
+      const subject = Bitstring.fromText("ELIXIR");
+      const result = first(subject);
+
+      assert.deepStrictEqual(result, Type.integer(69));
+    });
+
+    it("returns first byte of UTF-8 multi-byte character", () => {
+      const subject = Bitstring.fromText("é");
+      const result = first(subject);
+
+      assert.deepStrictEqual(result, Type.integer(195));
+    });
+
+    it("raises ArgumentError if subject is not a bitstring", () => {
+      assertBoxedError(
+        () => first(integer123),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if subject is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => first(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "is a bitstring (expected a binary)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if subject is an empty binary", () => {
+      assertBoxedError(
+        () => first(Type.bitstring([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "a zero-sized binary is not allowed",
+        ),
+      );
+    });
+  });
+
   describe("last/1", () => {
     const testedFun = Erlang_Binary["last/1"];
 
-    it("raises ArgumentError if the subject is not a bitstring", () => {
+    it("returns last byte of a single-byte binary", () => {
+      const subject = Bitstring.fromBytes([42]);
+      const result = testedFun(subject);
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("returns last byte of a multi-byte binary", () => {
+      const result = testedFun(bytesBasedBinary);
+
+      assert.deepStrictEqual(result, Type.integer(33));
+    });
+
+    it("returns last byte of a text-based binary", () => {
+      const subject = Bitstring.fromText("ELIXIR");
+      const result = testedFun(subject);
+
+      assert.deepStrictEqual(result, Type.integer(82));
+    });
+
+    it("returns last byte of UTF-8 multi-byte character", () => {
+      const subject = Bitstring.fromText("é");
+      const result = testedFun(subject);
+
+      assert.deepStrictEqual(result, Type.integer(195));
+    });
+
+    it("raises ArgumentError if subject is not a bitstring", () => {
       assertBoxedError(
         () => testedFun(atomAbc),
         "ArgumentError",
@@ -250,7 +340,7 @@ describe("Erlang_Binary", () => {
       );
     });
 
-    it("raises ArgumentError if the subject is a non-binary bitstring", () => {
+    it("raises ArgumentError if subject is a non-binary bitstring", () => {
       assertBoxedError(
         () => testedFun(Type.bitstring([1, 0, 1])),
         "ArgumentError",
@@ -261,7 +351,7 @@ describe("Erlang_Binary", () => {
       );
     });
 
-    it("raises ArgumentError if the subject is zero-length", () => {
+    it("raises ArgumentError if subject is an empty binary", () => {
       assertBoxedError(
         () => testedFun(textBasedEmptyBinary),
         "ArgumentError",
@@ -270,11 +360,6 @@ describe("Erlang_Binary", () => {
           "a zero-sized binary is not allowed",
         ),
       );
-    });
-
-    it("returns last byte", () => {
-      const result = testedFun(bytesBasedBinary);
-      assert.deepStrictEqual(result, Type.integer(33));
     });
   });
 });

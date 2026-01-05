@@ -18,9 +18,7 @@ opts = [enabled: true, env: %{"MIX_ENV" => "test"}]
     {:formatter, enabled: false},
     {:gettext, enabled: false},
     {:hex_audit, "mix hex.audit", opts},
-    {:js_formatter,
-     "assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
-     opts},
+    {:js_formatter, "mix format.js.check", opts},
     {:js_tests, "mix test.js", opts},
     {:mix_audit, opts},
     # custom :js_tests used instead of :npm_test

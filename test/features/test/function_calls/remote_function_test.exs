@@ -18,7 +18,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
   feature "private function", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
-                        build_undefined_function_error(
+                        build_undefined_function_error_msg(
                           {HologramFeatureTests.ModuleFixture2, :fun_2, 0},
                           []
                         ),
@@ -75,7 +75,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
   feature "arity invalid, called with no args", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
-                        build_undefined_function_error(
+                        build_undefined_function_error_msg(
                           {HologramFeatureTests.ModuleFixture2, :fun_4, 0},
                           []
                         ),
@@ -90,7 +90,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
   feature "arity invalid, called with single arg", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
-                        build_undefined_function_error(
+                        build_undefined_function_error_msg(
                           {HologramFeatureTests.ModuleFixture2, :fun_4, 1},
                           []
                         ),
@@ -105,7 +105,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
   feature "arity invalid, called with multiple args", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
-                        build_undefined_function_error(
+                        build_undefined_function_error_msg(
                           {HologramFeatureTests.ModuleFixture2, :fun_3, 2},
                           []
                         ),
