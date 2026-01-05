@@ -184,7 +184,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     test "returns last byte of UTF-8 multi-byte character" do
-      assert :binary.last("é") == 195
+      assert :binary.last("é") == 169
     end
 
     test "raises ArgumentError if subject is not a bitstring" do
@@ -196,7 +196,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     test "raises ArgumentError if subject is a non-binary bitstring" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "is a bitstring (expected a binary)"),
-                   {:binary, :last, [<<1::1, 0::1, 1::1>>, 3]}
+                   {:binary, :last, [<<1::1, 0::1, 1::1>>]}
     end
 
     test "raises ArgumentError if subject is an empty binary" do

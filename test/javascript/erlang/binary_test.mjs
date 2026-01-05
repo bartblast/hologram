@@ -329,7 +329,7 @@ describe("Erlang_Binary", () => {
       const subject = Bitstring.fromText("é");
       const result = testedFun(subject);
 
-      assert.deepStrictEqual(result, Type.integer(195));
+      assert.deepStrictEqual(result, Type.integer(169));
     });
 
     it("raises ArgumentError if subject is not a bitstring", () => {
