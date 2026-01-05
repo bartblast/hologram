@@ -477,6 +477,223 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     end
   end
 
+  describe "rootname/1" do
+    test "path with extension" do
+      assert :filename.rootname("/jam.src/foo.erl") == "/jam.src/foo"
+    end
+
+    test "path without extension" do
+      assert :filename.rootname("/jam.src/kalle") == "/jam.src/kalle"
+    end
+
+    test "filename with extension" do
+      assert :filename.rootname("foo.erl") == "foo"
+    end
+
+    test "filename without extension" do
+      assert :filename.rootname("foo") == "foo"
+    end
+
+    test "filename starting with dot" do
+      assert :filename.rootname(".foo") == ""
+    end
+
+    test "filename with multiple extensions" do
+      assert :filename.rootname("foo.bar.baz") == "foo.bar"
+    end
+
+    test "path with hidden file" do
+      assert :filename.rootname("path/to/.hidden") == "path/to/.hidden"
+    end
+
+    test "root path" do
+      assert :filename.rootname("/") == "/"
+    end
+
+    test "empty string" do
+      assert :filename.rootname("") == ""
+    end
+
+    test "path ending with dot" do
+      assert :filename.rootname("foo.") == "foo"
+    end
+
+    test "hidden file in root" do
+      assert :filename.rootname("/.bashrc") == "/.bashrc"
+    end
+
+    test "hidden file in subdirectory" do
+      assert :filename.rootname("/foo/.bashrc") == "/foo/.bashrc"
+    end
+
+    test "hidden file with extension" do
+      assert :filename.rootname(".bashrc.bak") == ".bashrc"
+    end
+
+    test "hidden file in subdirectory with extension" do
+      assert :filename.rootname("/foo/.bashrc.bak") == "/foo/.bashrc"
+    end
+
+    test "empty list input" do
+      assert :filename.rootname([]) == []
+    end
+
+    test "non-empty iolist input" do
+      assert :filename.rootname([~c"path/to/", ?f, ?i, ?l, ?e, ~c".txt"]) == ~c"path/to/file"
+    end
+
+    test "handles invalid UTF-8 bytewise (raw filename)" do
+      # Invalid UTF-8 bytes: <<255, 254, 253>>
+      invalid_utf8 = <<255, 254, 253>>
+      result = :filename.rootname(invalid_utf8)
+
+      # Should return unchanged since no extension
+      assert result == invalid_utf8
+    end
+
+    test "removes extension from invalid UTF-8 filename" do
+      # Invalid UTF-8 with extension: <<255, 254, 46, 253>> (0xFF 0xFE '.' 0xFD)
+      invalid_utf8_with_ext = <<255, 254, 46, 253>>
+      result = :filename.rootname(invalid_utf8_with_ext)
+
+      # Should remove ".253" (last dot and everything after)
+      assert result == <<255, 254>>
+    end
+
+    test "preserves invalid UTF-8 hidden file" do
+      # Invalid UTF-8 starting with slash-dot: <<47, 46, 255, 254>> ('/' '.' 0xFF 0xFE)
+      invalid_utf8_hidden = <<47, 46, 255, 254>>
+      result = :filename.rootname(invalid_utf8_hidden)
+
+      # Should not remove extension after slash
+      assert result == invalid_utf8_hidden
+    end
+
+    test "filename with trailing slash" do
+      assert :filename.rootname("foo.txt/") == "foo.txt/"
+    end
+
+    test "filename with double dots as extension" do
+      assert :filename.rootname("foo..txt") == "foo."
+    end
+
+    test "filename is just double dots" do
+      assert :filename.rootname("..") == "."
+    end
+
+    test "filename is three dots" do
+      assert :filename.rootname("...") == ".."
+    end
+  end
+
+  describe "rootname/2" do
+    test "removes matching extension" do
+      assert :filename.rootname("/jam.src/foo.erl", ".erl") == "/jam.src/foo"
+    end
+
+    test "does not remove non-matching extension" do
+      assert :filename.rootname("/jam.src/kalle.jam", ".erl") == "/jam.src/kalle.jam"
+    end
+
+    test "removes partial extension match" do
+      assert :filename.rootname("/jam.src/kalle.old.erl", ".erl") == "/jam.src/kalle.old"
+    end
+
+    test "removes extension from filename only" do
+      assert :filename.rootname("foo.erl", ".erl") == "foo"
+    end
+
+    test "does not remove if filename does not match extension" do
+      assert :filename.rootname("foo.beam", ".erl") == "foo.beam"
+    end
+
+    test "removes extension when filename equals extension" do
+      assert :filename.rootname(".bashrc", ".bashrc") == ""
+    end
+
+    test "does not remove extension after slash in root" do
+      assert :filename.rootname("/.erl", ".erl") == "/.erl"
+    end
+
+    test "does not remove extension after slash in subdirectory" do
+      assert :filename.rootname("/path/.erl", ".erl") == "/path/.erl"
+    end
+
+    test "empty extension" do
+      assert :filename.rootname("foo.erl", "") == "foo.erl"
+    end
+
+    test "empty filename" do
+      assert :filename.rootname("", ".erl") == ""
+    end
+
+    test "empty list filename input" do
+      assert :filename.rootname([], ".erl") == ""
+    end
+
+    test "iolist filename input" do
+      assert :filename.rootname([~c"foo", ~c".erl"], ".erl") == "foo"
+    end
+
+    test "iolist extension input" do
+      assert :filename.rootname("foo.erl", [~c".", ~c"erl"]) == "foo"
+    end
+
+    test "handles invalid UTF-8 filename bytewise (raw filename)" do
+      # Invalid UTF-8 bytes: <<255, 254, 253>>
+      invalid_utf8 = <<255, 254, 253>>
+      ext = <<253>>
+      result = :filename.rootname(invalid_utf8, ext)
+
+      # Should remove the last byte (253)
+      assert result == <<255, 254>>
+    end
+
+    test "handles invalid UTF-8 extension bytewise" do
+      filename = "foo.erl"
+      # Invalid UTF-8 extension
+      invalid_ext = <<255, 254>>
+      result = :filename.rootname(filename, invalid_ext)
+
+      # Should not remove anything (extension doesn't match)
+      assert result == filename
+    end
+
+    test "handles both filename and extension as invalid UTF-8" do
+      # Filename: <<255, 254, 46, 253>> (0xFF 0xFE '.' 0xFD)
+      invalid_filename = <<255, 254, 46, 253>>
+      # Extension: <<46, 253>> ('.' 0xFD)
+      invalid_ext = <<46, 253>>
+      result = :filename.rootname(invalid_filename, invalid_ext)
+
+      # Should remove the matching extension
+      assert result == <<255, 254>>
+    end
+
+    test "does not remove invalid UTF-8 extension after slash" do
+      # Filename: <<47, 255, 254>> ('/' 0xFF 0xFE)
+      invalid_filename = <<47, 255, 254>>
+      # Extension: <<255, 254>> (0xFF 0xFE)
+      invalid_ext = <<255, 254>>
+      result = :filename.rootname(invalid_filename, invalid_ext)
+
+      # Should not remove (extension is right after slash)
+      assert result == invalid_filename
+    end
+
+    test "extension without leading dot" do
+      assert :filename.rootname("foo.erl", "erl") == "foo."
+    end
+
+    test "extension longer than filename" do
+      assert :filename.rootname("foo", "foobar") == "foo"
+    end
+
+    test "extension with double dots" do
+      assert :filename.rootname("foo.erl", "..erl") == "foo.erl"
+    end
+  end
+
   describe "split/1" do
     test "absolute Unix path" do
       assert :filename.split("/usr/local/bin") == ["/", "usr", "local", "bin"]
