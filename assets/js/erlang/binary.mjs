@@ -131,9 +131,7 @@ const Erlang_Binary = {
         ? "is a bitstring (expected a binary)"
         : "not a binary";
 
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, msg)
-      );
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
     }
 
     if (subject.bytes.length < 1) {
