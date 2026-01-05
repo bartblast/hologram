@@ -128,7 +128,7 @@ const Erlang_String = {
     const replacementText = Bitstring.toText(replacementBinary);
 
     if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
-      return Type.list([string]);
+      return Type.list([stringText]);
     }
 
     let splittedStringList, index;
@@ -137,7 +137,7 @@ const Erlang_String = {
         splittedStringList = stringText
           .split(patternText)
           .flatMap((elem, idx) => {
-            return idx === 0 ? elem : [replacementText, elem];
+            return idx === 0 ? [elem] : [replacementText, elem];
           });
         break;
 
