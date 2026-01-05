@@ -702,7 +702,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       """s
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.mapfoldl(fn x -> x end, 0, [])
+        :lists.mapfoldl(fn elem -> elem end, 0, [])
       end
     end
 
@@ -738,7 +738,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises MatchError if the anonymous function does not return a 2-element tuple" do
       assert_error MatchError, "no match of right hand side value: 1", fn ->
-        :lists.mapfoldl(fn x, acc -> x + acc end, 0, [1])
+        :lists.mapfoldl(fn elem, acc -> elem + acc end, 0, [1])
       end
     end
   end

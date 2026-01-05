@@ -1357,7 +1357,6 @@ describe("Erlang_Lists", () => {
 
     it("mapfolds empty list", () => {
       const result = mapfoldl(fun, acc, emptyList);
-
       const expected = Type.tuple([emptyList, acc]);
 
       assert.deepStrictEqual(result, expected);
@@ -1473,7 +1472,7 @@ describe("Erlang_Lists", () => {
       );
 
       assertBoxedError(
-        () => mapfoldl(invalidFun, acc, properList),
+        () => mapfoldl(invalidFun, acc, Type.list([integer1])),
         "MatchError",
         Interpreter.buildMatchErrorMsg(integer1),
       );

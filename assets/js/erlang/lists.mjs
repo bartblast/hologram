@@ -351,6 +351,7 @@ const Erlang_Lists = {
     }
 
     const isProperList = Type.isProperList(list);
+
     const elementsCount = isProperList
       ? list.data.length
       : Math.max(list.data.length - 1, 0);
