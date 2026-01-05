@@ -368,7 +368,7 @@ describe("Erlang_String", () => {
         Type.atom("all"),
       );
 
-      assert.deepStrictEqual(["Hello ", "🌍", " World"]);
+      assert.deepStrictEqual(result, ["Hello ", "🌍", " World"]);
     });
   });
 
