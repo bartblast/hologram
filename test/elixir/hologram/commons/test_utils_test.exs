@@ -119,6 +119,13 @@ defmodule Hologram.Commons.TestUtilsTest do
     end
   end
 
+  test "build_match_error_msg/1" do
+    result = build_match_error_msg(%{b: 2, a: 1})
+    expected = "no match of right hand side value: %{a: 1, b: 2}"
+
+    assert result == expected
+  end
+
   describe "build_undefined_function_error/3" do
     # no similar functions / module is available
     test "basic case" do

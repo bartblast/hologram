@@ -69,6 +69,14 @@ defmodule Hologram.Commons.TestUtils do
   end
 
   @doc """
+  Builds an error message for MatchError.
+  """
+  @spec build_match_error_msg(term) :: String.t()
+  def build_match_error_msg(right) do
+    "no match of right hand side value: " <> KernelUtils.inspect(right)
+  end
+
+  @doc """
   Builds an error message for UndefinedFunctionError.
   """
   @spec build_undefined_function_error(mfa, list({fun, arity}), boolean) :: String.t()
