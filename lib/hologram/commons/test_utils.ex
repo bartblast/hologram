@@ -79,8 +79,12 @@ defmodule Hologram.Commons.TestUtils do
   @doc """
   Builds an error message for UndefinedFunctionError.
   """
-  @spec build_undefined_function_error(mfa, list({fun, arity}), boolean) :: String.t()
-  def build_undefined_function_error(undefined_mfa, similar_funs \\ [], module_available? \\ true) do
+  @spec build_undefined_function_error_msg(mfa, list({fun, arity}), boolean) :: String.t()
+  def build_undefined_function_error_msg(
+        undefined_mfa,
+        similar_funs \\ [],
+        module_available? \\ true
+      ) do
     {module, fun, arity} = undefined_mfa
     module_name = Reflection.module_name(module)
 
