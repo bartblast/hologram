@@ -33,11 +33,12 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "emoji" do
-      [
+      data = [
         {"👩‍👩‍👦‍👦", "👩‍👩‍👦‍👦"},
         {"👩‍🚒", "👩‍🚒"}
       ]
-      |> Enum.each(fn {input, expected} ->
+
+      Enum.each(data, fn {input, expected} ->
         assert :string.titlecase(input) == expected
       end)
     end
