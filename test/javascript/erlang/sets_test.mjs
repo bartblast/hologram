@@ -148,42 +148,32 @@ describe("Erlang_Sets", () => {
 
   describe("del_element/2", () => {
     const del_element_2 = Erlang_Sets["del_element/2"];
+    const from_list_2 = Erlang_Sets["from_list/2"];
 
     it("removes an existing element from the set", () => {
-      const set = Type.map([
-        [integer1, Type.list([])],
-        [integer2, Type.list([])],
-        [integer3, Type.list([])],
-      ]);
-
+      const set = from_list_2(Type.list([integer1, integer2, integer3]), opts);
       const result = del_element_2(integer2, set);
 
-      const expected = Type.map([
-        [integer1, Type.list([])],
-        [integer3, Type.list([])],
-      ]);
+      const expected = from_list_2(Type.list([integer1, integer3]), opts);
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("returns the same set if element is not present", () => {
-      const set = Type.map([
-        [integer1, Type.list([])],
-        [integer2, Type.list([])],
-        [integer3, Type.list([])],
-      ]);
-
+      const set = from_list_2(Type.list([integer1, integer2, integer3]), opts);
       const integer42 = Type.integer(42);
       const result = del_element_2(integer42, set);
 
-      assert.deepStrictEqual(result, set);
+      const expected = from_list_2(Type.list([integer1, integer2, integer3]), opts);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("returns empty set when removing from empty set", () => {
-      const emptySet = Type.map();
+      const emptySet = from_list_2(Type.list(), opts);
       const result = del_element_2(Type.atom("any"), emptySet);
 
-      assert.deepStrictEqual(result, Type.map());
+      assert.deepStrictEqual(result, emptySet);
     });
 
     it("raises FunctionClauseError if argument is not a set", () => {

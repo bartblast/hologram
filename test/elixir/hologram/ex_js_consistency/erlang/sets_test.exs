@@ -76,20 +76,23 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
   describe "del_element/2" do
     test "removes an existing element from the set" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      expected = :sets.from_list([1, 3], [{:version, 2}])
       result = :sets.del_element(2, set)
-      assert result == %{1 => [], 3 => []}
+      assert result == expected
     end
 
     test "returns the same set if element is not present" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
       result = :sets.del_element(42, set)
-      assert result == %{1 => [], 2 => [], 3 => []}
+      assert result == expected
     end
 
     test "returns empty set when removing from empty set" do
-      set = :sets.new([{:version, 2}])
+      set = :sets.from_list([], [{:version, 2}])
+      expected = :sets.from_list([], [{:version, 2}])
       result = :sets.del_element(:any, set)
-      assert result == %{}
+      assert result == expected
     end
 
     test "raises FunctionClauseError if argument is not a set" do
