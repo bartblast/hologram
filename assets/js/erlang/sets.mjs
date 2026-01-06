@@ -92,17 +92,7 @@ const Erlang_Sets = {
 
   // Start fold/3
   "fold/3": (fun, initialAcc, set) => {
-    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3", [
-          fun,
-          initialAcc,
-          set,
-        ]),
-      );
-    }
-
-    if (!Type.isMap(set)) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2 || !Type.isMap(set)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3", [
           fun,
