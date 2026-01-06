@@ -331,10 +331,12 @@ const Erlang_Lists = {
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keyreplace3/4",
-          [key, index, thirdArg, newtuple],
-        ),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
+          key,
+          index,
+          thirdArg,
+          newtuple,
+        ]),
       );
     }
 
