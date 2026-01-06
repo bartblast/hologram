@@ -105,6 +105,16 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert result == 6
     end
 
+    test "raises FunctionClauseError if the function has wrong arity", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      fun = fn _elem -> :ignored end
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [fun, 0, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(fun, 0, set)
+      end
+    end
+
     test "raises FunctionClauseError if the function argument is not a function", %{opts: opts} do
       set = :sets.from_list([1, 2, 3], opts)
       expected_msg = build_function_clause_error_msg(":sets.fold/3", [:not_a_function, 0, set])
