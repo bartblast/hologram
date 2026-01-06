@@ -90,7 +90,63 @@ describe("Erlang_String", () => {
     describe("error conditions", () => {
       it("first argument is not a list", () => {
         const stringList = Type.atom("not_a_list");
-        const separator = charlistFixture(", ");
+        const separator = Type.charlist(", ");
+
+        assertBoxedError(
+          () => Erlang_String["join/2"](stringList, separator),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
+            stringList,
+            separator,
+          ]),
+        );
+      });
+
+      it("first argument is an improper list", () => {
+        const stringList = Type.improperList([Type.charlist("hello")], Type.atom("tail"));
+        const separator = Type.charlist(", ");
+
+        assertBoxedError(
+          () => Erlang_String["join/2"](stringList, separator),
+          "ArgumentError",
+          "Argument is not a proper list",
+        );
+      });
+
+      it("second argument is not a proper list", () => {
+        const stringList = Type.list([Type.charlist("hello")]);
+        const separator = Type.atom("not_a_list");
+
+        assertBoxedError(
+          () => Erlang_String["join/2"](stringList, separator),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
+            stringList,
+            separator,
+          ]),
+        );
+      });
+
+      it("separator is not a charlist (list of atoms)", () => {
+        const stringList = Type.list([Type.charlist("hello")]);
+        const separator = Type.list([Type.atom("a"), Type.atom("b")]);
+
+        assertBoxedError(
+          () => Erlang_String["join/2"](stringList, separator),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
+            stringList,
+            separator,
+          ]),
+        );
+      });
+
+      it("list contains non-charlist element", () => {
+        const stringList = Type.list([
+          Type.charlist("hello"),
+          Type.atom("not_a_charlist"),
+        ]);
+        const separator = Type.charlist(", ");
 
         assertBoxedError(
           () => Erlang_String["join/2"](stringList, separator),

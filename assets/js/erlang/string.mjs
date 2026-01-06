@@ -7,19 +7,47 @@ import Type from "../type.mjs";
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
+// Helper: Check if a term is a charlist (list of integers)
+function isCharlist(term) {
+  if (!Type.isProperList(term)) {
+    return false;
+  }
+  return term.data.every((element) => Type.isInteger(element));
+}
+
 const Erlang_String = {
   // Start join/2
-  // Note: In Erlang, string() refers to charlists (lists of character codes)
   "join/2": function (stringList, separator) {
+    const errorMsg = Interpreter.buildFunctionClauseErrorMsg(
+      ":string.join/2",
+      arguments,
+    );
+
+    // Validate stringList is a list
     if (!Type.isList(stringList)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
-      );
+      Interpreter.raiseFunctionClauseError(errorMsg);
+    }
+
+    // Validate stringList is a proper list
+    if (!Type.isProperList(stringList)) {
+      Interpreter.raiseArgumentError("Argument is not a proper list");
+    }
+
+    // Validate separator is a charlist
+    if (!isCharlist(separator)) {
+      Interpreter.raiseFunctionClauseError(errorMsg);
     }
 
     // Handle empty list case - return empty list
     if (stringList.data.length === 0) {
       return Type.list([]);
+    }
+
+    // Validate all elements in stringList are charlists
+    for (const element of stringList.data) {
+      if (!isCharlist(element)) {
+        Interpreter.raiseFunctionClauseError(errorMsg);
+      }
     }
 
     // Join the strings (charlists) with separator
