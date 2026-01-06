@@ -92,13 +92,7 @@ const Erlang_Sets = {
 
   // Start filter/2
   "filter/2": (fun, set) => {
-    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2", [fun, set]),
-      );
-    }
-
-    if (!Type.isMap(set)) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1 || !Type.isMap(set)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2", [fun, set]),
       );
