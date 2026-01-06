@@ -175,26 +175,26 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       [empty_set: empty_set, set123: set123]
     end
 
-    test "should always return true if set1 is an empty set", ctx do
+    test "returns true if set1 is an empty set", ctx do
       assert :sets.is_subset(ctx.empty_set, ctx.empty_set)
     end
 
-    test "should always return true if set1 is empty and set2 isn't", ctx do
+    test "returns true if set1 is empty and set2 isn't", ctx do
       assert :sets.is_subset(ctx.empty_set, ctx.set123)
     end
 
-    test "should return false if not all elements in set1 are in set2", ctx do
+    test "returns false if not all elements in set1 are in set2", ctx do
       set1 = :sets.from_list([1], version: 2)
       refute :sets.is_subset(set1, ctx.empty_set)
     end
 
-    test "should return true if both sets are the same" do
+    test "returns true if both sets are the same" do
       set1 = :sets.from_list([1, 2], version: 2)
       set2 = :sets.from_list([1, 2], version: 2)
       assert :sets.is_subset(set1, set2)
     end
 
-    test "should return true if all elements in set1 are in set2" do
+    test "returns true if all elements in set1 are in set2" do
       set1 = :sets.from_list([1], version: 2)
       set2 = :sets.from_list([1, 2], version: 2)
       assert :sets.is_subset(set1, set2)
