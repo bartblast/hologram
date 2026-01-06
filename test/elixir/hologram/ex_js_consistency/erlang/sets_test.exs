@@ -17,13 +17,13 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     test "filters elements from a non-empty set", %{set: set} do
       result = :sets.filter(fn x -> x > 2 end, set)
 
-      assert result == %{3 => []}
+      assert result == :sets.from_list([3], version: 2)
     end
 
     test "returns an empty set if the predicate filters out all elements", %{set: set} do
       result = :sets.filter(fn x -> x > 10 end, set)
 
-      assert result == %{}
+      assert result == :sets.from_list([], version: 2)
     end
 
     test "returns the same set if the predicate matches all elements", %{set: set} do
@@ -36,7 +36,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       set = :sets.new(version: 2)
       result = :sets.filter(fn x -> x > 0 end, set)
 
-      assert result == %{}
+      assert result == :sets.from_list([], version: 2)
     end
 
     test "raises FunctionClauseError if the first argument is not an anonymous function" do
@@ -71,21 +71,21 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       set = :sets.from_list([1.5, 2.5, 3.5], version: 2)
       result = :sets.filter(fn x -> x > 2.0 end, set)
 
-      assert result == %{2.5 => [], 3.5 => []}
+      assert result == :sets.from_list([2.5, 3.5], version: 2)
     end
 
     test "filters elements with atoms" do
       set = :sets.from_list([:foo, :bar, :baz], version: 2)
       result = :sets.filter(fn x -> x != :foo end, set)
 
-      assert result == %{bar: [], baz: []}
+      assert result == :sets.from_list([:bar, :baz], version: 2)
     end
 
     test "filters elements with mixed types" do
       set = :sets.from_list([:atom, "string", 1.5, 42], version: 2)
       result = :sets.filter(fn x -> is_number(x) end, set)
 
-      assert result == %{1.5 => [], 42 => []}
+      assert result == :sets.from_list([1.5, 42], version: 2)
     end
   end
 
