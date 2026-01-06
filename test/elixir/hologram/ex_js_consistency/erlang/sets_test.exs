@@ -73,100 +73,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
-  describe "is_element/2" do
-    test "returns true if element is in the set" do
-      set = :sets.from_list([1, 2, 3], [{:version, 2}])
-      assert :sets.is_element(2, set) == true
-    end
-
-    test "returns false if element is not in the set" do
-      set = :sets.from_list([1, 2, 3], [{:version, 2}])
-      assert :sets.is_element(42, set) == false
-    end
-
-    test "returns false for empty set" do
-      set = :sets.new([{:version, 2}])
-      assert :sets.is_element(:any, set) == false
-    end
-
-    test "uses strict matching (integer vs float)" do
-      set = :sets.from_list([1], [{:version, 2}])
-      assert :sets.is_element(1.0, set) == false
-    end
-
-    test "raises FunctionClauseError if the second argument is not a set" do
-      expected_msg = build_function_clause_error_msg(":sets.is_element/2", [:elem, :not_a_set])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.is_element(:elem, :not_a_set)
-      end
-    end
-  end
-
-  describe "new/1" do
-    setup do
-      [opts: [{:version, 2}]]
-    end
-
-    test "creates a new set", %{opts: opts} do
-      assert :sets.new(opts) == %{}
-    end
-
-    test "ignores invalid options" do
-      assert :sets.new(invalid: 1, version: 2) == %{}
-    end
-
-    test "raises FunctionClauseError if the first argument is not a list" do
-      expected_msg =
-        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 1])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.new(:invalid)
-      end
-    end
-
-    # Client error message is intentionally different than server error message.
-    test "raises FunctionClauseError if the first argument is an a improper list" do
-      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 1])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.new([1 | 2])
-      end
-    end
-
-    test "raises CaseClauseError for invalid versions" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
-        :sets.new(version: :abc)
-      end
-    end
-  end
-
-  describe "to_list/1" do
-    test "returns an empty list if given an empty set" do
-      set = :sets.new(version: 2)
-
-      assert :sets.to_list(set) == []
-    end
-
-    test "returns a list of values if given a non-empty set" do
-      sorted_result =
-        [1, 2.0]
-        |> :sets.from_list(version: 2)
-        |> :sets.to_list()
-        |> Enum.sort()
-
-      assert sorted_result == [1, 2.0]
-    end
-
-    test "raises FunctionClauseError if the argument is not a set" do
-      expected_msg = build_function_clause_error_msg(":sets.to_list/1", [:abc])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.to_list(:abc)
-      end
-    end
-  end
-
   describe "fold/3" do
     setup do
       [opts: [{:version, 2}]]
@@ -265,6 +171,100 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.fold(fun, 0, :not_a_set)
+      end
+    end
+  end
+
+  describe "is_element/2" do
+    test "returns true if element is in the set" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      assert :sets.is_element(2, set) == true
+    end
+
+    test "returns false if element is not in the set" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      assert :sets.is_element(42, set) == false
+    end
+
+    test "returns false for empty set" do
+      set = :sets.new([{:version, 2}])
+      assert :sets.is_element(:any, set) == false
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set = :sets.from_list([1], [{:version, 2}])
+      assert :sets.is_element(1.0, set) == false
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.is_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_element(:elem, :not_a_set)
+      end
+    end
+  end
+
+  describe "new/1" do
+    setup do
+      [opts: [{:version, 2}]]
+    end
+
+    test "creates a new set", %{opts: opts} do
+      assert :sets.new(opts) == %{}
+    end
+
+    test "ignores invalid options" do
+      assert :sets.new(invalid: 1, version: 2) == %{}
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
+      expected_msg =
+        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.new(:invalid)
+      end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the first argument is an a improper list" do
+      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.new([1 | 2])
+      end
+    end
+
+    test "raises CaseClauseError for invalid versions" do
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+        :sets.new(version: :abc)
+      end
+    end
+  end
+
+  describe "to_list/1" do
+    test "returns an empty list if given an empty set" do
+      set = :sets.new(version: 2)
+
+      assert :sets.to_list(set) == []
+    end
+
+    test "returns a list of values if given a non-empty set" do
+      sorted_result =
+        [1, 2.0]
+        |> :sets.from_list(version: 2)
+        |> :sets.to_list()
+        |> Enum.sort()
+
+      assert sorted_result == [1, 2.0]
+    end
+
+    test "raises FunctionClauseError if the argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.to_list/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.to_list(:abc)
       end
     end
   end
