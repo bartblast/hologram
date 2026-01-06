@@ -170,17 +170,17 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
   describe "is_subset/2" do
     setup do
       empty_set = :sets.new(version: 2)
-      set123 = :sets.from_list([1, 2, 3], version: 2)
+      set_123 = :sets.from_list([1, 2, 3], version: 2)
 
-      [empty_set: empty_set, set123: set123]
+      [empty_set: empty_set, set_123: set_123]
     end
 
     test "returns true if set1 is an empty set", %{empty_set: empty_set} do
       assert :sets.is_subset(empty_set, empty_set)
     end
 
-    test "returns true if set1 is empty and set2 isn't", %{empty_set: empty_set, set123: set123} do
-      assert :sets.is_subset(empty_set, set123)
+    test "returns true if set1 is empty and set2 isn't", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_subset(empty_set, set_123)
     end
 
     test "returns false if not all elements in set1 are in set2", %{empty_set: empty_set} do
@@ -200,7 +200,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert :sets.is_subset(set1, set2)
     end
 
-    test "raises FunctionClauseError if the first argument is not a set", %{set123: set123} do
+    test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
       expected_msg = ~r"""
       no function clause matching in :sets\.fold/3
 
@@ -217,11 +217,11 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       """s
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.is_subset(:abc, set123)
+        :sets.is_subset(:abc, set_123)
       end
     end
 
-    test "raises FunctionClauseError if the second argument is not a set", %{set123: set123} do
+    test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
       expected_msg = ~r"""
       no function clause matching in :sets\.is_element/2
 
@@ -235,7 +235,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       """s
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.is_subset(set123, :abc)
+        :sets.is_subset(set_123, :abc)
       end
     end
   end
