@@ -176,28 +176,28 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "returns true if set1 is an empty set", %{empty_set: empty_set} do
-      assert :sets.is_subset(empty_set, empty_set)
+      assert :sets.is_subset(empty_set, empty_set) == true
     end
 
     test "returns true if set1 is empty and set2 isn't", %{empty_set: empty_set, set_123: set_123} do
-      assert :sets.is_subset(empty_set, set_123)
+      assert :sets.is_subset(empty_set, set_123) == true
     end
 
     test "returns false if not all elements in set1 are in set2", %{empty_set: empty_set} do
       set1 = :sets.from_list([1], version: 2)
-      refute :sets.is_subset(set1, empty_set)
+      assert :sets.is_subset(set1, empty_set) == false
     end
 
     test "returns true if both sets are the same" do
       set1 = :sets.from_list([1, 2], version: 2)
       set2 = :sets.from_list([1, 2], version: 2)
-      assert :sets.is_subset(set1, set2)
+      assert :sets.is_subset(set1, set2) == true
     end
 
     test "returns true if all elements in set1 are in set2" do
       set1 = :sets.from_list([1], version: 2)
       set2 = :sets.from_list([1, 2], version: 2)
-      assert :sets.is_subset(set1, set2)
+      assert :sets.is_subset(set1, set2) == true
     end
 
     test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
