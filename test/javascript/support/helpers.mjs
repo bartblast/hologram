@@ -107,12 +107,6 @@ export function assertBoxedTrue(boxed) {
   assert.isTrue(Type.isTrue(boxed));
 }
 
-export function charlistFixture(str) {
-  return Type.list(
-    str.split("").map((char) => Type.integer(char.charCodeAt(0))),
-  );
-}
-
 export function componentRegistryEntryFixture(data = {}) {
   let {module} = data;
 

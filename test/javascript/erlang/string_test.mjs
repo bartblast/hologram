@@ -3,7 +3,6 @@
 import {
   assert,
   assertBoxedError,
-  charlistFixture,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
@@ -20,68 +19,68 @@ describe("Erlang_String", () => {
   describe("join/2", () => {
     describe("valid inputs", () => {
       it("single element", () => {
-        const stringList = Type.list([charlistFixture("hello")]);
-        const separator = charlistFixture(", ");
+        const stringList = Type.list([Type.charlist("hello")]);
+        const separator = Type.charlist(", ");
         const result = Erlang_String["join/2"](stringList, separator);
 
-        assert.deepStrictEqual(result, charlistFixture("hello"));
+        assert.deepStrictEqual(result, Type.charlist("hello"));
       });
 
       it("multiple elements", () => {
         const stringList = Type.list([
-          charlistFixture("one"),
-          charlistFixture("two"),
-          charlistFixture("three"),
+          Type.charlist("one"),
+          Type.charlist("two"),
+          Type.charlist("three"),
         ]);
-        const separator = charlistFixture(", ");
+        const separator = Type.charlist(", ");
         const result = Erlang_String["join/2"](stringList, separator);
 
-        assert.deepStrictEqual(result, charlistFixture("one, two, three"));
+        assert.deepStrictEqual(result, Type.charlist("one, two, three"));
       });
 
       it("empty separator", () => {
         const stringList = Type.list([
-          charlistFixture("hello"),
-          charlistFixture("world"),
+          Type.charlist("hello"),
+          Type.charlist("world"),
         ]);
-        const separator = charlistFixture("");
+        const separator = Type.charlist("");
         const result = Erlang_String["join/2"](stringList, separator);
 
-        assert.deepStrictEqual(result, charlistFixture("helloworld"));
+        assert.deepStrictEqual(result, Type.charlist("helloworld"));
       });
 
       it("empty strings (charlists) in list", () => {
         const stringList = Type.list([
-          charlistFixture(""),
-          charlistFixture("hello"),
-          charlistFixture(""),
-          charlistFixture("world"),
-          charlistFixture(""),
+          Type.charlist(""),
+          Type.charlist("hello"),
+          Type.charlist(""),
+          Type.charlist("world"),
+          Type.charlist(""),
         ]);
-        const separator = charlistFixture("-");
+        const separator = Type.charlist("-");
         const result = Erlang_String["join/2"](stringList, separator);
 
-        assert.deepStrictEqual(result, charlistFixture("-hello--world-"));
+        assert.deepStrictEqual(result, Type.charlist("-hello--world-"));
       });
 
       it("multi-character separator", () => {
         const stringList = Type.list([
-          charlistFixture("apple"),
-          charlistFixture("banana"),
-          charlistFixture("cherry"),
+          Type.charlist("apple"),
+          Type.charlist("banana"),
+          Type.charlist("cherry"),
         ]);
-        const separator = charlistFixture(" and ");
+        const separator = Type.charlist(" and ");
         const result = Erlang_String["join/2"](stringList, separator);
 
         assert.deepStrictEqual(
           result,
-          charlistFixture("apple and banana and cherry"),
+          Type.charlist("apple and banana and cherry"),
         );
       });
 
       it("empty list", () => {
         const stringList = Type.list([]);
-        const separator = charlistFixture(", ");
+        const separator = Type.charlist(", ");
         const result = Erlang_String["join/2"](stringList, separator);
 
         assert.deepStrictEqual(result, Type.list([]));
