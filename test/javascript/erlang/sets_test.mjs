@@ -164,7 +164,10 @@ describe("Erlang_Sets", () => {
       const integer42 = Type.integer(42);
       const result = del_element_2(integer42, set);
 
-      const expected = from_list_2(Type.list([integer1, integer2, integer3]), opts);
+      const expected = from_list_2(
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
 
       assert.deepStrictEqual(result, expected);
     });
