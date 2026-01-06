@@ -103,13 +103,19 @@ describe("Erlang_String", () => {
       });
 
       it("first argument is an improper list", () => {
-        const stringList = Type.improperList([Type.charlist("hello")], Type.atom("tail"));
+        const stringList = Type.improperList([
+          Type.charlist("hello"),
+          Type.atom("tail"),
+        ]);
         const separator = Type.charlist(", ");
 
         assertBoxedError(
           () => Erlang_String["join/2"](stringList, separator),
-          "ArgumentError",
-          "Argument is not a proper list",
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
+            stringList,
+            separator,
+          ]),
         );
       });
 
