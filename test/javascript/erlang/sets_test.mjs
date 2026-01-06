@@ -151,26 +151,28 @@ describe("Erlang_Sets", () => {
   describe("fold/3", () => {
     const fold_3 = Erlang_Sets["fold/3"];
 
+    // Helper function that returns the accumulator unchanged (elem, acc -> acc)
+    const returnAccFun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("elem"),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return context.vars.acc;
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
     it("folds over an empty set and returns the initial accumulator", () => {
       const set = Erlang_Sets["new/1"](opts);
-      const fun = Type.anonymousFunction(
-        2,
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("elem"),
-              Type.variablePattern("acc"),
-            ],
-            guards: [],
-            body: (context) => {
-              return context.vars.acc;
-            },
-          },
-        ],
-        contextFixture(),
-      );
 
-      const result = fold_3(fun, integer1, set);
+      const result = fold_3(returnAccFun, integer1, set);
 
       assert.deepStrictEqual(result, integer1);
     });
@@ -280,30 +282,13 @@ describe("Erlang_Sets", () => {
     });
 
     it("raises FunctionClauseError if the set argument is not a map", () => {
-      const fun = Type.anonymousFunction(
-        2,
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("elem"),
-              Type.variablePattern("acc"),
-            ],
-            guards: [],
-            body: (context) => {
-              return context.vars.acc;
-            },
-          },
-        ],
-        contextFixture(),
-      );
-
       const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
         ":sets.fold/3",
-        [fun, Type.integer(0n), atomAbc],
+        [returnAccFun, Type.integer(0n), atomAbc],
       );
 
       assertBoxedError(
-        () => fold_3(fun, Type.integer(0n), atomAbc),
+        () => fold_3(returnAccFun, Type.integer(0n), atomAbc),
         "FunctionClauseError",
         expectedMsg,
       );
