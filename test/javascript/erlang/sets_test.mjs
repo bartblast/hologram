@@ -63,7 +63,7 @@ describe("Erlang_Sets", () => {
     });
 
     it("returns an empty set if the predicate filters out all elements", () => {
-      const fun = Type.anonymousFunction(
+      const filterAllFun = Type.anonymousFunction(
         1,
         [
           {
@@ -77,7 +77,7 @@ describe("Erlang_Sets", () => {
         contextFixture(),
       );
 
-      const result = filter_2(fun, set123);
+      const result = filter_2(filterAllFun, set123);
 
       assert.deepStrictEqual(
         result,
@@ -86,7 +86,7 @@ describe("Erlang_Sets", () => {
     });
 
     it("returns the same set if the predicate matches all elements", () => {
-      const fun = Type.anonymousFunction(
+      const matchAllFun = Type.anonymousFunction(
         1,
         [
           {
@@ -100,7 +100,7 @@ describe("Erlang_Sets", () => {
         contextFixture(),
       );
 
-      const result = filter_2(fun, set123);
+      const result = filter_2(matchAllFun, set123);
 
       assert.deepStrictEqual(result, set123);
     });
@@ -178,22 +178,20 @@ describe("Erlang_Sets", () => {
           {
             params: (_context) => [Type.variablePattern("elem")],
             guards: [],
-            body: (context) => {
-              return Erlang["*/2"](Type.integer(2), context.vars.elem);
+            body: (_context) => {
+              return Type.atom("not_a_boolean");
             },
           },
         ],
         contextFixture(),
       );
 
-      const singleElementSet = freeze(Type.map([[integer1, Type.list([])]]));
-
       const expectedMsg = Interpreter.buildErlangErrorMsg(
-        `{:bad_filter, ${Interpreter.inspect(integer2)}}`,
+        `{:bad_filter, ${Interpreter.inspect(Type.atom("not_a_boolean"))}}`,
       );
 
       assertBoxedError(
-        () => filter_2(badFun, singleElementSet),
+        () => filter_2(badFun, set123),
         "ErlangError",
         expectedMsg,
       );

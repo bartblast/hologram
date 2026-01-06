@@ -11,11 +11,14 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   describe "filter/2" do
     setup do
-      [set: :sets.from_list([1, 2, 3], version: 2)]
+      [
+        set: :sets.from_list([1, 2, 3], version: 2),
+        fun: fn x -> x > 2 end
+      ]
     end
 
-    test "filters elements from a non-empty set", %{set: set} do
-      result = :sets.filter(fn x -> x > 2 end, set)
+    test "filters elements from a non-empty set", %{set: set, fun: fun} do
+      result = :sets.filter(fun, set)
 
       assert result == :sets.from_list([3], version: 2)
     end
@@ -32,16 +35,16 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert result == set
     end
 
-    test "filters elements from an empty set" do
+    test "filters elements from an empty set", %{fun: fun} do
       set = :sets.new(version: 2)
-      result = :sets.filter(fn x -> x > 0 end, set)
+      result = :sets.filter(fun, set)
 
       assert result == :sets.from_list([], version: 2)
     end
 
-    test "raises FunctionClauseError if the first argument is not an anonymous function" do
-      set = :sets.from_list([1, 2, 3], version: 2)
-
+    test "raises FunctionClauseError if the first argument is not an anonymous function", %{
+      set: set
+    } do
       expected_msg = build_function_clause_error_msg(":sets.filter/2", [:invalid, set])
 
       assert_error FunctionClauseError, expected_msg, fn ->
@@ -49,8 +52,8 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
-    test "raises FunctionClauseError if the first argument is an anonymous function with wrong arity" do
-      set = :sets.from_list([1, 2, 3], version: 2)
+    test "raises FunctionClauseError if the first argument is an anonymous function with wrong arity",
+         %{set: set} do
       wrong_arity_fun = fn x, y -> x == y end
 
       expected_msg = build_function_clause_error_msg(":sets.filter/2", [wrong_arity_fun, set])
@@ -60,9 +63,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
-    test "raises FunctionClauseError if the second argument is not a set" do
-      fun = fn x -> x > 0 end
-
+    test "raises FunctionClauseError if the second argument is not a set", %{fun: fun} do
       expected_msg = build_function_clause_error_msg(":sets.filter/2", [fun, :abc])
 
       assert_error FunctionClauseError, expected_msg, fn ->
@@ -70,9 +71,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
-    test "raises ErlangError if the predicate does not return a boolean" do
-      set = :sets.from_list([1, 2, 3], version: 2)
-
+    test "raises ErlangError if the predicate does not return a boolean", %{set: set} do
       assert_error ErlangError, build_erlang_error_msg("{:bad_filter, :not_a_boolean}"), fn ->
         :sets.filter(fn _x -> :not_a_boolean end, set)
       end
