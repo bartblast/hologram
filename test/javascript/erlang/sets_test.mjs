@@ -58,7 +58,7 @@ describe("Erlang_Sets", () => {
 
       assert.deepStrictEqual(
         result,
-        freeze(Type.map([[integer3, Type.list([])]])),
+        Erlang_Sets["from_list/2"](Type.list([integer3]), opts),
       );
     });
 
@@ -79,7 +79,10 @@ describe("Erlang_Sets", () => {
 
       const result = filter_2(fun, set123);
 
-      assert.deepStrictEqual(result, Type.map());
+      assert.deepStrictEqual(
+        result,
+        Erlang_Sets["from_list/2"](Type.list(), opts),
+      );
     });
 
     it("returns the same set if the predicate matches all elements", () => {
@@ -103,9 +106,13 @@ describe("Erlang_Sets", () => {
     });
 
     it("filters elements from an empty set", () => {
-      const result = filter_2(fun, Type.map());
+      const emptySet = Erlang_Sets["new/1"](opts);
+      const result = filter_2(fun, emptySet);
 
-      assert.deepStrictEqual(result, Type.map());
+      assert.deepStrictEqual(
+        result,
+        Erlang_Sets["from_list/2"](Type.list(), opts),
+      );
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
