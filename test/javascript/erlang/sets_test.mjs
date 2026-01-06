@@ -10,6 +10,7 @@ import {
   freeze,
 } from "../support/helpers.mjs";
 
+import Erlang_Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Erlang_Sets from "../../../assets/js/erlang/sets.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
@@ -200,6 +201,33 @@ describe("Erlang_Sets", () => {
       const expected = Type.list([integer2]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("sums multiple elements", () => {
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("elem"),
+              Type.variablePattern("acc"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang_Erlang["+/2"](context.vars.acc, context.vars.elem);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = fold_3(fun, Type.integer(0n), set);
+
+      assert.deepStrictEqual(result, Type.integer(6n));
     });
 
     it("raises FunctionClauseError if the function has wrong arity", () => {

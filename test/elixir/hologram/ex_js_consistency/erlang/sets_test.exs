@@ -96,17 +96,12 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert result == [2]
     end
 
-    test "folds with accumulator transformation", %{opts: opts} do
+    test "sums multiple elements", %{opts: opts} do
       set = :sets.from_list([1, 2, 3], opts)
-
-      fun = fn elem, acc ->
-        # Verify element is an integer (would be nil with the bug)
-        assert is_integer(elem), "Element should be an integer, got: #{inspect(elem)}"
-        acc + elem
-      end
+      fun = fn elem, acc -> acc + elem end
 
       result = :sets.fold(fun, 0, set)
-      # 1 + 2 + 3 = 6 (would be 0 with the bug since nil + 0 fails)
+
       assert result == 6
     end
 
