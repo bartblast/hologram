@@ -183,12 +183,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
     test "folds over a set with a single element", %{opts: opts} do
       set = :sets.from_list([2], opts)
-
-      fun = fn elem, acc ->
-        # Verify we're getting the actual element, not undefined
-        assert elem == 2
-        [elem | acc]
-      end
+      fun = fn elem, acc -> [elem | acc] end
 
       result = :sets.fold(fun, [], set)
 

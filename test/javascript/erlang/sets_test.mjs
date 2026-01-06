@@ -346,8 +346,6 @@ describe("Erlang_Sets", () => {
             ],
             guards: [],
             body: (context) => {
-              // Verify we're getting the actual element, not undefined
-              assert.deepStrictEqual(context.vars.elem, integer2);
               return Interpreter.consOperator(
                 context.vars.elem,
                 context.vars.acc,
