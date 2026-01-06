@@ -98,9 +98,7 @@ const Erlang_Sets = {
       );
     }
 
-    const filteredEntries = [];
-
-    for (const [key, value] of Object.values(set.data)) {
+    const predicate = ([key, _value]) => {
       const result = Interpreter.callAnonymousFunction(fun, [key]);
 
       if (!Type.isBoolean(result)) {
@@ -111,12 +109,10 @@ const Erlang_Sets = {
         );
       }
 
-      if (Type.isTrue(result)) {
-        filteredEntries.push([key, value]);
-      }
-    }
+      return Type.isTrue(result);
+    };
 
-    return Type.map(filteredEntries);
+    return Type.map(Object.values(set.data).filter(predicate));
   },
   // End filter/2
   // Deps: []
