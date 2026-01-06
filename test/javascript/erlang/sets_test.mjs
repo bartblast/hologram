@@ -70,7 +70,7 @@ describe("Erlang_Sets", () => {
             params: (_context) => [Type.variablePattern("elem")],
             guards: [],
             body: (context) => {
-              return Erlang[">/2"](context.vars.elem, Type.integer(10n));
+              return Erlang[">/2"](context.vars.elem, Type.integer(10));
             },
           },
         ],
@@ -90,7 +90,7 @@ describe("Erlang_Sets", () => {
             params: (_context) => [Type.variablePattern("elem")],
             guards: [],
             body: (context) => {
-              return Erlang[">/2"](context.vars.elem, Type.integer(0n));
+              return Erlang[">/2"](context.vars.elem, Type.integer(0));
             },
           },
         ],
@@ -172,7 +172,7 @@ describe("Erlang_Sets", () => {
             params: (_context) => [Type.variablePattern("elem")],
             guards: [],
             body: (context) => {
-              return Erlang["*/2"](Type.integer(2n), context.vars.elem);
+              return Erlang["*/2"](Type.integer(2), context.vars.elem);
             },
           },
         ],
@@ -276,7 +276,7 @@ describe("Erlang_Sets", () => {
       const atomValue = freeze(Type.atom("atom"));
       const stringValue = freeze(Type.string("string"));
       const floatValue = freeze(Type.float(1.5));
-      const intValue = freeze(Type.integer(42n));
+      const intValue = freeze(Type.integer(42));
 
       const setMixed = freeze(
         Type.map([
