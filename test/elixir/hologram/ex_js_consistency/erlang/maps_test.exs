@@ -301,6 +301,12 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.remove(:b, 123)
       end
     end
+
+    test "doesn't mutate the original map" do
+      map = %{a: 1, b: 2}
+      :maps.remove(:b, map)
+      assert map == %{a: 1, b: 2}
+    end
   end
 
   describe "to_list/1" do

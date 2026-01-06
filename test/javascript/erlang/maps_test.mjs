@@ -617,6 +617,22 @@ describe("Erlang_Maps", () => {
         "expected a map, got: 123",
       );
     });
+
+    it("doesn't mutate the original map", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      remove(Type.atom("b"), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assert.deepStrictEqual(map, expected);
+    });
   });
 
   describe("to_list/1", () => {
