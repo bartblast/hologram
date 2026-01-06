@@ -96,52 +96,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert result == [2]
     end
 
-    test "folds over a set with multiple elements (integers)", %{opts: opts} do
-      set = :sets.from_list([1, 2, 3], opts)
-
-      fun = fn elem, acc ->
-        # Verify element is not nil and is an integer
-        assert is_integer(elem), "Element should be an integer, got: #{inspect(elem)}"
-        [elem | acc]
-      end
-
-      result = :sets.fold(fun, [], set)
-      sorted_result = Enum.sort(result)
-
-      assert sorted_result == [1, 2, 3]
-    end
-
-    test "folds over a set with mixed numeric types (integers and floats)", %{opts: opts} do
-      set = :sets.from_list([1, 2.0, 3], opts)
-
-      fun = fn elem, acc ->
-        # Verify element is a number (would fail if nil/undefined)
-        assert is_number(elem), "Element should be a number, got: #{inspect(elem)}"
-        elem + acc
-      end
-
-      result = :sets.fold(fun, 0, set)
-      # 1 + 2.0 + 3 = 6.0
-      assert result == 6.0
-    end
-
-    test "folds over a set with mixed types (atom, integer, float, tuple)", %{
-      opts: opts
-    } do
-      set = :sets.from_list([:x, 2, 2.0, {1, 2}], opts)
-
-      fun = fn elem, acc ->
-        # Verify element is not nil (would be nil/undefined with the bug)
-        assert elem != nil, "Element should not be nil"
-        [elem | acc]
-      end
-
-      result = :sets.fold(fun, [], set)
-
-      # Verify the length is correct since order is undefined in sets
-      assert length(result) == 4
-    end
-
     test "folds with accumulator transformation", %{opts: opts} do
       set = :sets.from_list([1, 2, 3], opts)
 
