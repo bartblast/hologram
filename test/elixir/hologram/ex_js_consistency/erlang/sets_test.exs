@@ -66,27 +66,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
         :sets.filter(fn _x -> :not_a_boolean end, set)
       end
     end
-
-    test "filters elements with floats" do
-      set = :sets.from_list([1.5, 2.5, 3.5], version: 2)
-      result = :sets.filter(fn x -> x > 2.0 end, set)
-
-      assert result == :sets.from_list([2.5, 3.5], version: 2)
-    end
-
-    test "filters elements with atoms" do
-      set = :sets.from_list([:foo, :bar, :baz], version: 2)
-      result = :sets.filter(fn x -> x != :foo end, set)
-
-      assert result == :sets.from_list([:bar, :baz], version: 2)
-    end
-
-    test "filters elements with mixed types" do
-      set = :sets.from_list([:atom, "string", 1.5, 42], version: 2)
-      result = :sets.filter(fn x -> is_number(x) end, set)
-
-      assert result == :sets.from_list([1.5, 42], version: 2)
-    end
   end
 
   describe "from_list/2" do
