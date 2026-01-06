@@ -49,6 +49,17 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
 
+    test "raises FunctionClauseError if the first argument is an anonymous function with wrong arity" do
+      set = :sets.from_list([1, 2, 3], version: 2)
+      wrong_arity_fun = fn x, y -> x == y end
+
+      expected_msg = build_function_clause_error_msg(":sets.filter/2", [wrong_arity_fun, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.filter(wrong_arity_fun, set)
+      end
+    end
+
     test "raises FunctionClauseError if the second argument is not a set" do
       fun = fn x -> x > 0 end
 
