@@ -181,6 +181,22 @@ defmodule HologramFeatureTests.TypesTest do
     end
   end
 
+  describe "reference" do
+    feature "client origin", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='reference (client origin)']"))
+      |> assert_text(css("#result"), "#Reference<0.1.2.3>")
+    end
+
+    feature "server origin", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='reference (server origin)']"))
+      |> assert_text(css("#result"), "#Reference<1.2.3.4>")
+    end
+  end
+
   feature "tuple", %{session: session} do
     session
     |> visit(TypesPage)
