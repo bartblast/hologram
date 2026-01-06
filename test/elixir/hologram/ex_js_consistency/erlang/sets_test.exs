@@ -29,7 +29,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     test "returns the same set if the predicate matches all elements", %{set: set} do
       result = :sets.filter(fn x -> x > 0 end, set)
 
-      # Since sets don't guarantee order, we need to compare as maps
       assert result == set
     end
 
