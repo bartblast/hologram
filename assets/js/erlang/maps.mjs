@@ -111,6 +111,28 @@ const Erlang_Maps = {
   // End get/3
   // Deps: []
 
+  // Start intersect/2
+  "intersect/2": (map1, map2) => {
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = [];
+
+    for (const key in map1.data) {
+      if (map2.data[key]) {
+        result.push([key, map2[key]]);
+      }
+    }
+
+    return Type.map(result);
+  },
+  // End intersect/2
+  // Deps: []
+
   // Start is_key/2
   "is_key/2": (key, map) => {
     if (!Type.isMap(map)) {

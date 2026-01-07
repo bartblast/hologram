@@ -13,6 +13,7 @@ import {
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
+import {it} from "node:test";
 
 defineGlobalErlangAndElixirModules();
 
@@ -316,6 +317,81 @@ describe("Erlang_Maps", () => {
     it("returns the default value if the map doesn't contain the given key", () => {
       const result = get(Type.atom("a"), Type.map(), defaultValue);
       assert.deepStrictEqual(result, defaultValue);
+    });
+  });
+
+  describe("intersect/2", () => {
+    const intersect = Erlang_Maps["intersect/2"];
+
+    it("takes value from map2", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(4)],
+      ]);
+
+      const result = intersect(map1, map2);
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("a"), Type.integer(2)]]),
+      );
+    });
+
+    it("takes value from map1", () => {
+      const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(2)],
+        [Type.string("a"), Type.integer(20)],
+      ]);
+
+      const result = intersect(map2, map1);
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("a"), Type.integer(2)]]),
+      );
+    });
+
+    it("returns an empty map when map1 is empty", () => {
+      const map1 = Type.map([]);
+      const map2 = Type.map([[Type.atom("a"), Type.integer(2)]]);
+
+      const result = intersect(map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("returns an empty map when map2 is empty", () => {
+      const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      const map2 = Type.map([]);
+
+      const result = intersect(map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("raises when map1 is not a map", () => {
+      const map1 = Type.atom("abc");
+      const map2 = Type.map([]);
+
+      assert.BoxedError(
+        () => intersect(map1, map2),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+
+    it("raises when map2 is not a map", () => {
+      const map1 = Type.map([]);
+      const map2 = Type.atom("abc");
+
+      assert.BoxedError(
+        () => intersect(map1, map2),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
     });
   });
 

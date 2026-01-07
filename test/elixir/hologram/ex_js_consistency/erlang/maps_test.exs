@@ -162,6 +162,36 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "intersect/2" do
+    test "takes value from map2" do
+      assert :maps.intersect(%{a: 1, b: 3}, %{a: 2, c: 4}) == %{a: 2}
+    end
+
+    test "handles mixed atom/string keys" do
+      assert :maps.intersect(%{a: 1}, %{:a => 2, "a" => 20}) == %{a: 2}
+    end
+
+    test "returns an empty map when map1 is empty" do
+      assert :maps.intersect(%{}, %{a: 2}) == %{}
+    end
+
+    test "returns an empty map when map2 is empty" do
+      assert :maps.intersect(%{a: 1}, %{}) == %{}
+    end
+
+    test "map1 not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect(:abc, %{})
+      end
+    end
+
+    test "map2 not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect(%{}, :abc)
+      end
+    end
+  end
+
   describe "iterator/1" do
     test "empty map" do
       assert :maps.iterator(%{}) == [0 | %{}]
