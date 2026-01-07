@@ -1955,7 +1955,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "bxor/2" do
     test "valid arguments" do
-      # 5 = 0b0101, 3 = 0b0011, 6 = 0b0110
+      # 5 = 0b00000101, 3 = 0b00000011, 6 = 0b00000110
       assert :erlang.bxor(5, 3) == 6
     end
 
@@ -1976,24 +1976,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "left argument is negative" do
-      # 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      # -5 = 0b11111011, 5 = 0b00000101, -2 = 0b11111110
       assert :erlang.bxor(-5, 5) == -2
     end
 
     test "right argument is negative" do
-      # 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      # 5 = 0b00000101, -5 = 0b11111011, -2 = 0b11111110
       assert :erlang.bxor(5, -5) == -2
     end
 
     test "both arguments are negative" do
-      # -5 = ...11111011, -3 = ...11111101, xor = ...00000110 = 6
+      # -5 = 0b11111011, -3 = 0b11111101, 6 = 0b00000110
       assert :erlang.bxor(-5, -3) == 6
     end
 
     test "works with large numbers" do
       # 18014398509481983 = 0b111111111111111111111111111111111111111111111111111111
       # 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
-      # xor result         = 0b000000000000000000000000000000000000000000000000000001 = 1
+      # xor result        = 0b000000000000000000000000000000000000000000000000000001 = 1
 
       left = 18_014_398_509_481_983
       right = 18_014_398_509_481_982

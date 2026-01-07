@@ -2737,7 +2737,7 @@ describe("Erlang", () => {
     const testedFun = Erlang["bxor/2"];
 
     it("valid arguments", () => {
-      // 5 = 0b0101, 3 = 0b0011, 6 = 0b0110
+      // 5 = 0b00000101, 3 = 0b00000011, 6 = 0b00000110
       const result = testedFun(integer5, integer3);
 
       assert.deepStrictEqual(result, Type.integer(6));
@@ -2770,7 +2770,7 @@ describe("Erlang", () => {
     it("left argument is negative", () => {
       const left = Type.integer(-5);
 
-      // 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      // -5 = 0b11111011, 5 = 0b00000101, -2 = 0b11111110
       const result = testedFun(left, integer5);
 
       assert.deepStrictEqual(result, Type.integer(-2));
@@ -2779,7 +2779,7 @@ describe("Erlang", () => {
     it("right argument is negative", () => {
       const right = Type.integer(-5);
 
-      // 5 = 0b0101, -5 = ...11111011, xor = ...11111110 = -2
+      // 5 = 0b00000101, -5 = 0b11111011, -2 = 0b11111110
       const result = testedFun(integer5, right);
 
       assert.deepStrictEqual(result, Type.integer(-2));
@@ -2789,7 +2789,7 @@ describe("Erlang", () => {
       const left = Type.integer(-5);
       const right = Type.integer(-3);
 
-      // -5 = ...11111011, -3 = ...11111101, xor = ...00000110 = 6
+      // -5 = 0b11111011, -3 = 0b11111101, 6 = 0b00000110
       const result = testedFun(left, right);
 
       assert.deepStrictEqual(result, Type.integer(6));
@@ -2798,11 +2798,10 @@ describe("Erlang", () => {
     it("works with large numbers", () => {
       // 18014398509481983 = 0b111111111111111111111111111111111111111111111111111111
       // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
-      // xor result         = 0b000000000000000000000000000000000000000000000000000001 = 1
+      // xor result        = 0b000000000000000000000000000000000000000000000000000001 = 1
 
       const left = Type.integer(18014398509481983n);
       const right = Type.integer(18014398509481982n);
-
       const result = testedFun(left, right);
 
       assert.deepStrictEqual(result, Type.integer(1));
