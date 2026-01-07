@@ -1917,7 +1917,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "zero shift" do
-      assert :erlang.bsr(255, 0) == 255
+      # 247 = 0b11110111
+      assert :erlang.bsr(247, 0) == 247
     end
 
     test "shift left via negative shift" do
@@ -1926,8 +1927,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "negative keeps sign bit" do
-      # -16 = -0b00010000, -8 = -0b00001000
+      # -16 = 0b11110000, -8 = 0b11111000
       assert :erlang.bsr(-16, 1) == -8
+    end
+
+    test "shift beyond size for positive integer" do
+      # 255 = 0b1111111, 0 = 0b00000000
+      assert :erlang.bsr(255, 9) == 0
+    end
+
+    test "shift beyond size for negative integer" do
+      # -127 = 0b10000001, -1 = 0b11111111
+      assert :erlang.bsr(-127, 8) == -1
     end
 
     test "above JS Number.MAX_SAFE_INTEGER" do
@@ -1939,19 +1950,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "below JS Number.MIN_SAFE_INTEGER" do
       # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
-      # -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
-      #  -9_007_199_254_740_992 = -0b0100000000000000000000000000000000000000000000000000000
+      # -18_014_398_509_481_984 = 0b1111111111000000000000000000000000000000000000000000000000000000
+      #  -9_007_199_254_740_992 = 0b1111111111100000000000000000000000000000000000000000000000000000
       assert :erlang.bsr(-18_014_398_509_481_984, 1) == -9_007_199_254_740_992
-    end
-
-    test "shift beyond size for positive integer" do
-      # 255 = 0b1111111
-      assert :erlang.bsr(255, 9) == 0
-    end
-
-    test "shift beyond size for negative integer" do
-      # -127 = -0b1111111
-      assert :erlang.bsr(-127, 8) == -1
     end
 
     test "raises ArithmeticError if the first argument is not an integer" do

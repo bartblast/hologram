@@ -2682,9 +2682,10 @@ describe("Erlang", () => {
     });
 
     it("zero shift", () => {
+      // 247 = 0b11110111
       assert.deepStrictEqual(
-        testedFun(Type.integer(255), Type.integer(0)),
-        Type.integer(255),
+        testedFun(Type.integer(247), Type.integer(0)),
+        Type.integer(247),
       );
     });
 
@@ -2697,10 +2698,26 @@ describe("Erlang", () => {
     });
 
     it("negative keeps sign bit", () => {
-      // -16 = -0b00010000, -8 = -0b00001000
+      // -16 = 0b11110000, -8 = 0b11111000
       assert.deepStrictEqual(
         testedFun(Type.integer(-16), Type.integer(1)),
         Type.integer(-8),
+      );
+    });
+
+    it("shift beyond size for positive integer", () => {
+      // 255 = 0b1111111, 0 = 0b00000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(9)),
+        Type.integer(0),
+      );
+    });
+
+    it("shift beyond size for negative integer", () => {
+      // -127 = 0b10000001, -1 = 0b11111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-127), Type.integer(8)),
+        Type.integer(-1),
       );
     });
 
@@ -2716,27 +2733,11 @@ describe("Erlang", () => {
 
     it("below JS Number.MIN_SAFE_INTEGER", () => {
       // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
-      // -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
-      //  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      // -18_014_398_509_481_984 = 0b1111111111000000000000000000000000000000000000000000000000000000
+      //  -9_007_199_254_740_992 = 0b1111111111100000000000000000000000000000000000000000000000000000
       assert.deepStrictEqual(
         testedFun(Type.integer(-18_014_398_509_481_984n), Type.integer(1)),
         Type.integer(-9_007_199_254_740_992n),
-      );
-    });
-
-    it("shift beyond size for positive integer", () => {
-      // 255 = 0b1111111
-      assert.deepStrictEqual(
-        testedFun(Type.integer(255), Type.integer(9)),
-        Type.integer(0),
-      );
-    });
-
-    it("shift beyond size for negative integer", () => {
-      // -127 = -0b1111111
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-127), Type.integer(8)),
-        Type.integer(-1),
       );
     });
 
