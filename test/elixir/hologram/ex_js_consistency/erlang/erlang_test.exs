@@ -1845,47 +1845,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "bor/2" do
     test "both arguments are positive" do
+      # 4 = 0b00000100, 3 = 0b00000011, 7 = 0b00000111
       assert :erlang.bor(4, 3) == 7
     end
 
     test "both arguments are zero" do
+      # 0 = 0b00000000
       assert :erlang.bor(0, 0) == 0
     end
 
     test "left argument is zero" do
+      # 0 = 0b00000000, 8 = 0b00001000
       assert :erlang.bor(0, 8) == 8
     end
 
     test "right argument is zero" do
+      # 4 = 0b00000100, 0 = 0b00000000
       assert :erlang.bor(4, 0) == 4
     end
 
     test "left argument is negative" do
+      # -4 = 0b11111100, 3 = 0b00000011, -1 = 0b11111111
       assert :erlang.bor(-4, 3) == -1
     end
 
     test "right argument is negative" do
+      # 4 = 0b00000100, -3 = 0b11111101
       assert :erlang.bor(4, -3) == -3
     end
 
     test "both arguments are negative" do
+      # -4 = 0b11111100, -3 = 0b11111101
       assert :erlang.bor(-4, -3) == -3
     end
 
-    test "works with large numbers" do
-      # Number.MAX_SAFE_INTEGER = 9007199254740991
-      # = 0b11111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 + 1 = 18014398509481983
-      # = 0b111111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 = 18014398509481982
-      # = 0b111111111111111111111111111111111111111111111111111110
+    test "arguments above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      #   805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      #   457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      # 1_116_320_821_920_915_325 = 0b111101111101111101111101111101111101111101111101111101111101
+      assert :erlang.bor(805_215_019_090_496_300, 457_508_533_574_145_625) ==
+               1_116_320_821_920_915_325
+    end
 
-      left = 18_014_398_509_481_983
-      right = 18_014_398_509_481_982
-
-      assert :erlang.bor(left, right) == left
+    test "arguments below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      # -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      # -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      #  -36_600_682_685_931_651 = 0b1111111101111101111101111101111101111101111101111101111101111101
+      assert :erlang.bor(-347_706_485_516_350_676, -695_412_971_032_701_351) ==
+               -36_600_682_685_931_651
     end
 
     test "raises ArithmeticError if the first argument is not an integer" do
