@@ -574,6 +574,20 @@ const Erlang = {
   // End bsr/2
   // Deps: []
 
+  // Start bxor/2
+  "bxor/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.bxor(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value ^ integer2.value);
+  },
+  // End bxor/2
+  // Deps: []
+
   // Start byte_size/1
   "byte_size/1": (bitstring) => {
     if (!Type.isBitstring(bitstring)) {
