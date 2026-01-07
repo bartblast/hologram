@@ -2795,16 +2795,30 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, Type.integer(6));
     });
 
-    it("works with large numbers", () => {
-      // 18014398509481983 = 0b111111111111111111111111111111111111111111111111111111
-      // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
-      // xor result        = 0b000000000000000000000000000000000000000000000000000001 = 1
-
-      const left = Type.integer(18014398509481983n);
-      const right = Type.integer(18014398509481982n);
+    it("arguments above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      // 805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      // 457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      // 969_918_091_177_188_725 = 0b110101110101110101110101110101110101110101110101110101110101
+      const left = Type.integer(805_215_019_090_496_300n);
+      const right = Type.integer(457_508_533_574_145_625n);
+      const expected = Type.integer(969_918_091_177_188_725n);
       const result = testedFun(left, right);
 
-      assert.deepStrictEqual(result, Type.integer(1));
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("arguments below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      // -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      // -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      //  969_918_091_177_188_725 = 0b0000110101110101110101110101110101110101110101110101110101110101
+      const left = Type.integer(-347_706_485_516_350_676n);
+      const right = Type.integer(-695_412_971_032_701_351n);
+      const expected = Type.integer(969_918_091_177_188_725n);
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises ArithmeticError if the first argument is not an integer", () => {
