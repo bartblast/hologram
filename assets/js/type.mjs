@@ -6,6 +6,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
 import Serializer from "./serializer.mjs";
+import Utils from "./utils.mjs";
 
 export default class Type {
   static actionStruct(data = {}) {
@@ -89,6 +90,10 @@ export default class Type {
     return Type.list(
       Array.from(string, (char) => Type.integer(char.codePointAt(0))),
     );
+  }
+
+  static cloneMap(map) {
+    return {type: "map", data: Utils.shallowCloneObject(map.data)};
   }
 
   static commandStruct(data = {}) {

@@ -329,6 +329,12 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "raises BadMapError if the third argument is not a map" do
       assert_error BadMapError, "expected a map, got: :abc", {:maps, :put, [:a, 1, :abc]}
     end
+
+    test "doesn't mutate the original map" do
+      map = %{a: 1, b: 2}
+      :maps.put(:c, 3, map)
+      assert map == %{a: 1, b: 2}
+    end
   end
 
   describe "remove/2" do
@@ -344,6 +350,12 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert_error BadMapError, "expected a map, got: 123", fn ->
         :maps.remove(:b, 123)
       end
+    end
+
+    test "doesn't mutate the original map" do
+      map = %{a: 1, b: 2}
+      :maps.remove(:b, map)
+      assert map == %{a: 1, b: 2}
     end
   end
 
