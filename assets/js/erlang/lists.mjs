@@ -333,6 +333,63 @@ const Erlang_Lists = {
   // End map/2
   // Deps: []
 
+  // Start mapfoldl/3
+  "mapfoldl/3": function (fun, initialAcc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.mapfoldl_1/3",
+          arguments,
+        ),
+      );
+    }
+
+    const isProperList = Type.isProperList(list);
+
+    const elementsCount = isProperList
+      ? list.data.length
+      : Math.max(list.data.length - 1, 0);
+
+    let acc = initialAcc;
+    const mappedElements = [];
+
+    for (let i = 0; i < elementsCount; ++i) {
+      const result = Interpreter.callAnonymousFunction(fun, [
+        list.data[i],
+        acc,
+      ]);
+
+      if (!Type.isTuple(result) || result.data.length !== 2) {
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(result));
+      }
+
+      mappedElements.push(result.data[0]);
+      acc = result.data[1];
+    }
+
+    if (!isProperList) {
+      const improperTail = list.data.at(-1);
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3", [
+          fun,
+          acc,
+          improperTail,
+        ]),
+      );
+    }
+
+    return Type.tuple([Type.list(mappedElements), acc]);
+  },
+  // End mapfoldl/3
+  // Deps: []
+
   // Start member/2
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {
