@@ -240,11 +240,11 @@ describe("Type", () => {
         [Type.atom("b"), Type.integer(2)],
       ]);
 
-      const result = Type.cloneMap(original);
+      const cloned = Type.cloneMap(original);
 
-      assert.deepStrictEqual(result, original);
-      assert.notStrictEqual(result, original);
-      assert.notStrictEqual(result.data, original.data);
+      assert.deepStrictEqual(cloned, original);
+      assert.notEqual(cloned, original);
+      assert.notEqual(cloned.data, original.data);
     });
 
     it("modifications to the cloned map do not affect the original", () => {
@@ -254,13 +254,14 @@ describe("Type", () => {
       ]);
 
       const cloned = Type.cloneMap(original);
+
       cloned.data[Type.encodeMapKey(Type.atom("c"))] = [
         Type.atom("c"),
         Type.integer(3),
       ];
 
-      assert.strictEqual(Object.keys(original.data).length, 2);
-      assert.strictEqual(Object.keys(cloned.data).length, 3);
+      assert.equal(Object.keys(original.data).length, 2);
+      assert.equal(Object.keys(cloned.data).length, 3);
     });
   });
 
