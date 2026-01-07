@@ -9,4 +9,5 @@ export default class ERTS {
   static ets = {};
   static nodeTable = NodeTable;
   static referenceSequence = new Sequence();
+  static uniqueInteger = new Sequence();
 }
