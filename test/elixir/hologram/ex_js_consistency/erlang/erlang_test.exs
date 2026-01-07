@@ -1319,46 +1319,51 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "band/2" do
     test "valid arguments" do
-      # 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      # 5 = 0b00000101, 3 = 0b00000011, 1 = 0b00000001
       assert :erlang.band(5, 3) == 1
     end
 
     test "both arguments are zero" do
+      # 0 = 0b00000000
       assert :erlang.band(0, 0) == 0
     end
 
     test "left argument is zero" do
+      # 0 = 0b00000000, 5 = 0b00000101
       assert :erlang.band(0, 5) == 0
     end
 
     test "right argument is zero" do
+      # 5 = 0b00000101, 0 = 0b00000000
       assert :erlang.band(5, 0) == 0
     end
 
     test "left argument is negative" do
-      # 15 = 0b1111, 11 = -5 = 0b1011
+      # -5 = 0b11111011, 15 = 0b00001111, 11 = 0b00001011
       assert :erlang.band(-5, 15) == 11
     end
 
     test "right argument is negative" do
-      # 15 = 0b1111, 11 = -5 = 0b1011
+      # 15 = 0b00001111, -5 = 0b11111011, 11 = 0b00001011
       assert :erlang.band(15, -5) == 11
     end
 
-    test "works with large numbers" do
-      # Number.MAX_SAFE_INTEGER = 9007199254740991
-      # = 0b11111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 + 1 = 18014398509481983
-      # = 0b111111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 = 18014398509481982
-      # = 0b111111111111111111111111111111111111111111111111111110
+    test "arguments above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      # 805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      # 457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      # 146_402_730_743_726_600 = 0b001000001000001000001000001000001000001000001000001000001000
+      assert :erlang.band(805_215_019_090_496_300, 457_508_533_574_145_625) ==
+               146_402_730_743_726_600
+    end
 
-      left = 18_014_398_509_481_983
-      right = 18_014_398_509_481_982
-
-      assert :erlang.band(left, right) == right
+    test "arguments below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      #   -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      #   -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      # -1_006_518_773_863_120_376 = 0b1111001000001000001000001000001000001000001000001000001000001000
+      assert :erlang.band(-347_706_485_516_350_676, -695_412_971_032_701_351) ==
+               -1_006_518_773_863_120_376
     end
 
     test "raises ArithmeticError if the first argument is not an integer" do

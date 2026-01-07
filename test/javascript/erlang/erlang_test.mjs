@@ -1553,64 +1553,73 @@ describe("Erlang", () => {
     const testedFun = Erlang["band/2"];
 
     it("valid arguments", () => {
-      // 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      // 5 = 0b00000101, 3 = 0b00000011, 1 = 0b00000001
       const result = testedFun(integer5, integer3);
 
       assert.deepStrictEqual(result, integer1);
     });
 
     it("both arguments are zero", () => {
+      // 0 = 0b00000000
       const result = testedFun(integer0, integer0);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("left argument is zero", () => {
+      // 0 = 0b00000000, 5 = 0b00000101
       const result = testedFun(integer0, integer5);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("right argument is zero", () => {
+      // 5 = 0b00000101, 0 = 0b00000000
       const result = testedFun(integer5, integer0);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("left argument is negative", () => {
+      // -5 = 0b11111011, 15 = 0b00001111, 11 = 0b00001011
       const left = Type.integer(-5);
-
-      // 15 = 0b1111, 11 = -5 = 0b1011
       const result = testedFun(left, integer15);
 
       assert.deepStrictEqual(result, integer11);
     });
 
     it("right argument is negative", () => {
+      // 15 = 0b00001111, -5 = 0b11111011, 11 = 0b00001011
       const right = Type.integer(-5);
-
-      // 15 = 0b1111, 11 = -5 = 0b1011
       const result = testedFun(integer15, right);
 
       assert.deepStrictEqual(result, integer11);
     });
 
-    it("works with large numbers", () => {
-      // Number.MAX_SAFE_INTEGER = 9007199254740991
-      // = 0b11111111111111111111111111111111111111111111111111111
-      //
-      // 2 * 9007199254740991 + 1 = 18014398509481983
-      // = 0b111111111111111111111111111111111111111111111111111111
-      //
-      // 2 * 9007199254740991 = 18014398509481982
-      // = 0b111111111111111111111111111111111111111111111111111110
-
-      const left = Type.integer(18014398509481983n);
-      const right = Type.integer(18014398509481982n);
-
+    it("arguments above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      // 805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      // 457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      // 146_402_730_743_726_600 = 0b001000001000001000001000001000001000001000001000001000001000
+      const left = Type.integer(805_215_019_090_496_300n);
+      const right = Type.integer(457_508_533_574_145_625n);
+      const expected = Type.integer(146_402_730_743_726_600n);
       const result = testedFun(left, right);
 
-      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("arguments below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      //   -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      //   -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      // -1_006_518_773_863_120_376 = 0b1111001000001000001000001000001000001000001000001000001000001000
+      const left = Type.integer(-347_706_485_516_350_676n);
+      const right = Type.integer(-695_412_971_032_701_351n);
+      const expected = Type.integer(-1_006_518_773_863_120_376n);
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises ArithmeticError if the first argument is not an integer", () => {
