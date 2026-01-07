@@ -340,7 +340,7 @@ describe("Erlang_Maps", () => {
       );
     });
 
-    it("takes value from map1", () => {
+    it("handles mixed atom/string keys", () => {
       const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
 
       const map2 = Type.map([
