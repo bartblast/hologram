@@ -375,7 +375,7 @@ describe("Erlang_Maps", () => {
       const map1 = Type.atom("abc");
       const map2 = Type.map([]);
 
-      assert.BoxedError(
+      assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
         "expected a map, got: :abc",
@@ -386,7 +386,7 @@ describe("Erlang_Maps", () => {
       const map1 = Type.map([]);
       const map2 = Type.atom("abc");
 
-      assert.BoxedError(
+      assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
         "expected a map, got: :abc",
