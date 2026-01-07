@@ -13,7 +13,6 @@ import {
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
-import {it} from "node:test";
 
 defineGlobalErlangAndElixirModules();
 
