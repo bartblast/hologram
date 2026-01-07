@@ -151,8 +151,7 @@ describe("Erlang_Sets", () => {
     const from_list_2 = Erlang_Sets["from_list/2"];
 
     it("removes an existing element from the set", () => {
-      const set = from_list_2(Type.list([integer1, integer2, integer3]), opts);
-      const result = del_element_2(integer2, set);
+      const result = del_element_2(integer2, set123);
 
       const expected = from_list_2(Type.list([integer1, integer3]), opts);
 
@@ -160,16 +159,10 @@ describe("Erlang_Sets", () => {
     });
 
     it("returns the same set if element is not present", () => {
-      const set = from_list_2(Type.list([integer1, integer2, integer3]), opts);
       const integer42 = Type.integer(42);
-      const result = del_element_2(integer42, set);
+      const result = del_element_2(integer42, set123);
 
-      const expected = from_list_2(
-        Type.list([integer1, integer2, integer3]),
-        opts,
-      );
-
-      assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, set123);
     });
 
     it("returns empty set when removing from empty set", () => {
