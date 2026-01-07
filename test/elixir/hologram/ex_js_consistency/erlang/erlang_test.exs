@@ -1975,18 +1975,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "both arguments are zero" do
+      # 0 = 0b00000000
       assert :erlang.bxor(0, 0) == 0
     end
 
     test "left argument is zero" do
+      # 0 = 0b00000000, 5 = 0b00000101
       assert :erlang.bxor(0, 5) == 5
     end
 
     test "right argument is zero" do
+      # 5 = 0b00000101, 0 = 0b00000000
       assert :erlang.bxor(5, 0) == 5
     end
 
     test "same values result in zero" do
+      # 5 = 0b00000101, 0 = 0b00000000
       assert :erlang.bxor(5, 5) == 0
     end
 

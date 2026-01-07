@@ -2769,52 +2769,53 @@ describe("Erlang", () => {
     });
 
     it("both arguments are zero", () => {
+      // 0 = 0b00000000
       const result = testedFun(integer0, integer0);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("left argument is zero", () => {
+      // 0 = 0b00000000, 5 = 0b00000101
       const result = testedFun(integer0, integer5);
 
       assert.deepStrictEqual(result, integer5);
     });
 
     it("right argument is zero", () => {
+      // 5 = 0b00000101, 0 = 0b00000000
       const result = testedFun(integer5, integer0);
 
       assert.deepStrictEqual(result, integer5);
     });
 
     it("same values result in zero", () => {
+      // 5 = 0b00000101, 0 = 0b00000000
       const result = testedFun(integer5, integer5);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("left argument is negative", () => {
-      const left = Type.integer(-5);
-
       // -5 = 0b11111011, 5 = 0b00000101, -2 = 0b11111110
+      const left = Type.integer(-5);
       const result = testedFun(left, integer5);
 
       assert.deepStrictEqual(result, Type.integer(-2));
     });
 
     it("right argument is negative", () => {
-      const right = Type.integer(-5);
-
       // 5 = 0b00000101, -5 = 0b11111011, -2 = 0b11111110
+      const right = Type.integer(-5);
       const result = testedFun(integer5, right);
 
       assert.deepStrictEqual(result, Type.integer(-2));
     });
 
     it("both arguments are negative", () => {
+      // -5 = 0b11111011, -3 = 0b11111101, 6 = 0b00000110
       const left = Type.integer(-5);
       const right = Type.integer(-3);
-
-      // -5 = 0b11111011, -3 = 0b11111101, 6 = 0b00000110
       const result = testedFun(left, right);
 
       assert.deepStrictEqual(result, Type.integer(6));
