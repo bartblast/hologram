@@ -2,7 +2,6 @@
 
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
-import Utils from "../utils.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
@@ -182,7 +181,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.shallowCloneObject(map);
+    const newMap = Type.cloneMap(map);
     newMap.data[Type.encodeMapKey(key)] = [key, value];
 
     return newMap;
@@ -196,7 +195,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.shallowCloneObject(map);
+    const newMap = Type.cloneMap(map);
     delete newMap.data[Type.encodeMapKey(key)];
 
     return newMap;

@@ -233,6 +233,37 @@ describe("Type", () => {
     });
   });
 
+  describe("cloneMap()", () => {
+    it("creates a shallow clone of the map", () => {
+      const original = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const result = Type.cloneMap(original);
+
+      assert.deepStrictEqual(result, original);
+      assert.notStrictEqual(result, original);
+      assert.notStrictEqual(result.data, original.data);
+    });
+
+    it("modifications to the cloned map do not affect the original", () => {
+      const original = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const cloned = Type.cloneMap(original);
+      cloned.data[Type.encodeMapKey(Type.atom("c"))] = [
+        Type.atom("c"),
+        Type.integer(3),
+      ];
+
+      assert.strictEqual(Object.keys(original.data).length, 2);
+      assert.strictEqual(Object.keys(cloned.data).length, 3);
+    });
+  });
+
   describe("commandStruct()", () => {
     it("default values", () => {
       assert.deepStrictEqual(

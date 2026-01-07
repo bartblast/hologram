@@ -572,6 +572,22 @@ describe("Erlang_Maps", () => {
         "expected a map, got: :abc",
       );
     });
+
+    it("doesn't mutate the original map", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      put(Type.atom("c"), Type.integer(3), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assert.deepStrictEqual(map, expected);
+    });
   });
 
   describe("remove/2", () => {
@@ -616,6 +632,22 @@ describe("Erlang_Maps", () => {
         "BadMapError",
         "expected a map, got: 123",
       );
+    });
+
+    it("doesn't mutate the original map", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      remove(Type.atom("b"), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assert.deepStrictEqual(map, expected);
     });
   });
 
