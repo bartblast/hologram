@@ -124,7 +124,7 @@ const Erlang_Maps = {
 
     for (const key in map1.data) {
       if (map2.data[key]) {
-        result.push([key, map2[key]]);
+        result.push([key, map2.data[key]]);
       }
     }
 
