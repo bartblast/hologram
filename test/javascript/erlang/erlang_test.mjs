@@ -10,6 +10,8 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
@@ -18,6 +20,7 @@ import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
+defineErlangModule1Fixture();
 
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
@@ -1473,153 +1476,106 @@ describe("Erlang", () => {
 
   describe("apply/3", () => {
     const apply = Erlang["apply/3"];
-    const applyModuleAlias = Type.alias("ApplyTargetModule");
-    const applyModuleJsName = Interpreter.moduleJsName(applyModuleAlias);
-    const funName = Type.atom("my_fun");
 
-    beforeEach(() => {
-      globalThis[applyModuleJsName] = {
-        __exModule__: applyModuleAlias,
-        __exports__: new Set(["my_fun/0", "my_fun/1", "my_fun/2", "my_fun/4"]),
-        // my_fun/0() -> 42
-        "my_fun/0": () => Type.integer(42),
-        // my_fun/1(value) -> value * 2
-        "my_fun/1": (arg1) => Type.integer(arg1.value * 2n),
-        // my_fun/2(left, right) -> left + right
-        "my_fun/2": (arg1, arg2) => Type.integer(arg1.value + arg2.value),
-        // my_fun/4(a, b, c, d) -> a + b + c + d
-        "my_fun/4": (arg1, arg2, arg3, arg4) =>
-          Type.integer(arg1.value + arg2.value + arg3.value + arg4.value),
-      };
+    const module = Type.alias(
+      "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+    );
+
+    const fun = Type.atom("fun_0");
+    const args = Type.list();
+
+    it("invokes a function with no params", () => {
+      const result = apply(module, fun, args);
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
     });
 
-    afterEach(() => {
-      delete globalThis[applyModuleJsName];
+    it("invokes a function with a single param", () => {
+      const fun = Type.atom("fun_1");
+      const args = Type.list([Type.integer(9)]);
+      const result = apply(module, fun, args);
+      const expected = Type.integer(109);
+
+      assert.deepStrictEqual(result, expected);
     });
 
-    it("invokes a function with 0 arguments", () => {
-      const args = Type.list([]);
+    it("invokes a function with multiple params", () => {
+      const fun = Type.atom("fun_2");
+      const args = Type.list([Type.integer(3), Type.integer(4)]);
+      const result = apply(module, fun, args);
+      const expected = Type.integer(7);
 
-      const result = apply(applyModuleAlias, funName, args);
-
-      assert.deepStrictEqual(result, Type.integer(42));
+      assert.deepStrictEqual(result, expected);
     });
 
-    it("invokes a function with 1 argument", () => {
-      const args = Type.list([Type.integer(5)]);
+    it("raises ArgumentError if the first argument is not an atom", () => {
+      const module = Type.integer(123);
 
-      const result = apply(applyModuleAlias, funName, args);
-
-      assert.deepStrictEqual(result, Type.integer(10));
-    });
-
-    it("invokes a function with 2 arguments", () => {
-      const args = Type.list([Type.integer(1), Type.integer(2)]);
-
-      const result = apply(applyModuleAlias, funName, args);
-
-      assert.deepStrictEqual(result, Type.integer(3));
-    });
-
-    it("invokes a function with 4 arguments", () => {
-      const args = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-        Type.integer(4),
-      ]);
-
-      const result = apply(applyModuleAlias, funName, args);
-
-      assert.deepStrictEqual(result, Type.integer(10));
-    });
-
-    it("raises ArgumentError if the module is not an atom", () => {
-      const args = Type.list([]);
-      const invalidModule = Type.integer(1);
+      const expectedMessage =
+        "you attempted to apply a function named :fun_0 on 123. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module";
 
       assertBoxedError(
-        () => apply(invalidModule, funName, args),
+        () => apply(module, fun, args),
         "ArgumentError",
-        `you attempted to apply a function on ${Interpreter.inspect(
-          invalidModule,
-        )}. Modules (the first argument of apply) must always be an atom`,
+        expectedMessage,
       );
     });
 
-    it("raises ArgumentError if the function is not an atom", () => {
-      const args = Type.list([]);
+    it("raises ArgumentError if the second argument is not an atom", () => {
+      const fun = Type.integer(123);
 
       assertBoxedError(
-        () => apply(applyModuleAlias, Type.integer(1), args),
+        () => apply(module, fun, args),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "not an atom"),
       );
     });
 
-    it("raises ArgumentError if the args term is not a list", () => {
+    it("raises ArgumentError if the third argument is not a list", () => {
+      const args = Type.integer(123);
+
       assertBoxedError(
-        () => apply(applyModuleAlias, funName, Type.integer(1)),
+        () => apply(module, fun, args),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
-    it("raises ArgumentError if the args term is not a proper list", () => {
+    it("raises ArgumentError if the third argument is not a proper list", () => {
+      const fun = Type.atom("fun_2");
       const args = Type.improperList([Type.integer(1), Type.integer(2)]);
 
       assertBoxedError(
-        () => apply(applyModuleAlias, funName, args),
+        () => apply(module, fun, args),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
 
     it("raises UndefinedFunctionError if the module doesn't exist", () => {
-      const nonexistentModule = Type.alias("NonexistentModule");
+      const module = Type.alias("NonexistentModule");
+      const fun = Type.atom("fun_2");
       const args = Type.list([Type.integer(1), Type.integer(2)]);
 
       assertBoxedError(
-        () => apply(nonexistentModule, Type.atom("some_fun"), args),
+        () => apply(module, fun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          nonexistentModule,
-          "some_fun",
-          2,
-          false,
-        ),
+        Interpreter.buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false),
       );
     });
 
     it("raises UndefinedFunctionError if the function doesn't exist", () => {
+      const fun = Type.atom("nonexistent_fun");
       const args = Type.list([Type.integer(1), Type.integer(2)]);
-      const nonexistentFun = Type.atom("nonexistent_fun");
 
       assertBoxedError(
-        () => apply(applyModuleAlias, nonexistentFun, args),
+        () => apply(module, fun, args),
         "UndefinedFunctionError",
         Interpreter.buildUndefinedFunctionErrorMsg(
-          applyModuleAlias,
+          module,
           "nonexistent_fun",
           2,
-        ),
-      );
-    });
-
-    it("raises UndefinedFunctionError if the function doesn't exist with the given arity", () => {
-      const args = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-
-      assertBoxedError(
-        () => apply(applyModuleAlias, funName, args),
-        "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          applyModuleAlias,
-          "my_fun",
-          3,
         ),
       );
     });
