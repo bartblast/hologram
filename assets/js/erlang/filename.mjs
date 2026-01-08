@@ -61,8 +61,7 @@ const Erlang_Filename = {
     const flattened = Erlang_Filename["flatten/1"](filename);
 
     // TODO: Once implemented, replace extractBasenameBytes with :binary.split/3
-    // on <<"/">> with [global] option, filter out <<>>, and use :lists.last/1
-    // (again once implemented) to get the last component.
+    // on <<"/">> with [global] option, filter out <<>>.
 
     const extractBasenameBytes = (bytes) => {
       const lastNonSeparatorIndex = [...bytes]
@@ -88,26 +87,44 @@ const Erlang_Filename = {
       return bytes.slice(start, end);
     };
 
+    const getBinaryAndValidateUtf8 = (flattened, isBinary) => {
+      const binary = isBinary
+        ? flattened
+        : Erlang["iolist_to_binary/1"](flattened);
+
+      Bitstring.maybeSetBytesFromText(binary);
+      const bytes = binary.bytes;
+      const component = extractBasenameBytes(bytes);
+
+      if (component === null) {
+        return {component: null, basenameBinary: null, isValidUtf8: true};
+      }
+
+      const basenameBinary = Bitstring.fromBytes(component);
+      Bitstring.maybeSetTextFromBytes(basenameBinary);
+
+      return {
+        component,
+        basenameBinary,
+        isValidUtf8: basenameBinary.text !== false,
+      };
+    };
+
     const handleBinaryFilename = (flattened) => {
       if (Bitstring.isEmpty(flattened)) {
         return Type.bitstring("");
       }
 
-      Bitstring.maybeSetBytesFromText(flattened);
-
-      const bytes = flattened.bytes;
-
-      const component = extractBasenameBytes(bytes);
+      const {component, basenameBinary, isValidUtf8} = getBinaryAndValidateUtf8(
+        flattened,
+        true,
+      );
 
       if (component === null) {
         return Type.bitstring("");
       }
 
-      const basenameBinary = Bitstring.fromBytes(component);
-
-      Bitstring.maybeSetTextFromBytes(basenameBinary);
-
-      if (basenameBinary.text === false) {
+      if (!isValidUtf8) {
         // For invalid UTF-8, return bitstring with text: null to preserve raw bytes
         return Bitstring.fromBytes(component);
       }
@@ -116,26 +133,21 @@ const Erlang_Filename = {
     };
 
     const handleListFilename = (flattened) => {
-      const binary = Erlang["iolist_to_binary/1"](flattened);
-      Bitstring.maybeSetBytesFromText(binary);
-
-      const bytes = binary.bytes;
-
-      const component = extractBasenameBytes(bytes);
+      const {component, isValidUtf8} = getBinaryAndValidateUtf8(
+        flattened,
+        false,
+      );
 
       if (component === null) {
         return Type.list([]);
       }
 
-      const basenameBinary = Bitstring.fromBytes(component);
-
-      Bitstring.maybeSetTextFromBytes(basenameBinary);
-
-      if (basenameBinary.text === false) {
+      if (!isValidUtf8) {
         // For invalid UTF-8, return raw bytes as integers
         return Type.list([...component].map((byte) => Type.integer(byte)));
       }
 
+      const basenameBinary = Bitstring.fromBytes(component);
       return Bitstring.toCodepoints(basenameBinary);
     };
 
