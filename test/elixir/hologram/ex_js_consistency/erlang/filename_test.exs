@@ -102,9 +102,9 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
                102,
                111,
                111,
-               20840,
-               24687,
-               22270,
+               20_840,
+               24_687,
+               22_270,
                98,
                97,
                114
