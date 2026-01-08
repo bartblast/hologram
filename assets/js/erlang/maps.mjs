@@ -120,15 +120,14 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map2);
     }
 
-    const result = [];
-
-    for (const key in map1.data) {
-      if (map2.data[key]) {
-        result.push([key, map2.data[key]]);
-      }
-    }
-
-    return Type.map(result);
+    return Type.map(
+      Object.keys(map1.data).reduce((acc, key) => {
+        if (map2.data[key]) {
+          acc.push(map2.data[key]);
+        }
+        return acc;
+      }, []),
+    );
   },
   // End intersect/2
   // Deps: []

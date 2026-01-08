@@ -163,12 +163,23 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
   end
 
   describe "intersect/2" do
-    test "takes value from map2" do
+    test "takes value from map2 (atom keys)" do
       assert :maps.intersect(%{a: 1, b: 3}, %{a: 2, c: 4}) == %{a: 2}
     end
 
-    test "handles mixed atom/string keys" do
-      assert :maps.intersect(%{a: 1}, %{:a => 2, "a" => 20}) == %{a: 2}
+    test "takes value from map2 (bitstring keys)" do
+      assert :maps.intersect(%{"a" => 1, "b" => 3}, %{"a" => 2, "c" => 4}) == %{"a" => 2}
+    end
+
+    test "takes value from map2 (integer keys)" do
+      assert :maps.intersect(%{1 => 1, 2 => 3}, %{1 => 2, 3 => 4}) == %{1 => 2}
+    end
+
+    test "handles mixed keys" do
+      assert :maps.intersect(
+               %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9},
+               %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+             ) == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
     end
 
     test "returns an empty map when map1 is empty" do
