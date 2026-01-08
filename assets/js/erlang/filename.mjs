@@ -49,6 +49,65 @@ const Erlang_Filename = {
   },
   // End basename/1
   // Deps: [:erlang.iolist_to_binary/1]
+
+  // Start flatten/1
+  "flatten/1": (filename) => {
+    // Binary input returns binary unchanged
+    if (Type.isBinary(filename)) {
+      return filename;
+    }
+
+    // Everything else is delegated to _do_flatten/2
+    return Erlang_Filename["_do_flatten/2"](filename, Type.list([]));
+  },
+  // End flatten/1
+  // Deps: [:filename._do_flatten/2]
+
+  // Start _do_flatten/2
+  "_do_flatten/2": (filename, tail) => {
+    // Handle list - recursively flatten each element
+    if (Type.isList(filename)) {
+      const flattenElement = (acc, elem) => {
+        if (Type.isList(elem)) {
+          return Erlang_Filename["_do_flatten/2"](elem, acc);
+        }
+
+        if (Type.isAtom(elem)) {
+          const atomAsCharlist = Erlang["atom_to_list/1"](elem);
+          const combined = [...atomAsCharlist.data, ...acc.data];
+          return Type.list(combined);
+        }
+
+        const combined = [elem, ...acc.data];
+        return Type.list(combined);
+      };
+
+      return filename.data.reduceRight(flattenElement, tail);
+    }
+
+    // Handle atom - convert to charlist and concatenate with tail
+    if (Type.isAtom(filename)) {
+      const atomAsCharlist = Erlang["atom_to_list/1"](filename);
+      const combined = [...atomAsCharlist.data, ...tail.data];
+      return Type.list(combined);
+    }
+
+    // Handle binary - add to front of tail
+    if (Type.isBinary(filename)) {
+      const combined = [filename, ...tail.data];
+      return Type.list(combined);
+    }
+
+    // Invalid input - doesn't match any valid clause
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        filename,
+        tail,
+      ]),
+    );
+  },
+  // End _do_flatten/2
+  // Deps: [:erlang.atom_to_list/1]
 };
 
 export default Erlang_Filename;
