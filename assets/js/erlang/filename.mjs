@@ -54,43 +54,87 @@ const Erlang_Filename = {
 
   // Start basename/1
   "basename/1": (filename) => {
-    let filepathText;
-    let returnAsCodepoints = false;
+    const DIR_SEPARATOR_BYTE = 47;
 
-    if (Type.isBinary(filename)) {
-      Bitstring.maybeSetTextFromBytes(filename);
-      filepathText = filename.text;
-    } else if (Type.isList(filename)) {
-      if (filename.data.length === 0) {
+    // flatten/1 handles argument type checking and raises
+    // FunctionClauseError if needed.
+    const flattened = Erlang_Filename["flatten/1"](filename);
+
+    // TODO: Once implemented, replace extractBasenameBytes with :binary.split/3
+    // on <<"/">> with [global] option, filter out <<>>, and use :lists.last/1
+    // (again once implemented) to get the last component.
+
+    const extractBasenameBytes = (bytes) => {
+      const lastNonSeparatorIndex = [...bytes]
+        .reverse()
+        .findIndex((byte) => byte !== DIR_SEPARATOR_BYTE);
+
+      if (lastNonSeparatorIndex === -1) {
+        return null;
+      }
+
+      const end = bytes.length - lastNonSeparatorIndex;
+      const bytesUpToEnd = bytes.slice(0, end);
+
+      const lastSeparatorIndex = [...bytesUpToEnd]
+        .reverse()
+        .findIndex((byte) => byte === DIR_SEPARATOR_BYTE);
+
+      const start =
+        lastSeparatorIndex === -1
+          ? 0
+          : bytesUpToEnd.length - lastSeparatorIndex;
+
+      return bytes.slice(start, end);
+    };
+
+    const handleBinaryFilename = (flattened) => {
+      if (Bitstring.isEmpty(flattened)) {
+        return Type.bitstring("");
+      }
+
+      Bitstring.maybeSetBytesFromText(flattened);
+
+      const bytes = flattened.bytes;
+
+      const component = extractBasenameBytes(bytes);
+
+      if (component === null) {
+        return Type.bitstring("");
+      }
+
+      const basenameBinary = Bitstring.fromBytes(component);
+
+      Bitstring.maybeSetTextFromBytes(basenameBinary);
+
+      return Type.bitstring(basenameBinary.text);
+    };
+
+    const handleListFilename = (flattened) => {
+      const binary = Erlang["iolist_to_binary/1"](flattened);
+      Bitstring.maybeSetBytesFromText(binary);
+
+      const bytes = binary.bytes;
+
+      const component = extractBasenameBytes(bytes);
+
+      if (component === null) {
         return Type.list([]);
       }
 
-      const binary = Erlang["iolist_to_binary/1"](filename);
-      Bitstring.maybeSetTextFromBytes(binary);
-      filepathText = binary.text;
-      returnAsCodepoints = true;
-    } else if (Type.isAtom(filename)) {
-      filepathText = filename.value;
-      returnAsCodepoints = true;
-    } else {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
-          filename,
-          Type.list([]),
-        ]),
-      );
-    }
+      const basenameBinary = Bitstring.fromBytes(component);
 
-    const parts = filepathText.split("/").filter((part) => part !== "");
-    const basenameText = parts.length > 0 ? parts.at(-1) : "";
-    const basenameBitstring = Type.bitstring(basenameText);
+      return Bitstring.toCodepoints(basenameBinary);
+    };
 
-    return returnAsCodepoints
-      ? Bitstring.toCodepoints(basenameBitstring)
-      : basenameBitstring;
+    const result = Type.isBinary(flattened)
+      ? handleBinaryFilename(flattened)
+      : handleListFilename(flattened);
+
+    return result;
   },
   // End basename/1
-  // Deps: [:erlang.iolist_to_binary/1]
+  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1]
 
   // Start flatten/1
   "flatten/1": (filename) => {
