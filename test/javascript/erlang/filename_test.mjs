@@ -97,6 +97,19 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("binary with invalid UTF-8 bytes", () => {
+      // "path/to/" + [0xFF, 0xFE] (invalid UTF-8) + ".txt"
+      const filename = Bitstring.fromBytes([
+        112, 97, 116, 104, 47, 116, 111, 47, 0xff, 0xfe, 46, 116, 120, 116,
+      ]);
+
+      const result = basename(filename);
+      // Should preserve raw bytes: [0xFF, 0xFE, 46, 116, 120, 116]
+      const expected = Bitstring.fromBytes([0xff, 0xfe, 46, 116, 120, 116]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("atom input", () => {
       const filename = Type.atom("path/to/file.txt");
       const result = basename(filename);
@@ -124,6 +137,40 @@ describe("Erlang_Filename", () => {
 
       const result = basename(filename);
       const expected = Type.charlist("file.txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("iolist with invalid UTF-8 bytes", () => {
+      // Pure charlist: [112, 97, 116, 104, 47, 116, 111, 47, 0xFF, 0xFE, 46, 116, 120, 116]
+      // "path/to/" + [0xFF, 0xFE] + ".txt"
+      const filename = Type.list([
+        Type.integer(112), // 'p'
+        Type.integer(97), // 'a'
+        Type.integer(116), // 't'
+        Type.integer(104), // 'h'
+        Type.integer(47), // '/'
+        Type.integer(116), // 't'
+        Type.integer(111), // 'o'
+        Type.integer(47), // '/'
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(46), // '.'
+        Type.integer(116), // 't'
+        Type.integer(120), // 'x'
+        Type.integer(116), // 't'
+      ]);
+
+      const result = basename(filename);
+      // Should return raw bytes as integers: [0xFF, 0xFE, 46, 116, 120, 116]
+      const expected = Type.list([
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(46), // '.'
+        Type.integer(116), // 't'
+        Type.integer(120), // 'x'
+        Type.integer(116), // 't'
+      ]);
 
       assert.deepStrictEqual(result, expected);
     });

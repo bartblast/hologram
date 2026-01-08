@@ -107,6 +107,11 @@ const Erlang_Filename = {
 
       Bitstring.maybeSetTextFromBytes(basenameBinary);
 
+      if (basenameBinary.text === false) {
+        // For invalid UTF-8, return bitstring with text: null to preserve raw bytes
+        return Bitstring.fromBytes(component);
+      }
+
       return Type.bitstring(basenameBinary.text);
     };
 
@@ -123,6 +128,13 @@ const Erlang_Filename = {
       }
 
       const basenameBinary = Bitstring.fromBytes(component);
+
+      Bitstring.maybeSetTextFromBytes(basenameBinary);
+
+      if (basenameBinary.text === false) {
+        // For invalid UTF-8, return raw bytes as integers
+        return Type.list([...component].map((byte) => Type.integer(byte)));
+      }
 
       return Bitstring.toCodepoints(basenameBinary);
     };
