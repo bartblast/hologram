@@ -270,6 +270,38 @@ const Erlang = {
 
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
+  // Start apply/3
+  "apply/3": (module, func, args) => {
+    if (!Type.isAtom(module)) {
+      const moduleValue = Interpreter.inspect(module);
+      Interpreter.raiseArgumentError(
+        `you attempted to apply a function on ${moduleValue}. Modules (the first argument of apply) must always be an atom`,
+      );
+    }
+
+    if (!Type.isAtom(func)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const context = Interpreter.buildContext({module: Type.alias("Elixir")});
+    return Interpreter.callNamedFunction(module, func, args, context);
+  },
+  // End apply/3
+  // Deps: []
 
   // Start atom_to_binary/1
   "atom_to_binary/1": (atom) => {

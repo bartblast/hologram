@@ -1277,6 +1277,82 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  @spec apply3_target_fun_0() :: number
+  def apply3_target_fun_0, do: 42
+
+  @spec apply3_target_fun_1(number) :: number
+  def apply3_target_fun_1(value), do: value * 2
+
+  @spec apply3_target_fun_2(number, number) :: number
+  def apply3_target_fun_2(left, right), do: left + right
+
+  @spec apply3_target_fun_4(number, number, number, number) :: number
+  def apply3_target_fun_4(a, b, c, d), do: a + b + c + d
+
+  describe "apply/3" do
+    test "invokes a function with 0 arguments" do
+      assert :erlang.apply(__MODULE__, :apply3_target_fun_0, []) == 42
+    end
+
+    test "invokes a function with 1 argument" do
+      assert :erlang.apply(__MODULE__, :apply3_target_fun_1, [5]) == 10
+    end
+
+    test "invokes a function with 2 arguments" do
+      assert :erlang.apply(__MODULE__, :apply3_target_fun_2, [1, 2]) == 3
+    end
+
+    test "invokes a function with 4 arguments" do
+      assert :erlang.apply(__MODULE__, :apply3_target_fun_4, [1, 2, 3, 4]) == 10
+    end
+
+    test "raises ArgumentError if the module is not an atom" do
+      invalid_module = prevent_term_typing_violation(123)
+
+      expected_msg =
+        "you attempted to apply a function on 123. Modules (the first argument of apply) must always be an atom"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.apply(invalid_module, :apply3_target_fun_2, [1, 2])
+      end
+    end
+
+    test "raises ArgumentError if the function is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an atom"),
+                   {:erlang, :apply, [__MODULE__, 123, [1, 2]]}
+    end
+
+    test "raises ArgumentError if the args term is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a list"),
+                   {:erlang, :apply, [__MODULE__, :apply3_target_fun_2, 123]}
+    end
+
+    test "raises ArgumentError if the args term is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a proper list"),
+                   {:erlang, :apply, [__MODULE__, :apply3_target_fun_2, [1 | 2]]}
+    end
+
+    test "raises UndefinedFunctionError if the module doesn't exist" do
+      expected_msg =
+        build_undefined_function_error({NonexistentModule, :some_fun, 2}, [], false)
+
+      assert_error UndefinedFunctionError, expected_msg, fn ->
+        :erlang.apply(NonexistentModule, :some_fun, [1, 2])
+      end
+    end
+
+    test "raises UndefinedFunctionError if the function doesn't exist" do
+      expected_msg = build_undefined_function_error({__MODULE__, :nonexistent_fun, 2})
+
+      assert_error UndefinedFunctionError, expected_msg, fn ->
+        :erlang.apply(__MODULE__, :nonexistent_fun, [1, 2])
+      end
+    end
+  end
+
   if SystemUtils.otp_version() >= 23 do
     describe "atom_to_binary/1" do
       test "delegates to atom_to_binary/2" do
