@@ -158,14 +158,14 @@ describe("Erlang_Filename", () => {
   describe("flatten/1", () => {
     const flatten = Erlang_Filename["flatten/1"];
 
-    it("binary input returns binary unchanged", () => {
+    it("binary", () => {
       const filename = Type.bitstring("path/to/file.txt");
       const result = flatten(filename);
 
       assert.deepStrictEqual(result, filename);
     });
 
-    it("atom input converts to charlist", () => {
+    it("atom", () => {
       const filename = Type.atom("myfile");
       const result = flatten(filename);
       const expected = Type.charlist("myfile");
@@ -173,12 +173,12 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("flat list of integers returns as-is", () => {
+    it("flat list of integers", () => {
       const filename = Type.list([
-        Type.integer(112), // p
-        Type.integer(97), // a
-        Type.integer(116), // t
-        Type.integer(104), // h
+        Type.integer(112),
+        Type.integer(97),
+        Type.integer(116),
+        Type.integer(104),
       ]);
 
       const result = flatten(filename);
@@ -186,7 +186,7 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, filename);
     });
 
-    it("flat list with bitstring elements", () => {
+    it("flat list of bitstrings", () => {
       const filename = Type.list([
         Type.bitstring("foo"),
         Type.bitstring("bar"),
@@ -194,19 +194,39 @@ describe("Erlang_Filename", () => {
 
       const result = flatten(filename);
 
+      assert.deepStrictEqual(result, filename);
+    });
+
+    it("flat list of atoms", () => {
+      // # ?f = 102, ?o = 111, ?全 = 20840, ?息 = 24687, ?图 = 22270, ?b = 98, ?a = 97, ?r = 114
+      const filename = Type.list([
+        Type.atom("foo"),
+        Type.atom("全息图"),
+        Type.atom("bar"),
+      ]);
+
+      const result = flatten(filename);
+
       const expected = Type.list([
-        Type.bitstring("foo"),
-        Type.bitstring("bar"),
+        Type.integer(102),
+        Type.integer(111),
+        Type.integer(111),
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+        Type.integer(98),
+        Type.integer(97),
+        Type.integer(114),
       ]);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("nested list with integers flattens correctly", () => {
+    it("nested list of integers", () => {
       const filename = Type.list([
-        Type.integer(112), // p
-        Type.list([Type.integer(97), Type.integer(116)]), // at
-        Type.integer(104), // h
+        Type.integer(112),
+        Type.list([Type.integer(97), Type.integer(116)]),
+        Type.integer(104),
       ]);
 
       const result = flatten(filename);
@@ -221,7 +241,7 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("deeply nested list flattens correctly", () => {
+    it("deeply nested list of integers", () => {
       const filename = Type.list([
         Type.list([
           Type.list([Type.integer(97), Type.integer(98)]),
@@ -242,39 +262,17 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("list with atom elements converts atoms to charcodes", () => {
-      const filename = Type.list([
-        Type.atom("foo"),
-        Type.integer(47), // /
-        Type.atom("bar"),
-      ]);
-
-      const result = flatten(filename);
-
-      const expected = Type.list([
-        Type.integer(102), // f
-        Type.integer(111), // o
-        Type.integer(111), // o
-        Type.integer(47), // /
-        Type.integer(98), // b
-        Type.integer(97), // a
-        Type.integer(114), // r
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("empty list returns empty list", () => {
-      const filename = Type.list([]);
+    it("empty list", () => {
+      const filename = Type.list();
       const result = flatten(filename);
 
       assert.deepStrictEqual(result, filename);
     });
 
-    it("list with empty nested list", () => {
+    it("list with an empty list element", () => {
       const filename = Type.list([
         Type.integer(97),
-        Type.list([]),
+        Type.list(),
         Type.integer(98),
       ]);
 
@@ -285,13 +283,11 @@ describe("Erlang_Filename", () => {
     });
 
     it("mixed list with bitstrings, atoms, integers and nested lists", () => {
+      // ?t = 116, ?o = 111
       const filename = Type.list([
         Type.bitstring("path"),
-        Type.list([
-          Type.integer(47), // /
-          Type.atom("to"),
-        ]),
-        Type.integer(47), // /
+        Type.list([Type.integer(47), Type.atom("to")]),
+        Type.integer(63),
         Type.list([Type.bitstring("file.txt")]),
       ]);
 
@@ -300,9 +296,9 @@ describe("Erlang_Filename", () => {
       const expected = Type.list([
         Type.bitstring("path"),
         Type.integer(47),
-        Type.integer(116), // t
-        Type.integer(111), // o
-        Type.integer(47),
+        Type.integer(116),
+        Type.integer(111),
+        Type.integer(63),
         Type.bitstring("file.txt"),
       ]);
 

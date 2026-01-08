@@ -74,45 +74,63 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
   end
 
   describe "flatten/1" do
-    test "binary input returns binary unchanged" do
-      assert :filename.flatten("path/to/file.txt") == "path/to/file.txt"
+    test "binary" do
+      filename = "path/to/file.txt"
+
+      assert :filename.flatten(filename) == filename
     end
 
-    test "atom input converts to charlist" do
+    test "atom" do
       assert :filename.flatten(:myfile) == ~c"myfile"
     end
 
-    test "flat list of integers returns as-is" do
-      assert :filename.flatten([112, 97, 116, 104]) == [112, 97, 116, 104]
+    test "flat list of integers" do
+      filename = [112, 97, 116, 104]
+
+      assert :filename.flatten(filename) == filename
     end
 
-    test "flat list with bitstring elements" do
-      assert :filename.flatten([<<"foo">>, <<"bar">>]) == [<<"foo">>, <<"bar">>]
+    test "flat list of bitstrings" do
+      filename = [<<"foo">>, <<"bar">>]
+
+      assert :filename.flatten(filename) == filename
     end
 
-    test "nested list with integers flattens correctly" do
+    test "flat list of atoms" do
+      # ?f = 102, ?o = 111, ?全 = 20840, ?息 = 24687, ?图 = 22270, ?b = 98, ?a = 97, ?r = 114
+      assert :filename.flatten([:foo, :全息图, :bar]) == [
+               102,
+               111,
+               111,
+               20840,
+               24687,
+               22270,
+               98,
+               97,
+               114
+             ]
+    end
+
+    test "nested list of integers" do
       assert :filename.flatten([112, [97, 116], 104]) == [112, 97, 116, 104]
     end
 
-    test "deeply nested list flattens correctly" do
+    test "deeply nested list of integers" do
       assert :filename.flatten([[[97, 98], 99], 100]) == [97, 98, 99, 100]
     end
 
-    test "list with atom elements converts atoms to charcodes" do
-      assert :filename.flatten([:foo, 47, :bar]) == [102, 111, 111, 47, 98, 97, 114]
-    end
-
-    test "empty list returns empty list" do
+    test "empty list" do
       assert :filename.flatten([]) == []
     end
 
-    test "list with empty nested list" do
+    test "list with an empty list element" do
       assert :filename.flatten([97, [], 98]) == [97, 98]
     end
 
     test "mixed list with bitstrings, atoms, integers and nested lists" do
-      assert :filename.flatten([<<"path">>, [47, :to], 47, [<<"file.txt">>]]) ==
-               [<<"path">>, 47, 116, 111, 47, <<"file.txt">>]
+      # ?t = 116, ?o = 111
+      assert :filename.flatten([<<"path">>, [47, :to], 63, [<<"file.txt">>]]) ==
+               [<<"path">>, 47, 116, 111, 63, <<"file.txt">>]
     end
 
     test "raises FunctionClauseError if the argument is not a binary, atom, or list" do
