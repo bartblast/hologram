@@ -495,6 +495,110 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keysort/2" do
+    test "returns the empty list if the input is the empty list" do
+      assert :lists.keysort(3, []) === []
+    end
+
+    test "returns the unchanged one-element list" do
+      assert :lists.keysort(1, [{:a, 2}]) === [{:a, 2}]
+    end
+
+    test "returns the unchanged one-element list even if the index is out of range of the tuple" do
+      assert :lists.keysort(3, [{:a}]) === [{:a}]
+    end
+
+    test "returns the unchanged one-element list even if the element is not a tuple" do
+      assert :lists.keysort(3, [:a]) === [:a]
+    end
+
+    test "sorts the list by the first element of each tuple" do
+      assert :lists.keysort(1, [{:b, 1}, {:a, 2}]) === [{:a, 2}, {:b, 1}]
+    end
+
+    test "sorts the list by the middle element of each tuple" do
+      assert :lists.keysort(2, [{:a, 2, :c}, {:b, 1, :d}]) === [{:b, 1, :d}, {:a, 2, :c}]
+    end
+
+    test "sorts the list by the last element of each tuple" do
+      assert :lists.keysort(2, [{:a, 2}, {:b, 1}]) === [{:b, 1}, {:a, 2}]
+    end
+
+    test "is stable (preserves order of elements)" do
+      tuples = [{4, :h}, {1, :a}, {1, :b}, {3, :f}, {3, :g}, {1, :c}, {1, :d}, {2, :e}]
+      result = :lists.keysort(1, tuples)
+      expected = [{1, :a}, {1, :b}, {1, :c}, {1, :d}, {2, :e}, {3, :f}, {3, :g}, {4, :h}]
+
+      assert result == expected
+    end
+
+    test "raises FunctionClauseError if the first argument is not an integer" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.keysort/2", [1.0, []]),
+                   fn -> :lists.keysort(1.0, []) end
+    end
+
+    test "raises FunctionClauseError if the first argument is zero integer" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.keysort/2", [0, []]),
+                   fn -> :lists.keysort(0, []) end
+    end
+
+    test "raises FunctionClauseError if the first argument is a negative integer" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.keysort/2", [-1, []]),
+                   fn -> :lists.keysort(-1, []) end
+    end
+
+    test "raises CaseClauseError if the second argument is not a list" do
+      assert_error CaseClauseError,
+                   "no case clause matching: :a",
+                   fn -> :lists.keysort(1, :a) end
+    end
+
+    test "raises CaseClauseError if the second argument is a two-element improper list" do
+      assert_error CaseClauseError,
+                   "no case clause matching: [1 | 2]",
+                   fn -> :lists.keysort(1, [1 | 2]) end
+    end
+
+    test "raises FunctionClauseError if the second argument is a larger improper list of tuples" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.keysplit_1/8", [
+          1,
+          {:a},
+          :a,
+          {:b},
+          :b,
+          {:c},
+          [],
+          []
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keysort(1, [{:a}, {:b} | {:c}])
+      end
+    end
+
+    test "raises ArgumentError if the second argument is a larger improper list of non tuples" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   fn -> :lists.keysort(1, [1, 2 | 3]) end
+    end
+
+    test "raises ArgumentError if an element of the list is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   fn -> :lists.keysort(1, [{:a}, :b]) end
+    end
+
+    test "raises ArgumentError if the index is out of range for any tuple in the list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   fn -> :lists.keysort(1, [{:a}, {}]) end
+    end
+  end
+
   describe "map/2" do
     setup do
       [fun: fn elem -> elem * 10 end]
@@ -555,6 +659,86 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.map(fun, [1, 2 | 3])
+      end
+    end
+  end
+
+  describe "mapfoldl/3" do
+    setup do
+      [fun: fn elem, acc -> {elem * 10, acc + elem} end]
+    end
+
+    test "mapfolds empty list", %{fun: fun} do
+      assert :lists.mapfoldl(fun, 0, []) == {[], 0}
+    end
+
+    test "mapfolds non-empty list", %{fun: fun} do
+      assert :lists.mapfoldl(fun, 0, [1, 2, 3]) == {[10, 20, 30], 6}
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.mapfoldl/3", [:abc, 0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(:abc, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 2" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.mapfoldl/3
+
+      The following arguments were given to :lists\.mapfoldl/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test mapfoldl/3 raises FunctionClauseError if the first argument is an anonymous function with arity different than 2"/1>
+
+          # 2
+          0
+
+          # 3
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(fn elem -> elem end, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is not a list", %{fun: fun} do
+      expected_msg =
+        build_function_clause_error_msg(":lists.mapfoldl_1/3", [fun, 0, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(fun, 0, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.mapfoldl_1/3
+
+      The following arguments were given to :lists\.mapfoldl_1/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          3
+
+          # 3
+          3
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.mapfoldl(fun, 0, [1, 2 | 3])
+      end
+    end
+
+    test "raises MatchError if the anonymous function does not return a 2-element tuple" do
+      assert_error MatchError, build_match_error_msg(1), fn ->
+        :lists.mapfoldl(fn elem, acc -> elem + acc end, 0, [1])
       end
     end
   end

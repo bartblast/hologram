@@ -212,7 +212,6 @@ describe("Erlang_Sets", () => {
 
     it("uses strict matching (integer vs float)", () => {
       const set = Erlang_Sets["from_list/2"](Type.list([integer1]), opts);
-
       const result = is_element_2(Type.float(1.0), set);
 
       assertBoxedFalse(result);

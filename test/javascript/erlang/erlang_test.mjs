@@ -1553,64 +1553,73 @@ describe("Erlang", () => {
     const testedFun = Erlang["band/2"];
 
     it("valid arguments", () => {
-      // 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      // 5 = 0b00000101, 3 = 0b00000011, 1 = 0b00000001
       const result = testedFun(integer5, integer3);
 
       assert.deepStrictEqual(result, integer1);
     });
 
     it("both arguments are zero", () => {
+      // 0 = 0b00000000
       const result = testedFun(integer0, integer0);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("left argument is zero", () => {
+      // 0 = 0b00000000, 5 = 0b00000101
       const result = testedFun(integer0, integer5);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("right argument is zero", () => {
+      // 5 = 0b00000101, 0 = 0b00000000
       const result = testedFun(integer5, integer0);
 
       assert.deepStrictEqual(result, integer0);
     });
 
     it("left argument is negative", () => {
+      // -5 = 0b11111011, 15 = 0b00001111, 11 = 0b00001011
       const left = Type.integer(-5);
-
-      // 15 = 0b1111, 11 = -5 = 0b1011
       const result = testedFun(left, integer15);
 
       assert.deepStrictEqual(result, integer11);
     });
 
     it("right argument is negative", () => {
+      // 15 = 0b00001111, -5 = 0b11111011, 11 = 0b00001011
       const right = Type.integer(-5);
-
-      // 15 = 0b1111, 11 = -5 = 0b1011
       const result = testedFun(integer15, right);
 
       assert.deepStrictEqual(result, integer11);
     });
 
-    it("works with large numbers", () => {
-      // Number.MAX_SAFE_INTEGER = 9007199254740991
-      // = 0b11111111111111111111111111111111111111111111111111111
-      //
-      // 2 * 9007199254740991 + 1 = 18014398509481983
-      // = 0b111111111111111111111111111111111111111111111111111111
-      //
-      // 2 * 9007199254740991 = 18014398509481982
-      // = 0b111111111111111111111111111111111111111111111111111110
-
-      const left = Type.integer(18014398509481983n);
-      const right = Type.integer(18014398509481982n);
-
+    it("arguments above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      // 805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      // 457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      // 146_402_730_743_726_600 = 0b001000001000001000001000001000001000001000001000001000001000
+      const left = Type.integer(805_215_019_090_496_300n);
+      const right = Type.integer(457_508_533_574_145_625n);
+      const expected = Type.integer(146_402_730_743_726_600n);
       const result = testedFun(left, right);
 
-      assert.deepStrictEqual(result, right);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("arguments below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      //   -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      //   -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      // -1_006_518_773_863_120_376 = 0b1111001000001000001000001000001000001000001000001000001000001000
+      const left = Type.integer(-347_706_485_516_350_676n);
+      const right = Type.integer(-695_412_971_032_701_351n);
+      const expected = Type.integer(-1_006_518_773_863_120_376n);
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises ArithmeticError if the first argument is not an integer", () => {
@@ -2563,6 +2572,7 @@ describe("Erlang", () => {
     const bor = Erlang["bor/2"];
 
     it("both arguments are positive", () => {
+      // 4 = 0b00000100, 3 = 0b00000011, 7 = 0b00000111
       assert.deepStrictEqual(
         bor(Type.integer(4), Type.integer(3)),
         Type.integer(7),
@@ -2570,6 +2580,7 @@ describe("Erlang", () => {
     });
 
     it("both arguments are zero", () => {
+      // 0 = 0b00000000
       assert.deepStrictEqual(
         bor(Type.integer(0), Type.integer(0)),
         Type.integer(0),
@@ -2577,6 +2588,7 @@ describe("Erlang", () => {
     });
 
     it("left argument is zero", () => {
+      // 0 = 0b00000000, 8 = 0b00001000
       assert.deepStrictEqual(
         bor(Type.integer(0), Type.integer(8)),
         Type.integer(8),
@@ -2584,6 +2596,7 @@ describe("Erlang", () => {
     });
 
     it("right argument is zero", () => {
+      // 4 = 0b00000100, 0 = 0b00000000
       assert.deepStrictEqual(
         bor(Type.integer(4), Type.integer(0)),
         Type.integer(4),
@@ -2591,6 +2604,7 @@ describe("Erlang", () => {
     });
 
     it("left argument is negative", () => {
+      // -4 = 0b11111100, 3 = 0b00000011, -1 = 0b11111111
       assert.deepStrictEqual(
         bor(Type.integer(-4), Type.integer(3)),
         Type.integer(-1),
@@ -2598,6 +2612,7 @@ describe("Erlang", () => {
     });
 
     it("right argument is negative", () => {
+      // 4 = 0b00000100, -3 = 0b11111101
       assert.deepStrictEqual(
         bor(Type.integer(4), Type.integer(-3)),
         Type.integer(-3),
@@ -2605,28 +2620,37 @@ describe("Erlang", () => {
     });
 
     it("both arguments are negative", () => {
+      // -4 = 0b11111100, -3 = 0b11111101
       assert.deepStrictEqual(
         bor(Type.integer(-4), Type.integer(-3)),
         Type.integer(-3),
       );
     });
 
-    it("works with large numbers", () => {
-      // Number.MAX_SAFE_INTEGER = 9007199254740991
-      // = 0b11111111111111111111111111111111111111111111111111111
-      //
-      // 2 * 9007199254740991 + 1 = 18014398509481983
-      // = 0b111111111111111111111111111111111111111111111111111111
-      //
-      // 2 * 9007199254740991 = 18014398509481982
-      // = 0b111111111111111111111111111111111111111111111111111110
-
-      const left = Type.integer(18_014_398_509_481_983n);
-      const right = Type.integer(18_014_398_509_481_982n);
-
+    it("arguments above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      //   805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      //   457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      // 1_116_320_821_920_915_325 = 0b111101111101111101111101111101111101111101111101111101111101
+      const left = Type.integer(805_215_019_090_496_300n);
+      const right = Type.integer(457_508_533_574_145_625n);
+      const expected = Type.integer(1_116_320_821_920_915_325n);
       const result = bor(left, right);
 
-      assert.deepStrictEqual(result, left);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("arguments below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      // -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      // -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      //  -36_600_682_685_931_651 = 0b1111111101111101111101111101111101111101111101111101111101111101
+      const left = Type.integer(-347_706_485_516_350_676n);
+      const right = Type.integer(-695_412_971_032_701_351n);
+      const expected = Type.integer(-36_600_682_685_931_651n);
+      const result = bor(left, right);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises ArithmeticError if the first argument is not an integer", () => {
@@ -2658,9 +2682,10 @@ describe("Erlang", () => {
     });
 
     it("zero shift", () => {
+      // 247 = 0b11110111
       assert.deepStrictEqual(
-        testedFun(Type.integer(255), Type.integer(0)),
-        Type.integer(255),
+        testedFun(Type.integer(247), Type.integer(0)),
+        Type.integer(247),
       );
     });
 
@@ -2673,10 +2698,26 @@ describe("Erlang", () => {
     });
 
     it("negative keeps sign bit", () => {
-      // -16 = -0b00010000, -8 = -0b00001000
+      // -16 = 0b11110000, -8 = 0b11111000
       assert.deepStrictEqual(
         testedFun(Type.integer(-16), Type.integer(1)),
         Type.integer(-8),
+      );
+    });
+
+    it("shift beyond size for positive integer", () => {
+      // 255 = 0b1111111, 0 = 0b00000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(9)),
+        Type.integer(0),
+      );
+    });
+
+    it("shift beyond size for negative integer", () => {
+      // -127 = 0b10000001, -1 = 0b11111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-127), Type.integer(8)),
+        Type.integer(-1),
       );
     });
 
@@ -2692,27 +2733,11 @@ describe("Erlang", () => {
 
     it("below JS Number.MIN_SAFE_INTEGER", () => {
       // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
-      // -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
-      //  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      // -18_014_398_509_481_984 = 0b1111111111000000000000000000000000000000000000000000000000000000
+      //  -9_007_199_254_740_992 = 0b1111111111100000000000000000000000000000000000000000000000000000
       assert.deepStrictEqual(
         testedFun(Type.integer(-18_014_398_509_481_984n), Type.integer(1)),
         Type.integer(-9_007_199_254_740_992n),
-      );
-    });
-
-    it("shift beyond size for positive integer", () => {
-      // 255 = 0b1111111
-      assert.deepStrictEqual(
-        testedFun(Type.integer(255), Type.integer(9)),
-        Type.integer(0),
-      );
-    });
-
-    it("shift beyond size for negative integer", () => {
-      // -127 = -0b1111111
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-127), Type.integer(8)),
-        Type.integer(-1),
       );
     });
 
@@ -2729,6 +2754,112 @@ describe("Erlang", () => {
         () => testedFun(Type.integer(1), Type.float(2.0)),
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
+      );
+    });
+  });
+
+  describe("bxor/2", () => {
+    const testedFun = Erlang["bxor/2"];
+
+    it("valid arguments", () => {
+      // 5 = 0b00000101, 3 = 0b00000011, 6 = 0b00000110
+      const result = testedFun(integer5, integer3);
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("both arguments are zero", () => {
+      // 0 = 0b00000000
+      const result = testedFun(integer0, integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is zero", () => {
+      // 0 = 0b00000000, 5 = 0b00000101
+      const result = testedFun(integer0, integer5);
+
+      assert.deepStrictEqual(result, integer5);
+    });
+
+    it("right argument is zero", () => {
+      // 5 = 0b00000101, 0 = 0b00000000
+      const result = testedFun(integer5, integer0);
+
+      assert.deepStrictEqual(result, integer5);
+    });
+
+    it("same values result in zero", () => {
+      // 5 = 0b00000101, 0 = 0b00000000
+      const result = testedFun(integer5, integer5);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is negative", () => {
+      // -5 = 0b11111011, 5 = 0b00000101, -2 = 0b11111110
+      const left = Type.integer(-5);
+      const result = testedFun(left, integer5);
+
+      assert.deepStrictEqual(result, Type.integer(-2));
+    });
+
+    it("right argument is negative", () => {
+      // 5 = 0b00000101, -5 = 0b11111011, -2 = 0b11111110
+      const right = Type.integer(-5);
+      const result = testedFun(integer5, right);
+
+      assert.deepStrictEqual(result, Type.integer(-2));
+    });
+
+    it("both arguments are negative", () => {
+      // -5 = 0b11111011, -3 = 0b11111101, 6 = 0b00000110
+      const left = Type.integer(-5);
+      const right = Type.integer(-3);
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("arguments above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      // 805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      // 457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      // 969_918_091_177_188_725 = 0b110101110101110101110101110101110101110101110101110101110101
+      const left = Type.integer(805_215_019_090_496_300n);
+      const right = Type.integer(457_508_533_574_145_625n);
+      const expected = Type.integer(969_918_091_177_188_725n);
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("arguments below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      // -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      // -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      //  969_918_091_177_188_725 = 0b0000110101110101110101110101110101110101110101110101110101110101
+      const left = Type.integer(-347_706_485_516_350_676n);
+      const right = Type.integer(-695_412_971_032_701_351n);
+      const expected = Type.integer(969_918_091_177_188_725n);
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(float5, integer3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bxor(5.0, 3)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(integer5, float3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
       );
     });
   });
@@ -4888,42 +5019,6 @@ describe("Erlang", () => {
     });
   });
 
-  describe("xor/2", () => {
-    const xor = Erlang["xor/2"];
-
-    it("true xor false", () => {
-      assertBoxedTrue(xor(Type.boolean(true), Type.boolean(false)));
-    });
-
-    it("false xor true", () => {
-      assertBoxedTrue(xor(Type.boolean(false), Type.boolean(true)));
-    });
-
-    it("true xor true", () => {
-      assertBoxedFalse(xor(Type.boolean(true), Type.boolean(true)));
-    });
-
-    it("false xor false", () => {
-      assertBoxedFalse(xor(Type.boolean(false), Type.boolean(false)));
-    });
-
-    it("raises ArgumentError if the first argument is not a boolean", () => {
-      assertBoxedError(
-        () => xor(atomAbc, Type.boolean(true)),
-        "ArgumentError",
-        "argument error",
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not a boolean", () => {
-      assertBoxedError(
-        () => xor(Type.boolean(true), atomAbc),
-        "ArgumentError",
-        "argument error",
-      );
-    });
-  });
-
   describe("orelse/2", () => {
     const orelse = Erlang["orelse/2"];
 
@@ -5411,6 +5506,42 @@ describe("Erlang", () => {
         () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
+  describe("xor/2", () => {
+    const xor = Erlang["xor/2"];
+
+    it("true xor false", () => {
+      assertBoxedTrue(xor(Type.boolean(true), Type.boolean(false)));
+    });
+
+    it("false xor true", () => {
+      assertBoxedTrue(xor(Type.boolean(false), Type.boolean(true)));
+    });
+
+    it("true xor true", () => {
+      assertBoxedFalse(xor(Type.boolean(true), Type.boolean(true)));
+    });
+
+    it("false xor false", () => {
+      assertBoxedFalse(xor(Type.boolean(false), Type.boolean(false)));
+    });
+
+    it("raises ArgumentError if the first argument is not a boolean", () => {
+      assertBoxedError(
+        () => xor(atomAbc, Type.boolean(true)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a boolean", () => {
+      assertBoxedError(
+        () => xor(Type.boolean(true), atomAbc),
+        "ArgumentError",
+        "argument error",
       );
     });
   });

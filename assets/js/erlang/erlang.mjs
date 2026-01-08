@@ -574,6 +574,20 @@ const Erlang = {
   // End bsr/2
   // Deps: []
 
+  // Start bxor/2
+  "bxor/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.bxor(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value ^ integer2.value);
+  },
+  // End bxor/2
+  // Deps: []
+
   // Start byte_size/1
   "byte_size/1": (bitstring) => {
     if (!Type.isBitstring(bitstring)) {
@@ -1349,17 +1363,6 @@ const Erlang = {
   // End not/1
   // Deps: []
 
-  // Start xor/2
-  "xor/2": (left, right) => {
-    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
-      Interpreter.raiseArgumentError("argument error");
-    }
-
-    return Type.boolean(left.value != right.value);
-  },
-  // End xor/2
-  // Deps: []
-
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1535,6 +1538,17 @@ const Erlang = {
     return Type.list(tuple.data);
   },
   // End tuple_to_list/1
+  // Deps: []
+
+  // Start xor/2
+  "xor/2": (left, right) => {
+    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Type.boolean(left.value != right.value);
+  },
+  // End xor/2
   // Deps: []
 };
 

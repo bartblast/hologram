@@ -1319,46 +1319,51 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "band/2" do
     test "valid arguments" do
-      # 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      # 5 = 0b00000101, 3 = 0b00000011, 1 = 0b00000001
       assert :erlang.band(5, 3) == 1
     end
 
     test "both arguments are zero" do
+      # 0 = 0b00000000
       assert :erlang.band(0, 0) == 0
     end
 
     test "left argument is zero" do
+      # 0 = 0b00000000, 5 = 0b00000101
       assert :erlang.band(0, 5) == 0
     end
 
     test "right argument is zero" do
+      # 5 = 0b00000101, 0 = 0b00000000
       assert :erlang.band(5, 0) == 0
     end
 
     test "left argument is negative" do
-      # 15 = 0b1111, 11 = -5 = 0b1011
+      # -5 = 0b11111011, 15 = 0b00001111, 11 = 0b00001011
       assert :erlang.band(-5, 15) == 11
     end
 
     test "right argument is negative" do
-      # 15 = 0b1111, 11 = -5 = 0b1011
+      # 15 = 0b00001111, -5 = 0b11111011, 11 = 0b00001011
       assert :erlang.band(15, -5) == 11
     end
 
-    test "works with large numbers" do
-      # Number.MAX_SAFE_INTEGER = 9007199254740991
-      # = 0b11111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 + 1 = 18014398509481983
-      # = 0b111111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 = 18014398509481982
-      # = 0b111111111111111111111111111111111111111111111111111110
+    test "arguments above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      # 805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      # 457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      # 146_402_730_743_726_600 = 0b001000001000001000001000001000001000001000001000001000001000
+      assert :erlang.band(805_215_019_090_496_300, 457_508_533_574_145_625) ==
+               146_402_730_743_726_600
+    end
 
-      left = 18_014_398_509_481_983
-      right = 18_014_398_509_481_982
-
-      assert :erlang.band(left, right) == right
+    test "arguments below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      #   -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      #   -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      # -1_006_518_773_863_120_376 = 0b1111001000001000001000001000001000001000001000001000001000001000
+      assert :erlang.band(-347_706_485_516_350_676, -695_412_971_032_701_351) ==
+               -1_006_518_773_863_120_376
     end
 
     test "raises ArithmeticError if the first argument is not an integer" do
@@ -1840,47 +1845,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "bor/2" do
     test "both arguments are positive" do
+      # 4 = 0b00000100, 3 = 0b00000011, 7 = 0b00000111
       assert :erlang.bor(4, 3) == 7
     end
 
     test "both arguments are zero" do
+      # 0 = 0b00000000
       assert :erlang.bor(0, 0) == 0
     end
 
     test "left argument is zero" do
+      # 0 = 0b00000000, 8 = 0b00001000
       assert :erlang.bor(0, 8) == 8
     end
 
     test "right argument is zero" do
+      # 4 = 0b00000100, 0 = 0b00000000
       assert :erlang.bor(4, 0) == 4
     end
 
     test "left argument is negative" do
+      # -4 = 0b11111100, 3 = 0b00000011, -1 = 0b11111111
       assert :erlang.bor(-4, 3) == -1
     end
 
     test "right argument is negative" do
+      # 4 = 0b00000100, -3 = 0b11111101
       assert :erlang.bor(4, -3) == -3
     end
 
     test "both arguments are negative" do
+      # -4 = 0b11111100, -3 = 0b11111101
       assert :erlang.bor(-4, -3) == -3
     end
 
-    test "works with large numbers" do
-      # Number.MAX_SAFE_INTEGER = 9007199254740991
-      # = 0b11111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 + 1 = 18014398509481983
-      # = 0b111111111111111111111111111111111111111111111111111111
-      #
-      # 2 * 9007199254740991 = 18014398509481982
-      # = 0b111111111111111111111111111111111111111111111111111110
+    test "arguments above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      #   805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      #   457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      # 1_116_320_821_920_915_325 = 0b111101111101111101111101111101111101111101111101111101111101
+      assert :erlang.bor(805_215_019_090_496_300, 457_508_533_574_145_625) ==
+               1_116_320_821_920_915_325
+    end
 
-      left = 18_014_398_509_481_983
-      right = 18_014_398_509_481_982
-
-      assert :erlang.bor(left, right) == left
+    test "arguments below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      # -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      # -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      #  -36_600_682_685_931_651 = 0b1111111101111101111101111101111101111101111101111101111101111101
+      assert :erlang.bor(-347_706_485_516_350_676, -695_412_971_032_701_351) ==
+               -36_600_682_685_931_651
     end
 
     test "raises ArithmeticError if the first argument is not an integer" do
@@ -1903,7 +1917,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "zero shift" do
-      assert :erlang.bsr(255, 0) == 255
+      # 247 = 0b11110111
+      assert :erlang.bsr(247, 0) == 247
     end
 
     test "shift left via negative shift" do
@@ -1912,32 +1927,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "negative keeps sign bit" do
-      # -16 = -0b00010000, -8 = -0b00001000
+      # -16 = 0b11110000, -8 = 0b11111000
       assert :erlang.bsr(-16, 1) == -8
+    end
+
+    test "shift beyond size for positive integer" do
+      # 255 = 0b1111111, 0 = 0b00000000
+      assert :erlang.bsr(255, 9) == 0
+    end
+
+    test "shift beyond size for negative integer" do
+      # -127 = 0b10000001, -1 = 0b11111111
+      assert :erlang.bsr(-127, 8) == -1
     end
 
     test "above JS Number.MAX_SAFE_INTEGER" do
       # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
       # 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
-      #  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      #  9_007_199_254_740_992 = 0b0100000000000000000000000000000000000000000000000000000
       assert :erlang.bsr(18_014_398_509_481_984, 1) == 9_007_199_254_740_992
     end
 
     test "below JS Number.MIN_SAFE_INTEGER" do
       # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
-      # -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
-      #  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      # -18_014_398_509_481_984 = 0b1111111111000000000000000000000000000000000000000000000000000000
+      #  -9_007_199_254_740_992 = 0b1111111111100000000000000000000000000000000000000000000000000000
       assert :erlang.bsr(-18_014_398_509_481_984, 1) == -9_007_199_254_740_992
-    end
-
-    test "shift beyond size for positive integer" do
-      # 255 = 0b1111111
-      assert :erlang.bsr(255, 9) == 0
-    end
-
-    test "shift beyond size for negative integer" do
-      # -127 = -0b1111111
-      assert :erlang.bsr(-127, 8) == -1
     end
 
     test "raises ArithmeticError if the first argument is not an integer" do
@@ -1950,6 +1965,78 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
                    {:erlang, :bsr, [1, 2.0]}
+    end
+  end
+
+  describe "bxor/2" do
+    test "valid arguments" do
+      # 5 = 0b00000101, 3 = 0b00000011, 6 = 0b00000110
+      assert :erlang.bxor(5, 3) == 6
+    end
+
+    test "both arguments are zero" do
+      # 0 = 0b00000000
+      assert :erlang.bxor(0, 0) == 0
+    end
+
+    test "left argument is zero" do
+      # 0 = 0b00000000, 5 = 0b00000101
+      assert :erlang.bxor(0, 5) == 5
+    end
+
+    test "right argument is zero" do
+      # 5 = 0b00000101, 0 = 0b00000000
+      assert :erlang.bxor(5, 0) == 5
+    end
+
+    test "same values result in zero" do
+      # 5 = 0b00000101, 0 = 0b00000000
+      assert :erlang.bxor(5, 5) == 0
+    end
+
+    test "left argument is negative" do
+      # -5 = 0b11111011, 5 = 0b00000101, -2 = 0b11111110
+      assert :erlang.bxor(-5, 5) == -2
+    end
+
+    test "right argument is negative" do
+      # 5 = 0b00000101, -5 = 0b11111011, -2 = 0b11111110
+      assert :erlang.bxor(5, -5) == -2
+    end
+
+    test "both arguments are negative" do
+      # -5 = 0b11111011, -3 = 0b11111101, 6 = 0b00000110
+      assert :erlang.bxor(-5, -3) == 6
+    end
+
+    test "arguments above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      # 805_215_019_090_496_300 = 0b101100101100101100101100101100101100101100101100101100101100
+      # 457_508_533_574_145_625 = 0b011001011001011001011001011001011001011001011001011001011001
+      # 969_918_091_177_188_725 = 0b110101110101110101110101110101110101110101110101110101110101
+      assert :erlang.bxor(805_215_019_090_496_300, 457_508_533_574_145_625) ==
+               969_918_091_177_188_725
+    end
+
+    test "arguments below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      # -347_706_485_516_350_676 = 0b1111101100101100101100101100101100101100101100101100101100101100
+      # -695_412_971_032_701_351 = 0b1111011001011001011001011001011001011001011001011001011001011001
+      #  969_918_091_177_188_725 = 0b0000110101110101110101110101110101110101110101110101110101110101
+      assert :erlang.bxor(-347_706_485_516_350_676, -695_412_971_032_701_351) ==
+               969_918_091_177_188_725
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bxor(5.0, 3)",
+                   {:erlang, :bxor, [5.0, 3]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
+                   {:erlang, :bxor, [5, 3.0]}
     end
   end
 
@@ -3157,32 +3244,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe "xor/2" do
-    test "true xor false" do
-      assert :erlang.xor(true, false) == true
-    end
-
-    test "false xor true" do
-      assert :erlang.xor(false, true) == true
-    end
-
-    test "true xor true" do
-      assert :erlang.xor(true, true) == false
-    end
-
-    test "false xor false" do
-      assert :erlang.xor(false, false) == false
-    end
-
-    test "raises ArgumentError if the first argument is not a boolean" do
-      assert_error ArgumentError, "argument error", {:erlang, :xor, [:abc, true]}
-    end
-
-    test "raises ArgumentError if the second argument is not a boolean" do
-      assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
-    end
-  end
-
   describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true
@@ -3452,6 +3513,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a tuple"),
                    {:erlang, :tuple_to_list, [:abc]}
+    end
+  end
+
+  describe "xor/2" do
+    test "true xor false" do
+      assert :erlang.xor(true, false) == true
+    end
+
+    test "false xor true" do
+      assert :erlang.xor(false, true) == true
+    end
+
+    test "true xor true" do
+      assert :erlang.xor(true, true) == false
+    end
+
+    test "false xor false" do
+      assert :erlang.xor(false, false) == false
+    end
+
+    test "raises ArgumentError if the first argument is not a boolean" do
+      assert_error ArgumentError, "argument error", {:erlang, :xor, [:abc, true]}
+    end
+
+    test "raises ArgumentError if the second argument is not a boolean" do
+      assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
     end
   end
 end

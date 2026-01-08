@@ -262,6 +262,52 @@ const Erlang_Lists = {
   // End keymember/3
   // Deps: [:lists.keyfind/3]
 
+  // Start keysort/2
+  "keysort/2": (index, tuples) => {
+    if (!Type.isInteger(index) || index.value <= 0n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          index,
+          tuples,
+        ]),
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseCaseClauseError(tuples);
+    }
+
+    if (Type.isImproperList(tuples)) {
+      if (tuples.data.length === 2) {
+        Interpreter.raiseCaseClauseError(tuples);
+      } else if (tuples.data.every((item) => Type.isTuple(item))) {
+        // Client-side error message is intentionally simplified.
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
+        );
+      } else {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+        );
+      }
+    }
+
+    if (tuples.data.length < 2) {
+      return tuples;
+    }
+
+    const sorted = tuples.data.toSorted((tuple1, tuple2) =>
+      Interpreter.compareTerms(
+        Erlang["element/2"](index, tuple1),
+        Erlang["element/2"](index, tuple2),
+      ),
+    );
+
+    return Type.list(sorted);
+  },
+  // End keysort/2
+  // Deps: [:erlang.element/2]
+
   // Start map/2
   "map/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
@@ -285,6 +331,63 @@ const Erlang_Lists = {
     );
   },
   // End map/2
+  // Deps: []
+
+  // Start mapfoldl/3
+  "mapfoldl/3": function (fun, initialAcc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.mapfoldl_1/3",
+          arguments,
+        ),
+      );
+    }
+
+    const isProperList = Type.isProperList(list);
+
+    const elementsCount = isProperList
+      ? list.data.length
+      : Math.max(list.data.length - 1, 0);
+
+    let acc = initialAcc;
+    const mappedElements = [];
+
+    for (let i = 0; i < elementsCount; ++i) {
+      const result = Interpreter.callAnonymousFunction(fun, [
+        list.data[i],
+        acc,
+      ]);
+
+      if (!Type.isTuple(result) || result.data.length !== 2) {
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(result));
+      }
+
+      mappedElements.push(result.data[0]);
+      acc = result.data[1];
+    }
+
+    if (!isProperList) {
+      const improperTail = list.data.at(-1);
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3", [
+          fun,
+          acc,
+          improperTail,
+        ]),
+      );
+    }
+
+    return Type.tuple([Type.list(mappedElements), acc]);
+  },
+  // End mapfoldl/3
   // Deps: []
 
   // Start member/2
