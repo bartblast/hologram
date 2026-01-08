@@ -178,6 +178,43 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "intersect_with/3" do
+    test "combines values with function" do
+      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1, b: 3}, %{a: 2, c: 4}) ==
+               %{
+                 a: 3
+               }
+    end
+
+    test "returns an empty map when map1 is empty" do
+      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{}, %{a: 2}) == %{}
+    end
+
+    test "returns an empty map when map2 is empty" do
+      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1}, %{}) == %{}
+    end
+
+    test "raises when map1 is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, :abc, %{})
+      end
+    end
+
+    test "raises when map2 is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{}, :abc)
+      end
+    end
+
+    test "raises when function is not a 3 arity function" do
+      assert_error ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   fn ->
+                     :maps.intersect_with(fn v1, v2 -> v1 + v2 end, %{}, %{})
+                   end
+    end
+  end
+
   describe "keys/1" do
     test "empty map" do
       assert :maps.keys(%{}) == []

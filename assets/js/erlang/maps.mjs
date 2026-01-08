@@ -112,6 +112,41 @@ const Erlang_Maps = {
   // End get/3
   // Deps: []
 
+  // Start intersect_with/3
+  "intersect_with/3": (fun, map1, map2) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+          [],
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    return Type.map(
+      Object.values(map1.data).reduce((acc, [key, value]) => {
+        const keyValue2 = map2.data[Type.encodeMapKey(key)];
+        if (keyValue2) {
+          acc.push([
+            key,
+            Interpreter.callAnonymousFunction(fun, [key, value, keyValue2[1]]),
+          ]);
+        }
+        return acc;
+      }, []),
+    );
+  },
+  // End intersect_with/3
+  // Deps: []
+
   // Start is_key/2
   "is_key/2": (key, map) => {
     if (!Type.isMap(map)) {
