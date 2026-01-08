@@ -180,6 +180,7 @@ describe("Erlang_Filename", () => {
         Type.integer(116), // t
         Type.integer(104), // h
       ]);
+
       const result = flatten(filename);
 
       assert.deepStrictEqual(result, filename);
@@ -190,7 +191,9 @@ describe("Erlang_Filename", () => {
         Type.bitstring("foo"),
         Type.bitstring("bar"),
       ]);
+
       const result = flatten(filename);
+
       const expected = Type.list([
         Type.bitstring("foo"),
         Type.bitstring("bar"),
@@ -205,7 +208,9 @@ describe("Erlang_Filename", () => {
         Type.list([Type.integer(97), Type.integer(116)]), // at
         Type.integer(104), // h
       ]);
+
       const result = flatten(filename);
+
       const expected = Type.list([
         Type.integer(112),
         Type.integer(97),
@@ -224,7 +229,9 @@ describe("Erlang_Filename", () => {
         ]),
         Type.integer(100),
       ]);
+
       const result = flatten(filename);
+
       const expected = Type.list([
         Type.integer(97),
         Type.integer(98),
@@ -241,7 +248,9 @@ describe("Erlang_Filename", () => {
         Type.integer(47), // /
         Type.atom("bar"),
       ]);
+
       const result = flatten(filename);
+
       const expected = Type.list([
         Type.integer(102), // f
         Type.integer(111), // o
@@ -268,6 +277,7 @@ describe("Erlang_Filename", () => {
         Type.list([]),
         Type.integer(98),
       ]);
+
       const result = flatten(filename);
       const expected = Type.list([Type.integer(97), Type.integer(98)]);
 
@@ -284,7 +294,9 @@ describe("Erlang_Filename", () => {
         Type.integer(47), // /
         Type.list([Type.bitstring("file.txt")]),
       ]);
+
       const result = flatten(filename);
+
       const expected = Type.list([
         Type.bitstring("path"),
         Type.integer(47),
