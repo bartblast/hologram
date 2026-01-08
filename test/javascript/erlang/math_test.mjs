@@ -89,10 +89,10 @@ describe("Erlang_Math", () => {
     });
   });
   
-  it("exp/1", () => {
+  describe("exp/1", () => {
     const exp = Erlang_Math["exp/1"];
 
-    describe("returns correct value if passing a positive float value", () => {
+    it("returns correct value if passing a positive float value", () => {
       const number = Type.float(2);
 
       const result = exp(number);
@@ -101,7 +101,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("returns correct value if passing a negative float value", () => {
+    it("returns correct value if passing a negative float value", () => {
       const number = Type.float(-2);
 
       const result = exp(number);
@@ -110,7 +110,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("returns correct value if passing one as a float", () => {
+    it("returns correct value if passing one as a float", () => {
       const number = Type.float(1.0);
 
       const result = exp(number);
@@ -119,7 +119,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("returns correct value if passing zero as a float", () => {
+    it("returns correct value if passing zero as a float", () => {
       const number = Type.float(0);
 
       const result = exp(number);
@@ -128,7 +128,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("returns correct value if passing a positive integer", () => {
+    it("returns correct value if passing a positive integer", () => {
       const number = Type.integer(2);
 
       const result = exp(number);
@@ -137,7 +137,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("returns correct value if passing negative integer", () => {
+    it("returns correct value if passing negative integer", () => {
       const number = Type.integer(-2);
 
       const result = exp(number);
@@ -146,7 +146,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("returns correct value if passing one as an integer", () => {
+    it("returns correct value if passing one as an integer", () => {
       const number = Type.integer(1);
 
       const result = exp(number);
@@ -155,7 +155,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("returns correct value if passing zero as an integer", () => {
+    it("returns correct value if passing zero as an integer", () => {
       const number = Type.integer(0);
 
       const result = exp(number);
@@ -164,7 +164,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("raises ArgumentError if the argument is not a number", () => {
+    it("raises ArgumentError if the argument is not a number", () => {
       const integerString = Type.string("12345");
 
       assertBoxedError(
