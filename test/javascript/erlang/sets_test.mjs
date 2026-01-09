@@ -187,7 +187,7 @@ describe("Erlang_Sets", () => {
       );
 
       const expectedMsg = Interpreter.buildErlangErrorMsg(
-        `{:bad_filter, ${Interpreter.inspect(Type.atom("not_a_boolean"))}}`,
+        `{:bad_filter, :not_a_boolean}`,
       );
 
       assertBoxedError(

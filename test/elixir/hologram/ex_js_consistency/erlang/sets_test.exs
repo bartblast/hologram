@@ -13,7 +13,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     setup do
       [
         set: :sets.from_list([1, 2, 3], version: 2),
-        fun: fn x -> x > 2 end
+        fun: fn elem -> elem > 2 end
       ]
     end
 
@@ -24,13 +24,13 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "returns an empty set if the predicate filters out all elements", %{set: set} do
-      result = :sets.filter(fn x -> x > 10 end, set)
+      result = :sets.filter(fn elem -> elem > 10 end, set)
 
       assert result == :sets.from_list([], version: 2)
     end
 
     test "returns the same set if the predicate matches all elements", %{set: set} do
-      result = :sets.filter(fn x -> x > 0 end, set)
+      result = :sets.filter(fn elem -> elem > 0 end, set)
 
       assert result == set
     end
@@ -55,7 +55,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     test "raises FunctionClauseError if the first argument is an anonymous function with wrong arity",
          %{set: set} do
       wrong_arity_fun = fn x, y -> x == y end
-
       expected_msg = build_function_clause_error_msg(":sets.filter/2", [wrong_arity_fun, set])
 
       assert_error FunctionClauseError, expected_msg, fn ->
@@ -73,7 +72,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
     test "raises ErlangError if the predicate does not return a boolean", %{set: set} do
       assert_error ErlangError, build_erlang_error_msg("{:bad_filter, :not_a_boolean}"), fn ->
-        :sets.filter(fn _x -> :not_a_boolean end, set)
+        :sets.filter(fn _elem -> :not_a_boolean end, set)
       end
     end
   end
