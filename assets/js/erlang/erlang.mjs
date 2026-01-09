@@ -39,7 +39,9 @@ const Erlang = {
   // Start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} * ${Interpreter.inspect(right)}`;
+      const blame = `${Interpreter.inspect(left)} * ${Interpreter.inspect(
+        right,
+      )}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -58,7 +60,9 @@ const Erlang = {
   // Start +/2
   "+/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
+      const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(
+        right,
+      )}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -114,7 +118,9 @@ const Erlang = {
   // Start -/2
   "-/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} - ${Interpreter.inspect(right)}`;
+      const blame = `${Interpreter.inspect(left)} - ${Interpreter.inspect(
+        right,
+      )}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -158,7 +164,9 @@ const Erlang = {
   // Start //2
   "//2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right) || right.value == 0) {
-      const blame = `${Interpreter.inspect(left)} / ${Interpreter.inspect(right)}`;
+      const blame = `${Interpreter.inspect(left)} / ${Interpreter.inspect(
+        right,
+      )}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -1505,6 +1513,15 @@ const Erlang = {
     return Type.list(tuple.data);
   },
   // End tuple_to_list/1
+  // Deps: []
+
+  // Start unique_integer/0
+  "unique_integer/0": function () {
+    const result = Interpreter.uniqueIntegerCounter;
+    Interpreter.uniqueIntegerCounter += 1n;
+    return Type.integer(result);
+  },
+  // End unique_integer/0
   // Deps: []
 };
 

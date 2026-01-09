@@ -3348,4 +3348,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :tuple_to_list, [:abc]}
     end
   end
+
+  describe "unique_integer/0" do
+    test "returns a unique integer each time it is called" do
+      int1 = :erlang.unique_integer()
+      int2 = :erlang.unique_integer()
+      int3 = :erlang.unique_integer()
+
+      # Verify that no two values are the same
+      assert int1 != int2
+      assert int2 != int3
+      assert int1 != int3
+    end
+
+    test "returns integers in increasing order" do
+      int1 = :erlang.unique_integer()
+      int2 = :erlang.unique_integer()
+      int3 = :erlang.unique_integer()
+
+      # Verify monotonicity (standard for erlang:unique_integer)
+      assert int1 < int2
+      assert int2 < int3
+    end
+  end
 end

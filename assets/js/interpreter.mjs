@@ -89,7 +89,10 @@ export default class Interpreter {
       ],
     ]);
 
-    return `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(map, opts)}`;
+    return `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
+      map,
+      opts,
+    )}`;
   }
 
   static buildMatchErrorMsg(right) {
@@ -1284,7 +1287,10 @@ export default class Interpreter {
     const stepStr =
       step.value > 1 ? `//${Interpreter.inspect(step, opts)}` : "";
 
-    return `${Interpreter.inspect(first, opts)}..${Interpreter.inspect(last, opts)}${stepStr}`;
+    return `${Interpreter.inspect(first, opts)}..${Interpreter.inspect(
+      last,
+      opts,
+    )}${stepStr}`;
   }
 
   static #inspectReference(term, _opts) {
@@ -1293,7 +1299,9 @@ export default class Interpreter {
       term.creation,
     );
 
-    return `#Reference<${localIncarnationId}.${term.idWords.toReversed().join(".")}>`;
+    return `#Reference<${localIncarnationId}.${term.idWords
+      .toReversed()
+      .join(".")}>`;
   }
 
   static #inspectTuple(term, opts) {
@@ -1503,6 +1511,8 @@ export default class Interpreter {
       "no cond clause evaluated to a truthy value",
     );
   }
+
+  static uniqueIntegerCounter = 0n;
 }
 
 const $ = Interpreter;

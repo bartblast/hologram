@@ -1502,7 +1502,7 @@ describe("Erlang", () => {
 
     // TODO: remove this test when other encodings are implemented
     it("raises ArgumentError if the second arg is not equal to :utf8", () => {
-      assert.throw(
+      assert.throws(
         () => testedFun(atom, Type.atom("latin1")),
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
@@ -5198,6 +5198,30 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
+    });
+  });
+
+  describe("erlang:unique_integer/0", () => {
+    beforeEach(() => {
+      Interpreter.uniqueIntegerCounter = 0n;
+    });
+
+    it("returns a boxed integer", () => {
+      const result = Erlang["unique_integer/0"]();
+      assert.strictEqual(result.type, "integer");
+      assert.strictEqual(typeof result.value, "bigint");
+    });
+
+    it("guarantees uniqueness across multiple calls (Uniqueness Pattern)", () => {
+      const count = 100;
+      const values = [];
+
+      for (let i = 0; i < count; i++) {
+        values.push(Erlang["unique_integer/0"]().value);
+      }
+
+      const uniqueSet = new Set(values);
+      assert.strictEqual(uniqueSet.size, count, "Duplicate integer detected!");
     });
   });
 });
