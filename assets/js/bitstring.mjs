@@ -713,7 +713,7 @@ export default class Bitstring {
 
   static toCodepoints(bitstring) {
     $.maybeSetTextFromBytes(bitstring);
-    return Type.iolist(bitstring.text);
+    return Type.charlist(bitstring.text);
   }
 
   static toFloat(bitstring, endianness) {

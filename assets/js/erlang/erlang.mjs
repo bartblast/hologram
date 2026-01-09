@@ -278,6 +278,38 @@ const Erlang = {
 
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
+  // Start apply/3
+  "apply/3": (module, fun, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        `you attempted to apply a function named ${Interpreter.inspect(fun)} on ${Interpreter.inspect(module)}. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module`,
+      );
+    }
+
+    if (!Type.isAtom(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const context = Interpreter.buildContext({module: Type.nil()});
+
+    return Interpreter.callNamedFunction(module, fun, args, context);
+  },
+  // End apply/3
+  // Deps: []
 
   // Start atom_to_binary/1
   "atom_to_binary/1": (atom) => {
@@ -386,8 +418,8 @@ const Erlang = {
     );
   },
   // End binary_part/3
-  // Deps: []
 
+  // Deps: []
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
@@ -546,6 +578,20 @@ const Erlang = {
   // End bit_size/1
   // Deps: []
 
+  // Start bor/2
+  "bor/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.bor(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value | integer2.value);
+  },
+  // End bor/2
+  // Deps: []
+
   // Start bsr/2
   "bsr/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
@@ -566,6 +612,20 @@ const Erlang = {
     }
   },
   // End bsr/2
+  // Deps: []
+
+  // Start bxor/2
+  "bxor/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.bxor(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value ^ integer2.value);
+  },
+  // End bxor/2
   // Deps: []
 
   // Start byte_size/1
@@ -713,11 +773,13 @@ const Erlang = {
     let scientific = ERLANG_DEFAULT_SCIENTIFIC;
     let isCompact = false;
     let isShort = false;
+    let lastOpt = null;
 
     // Parse options
     for (const opt of opts.data) {
       if (Interpreter.isStrictlyEqual(opt, Type.atom("short"))) {
         isShort = true;
+        lastOpt = "short";
         continue;
       }
 
@@ -741,17 +803,31 @@ const Erlang = {
         value.value <= 253n
       ) {
         decimals = Number(value.value);
+        lastOpt = "decimals";
       } else if (
         Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
         Type.isInteger(value) &&
         value.value <= 249n
       ) {
         scientific = Number(value.value);
+        lastOpt = "scientific";
       } else {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       }
+    }
+
+    // Only keep the last formatting option, reset others to defaults
+    if (lastOpt === "short") {
+      decimals = null;
+      scientific = ERLANG_DEFAULT_SCIENTIFIC;
+    } else if (lastOpt === "decimals") {
+      isShort = false;
+      scientific = ERLANG_DEFAULT_SCIENTIFIC;
+    } else if (lastOpt === "scientific") {
+      isShort = false;
+      decimals = null;
     }
 
     // Check if we have negative zero (JavaScript preserves signed zero)
@@ -1327,17 +1403,6 @@ const Erlang = {
   // End not/1
   // Deps: []
 
-  // Start xor/2
-  "xor/2": (left, right) => {
-    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
-      Interpreter.raiseArgumentError("argument error");
-    }
-
-    return Type.boolean(left.value != right.value);
-  },
-  // End xor/2
-  // Deps: []
-
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1522,6 +1587,15 @@ const Erlang = {
     return Type.integer(result);
   },
   // End unique_integer/0
+  // Start xor/2
+  "xor/2": (left, right) => {
+    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Type.boolean(left.value != right.value);
+  },
+  // End xor/2
   // Deps: []
 };
 
