@@ -90,6 +90,33 @@ const Erlang_Sets = {
   // End new/1
   // Deps: [:sets._validate_opts/1]
 
+  // Start filter/2
+  "filter/2": (fun, set) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1 || !Type.isMap(set)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2", [fun, set]),
+      );
+    }
+
+    const predicate = ([key, _value]) => {
+      const result = Interpreter.callAnonymousFunction(fun, [key]);
+
+      if (!Type.isBoolean(result)) {
+        Interpreter.raiseErlangError(
+          Interpreter.buildErlangErrorMsg(
+            `{:bad_filter, ${Interpreter.inspect(result)}}`,
+          ),
+        );
+      }
+
+      return Type.isTrue(result);
+    };
+
+    return Type.map(Object.values(set.data).filter(predicate));
+  },
+  // End filter/2
+  // Deps: []
+
   // Start to_list/1
   "to_list/1": (set) => {
     if (!Type.isMap(set)) {
