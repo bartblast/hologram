@@ -1,13 +1,11 @@
 #!/usr/bin/env elixir
 
-# Script to compare Elixir and JavaScript upcase mappings and detect inconsistencies
+# Script to compare Elixir and JavaScript uppercase mapping and detect inconsistencies
 
-ex_file = Path.join(__DIR__, "upcase_mapping_elixir.txt")
-js_file = Path.join(__DIR__, "upcase_mapping_javascript.txt")
+ex_file = Path.join(__DIR__, "mapping_elixir.txt")
+js_file = Path.join(__DIR__, "mapping_javascript.txt")
 
-IO.puts(
-  "Comparing mappings from upcase_mapping_elixir.txt and upcase_mapping_javascript.txt...\n"
-)
+IO.puts("Comparing mappings from mapping_elixir.txt and mapping_javascript.txt...\n")
 
 parse_file = fn filename ->
   filename
@@ -20,26 +18,26 @@ parse_file = fn filename ->
   |> Map.new()
 end
 
-elixir_mappings = parse_file.(ex_file)
-js_mappings = parse_file.(js_file)
+elixir_mapping = parse_file.(ex_file)
+js_mapping = parse_file.(js_file)
 
 inconsistencies =
-  elixir_mappings
+  elixir_mapping
   |> Enum.filter(fn {codepoint, elixir_result} ->
-    js_result = Map.get(js_mappings, codepoint)
+    js_result = Map.get(js_mapping, codepoint)
     elixir_result != js_result
   end)
   |> Enum.sort_by(fn {codepoint, _elixir_result} -> codepoint end)
 
 header = [
   "# NOTE: Due to Unicode character width variations, the formatting will appear",
-  "# broken in text editors. For proper viewing, use: cat mappings_comparison.txt",
+  "# broken in text editors. For proper viewing, use: cat comparison.txt",
   String.duplicate("=", 80),
   ""
 ]
 
 output = [
-  "Total codepoints: #{map_size(elixir_mappings)}",
+  "Total codepoints: #{map_size(elixir_mapping)}",
   "Inconsistencies found: #{length(inconsistencies)}\n",
   "Inconsistencies:\n",
   "Codepoint | Char    | Elixir Result | JavaScript Result",
@@ -49,7 +47,7 @@ output = [
 inconsistency_lines =
   inconsistencies
   |> Enum.map(fn {codepoint, elixir_result} ->
-    js_result = Map.get(js_mappings, codepoint)
+    js_result = Map.get(js_mapping, codepoint)
 
     char_display =
       try do
@@ -64,8 +62,8 @@ inconsistency_lines =
 
 output_content = Enum.join(header ++ output ++ inconsistency_lines, "\n")
 
-output_file = Path.join(__DIR__, "mappings_comparison.txt")
+output_file = Path.join(__DIR__, "comparison.txt")
 File.write!(output_file, output_content)
 
 IO.puts(output_content)
-IO.puts("\nResults written to mappings_comparison.txt")
+IO.puts("\nResults written to comparison.txt")

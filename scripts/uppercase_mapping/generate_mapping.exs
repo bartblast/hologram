@@ -3,12 +3,12 @@
 # Script to generate character to uppercase mapping using :string.titlecase/1
 # Output format: codepoint:uppercased_codepoint(s) or codepoint:-
 
-output_file = Path.join(__DIR__, "upcase_mappings_elixir.txt")
+output_file = Path.join(__DIR__, "mapping_elixir.txt")
 
-# Generate mappings for all Unicode codepoints (0 to 0x10FFFF = 1,114,111)
+# Generate mapping for all Unicode codepoints (0 to 0x10FFFF = 1,114,111)
 max_codepoint = 0x10FFFF
 
-IO.puts("Generating upcase mapping for codepoints 0 to #{max_codepoint}...")
+IO.puts("Generating uppercase mapping for codepoints 0 to #{max_codepoint}...")
 
 output =
   0..max_codepoint

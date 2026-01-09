@@ -1,5 +1,5 @@
 # NOTE: Due to Unicode character width variations, the formatting will appear
-# broken in text editors. For proper viewing, use: cat mappings_comparison.txt
+# broken in text editors. For proper viewing, use: cat comparison.txt
 ================================================================================
 
 Total codepoints: 1114112
