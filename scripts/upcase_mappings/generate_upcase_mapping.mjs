@@ -25,7 +25,7 @@ for (let codepoint = 0; codepoint <= maxCodepoint; codepoint++) {
     const resultCodepoints = Array.from(result).map((c) => c.codePointAt(0));
     const resultStr = resultCodepoints.join(",");
     mappings.push(`${codepoint}:${resultStr}`);
-  } catch (_error) {
+  } catch {
     mappings.push(`${codepoint}:-`);
   }
 }
