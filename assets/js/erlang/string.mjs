@@ -12,7 +12,7 @@ const Erlang_String = {
   // Start titlecase/1
   "titlecase/1": (subject) => {
     // Custom uppercase mapping where Erlang differs from JavaScript's toUpperCase()
-    // These mapping is extracted from scripts/uppercase_mapping/comparison.txt
+    // This mapping is extracted from scripts/uppercase_mapping/comparison.txt
     // Format: { codepoint: [codepoints] }
     const MAPPING = {
       223: [83, 115],
@@ -179,7 +179,117 @@ const Erlang_String = {
       68997: [68997],
     };
 
-    if (!Type.isBinary(subject)) {
+    // Helper: Validate codepoint is not in surrogate pair range
+    const validateCodepoint = (codepoint) => {
+      // Check if the codepoint is in the invalid range (55296-57343 / 0xD800-0xDFFF)
+      // These are not valid Unicode scalar values and cannot be encoded in UTF-8
+      if (codepoint >= 55296 && codepoint <= 57343) {
+        Interpreter.raiseArgumentError(
+          `argument error: ${Interpreter.inspect(subject)}`,
+        );
+      }
+    };
+
+    // Helper: Uppercase a single codepoint and return array of uppercased codepoints
+    const uppercaseCodepoint = (codepoint) => {
+      if (Object.hasOwn(MAPPING, codepoint)) {
+        return MAPPING[codepoint];
+      } else {
+        const char = String.fromCodePoint(codepoint);
+        const uppercased = char.toUpperCase();
+        return Array.from(uppercased).map((c) => c.codePointAt(0));
+      }
+    };
+
+    // Helper: Extract first character and rest from text string
+    const extractFirstChar = (text) => {
+      const firstChar = Array.from(text)[0];
+      const firstCodePoint = firstChar.codePointAt(0);
+      const restOfString = text.slice(firstChar.length);
+      return {firstCodePoint, restOfString};
+    };
+
+    // Handle binary strings
+    if (Type.isBinary(subject)) {
+      const text = Bitstring.toText(subject);
+
+      if (text === false) {
+        Interpreter.raiseArgumentError(
+          `argument error: ${Interpreter.inspect(subject)}`,
+        );
+      }
+
+      if (text.length === 0) {
+        return Type.bitstring("");
+      }
+
+      const {firstCodePoint, restOfString} = extractFirstChar(text);
+      validateCodepoint(firstCodePoint);
+
+      const uppercasedCodepoints = uppercaseCodepoint(firstCodePoint);
+      const uppercasedFirst = String.fromCodePoint(...uppercasedCodepoints);
+
+      return Type.bitstring(uppercasedFirst + restOfString);
+    }
+
+    // Handle lists (charlists/iolists)
+    if (Type.isList(subject)) {
+      if (subject.data.length === 0) {
+        return Type.list();
+      }
+
+      const firstElement = subject.data[0];
+      const rest = subject.data.slice(1);
+
+      // If first element is an integer codepoint
+      if (Type.isInteger(firstElement)) {
+        const codepoint = Number(firstElement.value);
+        validateCodepoint(codepoint);
+
+        const uppercasedCodepoints = uppercaseCodepoint(codepoint).map((cp) =>
+          Type.integer(cp),
+        );
+
+        return Type.list([...uppercasedCodepoints, ...rest]);
+      }
+
+      // If first element is a binary string
+      if (Type.isBinary(firstElement)) {
+        const text = Bitstring.toText(firstElement);
+
+        if (text === false) {
+          Interpreter.raiseArgumentError(
+            `argument error: ${Interpreter.inspect(subject)}`,
+          );
+        }
+
+        if (text.length === 0) {
+          Interpreter.raiseFunctionClauseError(
+            Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1 ", [
+              subject,
+            ]),
+          );
+        }
+
+        const {firstCodePoint, restOfString} = extractFirstChar(text);
+        validateCodepoint(firstCodePoint);
+
+        const uppercasedCodepoints = uppercaseCodepoint(firstCodePoint).map(
+          (cp) => Type.integer(cp),
+        );
+
+        const result = [...uppercasedCodepoints];
+
+        if (restOfString.length > 0) {
+          result.push(Type.bitstring(restOfString));
+        }
+
+        result.push(...rest);
+
+        return Type.list(result);
+      }
+
+      // If first element is neither integer nor binary, raise FunctionClauseError
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
           subject,
@@ -187,40 +297,10 @@ const Erlang_String = {
       );
     }
 
-    const text = Bitstring.toText(subject);
-
-    if (text === false) {
-      Interpreter.raiseArgumentError(
-        `argument error: ${Interpreter.inspect(subject)}`,
-      );
-    }
-
-    if (text.length === 0) {
-      return Type.bitstring("");
-    }
-
-    const firstChar = Array.from(text)[0];
-    const firstCodePoint = firstChar.codePointAt(0);
-    const restOfString = text.slice(firstChar.length);
-
-    // Check if the first codepoint is in the invalid range (55296-57343 / 0xD800-0xDFFF)
-    // These are not valid Unicode scalar values and cannot be encoded in UTF-8
-    if (firstCodePoint >= 55296 && firstCodePoint <= 57343) {
-      Interpreter.raiseArgumentError(
-        `argument error: ${Interpreter.inspect(subject)}`,
-      );
-    }
-
-    let uppercasedFirst;
-
-    if (Object.hasOwn(MAPPING, firstCodePoint)) {
-      const mappedCodepoints = MAPPING[firstCodePoint];
-      uppercasedFirst = String.fromCodePoint(...mappedCodepoints);
-    } else {
-      uppercasedFirst = firstChar.toUpperCase();
-    }
-
-    return Type.bitstring(uppercasedFirst + restOfString);
+    // If subject is neither binary nor list, raise FunctionClauseError
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [subject]),
+    );
   },
   // End titlecase/1
   // Deps: []
