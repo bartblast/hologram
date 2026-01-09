@@ -102,6 +102,93 @@ const Erlang_Filename = {
   },
   // End flatten/1
   // Deps: [:filename._do_flatten/2]
+
+  // Start split/1
+  "split/1": (filename) => {
+    const DIR_SEPARATOR_BYTE = 47;
+
+    // flatten/1 handles argument type checking and raises
+    // FunctionClauseError if needed.
+    const flattened = Erlang_Filename["flatten/1"](filename);
+    const flattenedIsBinary = Type.isBinary(flattened);
+
+    // Early return for empty input
+    if (
+      flattenedIsBinary
+        ? Bitstring.isEmpty(flattened)
+        : flattened.data.length === 0
+    ) {
+      return Type.list([]);
+    }
+
+    // TODO: Once implemented, use :binary.split/3 on <<"/">> with [global] option
+    // and filter out empty components.
+
+    const splitPathBytes = (bytes) => {
+      const {parts, currentPart} = [...bytes].reduce(
+        (acc, byte, index) => {
+          if (byte === DIR_SEPARATOR_BYTE) {
+            // Handle leading slash - add "/" component
+            if (index === 0) {
+              return {
+                parts: [...acc.parts, [DIR_SEPARATOR_BYTE]],
+                currentPart: [],
+              };
+            }
+            // Add non-empty accumulated part
+            if (acc.currentPart.length > 0) {
+              return {
+                parts: [...acc.parts, acc.currentPart],
+                currentPart: [],
+              };
+            }
+            // Skip consecutive slashes
+            return acc;
+          }
+
+          // Accumulate non-separator byte
+          return {
+            parts: acc.parts,
+            currentPart: [...acc.currentPart, byte],
+          };
+        },
+        {parts: [], currentPart: []},
+      );
+
+      // Add final part if non-empty (trailing slashes are ignored)
+      return currentPart.length > 0 ? [...parts, currentPart] : parts;
+    };
+
+    // Convert to binary and split into byte arrays
+    const binary = flattenedIsBinary
+      ? flattened
+      : Erlang["iolist_to_binary/1"](flattened);
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const parts = splitPathBytes(binary.bytes);
+
+    // Map byte arrays to appropriate output format
+    const resultParts = parts.map((partBytes) => {
+      const partBinary = Bitstring.fromBytes(partBytes);
+      Bitstring.maybeSetTextFromBytes(partBinary);
+
+      // Handle invalid UTF-8
+      if (partBinary.text === false) {
+        return flattenedIsBinary
+          ? partBinary // Preserve raw bytes in bitstring
+          : Type.list([...partBytes].map((byte) => Type.integer(byte)));
+      }
+
+      // Valid UTF-8
+      return flattenedIsBinary
+        ? Type.bitstring(partBinary.text)
+        : Bitstring.toCodepoints(partBinary);
+    });
+
+    return Type.list(resultParts);
+  },
+  // End split/1
+  // Deps: [:filename.flatten/1, :erlang.iolist_to_binary/1]
 };
 
 export default Erlang_Filename;
