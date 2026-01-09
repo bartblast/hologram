@@ -201,6 +201,14 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.intersect(%{}, :abc)
       end
     end
+
+    test "doesn't mutate the inputs" do
+      map1 = %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
+      map2 = %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+      :maps.intersect(map1, map2)
+      assert map1 == %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
+      assert map2 == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+    end
   end
 
   describe "iterator/1" do

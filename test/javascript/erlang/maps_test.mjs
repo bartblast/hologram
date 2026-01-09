@@ -428,6 +428,47 @@ describe("Erlang_Maps", () => {
         "expected a map, got: :abc",
       );
     });
+    it("doesn't mutate the inputs", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.bitstring("a"), Type.integer(3)],
+        [Type.integer(1), Type.integer(5)],
+        [Type.float(1.0), Type.integer(7)],
+        [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(9)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(2)],
+        [Type.bitstring("a"), Type.integer(4)],
+        [Type.integer(1), Type.integer(6)],
+        [Type.float(1.0), Type.integer(8)],
+        [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(10)],
+      ]);
+
+      intersect(map1, map2);
+
+      assert.deepStrictEqual(
+        map1,
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.bitstring("a"), Type.integer(3)],
+          [Type.integer(1), Type.integer(5)],
+          [Type.float(1.0), Type.integer(7)],
+          [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(9)],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        map2,
+        Type.map([
+          [Type.atom("a"), Type.integer(2)],
+          [Type.bitstring("a"), Type.integer(4)],
+          [Type.integer(1), Type.integer(6)],
+          [Type.float(1.0), Type.integer(8)],
+          [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(10)],
+        ]),
+      );
+    });
   });
 
   describe("is_key/2", () => {
