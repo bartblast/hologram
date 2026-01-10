@@ -5655,4 +5655,28 @@ describe("Erlang", () => {
       );
     });
   });
+
+  describe("unique_integer/0", () => {
+    const unique_integer = Erlang["unique_integer/0"];
+
+    beforeEach(() => {
+      Interpreter.uniqueIntegerCounter = 0n;
+    });
+
+    it("returns a boxed integer with an incremented BigInt value", () => {
+      const result = unique_integer();
+
+      assert.deepStrictEqual(result, Type.integer(1n));
+    });
+
+    it("guarantees that every call produces a different value", () => {
+      const int1 = unique_integer();
+      const int2 = unique_integer();
+      const int3 = unique_integer();
+
+      assert.notDeepEqual(int1, int2);
+      assert.notDeepEqual(int2, int3);
+      assert.notDeepEqual(int1, int3);
+    });
+  });
 });
