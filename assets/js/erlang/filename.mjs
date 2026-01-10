@@ -130,33 +130,30 @@ const Erlang_Filename = {
           if (byte === DIR_SEPARATOR_BYTE) {
             // Handle leading slash - add "/" component
             if (index === 0) {
-              return {
-                parts: [...acc.parts, [DIR_SEPARATOR_BYTE]],
-                currentPart: [],
-              };
+              acc.parts.push([DIR_SEPARATOR_BYTE]);
+              return acc;
             }
             // Add non-empty accumulated part
             if (acc.currentPart.length > 0) {
-              return {
-                parts: [...acc.parts, acc.currentPart],
-                currentPart: [],
-              };
+              acc.parts.push(acc.currentPart);
+              acc.currentPart = [];
             }
-            // Skip consecutive slashes
             return acc;
           }
 
           // Accumulate non-separator byte
-          return {
-            parts: acc.parts,
-            currentPart: [...acc.currentPart, byte],
-          };
+          acc.currentPart.push(byte);
+          return acc;
         },
         {parts: [], currentPart: []},
       );
 
       // Add final part if non-empty (trailing slashes are ignored)
-      return currentPart.length > 0 ? [...parts, currentPart] : parts;
+      if (currentPart.length > 0) {
+        parts.push(currentPart);
+      }
+
+      return parts;
     };
 
     // Convert to binary and split into byte arrays
