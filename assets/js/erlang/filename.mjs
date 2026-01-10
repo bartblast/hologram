@@ -133,7 +133,7 @@ const Erlang_Filename = {
     };
 
     const handleListFilename = (flattened) => {
-      const {component, isValidUtf8} = getBinaryAndValidateUtf8(
+      const {component, basenameBinary, isValidUtf8} = getBinaryAndValidateUtf8(
         flattened,
         false,
       );
@@ -147,7 +147,6 @@ const Erlang_Filename = {
         return Type.list([...component].map((byte) => Type.integer(byte)));
       }
 
-      const basenameBinary = Bitstring.fromBytes(component);
       return Bitstring.toCodepoints(basenameBinary);
     };
 
