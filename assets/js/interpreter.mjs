@@ -15,7 +15,7 @@ export default class Interpreter {
     const keyfindRes = Erlang_Lists["keyfind/3"](
       key,
       Type.integer(1),
-      keywordList,
+      keywordList
     );
 
     return Type.isTuple(keyfindRes) ? keyfindRes.data[1] : defaultValue;
@@ -34,7 +34,7 @@ export default class Interpreter {
       !Type.isTuple(term)
     ) {
       const message = `Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: ${Interpreter.inspect(
-        term,
+        term
       )}`;
 
       throw new HologramInterpreterError(message);
@@ -48,8 +48,8 @@ export default class Interpreter {
   }
 
   static buildContext(data = {}) {
-    const {module, vars} = data;
-    const context = {module: null, vars: {}};
+    const { module, vars } = data;
+    const context = { module: null, vars: {} };
 
     if (module) {
       context.module = Type.isAlias(module) ? module : Type.alias(module);
@@ -74,7 +74,7 @@ export default class Interpreter {
       argsInfo = Array.from(args).reduce(
         (acc, arg, idx) =>
           `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
-        `\n\nThe following arguments were given to ${funName}:\n`,
+        `\n\nThe following arguments were given to ${funName}:\n`
       );
     }
 
@@ -91,7 +91,7 @@ export default class Interpreter {
 
     return `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
       map,
-      opts,
+      opts
     )}`;
   }
 
@@ -119,7 +119,7 @@ export default class Interpreter {
     module,
     functionName,
     arity,
-    isModuleAvailable = true,
+    isModuleAvailable = true
   ) {
     const moduleName = Interpreter.inspect(module);
 
@@ -160,8 +160,8 @@ export default class Interpreter {
     Interpreter.raiseFunctionClauseError(
       Interpreter.buildFunctionClauseErrorMsg(
         `anonymous fn/${fun.arity}`,
-        argsArray,
-      ),
+        argsArray
+      )
     );
   }
 
@@ -183,8 +183,8 @@ export default class Interpreter {
           module,
           functionName.value,
           arity,
-          false,
-        ),
+          false
+        )
       );
     }
 
@@ -196,8 +196,8 @@ export default class Interpreter {
         Interpreter.buildUndefinedFunctionErrorMsg(
           module,
           functionName.value,
-          arity,
-        ),
+          arity
+        )
       );
     }
 
@@ -230,7 +230,7 @@ export default class Interpreter {
   static cloneContext(context) {
     // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
     // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
-    return {module: context.module, vars: {...context.vars}};
+    return { module: context.module, vars: { ...context.vars } };
   }
 
   // Implements structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
@@ -253,8 +253,8 @@ export default class Interpreter {
         return term1.value == term2.value
           ? 0
           : term1.value < term2.value
-            ? -1
-            : 1;
+          ? -1
+          : 1;
 
       case "bitstring":
         return Bitstring.compare(term1, term2);
@@ -274,12 +274,12 @@ export default class Interpreter {
     collectable,
     unique,
     mapper,
-    context,
+    context
   ) {
     const generatorsCount = generators.length;
 
     const sets = generators.map(
-      (generator) => Elixir_Enum["to_list/1"](generator.body(context)).data,
+      (generator) => Elixir_Enum["to_list/1"](generator.body(context)).data
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
@@ -290,7 +290,7 @@ export default class Interpreter {
           Interpreter.isMatched(
             generators[i].match,
             combination[i],
-            contextClone,
+            contextClone
           )
         ) {
           Interpreter.updateVarsToMatchedValues(contextClone);
@@ -349,7 +349,7 @@ export default class Interpreter {
     functionName,
     arity,
     visibility,
-    clauses,
+    clauses
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
@@ -370,7 +370,7 @@ export default class Interpreter {
       const args = Type.list([...arguments]);
 
       for (const clause of clauses) {
-        const context = Interpreter.buildContext({module: moduleExName});
+        const context = Interpreter.buildContext({ module: moduleExName });
         const pattern = Type.list(clause.params(context));
 
         if (Interpreter.isMatched(pattern, args, context)) {
@@ -385,7 +385,7 @@ export default class Interpreter {
             if (globalThis.hologram.isProfilingEnabled) {
               console.log(
                 `Hologram: function ${mfa} executed in`,
-                PerformanceTimer.diff(startTime),
+                PerformanceTimer.diff(startTime)
               );
             }
 
@@ -395,7 +395,7 @@ export default class Interpreter {
       }
 
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments)
       );
     };
 
@@ -418,7 +418,7 @@ export default class Interpreter {
     moduleExName,
     functionArityStr,
     visibility,
-    fun,
+    fun
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
@@ -465,7 +465,7 @@ export default class Interpreter {
     return new Function("context", "Type", "Interpreter", code)(
       context,
       Type,
-      Interpreter,
+      Interpreter
     );
   }
 
@@ -642,7 +642,7 @@ export default class Interpreter {
     }
 
     if (Interpreter.#hasUnresolvedVariablePattern(right)) {
-      return {type: "match_pattern", left: left, right: right};
+      return { type: "match_pattern", left: left, right: right };
     }
 
     if (left.type === "match_pattern") {
@@ -651,7 +651,7 @@ export default class Interpreter {
         right,
         left.left,
         context,
-        raiseMatchError,
+        raiseMatchError
       );
     }
 
@@ -664,7 +664,7 @@ export default class Interpreter {
         right,
         left,
         context,
-        raiseMatchError,
+        raiseMatchError
       );
     }
 
@@ -673,7 +673,7 @@ export default class Interpreter {
         right,
         left,
         context,
-        raiseMatchError,
+        raiseMatchError
       );
     }
 
@@ -682,7 +682,7 @@ export default class Interpreter {
         right,
         left,
         context,
-        raiseMatchError,
+        raiseMatchError
       );
     }
 
@@ -695,7 +695,7 @@ export default class Interpreter {
         right,
         left,
         context,
-        raiseMatchError,
+        raiseMatchError
       );
     }
 
@@ -724,8 +724,8 @@ export default class Interpreter {
             Interpreter.buildUndefinedFunctionErrorMsg(
               target.__exModule__,
               functionName,
-              arity,
-            ),
+              arity
+            )
           );
         },
       };
@@ -770,7 +770,7 @@ export default class Interpreter {
   static raiseArithmeticError(blame = null) {
     Interpreter.raiseError(
       "ArithmeticError",
-      `bad argument in arithmetic expression${blame ? `: ${blame}` : ""}`,
+      `bad argument in arithmetic expression${blame ? `: ${blame}` : ""}`
     );
   }
 
@@ -779,7 +779,7 @@ export default class Interpreter {
 
     const argumentNounPluralized = Utils.naiveNounPlural(
       "argument",
-      args.length,
+      args.length
     );
 
     const inspectedArgs = args.map((arg) => Interpreter.inspect(arg));
@@ -791,7 +791,7 @@ export default class Interpreter {
 
     Interpreter.raiseError(
       "BadArityError",
-      `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`,
+      `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`
     );
   }
 
@@ -854,7 +854,7 @@ export default class Interpreter {
     catchClauses,
     elseClauses,
     afterBlock,
-    context,
+    context
   ) {
     let result;
 
@@ -876,7 +876,7 @@ export default class Interpreter {
       if (afterBlock) {
         // eslint-disable-next-line no-unsafe-finally
         throw new HologramInterpreterError(
-          '"try" expression after block is not yet implemented in Hologram',
+          '"try" expression after block is not yet implemented in Hologram'
         );
       }
     }
@@ -886,7 +886,7 @@ export default class Interpreter {
     } else {
       // TODO: handle else clauses
       throw new HologramInterpreterError(
-        '"try" expression else clauses are not yet implemented in Hologram',
+        '"try" expression else clauses are not yet implemented in Hologram'
       );
     }
   }
@@ -901,7 +901,7 @@ export default class Interpreter {
   // TODO: finish implementing
   static with() {
     throw new HologramInterpreterError(
-      '"with" expression is not yet implemented in Hologram',
+      '"with" expression is not yet implemented in Hologram'
     );
   }
 
@@ -1025,7 +1025,7 @@ export default class Interpreter {
     for (let i = 0; i < tuple1.data.length; ++i) {
       const itemOrder = Interpreter.compareTerms(
         tuple1.data[i],
-        tuple2.data[i],
+        tuple2.data[i]
       );
 
       if (itemOrder !== 0) {
@@ -1109,7 +1109,7 @@ export default class Interpreter {
 
     if (termType === "list" || termType === "tuple") {
       return term.data.some((item) =>
-        Interpreter.#hasUnresolvedVariablePattern(item),
+        Interpreter.#hasUnresolvedVariablePattern(item)
       );
     }
 
@@ -1162,7 +1162,7 @@ export default class Interpreter {
 
     Bitstring.maybeSetBytesFromText(term);
 
-    const {bytes, leftoverBitCount} = term;
+    const { bytes, leftoverBitCount } = term;
 
     if (leftoverBitCount === 0) {
       return `<<${bytes.join(", ")}>>`;
@@ -1194,7 +1194,7 @@ export default class Interpreter {
           (item) =>
             Interpreter.inspect(item.data[0], opts).substring(1) +
             ": " +
-            Interpreter.inspect(item.data[1], opts),
+            Interpreter.inspect(item.data[1], opts)
         )
         .join(", ") +
       "]"
@@ -1240,19 +1240,19 @@ export default class Interpreter {
     const optSortMaps =
       Interpreter.accessKeywordListElement(
         optCustomOptions,
-        Type.atom("sort_maps"),
+        Type.atom("sort_maps")
       ) || Type.boolean(false);
 
     if (Type.isTrue(optSortMaps)) {
       term = Type.map(
         Erlang_Lists["sort/1"](Erlang_Maps["to_list/1"](term)).data.map(
-          (tuple) => tuple.data,
-        ),
+          (tuple) => tuple.data
+        )
       );
     }
 
     const isAtomKeyMap = Object.values(term.data).every(([key, _value]) =>
-      Type.isAtom(key),
+      Type.isAtom(key)
     );
 
     let itemsStr = "";
@@ -1260,7 +1260,7 @@ export default class Interpreter {
     if (isAtomKeyMap) {
       itemsStr = Object.values(term.data)
         .map(
-          ([key, value]) => `${key.value}: ${Interpreter.inspect(value, opts)}`,
+          ([key, value]) => `${key.value}: ${Interpreter.inspect(value, opts)}`
         )
         .join(", ");
     } else {
@@ -1269,8 +1269,8 @@ export default class Interpreter {
           ([key, value]) =>
             `${Interpreter.inspect(key, opts)} => ${Interpreter.inspect(
               value,
-              opts,
-            )}`,
+              opts
+            )}`
         )
         .join(", ");
     }
@@ -1289,14 +1289,14 @@ export default class Interpreter {
 
     return `${Interpreter.inspect(first, opts)}..${Interpreter.inspect(
       last,
-      opts,
+      opts
     )}${stepStr}`;
   }
 
   static #inspectReference(term, _opts) {
     const localIncarnationId = NodeTable.getLocalIncarnationId(
       term.node,
-      term.creation,
+      term.creation
     );
 
     return `#Reference<${localIncarnationId}.${term.idWords
@@ -1395,7 +1395,7 @@ export default class Interpreter {
           decodedChunk,
           segment.value,
           context,
-          raiseMatchError,
+          raiseMatchError
         );
       } else if (segment.value.type === "match_placeholder") {
         // Match placeholder in bitstring patterns just consumes the chunk without binding
@@ -1421,7 +1421,7 @@ export default class Interpreter {
   static #matchCatchClause(_clause, _error, _context) {
     // TODO: handle catch clauses
     throw new HologramInterpreterError(
-      '"try" expression catch clauses are not yet implemented in Hologram',
+      '"try" expression catch clauses are not yet implemented in Hologram'
     );
   }
 
@@ -1487,7 +1487,7 @@ export default class Interpreter {
   static #matchRescueClause(_clause, _error, _context) {
     // TODO: handle rescue clauses
     throw new HologramInterpreterError(
-      '"try" expression rescue clauses are not yet implemented in Hologram',
+      '"try" expression rescue clauses are not yet implemented in Hologram'
     );
   }
 
@@ -1508,10 +1508,14 @@ export default class Interpreter {
   static #raiseCondClauseError() {
     Interpreter.raiseError(
       "CondClauseError",
-      "no cond clause evaluated to a truthy value",
+      "no cond clause evaluated to a truthy value"
     );
   }
   static uniqueIntegerCounter = 0n;
+
+  static resetUniqueIntegerCounter() {
+    this.uniqueIntegerCounter = 0n;
+  }
 }
 
 const $ = Interpreter;
