@@ -1331,6 +1331,154 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("mapfoldl/3", () => {
+    const fun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("elem"),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Type.tuple([
+              Erlang["*/2"](context.vars.elem, Type.integer(10)),
+              Erlang["+/2"](context.vars.acc, context.vars.elem),
+            ]);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    const mapfoldl = Erlang_Lists["mapfoldl/3"];
+    const acc = integer0;
+
+    it("mapfolds empty list", () => {
+      const result = mapfoldl(fun, acc, emptyList);
+      const expected = Type.tuple([emptyList, acc]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("mapfolds non-empty list", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const result = mapfoldl(fun, acc, list);
+
+      const expected = Type.tuple([
+        Type.list([Type.integer(10), Type.integer(20), Type.integer(30)]),
+        Type.integer(6),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl/3",
+        [Type.atom("abc"), acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(Type.atom("abc"), acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
+      const funArity1 = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return context.vars.elem;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl/3",
+        [funArity1, acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(funArity1, acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument is not a list", () => {
+      const invalidArg = Type.atom("abc");
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl_1/3",
+        [fun, acc, invalidArg],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(fun, acc, invalidArg),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl_1/3",
+        [fun, Type.integer(3), Type.integer(3)],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(fun, acc, list),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises MatchError if the anonymous function does not return a 2-element tuple", () => {
+      const invalidFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("elem"),
+              Type.variablePattern("acc"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang["+/2"](context.vars.elem, context.vars.acc);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => mapfoldl(invalidFun, acc, Type.list([integer1])),
+        "MatchError",
+        Interpreter.buildMatchErrorMsg(integer1),
+      );
+    });
+  });
+
   describe("member/2", () => {
     const member = Erlang_Lists["member/2"];
 

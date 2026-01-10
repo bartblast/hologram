@@ -9,6 +9,74 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   @moduletag :consistency
 
+  describe "filter/2" do
+    setup do
+      [
+        set: :sets.from_list([1, 2, 3], version: 2),
+        fun: fn elem -> elem > 2 end
+      ]
+    end
+
+    test "filters elements from a non-empty set", %{set: set, fun: fun} do
+      result = :sets.filter(fun, set)
+
+      assert result == :sets.from_list([3], version: 2)
+    end
+
+    test "returns an empty set if the predicate filters out all elements", %{set: set} do
+      result = :sets.filter(fn elem -> elem > 10 end, set)
+
+      assert result == :sets.from_list([], version: 2)
+    end
+
+    test "returns the same set if the predicate matches all elements", %{set: set} do
+      result = :sets.filter(fn elem -> elem > 0 end, set)
+
+      assert result == set
+    end
+
+    test "filters elements from an empty set", %{fun: fun} do
+      set = :sets.new(version: 2)
+      result = :sets.filter(fun, set)
+
+      assert result == :sets.from_list([], version: 2)
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function", %{
+      set: set
+    } do
+      expected_msg = build_function_clause_error_msg(":sets.filter/2", [:invalid, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.filter(:invalid, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with wrong arity",
+         %{set: set} do
+      wrong_arity_fun = fn x, y -> x == y end
+      expected_msg = build_function_clause_error_msg(":sets.filter/2", [wrong_arity_fun, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.filter(wrong_arity_fun, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", %{fun: fun} do
+      expected_msg = build_function_clause_error_msg(":sets.filter/2", [fun, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.filter(fun, :abc)
+      end
+    end
+
+    test "raises ErlangError if the predicate does not return a boolean", %{set: set} do
+      assert_error ErlangError, build_erlang_error_msg("{:bad_filter, :not_a_boolean}"), fn ->
+        :sets.filter(fn _elem -> :not_a_boolean end, set)
+      end
+    end
+  end
+
   describe "from_list/2" do
     setup do
       [opts: [{:version, 2}]]
