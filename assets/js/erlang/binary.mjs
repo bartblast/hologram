@@ -46,15 +46,15 @@ const Erlang_Binary = {
   // Start compile_pattern/1
   "compile_pattern/1": (pattern) => {
     if (Type.isBinary(pattern)) {
-      return Erlang_Binary._boyer_moore_pattern_matcher(pattern);
+      return Erlang_Binary["_boyer_moore_pattern_matcher/1"](pattern);
     } else if (
       Type.isList(pattern) &&
       pattern.data.length > 0 &&
       pattern.data.every((i) => Type.isBinary(i))
     ) {
-      return pattern.length == 1
-        ? Erlang_Binary._boyer_moore_pattern_matcher(pattern.data[0])
-        : Erlang_Binary._aho_corasick_pattern_matcher(pattern);
+      return pattern.data.length == 1
+        ? Erlang_Binary["_boyer_moore_pattern_matcher/1"](pattern.data[0])
+        : Erlang_Binary["_aho_corasick_pattern_matcher/1"](pattern);
     }
 
     Interpreter.raiseArgumentError("is not a valid pattern");
