@@ -519,18 +519,19 @@ describe("Erlang_Lists", () => {
           ],
           guards: [],
           body: (context) => {
-            return Erlang["+/2"](context.vars.acc, context.vars.elem);
+            return Type.list([context.vars.elem, ...context.vars.acc.data]);
           },
         },
       ],
       contextFixture(),
     );
 
-    const acc = Type.integer(0);
+    const acc = Type.list();
 
     it("reduces empty list", () => {
       const result = foldl(fun, acc, emptyList);
-      assert.deepStrictEqual(result, acc);
+
+      assert.deepStrictEqual(result, emptyList);
     });
 
     it("reduces non-empty list", () => {
@@ -539,12 +540,18 @@ describe("Erlang_Lists", () => {
         Type.integer(2),
         Type.integer(3),
       ]);
+
       const result = foldl(fun, acc, list);
 
-      assert.deepStrictEqual(result, Type.integer(6));
+      const expected = Type.list([
+        Type.integer(3),
+        Type.integer(2),
+        Type.integer(1),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.foldl/3",
@@ -558,7 +565,6 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
       const fun = Type.anonymousFunction(
         1,
@@ -594,21 +600,129 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    // Client error message is intentionally different than server error message.
+    // Client-side error message is intentionally simplified.
     it("raises FunctionClauseError if the third argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
       assertBoxedError(
-        () =>
-          foldl(
-            fun,
-            acc,
-            Type.improperList([
-              Type.integer(1),
-              Type.integer(2),
-              Type.integer(3),
-            ]),
-          ),
+        () => foldl(fun, acc, list),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
+      );
+    });
+  });
+
+  describe("foldr/3", () => {
+    const foldr = Erlang_Lists["foldr/3"];
+
+    const fun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("elem"),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Type.list([context.vars.elem, ...context.vars.acc.data]);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    const acc = Type.list();
+
+    it("reduces empty list", () => {
+      const result = foldr(fun, acc, emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("reduces non-empty list", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const result = foldr(fun, acc, list);
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foldr/3",
+        [Type.atom("abc"), acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => foldr(Type.atom("abc"), acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return context.vars.x;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foldr/3",
+        [fun, acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => foldr(fun, acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    // Client-side error message is intentionally simplified.
+    it("raises FunctionClauseError if the third argument is not a list", () => {
+      assertBoxedError(
+        () => foldr(fun, acc, Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
+      );
+    });
+
+    // Client-side error message is intentionally simplified.
+    it("raises FunctionClauseError if the third argument is an improper list", () => {
+      const improperList = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assertBoxedError(
+        () => foldr(fun, acc, improperList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
       );
     });
   });
@@ -922,6 +1036,209 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keysort/2", () => {
+    const keysort = Erlang_Lists["keysort/2"];
+
+    it("returns the empty list if the input is the empty list", () => {
+      const result = keysort(Type.integer(3), emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("returns the unchanged one-element list", () => {
+      const input = Type.list([Type.tuple([Type.atom("a"), Type.integer(2)])]);
+      const result = keysort(Type.integer(1), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("returns the unchanged one-element list even if the index is out of range of the tuple", () => {
+      const input = Type.list([Type.tuple([Type.atom("a")])]);
+      const result = keysort(Type.integer(3), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("returns the unchanged one-element list even if the element is not a tuple", () => {
+      const input = Type.list([Type.atom("a")]);
+      const result = keysort(Type.integer(3), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("sorts the list by the first element of each tuple", () => {
+      const tuple1 = Type.tuple([Type.atom("b"), Type.integer(1)]);
+      const tuple2 = Type.tuple([Type.atom("a"), Type.integer(2)]);
+      const result = keysort(Type.integer(1), Type.list([tuple1, tuple2]));
+      const expected = Type.list([tuple2, tuple1]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("sorts the list by the middle element of each tuple", () => {
+      const tuple1 = Type.tuple([
+        Type.atom("a"),
+        Type.integer(2),
+        Type.atom("c"),
+      ]);
+
+      const tuple2 = Type.tuple([
+        Type.atom("b"),
+        Type.integer(1),
+        Type.atom("d"),
+      ]);
+
+      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
+      const expected = Type.list([tuple2, tuple1]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("sorts the list by the last element of each tuple", () => {
+      const tuple1 = Type.tuple([Type.atom("a"), Type.integer(2)]);
+      const tuple2 = Type.tuple([Type.atom("b"), Type.integer(1)]);
+      const result = keysort(Type.integer(2), Type.list([tuple1, tuple2]));
+      const expected = Type.list([tuple2, tuple1]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("is stable (preserves order of elements)", () => {
+      const tuple1 = Type.tuple([Type.integer(1), Type.atom("a")]);
+      const tuple2 = Type.tuple([Type.integer(1), Type.atom("b")]);
+      const tuple3 = Type.tuple([Type.integer(1), Type.atom("c")]);
+      const tuple4 = Type.tuple([Type.integer(1), Type.atom("d")]);
+      const tuple5 = Type.tuple([Type.integer(2), Type.atom("e")]);
+      const tuple6 = Type.tuple([Type.integer(3), Type.atom("f")]);
+      const tuple7 = Type.tuple([Type.integer(3), Type.atom("g")]);
+      const tuple8 = Type.tuple([Type.integer(4), Type.atom("h")]);
+
+      const tuples = Type.list([
+        tuple8,
+        tuple1,
+        tuple2,
+        tuple6,
+        tuple7,
+        tuple3,
+        tuple4,
+        tuple5,
+      ]);
+
+      const result = keysort(Type.integer(1), tuples);
+
+      const expected = Type.list([
+        tuple1,
+        tuple2,
+        tuple3,
+        tuple4,
+        tuple5,
+        tuple6,
+        tuple7,
+        tuple8,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => keysort(Type.float(1.0), emptyList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          Type.float(1.0),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is zero integer", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(0), emptyList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          Type.integer(0),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is a negative integer", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(-1), emptyList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [
+          Type.integer(-1),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises CaseClauseError if the second argument is not a list", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(1), Type.atom("a")),
+        "CaseClauseError",
+        "no case clause matching: :a",
+      );
+    });
+
+    it("raises CaseClauseError if the second argument is a two-element improper list", () => {
+      assertBoxedError(
+        () =>
+          keysort(
+            Type.integer(1),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "CaseClauseError",
+        "no case clause matching: [1 | 2]",
+      );
+    });
+
+    // Client-side error message is intentionally simplified.
+    it("raises FunctionClauseError if the second argument is a larger improper list of tuples", () => {
+      const index = Type.integer(1);
+
+      const input = Type.improperList([
+        Type.tuple([Type.atom("a")]),
+        Type.tuple([Type.atom("b")]),
+        Type.tuple([Type.atom("c")]),
+      ]);
+
+      assertBoxedError(
+        () => keysort(index, input),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysplit_1/8"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is a larger improper list of non tuples", () => {
+      assertBoxedError(
+        () => keysort(Type.integer(1), improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if an element of the list is not a tuple", () => {
+      const input = Type.list([Type.tuple([Type.atom("a")]), Type.atom("b")]);
+
+      assertBoxedError(
+        () => keysort(Type.integer(1), input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if the index is out of range for any tuple in the list", () => {
+      const input = Type.list([Type.tuple([Type.atom("a")]), Type.tuple()]);
+
+      assertBoxedError(
+        () => keysort(Type.integer(1), input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("map/2", () => {
     const fun = Type.anonymousFunction(
       1,
@@ -1010,6 +1327,154 @@ describe("Erlang_Lists", () => {
           ),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2"),
+      );
+    });
+  });
+
+  describe("mapfoldl/3", () => {
+    const fun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("elem"),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Type.tuple([
+              Erlang["*/2"](context.vars.elem, Type.integer(10)),
+              Erlang["+/2"](context.vars.acc, context.vars.elem),
+            ]);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    const mapfoldl = Erlang_Lists["mapfoldl/3"];
+    const acc = integer0;
+
+    it("mapfolds empty list", () => {
+      const result = mapfoldl(fun, acc, emptyList);
+      const expected = Type.tuple([emptyList, acc]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("mapfolds non-empty list", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const result = mapfoldl(fun, acc, list);
+
+      const expected = Type.tuple([
+        Type.list([Type.integer(10), Type.integer(20), Type.integer(30)]),
+        Type.integer(6),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl/3",
+        [Type.atom("abc"), acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(Type.atom("abc"), acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
+      const funArity1 = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return context.vars.elem;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl/3",
+        [funArity1, acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(funArity1, acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument is not a list", () => {
+      const invalidArg = Type.atom("abc");
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl_1/3",
+        [fun, acc, invalidArg],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(fun, acc, invalidArg),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.mapfoldl_1/3",
+        [fun, Type.integer(3), Type.integer(3)],
+      );
+
+      assertBoxedError(
+        () => mapfoldl(fun, acc, list),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises MatchError if the anonymous function does not return a 2-element tuple", () => {
+      const invalidFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("elem"),
+              Type.variablePattern("acc"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang["+/2"](context.vars.elem, context.vars.acc);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => mapfoldl(invalidFun, acc, Type.list([integer1])),
+        "MatchError",
+        Interpreter.buildMatchErrorMsg(integer1),
       );
     });
   });

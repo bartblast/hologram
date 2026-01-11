@@ -234,6 +234,84 @@ describe("Type", () => {
     });
   });
 
+  describe("charlist()", () => {
+    it("converts ASCII string to list of character code points", () => {
+      const result = Type.charlist("abc");
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts string with special characters to list of code points", () => {
+      const result = Type.charlist("a\nb");
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(10),
+        Type.integer(98),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts Unicode string to list of code points", () => {
+      const result = Type.charlist("😀全息图");
+
+      const expected = Type.list([
+        Type.integer(128512),
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts empty string to empty list", () => {
+      const result = Type.charlist("");
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("cloneMap()", () => {
+    it("creates a shallow clone of the map", () => {
+      const original = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const cloned = Type.cloneMap(original);
+
+      assert.deepStrictEqual(cloned, original);
+      assert.notEqual(cloned, original);
+      assert.notEqual(cloned.data, original.data);
+    });
+
+    it("modifications to the cloned map do not affect the original", () => {
+      const original = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const cloned = Type.cloneMap(original);
+
+      cloned.data[Type.encodeMapKey(Type.atom("c"))] = [
+        Type.atom("c"),
+        Type.integer(3),
+      ];
+
+      assert.equal(Object.keys(original.data).length, 2);
+      assert.equal(Object.keys(cloned.data).length, 3);
+    });
+  });
+
   describe("commandStruct()", () => {
     it("default values", () => {
       assert.deepStrictEqual(
