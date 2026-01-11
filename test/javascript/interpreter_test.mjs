@@ -9,7 +9,7 @@ import {
   sinon,
 } from "./support/helpers.mjs";
 
-import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
+import {defineModule1Fixture as defineInterpreterModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
 import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -20,8 +20,7 @@ import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
-
-defineModule1Fixture();
+defineInterpreterModule1Fixture();
 defineMatchOperatorModule1Fixture();
 
 describe("Interpreter", () => {

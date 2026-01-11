@@ -270,6 +270,38 @@ const Erlang = {
 
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
+  // Start apply/3
+  "apply/3": (module, fun, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        `you attempted to apply a function named ${Interpreter.inspect(fun)} on ${Interpreter.inspect(module)}. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module`,
+      );
+    }
+
+    if (!Type.isAtom(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const context = Interpreter.buildContext({module: Type.nil()});
+
+    return Interpreter.callNamedFunction(module, fun, args, context);
+  },
+  // End apply/3
+  // Deps: []
 
   // Start atom_to_binary/1
   "atom_to_binary/1": (atom) => {
@@ -1371,17 +1403,6 @@ const Erlang = {
   // End not/1
   // Deps: []
 
-  // Start xor/2
-  "xor/2": (left, right) => {
-    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
-      Interpreter.raiseArgumentError("argument error");
-    }
-
-    return Type.boolean(left.value != right.value);
-  },
-  // End xor/2
-  // Deps: []
-
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1557,6 +1578,17 @@ const Erlang = {
     return Type.list(tuple.data);
   },
   // End tuple_to_list/1
+  // Deps: []
+
+  // Start xor/2
+  "xor/2": (left, right) => {
+    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Type.boolean(left.value != right.value);
+  },
+  // End xor/2
   // Deps: []
 };
 
