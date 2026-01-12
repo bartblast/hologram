@@ -184,15 +184,12 @@ const Erlang_String = {
       return data.every((item) => Type.isInteger(item));
     };
 
-    // Helper: Validate codepoint is not in surrogate pair range
-    const validateCodepoint = (codepoint) => {
-      // Check if the codepoint is in the invalid range (55296-57343 / 0xD800-0xDFFF)
-      // These are not valid Unicode scalar values and cannot be encoded in UTF-8
-      if (codepoint >= 55296 && codepoint <= 57343) {
-        Interpreter.raiseArgumentError(
-          `argument error: ${Interpreter.inspect(subject)}`,
-        );
-      }
+    // Helper: Extract first character and rest from text string
+    const extractFirstChar = (text) => {
+      const firstChar = Array.from(text)[0];
+      const firstCodePoint = firstChar.codePointAt(0);
+      const restOfString = text.slice(firstChar.length);
+      return {firstCodePoint, restOfString};
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -206,12 +203,15 @@ const Erlang_String = {
       }
     };
 
-    // Helper: Extract first character and rest from text string
-    const extractFirstChar = (text) => {
-      const firstChar = Array.from(text)[0];
-      const firstCodePoint = firstChar.codePointAt(0);
-      const restOfString = text.slice(firstChar.length);
-      return {firstCodePoint, restOfString};
+    // Helper: Validate codepoint is not in surrogate pair range
+    const validateCodepoint = (codepoint) => {
+      // Check if the codepoint is in the invalid range (55296-57343 / 0xD800-0xDFFF)
+      // These are not valid Unicode scalar values and cannot be encoded in UTF-8
+      if (codepoint >= 55296 && codepoint <= 57343) {
+        Interpreter.raiseArgumentError(
+          `argument error: ${Interpreter.inspect(subject)}`,
+        );
+      }
     };
 
     // Handle binary strings
