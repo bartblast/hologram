@@ -579,12 +579,12 @@ const Erlang_Lists = {
 
     const tail = (list) => {
       if (Type.isProperList(list)) {
-        return Type.list(list.data.slice(index), list.data.length);
+        return Type.list(list.data.slice(index));
       } else {
         if (list.data.length === index + 1) {
           return list.data.at(-1);
         } else {
-          return Type.improperList(list.data.slice(index), list.data.length);
+          return Type.improperList(list.data.slice(index));
         }
       }
     };
