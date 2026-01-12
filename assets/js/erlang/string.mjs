@@ -179,6 +179,11 @@ const Erlang_String = {
       68997: [68997],
     };
 
+    // Helper: Check if a list contains only integers
+    const containsOnlyIntegers = (data) => {
+      return data.every((item) => Type.isInteger(item));
+    };
+
     // Helper: Validate codepoint is not in surrogate pair range
     const validateCodepoint = (codepoint) => {
       // Check if the codepoint is in the invalid range (55296-57343 / 0xD800-0xDFFF)
@@ -289,7 +294,47 @@ const Erlang_String = {
         return Type.list(result);
       }
 
-      // If first element is neither integer nor binary, raise FunctionClauseError
+      // If first element is a nested list, recursively process it
+      if (Type.isList(firstElement)) {
+        const processedFirst = Erlang_String["titlecase/1"](firstElement);
+        const processedData = processedFirst.data;
+
+        // Combine the processed first element with the rest using these rules:
+        // 1. If both contain only integers, spread both
+        // 2. If rest starts with a binary, spread processedData, add binary, wrap remainder
+        // 3. If processedData contains non-integers and rest has multiple elements, wrap rest
+        // 4. Otherwise, spread both
+
+        if (rest.length === 0) {
+          return Type.list(processedData);
+        }
+
+        // Rule 1: Both contain only integers
+        if (containsOnlyIntegers(processedData) && containsOnlyIntegers(rest)) {
+          return Type.list([...processedData, ...rest]);
+        }
+
+        // Rule 2: Rest starts with a binary
+        if (Type.isBinary(rest[0])) {
+          const result = [...processedData, rest[0]];
+
+          if (rest.length > 1) {
+            result.push(Type.list(rest.slice(1)));
+          }
+
+          return Type.list(result);
+        }
+
+        // Rule 3: processedData contains non-integers and rest has multiple elements
+        if (!containsOnlyIntegers(processedData) && rest.length > 1) {
+          return Type.list([...processedData, Type.list(rest)]);
+        }
+
+        // Rule 4: Default - spread both
+        return Type.list([...processedData, ...rest]);
+      }
+
+      // If first element is neither integer nor binary nor list, raise FunctionClauseError
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
           subject,
