@@ -189,7 +189,7 @@ const Erlang_String = {
 
         if (text.length === 0) {
           Interpreter.raiseFunctionClauseError(
-            Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1 ", [
+            Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
               subject,
             ]),
           );
