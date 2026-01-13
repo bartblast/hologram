@@ -3613,5 +3613,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert int2 != int3
       assert int1 != int3
     end
+
+    test "returns unique integers over many calls" do
+      integers = Enum.map(1..100, fn _ -> :erlang.unique_integer() end)
+      unique_integers = Enum.uniq(integers)
+
+      assert length(integers) == length(unique_integers)
+    end
   end
 end

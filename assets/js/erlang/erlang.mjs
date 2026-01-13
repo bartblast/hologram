@@ -39,9 +39,7 @@ const Erlang = {
   // Start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} * ${Interpreter.inspect(
-        right,
-      )}`;
+      const blame = `${Interpreter.inspect(left)} * ${Interpreter.inspect(right)}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -60,9 +58,7 @@ const Erlang = {
   // Start +/2
   "+/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(
-        right,
-      )}`;
+      const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -118,9 +114,7 @@ const Erlang = {
   // Start -/2
   "-/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      const blame = `${Interpreter.inspect(left)} - ${Interpreter.inspect(
-        right,
-      )}`;
+      const blame = `${Interpreter.inspect(left)} - ${Interpreter.inspect(right)}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -164,9 +158,7 @@ const Erlang = {
   // Start //2
   "//2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right) || right.value == 0) {
-      const blame = `${Interpreter.inspect(left)} / ${Interpreter.inspect(
-        right,
-      )}`;
+      const blame = `${Interpreter.inspect(left)} / ${Interpreter.inspect(right)}`;
       Interpreter.raiseArithmeticError(blame);
     }
 
@@ -282,11 +274,7 @@ const Erlang = {
   "apply/3": (module, fun, args) => {
     if (!Type.isAtom(module)) {
       Interpreter.raiseArgumentError(
-        `you attempted to apply a function named ${Interpreter.inspect(
-          fun,
-        )} on ${Interpreter.inspect(
-          module,
-        )}. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module`,
+        `you attempted to apply a function named ${Interpreter.inspect(fun)} on ${Interpreter.inspect(module)}. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module`,
       );
     }
 
@@ -1596,11 +1584,9 @@ const Erlang = {
   // Deps: []
 
   // Start unique_integer/0
-  "unique_integer/0": function () {
+  "unique_integer/0": () => {
     Interpreter.uniqueIntegerCounter += 1n;
-    const result = Interpreter.uniqueIntegerCounter;
-
-    return Type.integer(result);
+    return Type.integer(Interpreter.uniqueIntegerCounter);
   },
   // End unique_integer/0
   // Deps: []

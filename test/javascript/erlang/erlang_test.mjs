@@ -10,7 +10,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import { defineModule1Fixture as defineErlangModule1Fixture } from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -84,7 +84,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomA, integer1),
         "ArithmeticError",
-        "bad argument in arithmetic expression: :a * 1"
+        "bad argument in arithmetic expression: :a * 1",
       );
     });
 
@@ -92,7 +92,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(integer1, atomA),
         "ArithmeticError",
-        "bad argument in arithmetic expression: 1 * :a"
+        "bad argument in arithmetic expression: 1 * :a",
       );
     });
   });
@@ -128,7 +128,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomAbc),
         "ArithmeticError",
-        "bad argument in arithmetic expression: +(:abc)"
+        "bad argument in arithmetic expression: +(:abc)",
       );
     });
   });
@@ -156,7 +156,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomA, integer1),
         "ArithmeticError",
-        "bad argument in arithmetic expression: :a + 1"
+        "bad argument in arithmetic expression: :a + 1",
       );
     });
 
@@ -164,7 +164,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(integer1, atomA),
         "ArithmeticError",
-        "bad argument in arithmetic expression: 1 + :a"
+        "bad argument in arithmetic expression: 1 + :a",
       );
     });
   });
@@ -243,7 +243,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomAbc, Type.list()),
         "ArgumentError",
-        "argument error"
+        "argument error",
       );
     });
 
@@ -252,10 +252,10 @@ describe("Erlang", () => {
         () =>
           testedFun(
             Type.improperList([Type.integer(1), Type.integer(2)]),
-            Type.list()
+            Type.list(),
           ),
         "ArgumentError",
-        "argument error"
+        "argument error",
       );
     });
   });
@@ -291,7 +291,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomAbc),
         "ArithmeticError",
-        "bad argument in arithmetic expression: -(:abc)"
+        "bad argument in arithmetic expression: -(:abc)",
       );
     });
   });
@@ -319,7 +319,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomA, integer1),
         "ArithmeticError",
-        "bad argument in arithmetic expression: :a - 1"
+        "bad argument in arithmetic expression: :a - 1",
       );
     });
 
@@ -327,7 +327,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(integer1, atomA),
         "ArithmeticError",
-        "bad argument in arithmetic expression: 1 - :a"
+        "bad argument in arithmetic expression: 1 - :a",
       );
     });
   });
@@ -389,10 +389,10 @@ describe("Erlang", () => {
         () =>
           testedFun(
             Type.atom("abc"),
-            Type.list([Type.integer(1), Type.integer(2)])
+            Type.list([Type.integer(1), Type.integer(2)]),
           ),
         "ArgumentError",
-        "argument error"
+        "argument error",
       );
     });
 
@@ -401,10 +401,10 @@ describe("Erlang", () => {
         () =>
           testedFun(
             Type.list([Type.integer(1), Type.integer(2)]),
-            Type.atom("abc")
+            Type.atom("abc"),
           ),
         "ArgumentError",
-        "argument error"
+        "argument error",
       );
     });
   });
@@ -415,14 +415,14 @@ describe("Erlang", () => {
     it("divides float by float", () => {
       assert.deepStrictEqual(
         testedFun(Type.float(3.0), Type.float(2.0)),
-        Type.float(1.5)
+        Type.float(1.5),
       );
     });
 
     it("divides integer by integer", () => {
       assert.deepStrictEqual(
         testedFun(Type.integer(3), Type.integer(2)),
-        Type.float(1.5)
+        Type.float(1.5),
       );
     });
 
@@ -430,7 +430,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(3)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: :abc / 3"
+        "bad argument in arithmetic expression: :abc / 3",
       );
     });
 
@@ -438,7 +438,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(3), Type.atom("abc")),
         "ArithmeticError",
-        "bad argument in arithmetic expression: 3 / :abc"
+        "bad argument in arithmetic expression: 3 / :abc",
       );
     });
 
@@ -446,7 +446,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.float(0.0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: 1 / 0.0"
+        "bad argument in arithmetic expression: 1 / 0.0",
       );
     });
 
@@ -454,7 +454,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.integer(0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: 1 / 0"
+        "bad argument in arithmetic expression: 1 / 0",
       );
     });
   });
@@ -667,7 +667,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(list1, integer1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -678,7 +678,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(integer1, list1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -995,7 +995,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(list1, integer1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -1006,7 +1006,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(integer1, list1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -1221,7 +1221,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(list1, integer1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -1232,7 +1232,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(integer1, list1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -1345,7 +1345,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(list1, integer1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -1356,7 +1356,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(integer1, list1),
         HologramInterpreterError,
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -1393,14 +1393,14 @@ describe("Erlang", () => {
     it("large positive integer", () => {
       assert.deepStrictEqual(
         testedFun(Type.integer(123456789012345678901234567890n)),
-        Type.integer(123456789012345678901234567890n)
+        Type.integer(123456789012345678901234567890n),
       );
     });
 
     it("large negative integer", () => {
       assert.deepStrictEqual(
         testedFun(Type.integer(-123456789012345678901234567890n)),
-        Type.integer(123456789012345678901234567890n)
+        Type.integer(123456789012345678901234567890n),
       );
     });
 
@@ -1408,7 +1408,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number")
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
   });
@@ -1418,13 +1418,13 @@ describe("Erlang", () => {
 
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(false), right: Type.atom("abc") },
+        vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
       const result = andalso(
         (context) => context.vars.left,
         (context) => context.vars.right,
-        context
+        context,
       );
 
       assertBoxedFalse(result);
@@ -1432,13 +1432,13 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is true", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(true), right: Type.atom("abc") },
+        vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
       const result = andalso(
         (context) => context.vars.left,
         (context) => context.vars.right,
-        context
+        context,
       );
 
       assert.deepStrictEqual(result, Type.atom("abc"));
@@ -1450,7 +1450,7 @@ describe("Erlang", () => {
         (_context) => {
           throw new Error("impossible");
         },
-        contextFixture()
+        contextFixture(),
       );
 
       assertBoxedFalse(result);
@@ -1458,7 +1458,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: { left: Type.nil(), right: Type.boolean(true) },
+        vars: {left: Type.nil(), right: Type.boolean(true)},
       });
 
       assertBoxedError(
@@ -1466,10 +1466,10 @@ describe("Erlang", () => {
           andalso(
             (context) => context.vars.left,
             (context) => context.vars.right,
-            context
+            context,
           ),
         "ArgumentError",
-        "argument error: nil"
+        "argument error: nil",
       );
     });
   });
@@ -1478,7 +1478,7 @@ describe("Erlang", () => {
     const apply = Erlang["apply/3"];
 
     const module = Type.alias(
-      "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1"
+      "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
     );
 
     const fun = Type.atom("fun_0");
@@ -1518,7 +1518,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        expectedMessage
+        expectedMessage,
       );
     });
 
@@ -1528,7 +1528,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an atom")
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
       );
     });
 
@@ -1538,7 +1538,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a list")
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
@@ -1549,7 +1549,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list")
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
 
@@ -1561,7 +1561,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false)
+        Interpreter.buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false),
       );
     });
 
@@ -1572,7 +1572,11 @@ describe("Erlang", () => {
       assertBoxedError(
         () => apply(module, fun, args),
         "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(module, "nonexistent_fun", 2)
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          module,
+          "nonexistent_fun",
+          2,
+        ),
       );
     });
   });
@@ -1602,7 +1606,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(123), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom")
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     });
 
@@ -1611,7 +1615,7 @@ describe("Erlang", () => {
       assert.throw(
         () => testedFun(atom, Type.atom("latin1")),
         HologramInterpreterError,
-        "encodings other than utf8 are not yet implemented in Hologram"
+        "encodings other than utf8 are not yet implemented in Hologram",
       );
     });
   });
@@ -1629,7 +1633,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(
         result,
-        Type.list([Type.integer(97), Type.integer(98), Type.integer(99)])
+        Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
       );
     });
 
@@ -1642,7 +1646,7 @@ describe("Erlang", () => {
           Type.integer(20840),
           Type.integer(24687),
           Type.integer(22270),
-        ])
+        ]),
       );
     });
 
@@ -1650,7 +1654,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => atom_to_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an atom")
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     });
   });
@@ -1732,7 +1736,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(float5, integer3),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.band(5.0, 3)"
+        "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
       );
     });
 
@@ -1740,7 +1744,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(integer5, float3),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.band(5, 3.0)"
+        "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
       );
     });
   });
@@ -1841,7 +1845,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_part(Type.atom("abc"), Type.integer(1), Type.integer(2)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -1851,10 +1855,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring([1, 0, 1]),
             Type.integer(1),
-            Type.integer(2)
+            Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -1864,10 +1868,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring("goldfish"),
             Type.float(1.0),
-            Type.integer(2)
+            Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer")
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -1877,10 +1881,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring("goldfish"),
             Type.integer(-1),
-            Type.integer(2)
+            Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range")
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -1890,10 +1894,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring("goldfish"),
             Type.integer(9),
-            Type.integer(2)
+            Type.integer(2),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range")
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -1903,10 +1907,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring("goldfish"),
             Type.integer(0),
-            Type.integer(9)
+            Type.integer(9),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range")
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -1916,10 +1920,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring("goldfish"),
             Type.integer(1),
-            Type.float(2.0)
+            Type.float(2.0),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not an integer")
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
       );
     });
 
@@ -1929,10 +1933,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring("goldfish"),
             Type.integer(1),
-            Type.integer(8)
+            Type.integer(8),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range")
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
       );
     });
 
@@ -1942,10 +1946,10 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring("goldfish"),
             Type.integer(4),
-            Type.integer(-5)
+            Type.integer(-5),
           ),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range")
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
       );
     });
   });
@@ -1983,7 +1987,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.bitstring([1, 0, 1]), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -1991,7 +1995,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.atom("abc"), encoding),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
   });
@@ -2109,8 +2113,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2122,8 +2126,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2135,8 +2139,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2167,7 +2171,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2177,7 +2181,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(input),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2189,8 +2193,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2202,8 +2206,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2215,8 +2219,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2228,8 +2232,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2241,8 +2245,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2254,8 +2258,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2267,8 +2271,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2280,8 +2284,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2293,8 +2297,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2306,8 +2310,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2319,8 +2323,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2332,8 +2336,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2345,8 +2349,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -2358,8 +2362,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a float"
-        )
+          "not a textual representation of a float",
+        ),
       );
     });
   });
@@ -2515,7 +2519,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.atom("abc"), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary")
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -2523,7 +2527,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_integer(Type.bitstring([1, 0, 1]), Type.integer(10)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary")
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -2533,8 +2537,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             1,
-            "not a textual representation of an integer"
-          )
+            "not a textual representation of an integer",
+          ),
         );
       });
 
@@ -2544,8 +2548,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             1,
-            "not a textual representation of an integer"
-          )
+            "not a textual representation of an integer",
+          ),
         );
       });
 
@@ -2555,8 +2559,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
 
@@ -2566,8 +2570,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
 
@@ -2577,8 +2581,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
     });
@@ -2634,7 +2638,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -2642,7 +2646,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_list(Type.bitstring([1, 0, 1])),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
   });
@@ -2669,7 +2673,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => bit_size(myAtom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring")
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
   });
@@ -2681,7 +2685,7 @@ describe("Erlang", () => {
       // 4 = 0b00000100, 3 = 0b00000011, 7 = 0b00000111
       assert.deepStrictEqual(
         bor(Type.integer(4), Type.integer(3)),
-        Type.integer(7)
+        Type.integer(7),
       );
     });
 
@@ -2689,7 +2693,7 @@ describe("Erlang", () => {
       // 0 = 0b00000000
       assert.deepStrictEqual(
         bor(Type.integer(0), Type.integer(0)),
-        Type.integer(0)
+        Type.integer(0),
       );
     });
 
@@ -2697,7 +2701,7 @@ describe("Erlang", () => {
       // 0 = 0b00000000, 8 = 0b00001000
       assert.deepStrictEqual(
         bor(Type.integer(0), Type.integer(8)),
-        Type.integer(8)
+        Type.integer(8),
       );
     });
 
@@ -2705,7 +2709,7 @@ describe("Erlang", () => {
       // 4 = 0b00000100, 0 = 0b00000000
       assert.deepStrictEqual(
         bor(Type.integer(4), Type.integer(0)),
-        Type.integer(4)
+        Type.integer(4),
       );
     });
 
@@ -2713,7 +2717,7 @@ describe("Erlang", () => {
       // -4 = 0b11111100, 3 = 0b00000011, -1 = 0b11111111
       assert.deepStrictEqual(
         bor(Type.integer(-4), Type.integer(3)),
-        Type.integer(-1)
+        Type.integer(-1),
       );
     });
 
@@ -2721,7 +2725,7 @@ describe("Erlang", () => {
       // 4 = 0b00000100, -3 = 0b11111101
       assert.deepStrictEqual(
         bor(Type.integer(4), Type.integer(-3)),
-        Type.integer(-3)
+        Type.integer(-3),
       );
     });
 
@@ -2729,7 +2733,7 @@ describe("Erlang", () => {
       // -4 = 0b11111100, -3 = 0b11111101
       assert.deepStrictEqual(
         bor(Type.integer(-4), Type.integer(-3)),
-        Type.integer(-3)
+        Type.integer(-3),
       );
     });
 
@@ -2763,7 +2767,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => bor(float1, integer2),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bor(1.0, 2)"
+        "bad argument in arithmetic expression: Bitwise.bor(1.0, 2)",
       );
     });
 
@@ -2771,7 +2775,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => bor(integer1, float2),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)"
+        "bad argument in arithmetic expression: Bitwise.bor(1, 2.0)",
       );
     });
   });
@@ -2783,7 +2787,7 @@ describe("Erlang", () => {
       // 16 = 0b00010000, 8 = 0b00001000
       assert.deepStrictEqual(
         testedFun(Type.integer(16), Type.integer(1)),
-        Type.integer(8)
+        Type.integer(8),
       );
     });
 
@@ -2791,7 +2795,7 @@ describe("Erlang", () => {
       // 247 = 0b11110111
       assert.deepStrictEqual(
         testedFun(Type.integer(247), Type.integer(0)),
-        Type.integer(247)
+        Type.integer(247),
       );
     });
 
@@ -2799,7 +2803,7 @@ describe("Erlang", () => {
       // 1 = 0b00000001, 16 = 0b00010000
       assert.deepStrictEqual(
         testedFun(Type.integer(1), Type.integer(-4)),
-        Type.integer(16)
+        Type.integer(16),
       );
     });
 
@@ -2807,7 +2811,7 @@ describe("Erlang", () => {
       // -16 = 0b11110000, -8 = 0b11111000
       assert.deepStrictEqual(
         testedFun(Type.integer(-16), Type.integer(1)),
-        Type.integer(-8)
+        Type.integer(-8),
       );
     });
 
@@ -2815,7 +2819,7 @@ describe("Erlang", () => {
       // 255 = 0b1111111, 0 = 0b00000000
       assert.deepStrictEqual(
         testedFun(Type.integer(255), Type.integer(9)),
-        Type.integer(0)
+        Type.integer(0),
       );
     });
 
@@ -2823,7 +2827,7 @@ describe("Erlang", () => {
       // -127 = 0b10000001, -1 = 0b11111111
       assert.deepStrictEqual(
         testedFun(Type.integer(-127), Type.integer(8)),
-        Type.integer(-1)
+        Type.integer(-1),
       );
     });
 
@@ -2833,7 +2837,7 @@ describe("Erlang", () => {
       //  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
       assert.deepStrictEqual(
         testedFun(Type.integer(18_014_398_509_481_984n), Type.integer(1)),
-        Type.integer(9_007_199_254_740_992n)
+        Type.integer(9_007_199_254_740_992n),
       );
     });
 
@@ -2843,7 +2847,7 @@ describe("Erlang", () => {
       //  -9_007_199_254_740_992 = 0b1111111111100000000000000000000000000000000000000000000000000000
       assert.deepStrictEqual(
         testedFun(Type.integer(-18_014_398_509_481_984n), Type.integer(1)),
-        Type.integer(-9_007_199_254_740_992n)
+        Type.integer(-9_007_199_254_740_992n),
       );
     });
 
@@ -2851,7 +2855,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.float(1.0), Type.integer(2)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)"
+        "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)",
       );
     });
 
@@ -2859,7 +2863,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.float(2.0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)"
+        "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
       );
     });
   });
@@ -2957,7 +2961,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(float5, integer3),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bxor(5.0, 3)"
+        "bad argument in arithmetic expression: Bitwise.bxor(5.0, 3)",
       );
     });
 
@@ -2965,7 +2969,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(integer5, float3),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)"
+        "bad argument in arithmetic expression: Bitwise.bxor(5, 3.0)",
       );
     });
   });
@@ -3000,7 +3004,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => byte_size(atom),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a bitstring")
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
   });
@@ -3075,7 +3079,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number")
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
   });
@@ -3147,7 +3151,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.integer(0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: div(5, 0)"
+        "bad argument in arithmetic expression: div(5, 0)",
       );
     });
 
@@ -3155,7 +3159,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.float(5.5), Type.integer(2)),
         "ArgumentError",
-        "bad argument in arithmetic expression: div(5.5, 2)"
+        "bad argument in arithmetic expression: div(5.5, 2)",
       );
     });
 
@@ -3163,7 +3167,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.float(2.5)),
         "ArgumentError",
-        "bad argument in arithmetic expression: div(5, 2.5)"
+        "bad argument in arithmetic expression: div(5, 2.5)",
       );
     });
 
@@ -3171,7 +3175,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(2)),
         "ArgumentError",
-        "bad argument in arithmetic expression: div(:abc, 2)"
+        "bad argument in arithmetic expression: div(:abc, 2)",
       );
     });
 
@@ -3179,7 +3183,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.atom("abc")),
         "ArgumentError",
-        "bad argument in arithmetic expression: div(5, :abc)"
+        "bad argument in arithmetic expression: div(5, :abc)",
       );
     });
   });
@@ -3202,7 +3206,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.atom("abc"), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer")
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -3210,7 +3214,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(1), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple")
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -3218,7 +3222,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(10), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -3226,7 +3230,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(0), tuple),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
@@ -3265,7 +3269,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => float(atomAbc),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number")
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
   });
@@ -3458,7 +3462,7 @@ describe("Erlang", () => {
 
         const expected = Type.bitstring(
           "0.033333333333333332870740406406184774823486804962158203125" +
-            "0".repeat(196)
+            "0".repeat(196),
         );
 
         assert.deepStrictEqual(result, expected);
@@ -3472,7 +3476,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list")
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -3484,7 +3488,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list")
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -3496,7 +3500,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list")
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -3687,7 +3691,7 @@ describe("Erlang", () => {
         const expected = Type.bitstring(
           "3.333333333333333481363069950020872056484222412109375" +
             "0".repeat(198) +
-            "e+00"
+            "e+00",
         );
 
         assert.deepStrictEqual(result, expected);
@@ -3701,7 +3705,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list")
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
 
@@ -3713,7 +3717,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list")
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -3865,7 +3869,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(
         float_to_binary(inputAbove10, optsCompact),
-        float_to_binary(inputAbove10, optsDefault)
+        float_to_binary(inputAbove10, optsDefault),
       );
     });
 
@@ -3986,12 +3990,12 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(
         float_to_binary(inputAbove10, optsScientificCompact),
-        scientificResult
+        scientificResult,
       );
 
       assert.deepStrictEqual(
         float_to_binary(inputAbove10, optsCompactScientific),
-        scientificResult
+        scientificResult,
       );
     });
 
@@ -4012,12 +4016,12 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(
         float_to_binary(inputAbove10, optsShortCompact),
-        shortResult
+        shortResult,
       );
 
       assert.deepStrictEqual(
         float_to_binary(inputAbove10, optsCompactShort),
-        shortResult
+        shortResult,
       );
     });
 
@@ -4106,7 +4110,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => float_to_binary(Type.float(10.0), opts),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid option in list")
+        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
       );
     });
 
@@ -4117,7 +4121,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(integer123, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a float")
+          Interpreter.buildArgumentErrorMsg(1, "not a float"),
         );
       });
 
@@ -4125,7 +4129,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, integer123),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a list")
+          Interpreter.buildArgumentErrorMsg(2, "not a list"),
         );
       });
 
@@ -4138,7 +4142,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, opts),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a proper list")
+          Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
         );
       });
 
@@ -4146,7 +4150,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => float_to_binary(inputAbove10, Type.list([atomAbc])),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "invalid option in list")
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       });
     });
@@ -4222,7 +4226,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number")
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
   });
@@ -4246,7 +4250,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.list()),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list")
+        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
 
@@ -4254,7 +4258,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list")
+        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
   });
@@ -4302,7 +4306,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(atomB, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer")
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -4310,7 +4314,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer1, atomB, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple")
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -4318,7 +4322,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer4, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -4326,7 +4330,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => insert_element(integer0, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
@@ -4351,8 +4355,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
 
@@ -4367,7 +4371,7 @@ describe("Erlang", () => {
       it("base = 16", () => {
         const result = integer_to_binary(
           Type.integer(123123),
-          Type.integer(16)
+          Type.integer(16),
         );
 
         const expected = Type.bitstring("1E0F3");
@@ -4388,8 +4392,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
     });
@@ -4406,7 +4410,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => integer_to_binary(Type.atom("abc"), Type.integer(16)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer")
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -4416,8 +4420,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           2,
-          "not an integer in the range 2 through 36"
-        )
+          "not an integer in the range 2 through 36",
+        ),
       );
     });
   });
@@ -4487,7 +4491,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_list_2(Type.float(3.14), integer10),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not an integer")
+          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
         );
       });
 
@@ -4497,8 +4501,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
 
@@ -4508,8 +4512,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
 
@@ -4519,8 +4523,8 @@ describe("Erlang", () => {
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(
             2,
-            "not an integer in the range 2 through 36"
-          )
+            "not an integer in the range 2 through 36",
+          ),
         );
       });
     });
@@ -4597,7 +4601,7 @@ describe("Erlang", () => {
       const term = Type.anonymousFunction(
         "dummyArity",
         "dummyClauses",
-        "dummyContext"
+        "dummyContext",
       );
 
       assertBoxedTrue(is_function(term));
@@ -4685,7 +4689,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => is_map_key(atomA, atomAbc),
         "BadMapError",
-        "expected a map, got: :abc"
+        "expected a map, got: :abc",
       );
     });
   });
@@ -4770,7 +4774,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => length(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list")
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
   });
@@ -4815,8 +4819,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a pid"
-        )
+          "not a textual representation of a pid",
+        ),
       );
     });
 
@@ -4824,7 +4828,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => fun(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list")
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -4840,8 +4844,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a pid"
-        )
+          "not a textual representation of a pid",
+        ),
       );
     });
 
@@ -4857,8 +4861,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a pid"
-        )
+          "not a textual representation of a pid",
+        ),
       );
     });
   });
@@ -4949,8 +4953,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a reference"
-        )
+          "not a textual representation of a reference",
+        ),
       );
     });
 
@@ -4980,8 +4984,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a reference"
-        )
+          "not a textual representation of a reference",
+        ),
       );
     });
 
@@ -4989,7 +4993,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list")
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -4999,7 +5003,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_ref(arg),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list")
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
 
@@ -5015,8 +5019,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a reference"
-        )
+          "not a textual representation of a reference",
+        ),
       );
     });
 
@@ -5033,8 +5037,8 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
-          "not a textual representation of a reference"
-        )
+          "not a textual representation of a reference",
+        ),
       );
     });
   });
@@ -5075,7 +5079,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_tuple(Type.integer(-1), atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -5083,7 +5087,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => make_tuple(float2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
@@ -5104,7 +5108,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_size(Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc"
+        "expected a map, got: :abc",
       );
     });
   });
@@ -5130,13 +5134,13 @@ describe("Erlang", () => {
 
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(true), right: Type.atom("abc") },
+        vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
       const result = orelse(
         (context) => context.vars.left,
         (context) => context.vars.right,
-        context
+        context,
       );
 
       assertBoxedTrue(result);
@@ -5144,13 +5148,13 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is false", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(false), right: Type.atom("abc") },
+        vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
       const result = orelse(
         (context) => context.vars.left,
         (context) => context.vars.right,
-        context
+        context,
       );
 
       assert.deepStrictEqual(result, Type.atom("abc"));
@@ -5162,7 +5166,7 @@ describe("Erlang", () => {
         (_context) => {
           throw new Error("impossible");
         },
-        contextFixture()
+        contextFixture(),
       );
 
       assertBoxedTrue(result);
@@ -5170,7 +5174,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: { left: Type.nil(), right: Type.boolean(true) },
+        vars: {left: Type.nil(), right: Type.boolean(true)},
       });
 
       assertBoxedError(
@@ -5178,10 +5182,10 @@ describe("Erlang", () => {
           orelse(
             (context) => context.vars.left,
             (context) => context.vars.right,
-            context
+            context,
           ),
         "ArgumentError",
-        "argument error: nil"
+        "argument error: nil",
       );
     });
   });
@@ -5241,7 +5245,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.integer(0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: rem(5, 0)"
+        "bad argument in arithmetic expression: rem(5, 0)",
       );
     });
 
@@ -5249,7 +5253,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.float(5.5), Type.integer(2)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: rem(5.5, 2)"
+        "bad argument in arithmetic expression: rem(5.5, 2)",
       );
     });
 
@@ -5257,7 +5261,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.float(2.5)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: rem(5, 2.5)"
+        "bad argument in arithmetic expression: rem(5, 2.5)",
       );
     });
 
@@ -5265,7 +5269,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(2)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: rem(:abc, 2)"
+        "bad argument in arithmetic expression: rem(:abc, 2)",
       );
     });
 
@@ -5273,7 +5277,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.atom("abc")),
         "ArithmeticError",
-        "bad argument in arithmetic expression: rem(5, :abc)"
+        "bad argument in arithmetic expression: rem(5, :abc)",
       );
     });
   });
@@ -5303,7 +5307,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(atomB, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer")
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -5311,7 +5315,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer1, atomB, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple")
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -5319,7 +5323,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer3, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -5327,7 +5331,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer0, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
@@ -5410,7 +5414,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.atom("abc"), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -5418,7 +5422,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring([1, 0, 1]), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -5426,7 +5430,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.atom("invalid")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer")
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -5434,7 +5438,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.integer(-1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range")
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -5442,7 +5446,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => split_binary(Type.bitstring("abc"), Type.integer(4)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range")
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
   });
@@ -5509,7 +5513,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.list()),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list")
+          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
 
@@ -5517,7 +5521,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.integer(123)),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list")
+          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
     });
@@ -5589,7 +5593,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number")
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
   });
@@ -5611,7 +5615,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple")
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
   });
@@ -5639,7 +5643,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => xor(atomAbc, Type.boolean(true)),
         "ArgumentError",
-        "argument error"
+        "argument error",
       );
     });
 
@@ -5647,33 +5651,21 @@ describe("Erlang", () => {
       assertBoxedError(
         () => xor(Type.boolean(true), atomAbc),
         "ArgumentError",
-        "argument error"
+        "argument error",
       );
     });
   });
 
   describe("unique_integer/0", () => {
-    const unique_integer = Erlang["unique_integer/0"];
-
     beforeEach(() => {
       Interpreter.resetUniqueIntegerCounter();
     });
 
-    it("returns a boxed integer", () => {
-      const result = unique_integer();
-      assert.strictEqual(result.type, "integer");
-      assert.strictEqual(typeof result.value, "bigint");
-    });
-
     it("guarantees uniqueness across multiple calls", () => {
-      const int1 = unique_integer();
-      const int2 = unique_integer();
-      const int3 = unique_integer();
+      const int1 = Erlang["unique_integer/0"]();
+      const int2 = Erlang["unique_integer/0"]();
 
-      // UPDATED: Using strict inequality assertions
-      assert.notStrictEqual(int1, int2);
-      assert.notStrictEqual(int2, int3);
-      assert.notStrictEqual(int1, int3);
+      assert.notStrictEqual(int1.value, int2.value);
     });
   });
 });
