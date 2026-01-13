@@ -307,7 +307,7 @@ describe("Erlang_String", () => {
 
         assert.deepStrictEqual(
           result,
-          Type.list([Type.integer(65), Type.integer(98)]),
+          Type.list([Type.integer(65), Type.bitstring(""), Type.integer(98)]),
         );
       });
 
@@ -359,8 +359,7 @@ describe("Erlang_String", () => {
         assert.deepStrictEqual(
           result,
           Type.list([
-            Type.integer(70),
-            Type.integer(105),
+            Type.list([Type.integer(70), Type.integer(105)]),
             Type.bitstring("le"),
           ]),
         );
@@ -377,21 +376,16 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("raises FunctionClauseError for empty binary in list", () => {
+      it("returns empty list for empty binary in list", () => {
         const input = Type.list([Type.bitstring("")]);
+        const result = titlecase(input);
 
-        assertBoxedError(
-          () => titlecase(input),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
-        );
+        assert.deepStrictEqual(result, Type.list());
       });
     });
 
     describe("with nested list", () => {
-      it("processes nested list with only integers, rest only integers (Rule 1)", () => {
+      it("processes nested list with only integers, rest only integers ", () => {
         const input = Type.list([
           Type.list([Type.integer(97)]),
           Type.integer(98),
@@ -405,7 +399,7 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("processes nested list with multiple integers, rest with integers (Rule 1)", () => {
+      it("processes nested list with multiple integers, rest with integers ", () => {
         const input = Type.list([
           Type.list([Type.integer(104), Type.integer(101)]), // "he"
           Type.integer(108),
@@ -425,7 +419,7 @@ describe("Erlang_String", () => {
         ); // "Hell"
       });
 
-      it("processes nested list where rest starts with binary (Rule 2)", () => {
+      it("processes nested list where rest starts with binary", () => {
         const input = Type.list([
           Type.list([Type.integer(97)]),
           Type.bitstring("test"),
@@ -439,12 +433,12 @@ describe("Erlang_String", () => {
           Type.list([
             Type.integer(65),
             Type.bitstring("test"),
-            Type.list([Type.integer(99)]),
+            Type.integer(99),
           ]),
         );
       });
 
-      it("processes nested list where rest starts with binary, no remainder (Rule 2)", () => {
+      it("processes nested list where rest starts with binary, no remainder", () => {
         const input = Type.list([
           Type.list([Type.integer(97)]),
           Type.bitstring("test"),
@@ -457,7 +451,7 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("processes nested list with binary inside, multiple rest elements (Rule 3)", () => {
+      it("processes nested list with binary inside, multiple rest elements", () => {
         const input = Type.list([
           Type.list([Type.bitstring("ab")]),
           Type.integer(99),
@@ -471,12 +465,13 @@ describe("Erlang_String", () => {
           Type.list([
             Type.integer(65),
             Type.bitstring("b"),
-            Type.list([Type.integer(99), Type.integer(100)]),
+            Type.integer(99),
+            Type.integer(100),
           ]),
         );
       });
 
-      it("processes nested list with binary inside, single rest element (Rule 4)", () => {
+      it("processes nested list with binary inside, single rest element", () => {
         const input = Type.list([
           Type.list([Type.bitstring("ab")]),
           Type.integer(99),

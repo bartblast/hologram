@@ -90,11 +90,6 @@ const Erlang_String = {
       64279: [1348, 1389],
     };
 
-    // Helper: Check if a list contains only integers
-    const containsOnlyIntegers = (data) => {
-      return data.every((item) => Type.isInteger(item));
-    };
-
     // Helper: Extract first character and rest from text string
     const extractFirstChar = (text) => {
       const firstChar = Array.from(text)[0];
@@ -188,11 +183,7 @@ const Erlang_String = {
         }
 
         if (text.length === 0) {
-          Interpreter.raiseFunctionClauseError(
-            Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-              subject,
-            ]),
-          );
+          return Type.list(rest);
         }
 
         const {firstCodePoint, restOfString} = extractFirstChar(text);
@@ -202,9 +193,23 @@ const Erlang_String = {
           (cp) => Type.integer(cp),
         );
 
-        const result = [...uppercasedCodepoints];
+        const result = [];
 
-        if (restOfString.length > 0) {
+        // Special handling for ligatures (64256-64262): keep grouped if rest string exists
+        const isLigature = firstCodePoint >= 64256 && firstCodePoint <= 64262;
+
+        if (
+          isLigature &&
+          uppercasedCodepoints.length > 1 &&
+          restOfString.length > 0
+        ) {
+          result.push(Type.list(uppercasedCodepoints));
+        } else {
+          result.push(...uppercasedCodepoints);
+        }
+
+        // Add restOfString as binary only if not empty OR there are remaining elements
+        if (restOfString.length > 0 || rest.length > 0) {
           result.push(Type.bitstring(restOfString));
         }
 
@@ -218,38 +223,10 @@ const Erlang_String = {
         const processedFirst = Erlang_String["titlecase/1"](firstElement);
         const processedData = processedFirst.data;
 
-        // Combine the processed first element with the rest using these rules:
-        // 1. If both contain only integers, spread both
-        // 2. If rest starts with a binary, spread processedData, add binary, wrap remainder
-        // 3. If processedData contains non-integers and rest has multiple elements, wrap rest
-        // 4. Otherwise, spread both
-
         if (rest.length === 0) {
           return Type.list(processedData);
         }
 
-        // Rule 1: Both contain only integers
-        if (containsOnlyIntegers(processedData) && containsOnlyIntegers(rest)) {
-          return Type.list([...processedData, ...rest]);
-        }
-
-        // Rule 2: Rest starts with a binary
-        if (Type.isBinary(rest[0])) {
-          const result = [...processedData, rest[0]];
-
-          if (rest.length > 1) {
-            result.push(Type.list(rest.slice(1)));
-          }
-
-          return Type.list(result);
-        }
-
-        // Rule 3: processedData contains non-integers and rest has multiple elements
-        if (!containsOnlyIntegers(processedData) && rest.length > 1) {
-          return Type.list([...processedData, Type.list(rest)]);
-        }
-
-        // Rule 4: Default - spread both
         return Type.list([...processedData, ...rest]);
       }
 
