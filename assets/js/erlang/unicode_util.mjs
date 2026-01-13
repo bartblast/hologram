@@ -58,7 +58,7 @@ const Erlang_UnicodeUtil = {
     if (Type.isBinary(arg)) {
       const text = Bitstring.toText(arg);
 
-      // Check for invalid UTF-8 - return error tuple
+      // Check for invalid UTF-8
       if (text === false) {
         return errorTuple(arg);
       }
@@ -111,7 +111,7 @@ const Erlang_UnicodeUtil = {
 
           const text = Bitstring.toText(element);
 
-          // Check for invalid UTF-8 - return error tuple
+          // Check for invalid UTF-8
           if (text === false) {
             return {isError: true, binary: element};
           }
