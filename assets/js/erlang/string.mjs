@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_UnicodeUtil from "./unicode_util.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -90,12 +91,30 @@ const Erlang_String = {
       64279: [1348, 1389],
     };
 
-    // Helper: Extract first character and rest from text string
-    const extractFirstChar = (text) => {
-      const firstChar = Array.from(text)[0];
-      const firstCodePoint = firstChar.codePointAt(0);
-      const restOfString = text.slice(firstChar.length);
-      return {firstCodePoint, restOfString};
+    // Helper: Extract first codepoint using unicode_util.cp/1
+    const extractFirstCodepoint = (subject) => {
+      const cpResult = Erlang_UnicodeUtil["cp/1"](subject);
+
+      // Check if unicode_util.cp/1 returned an error tuple
+      if (Type.isTuple(cpResult)) {
+        // Extract the binary from the error tuple {:error, binary}
+        const errorBinary = cpResult.data[1];
+        Interpreter.raiseArgumentError(
+          `argument error: ${Interpreter.inspect(errorBinary)}`,
+        );
+      }
+
+      // Return null for empty results
+      if (cpResult.data.length === 0) {
+        return null;
+      }
+
+      // Extract codepoint number and rest
+      const firstCodepoint = cpResult.data[0];
+      const codepointNum = Number(firstCodepoint.value);
+      const rest = cpResult.data.slice(1);
+
+      return {codepointNum, rest};
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -117,125 +136,63 @@ const Erlang_String = {
       }
     };
 
-    // Helper: Validate codepoint is not in surrogate pair range
-    const validateCodepoint = (codepoint) => {
-      // Check if the codepoint is in the invalid range (55296-57343 / 0xD800-0xDFFF)
-      // These are not valid Unicode scalar values and cannot be encoded in UTF-8
-      if (codepoint >= 55296 && codepoint <= 57343) {
-        Interpreter.raiseArgumentError(
-          `argument error: ${Interpreter.inspect(subject)}`,
-        );
-      }
-    };
-
     // Handle binary strings
     if (Type.isBinary(subject)) {
-      const text = Bitstring.toText(subject);
+      const extraction = extractFirstCodepoint(subject);
 
-      if (text === false) {
-        Interpreter.raiseArgumentError(
-          `argument error: ${Interpreter.inspect(subject)}`,
-        );
-      }
-
-      if (text.length === 0) {
+      if (extraction === null) {
         return Type.bitstring("");
       }
 
-      const {firstCodePoint, restOfString} = extractFirstChar(text);
-      validateCodepoint(firstCodePoint);
+      const {codepointNum, rest} = extraction;
+      const restBinary = rest[0]; // Tail of the improper list
+      const restText = Bitstring.toText(restBinary);
 
-      const uppercasedCodepoints = uppercaseCodepoint(firstCodePoint);
+      const uppercasedCodepoints = uppercaseCodepoint(codepointNum);
       const uppercasedFirst = String.fromCodePoint(...uppercasedCodepoints);
 
-      return Type.bitstring(uppercasedFirst + restOfString);
+      return Type.bitstring(uppercasedFirst + restText);
     }
 
     // Handle lists (charlists/iolists)
     if (Type.isList(subject)) {
-      if (subject.data.length === 0) {
+      const extraction = extractFirstCodepoint(subject);
+
+      if (extraction === null) {
         return Type.list();
       }
 
-      const firstElement = subject.data[0];
-      const rest = subject.data.slice(1);
-
-      // If first element is an integer codepoint
-      if (Type.isInteger(firstElement)) {
-        const codepoint = Number(firstElement.value);
-        validateCodepoint(codepoint);
-
-        const uppercasedCodepoints = uppercaseCodepoint(codepoint).map((cp) =>
-          Type.integer(cp),
-        );
-
-        return Type.list([...uppercasedCodepoints, ...rest]);
-      }
-
-      // If first element is a binary string
-      if (Type.isBinary(firstElement)) {
-        const text = Bitstring.toText(firstElement);
-
-        if (text === false) {
-          Interpreter.raiseArgumentError(
-            `argument error: ${Interpreter.inspect(subject)}`,
-          );
-        }
-
-        if (text.length === 0) {
-          return Type.list(rest);
-        }
-
-        const {firstCodePoint, restOfString} = extractFirstChar(text);
-        validateCodepoint(firstCodePoint);
-
-        const uppercasedCodepoints = uppercaseCodepoint(firstCodePoint).map(
-          (cp) => Type.integer(cp),
-        );
-
-        const result = [];
-
-        // Special handling for ligatures (64256-64262): keep grouped if rest string exists
-        const isLigature = firstCodePoint >= 64256 && firstCodePoint <= 64262;
-
-        if (
-          isLigature &&
-          uppercasedCodepoints.length > 1 &&
-          restOfString.length > 0
-        ) {
-          result.push(Type.list(uppercasedCodepoints));
-        } else {
-          result.push(...uppercasedCodepoints);
-        }
-
-        // Add restOfString as binary only if not empty OR there are remaining elements
-        if (restOfString.length > 0 || rest.length > 0) {
-          result.push(Type.bitstring(restOfString));
-        }
-
-        result.push(...rest);
-
-        return Type.list(result);
-      }
-
-      // If first element is a nested list, recursively process it
-      if (Type.isList(firstElement)) {
-        const processedFirst = Erlang_String["titlecase/1"](firstElement);
-        const processedData = processedFirst.data;
-
-        if (rest.length === 0) {
-          return Type.list(processedData);
-        }
-
-        return Type.list([...processedData, ...rest]);
-      }
-
-      // If first element is neither integer nor binary nor list, raise FunctionClauseError
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-          subject,
-        ]),
+      const {codepointNum, rest} = extraction;
+      const uppercasedCodepoints = uppercaseCodepoint(codepointNum).map((cp) =>
+        Type.integer(cp),
       );
+
+      const firstRest = rest.length > 0 ? rest[0] : null;
+
+      // Check for ligature grouping: ligatures (64256-64262) that expand to multiple
+      // codepoints should be grouped when followed by a non-empty binary
+      const isLigature = codepointNum >= 64_256 && codepointNum <= 64_262;
+      if (
+        isLigature &&
+        uppercasedCodepoints.length > 1 &&
+        firstRest &&
+        Type.isBitstring(firstRest) &&
+        firstRest.text.length > 0
+      ) {
+        return Type.list([Type.list(uppercasedCodepoints), ...rest]);
+      }
+
+      // Filter out empty binary at the end (for improper list tails)
+      if (
+        rest.length === 1 &&
+        Type.isBitstring(firstRest) &&
+        firstRest.text.length === 0
+      ) {
+        return Type.list([...uppercasedCodepoints]);
+      }
+
+      // Default: combine uppercased codepoint(s) with the rest
+      return Type.list([...uppercasedCodepoints, ...rest]);
     }
 
     // If subject is neither binary nor list, raise FunctionClauseError
@@ -244,7 +201,7 @@ const Erlang_String = {
     );
   },
   // End titlecase/1
-  // Deps: []
+  // Deps: [:unicode_util.cp/1]
 };
 
 export default Erlang_String;

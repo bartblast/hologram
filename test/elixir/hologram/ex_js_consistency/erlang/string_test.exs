@@ -10,7 +10,8 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   @moduletag :consistency
 
   describe "titlecase/1" do
-    # Binary input tests
+    # Section: with binary input
+
     test "returns empty binary for empty string" do
       assert :string.titlecase("") == ""
     end
@@ -38,69 +39,79 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     test "uses range check for Georgian character (codepoint 4304)" do
       input = <<4304::utf8, "test">>
       expected = <<4304::utf8, "test">>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses range check for Greek character (codepoint 8072)" do
       input = <<8072::utf8, "test">>
       expected = <<8072::utf8, "test">>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses range check for Greek character (codepoint 8088)" do
       input = <<8088::utf8>>
       expected = <<8088::utf8>>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses range check for Greek character (codepoint 8104)" do
       input = <<8104::utf8>>
       expected = <<8104::utf8>>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses range check for Greek character (codepoint 8111)" do
       input = <<8111::utf8, "end">>
       expected = <<8111::utf8, "end">>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses range check for character (codepoint 68976)" do
       input = <<68_976::utf8>>
       expected = <<68_976::utf8>>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses custom mapping from MAPPING object (452 → 453)" do
       input = <<452::utf8, "test">>
       expected = <<453::utf8, "test">>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses custom mapping for ligature ﬁ (64257 → [70, 105] = 'Fi')" do
       input = <<64_257::utf8, "re">>
+
       assert :string.titlecase(input) == "Fire"
     end
 
     test "uses custom mapping that expands to multiple codepoints (8114 → [8122, 837])" do
       input = <<8114::utf8, "x">>
       expected = <<8122::utf8, 837::utf8, "x">>
+
       assert :string.titlecase(input) == expected
     end
 
     test "uses custom mapping for ligature ﬃ (64259 → [70, 102, 105] = 'Ffi')" do
       input = <<64_259::utf8>>
+
       assert :string.titlecase(input) == "Ffi"
     end
 
-    test "uses JavaScript toUpperCase for regular character" do
+    test "titlecases word without special case rules" do
       assert :string.titlecase("world") == "World"
     end
 
     test "raises ArgumentError for invalid UTF-8 binary" do
       invalid_binary = <<255, 255>>
 
-      assert_raise ArgumentError, fn ->
+      assert_error ArgumentError, "argument error: <<255, 255>>", fn ->
         :string.titlecase(invalid_binary)
       end
     end
@@ -109,12 +120,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       # Create a binary with surrogate pair codepoint (55296)
       invalid_binary = <<0xED, 0xA0, 0x80>>
 
-      assert_raise ArgumentError, fn ->
+      assert_error ArgumentError, "argument error: <<237, 160, 128>>", fn ->
         :string.titlecase(invalid_binary)
       end
     end
 
-    # List with integer first element tests
+    # Section: with list of integers (charlist)
+
     test "returns empty list for empty list" do
       assert :string.titlecase([]) == []
     end
@@ -151,7 +163,7 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.titlecase([8114, 120]) == [8122, 837, 120]
     end
 
-    test "uses JavaScript toUpperCase for regular codepoint" do
+    test "titlecases codepoint without special case rules" do
       assert :string.titlecase([119]) == [87]
     end
 
@@ -160,7 +172,8 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.titlecase([55_296]) == [55_296]
     end
 
-    # List with binary first element tests
+    # Section: with list starting with binary
+
     test "processes single character binary" do
       assert :string.titlecase(["a", 98]) == [65, "", 98]
     end
@@ -177,15 +190,64 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.titlecase(["ßx", 97]) == [83, 115, "x", 97]
     end
 
-    test "expands binary first char with ligature ﬁ (64257)" do
+    test "expands ligature ﬁ (64257) to nested list when binary has trailing content" do
       input = [<<64_257::utf8, "le">>]
+
       assert :string.titlecase(input) == [[70, 105], "le"]
+    end
+
+    test "expands ligature ﬁ (64257) to flat list when followed by separate binary" do
+      input = [<<64_257::utf8>>, "ox"]
+
+      assert :string.titlecase(input) == [70, 105, "", "ox"]
+    end
+
+    test "expands ligature ﬁ (64257) to flat list when alone in list" do
+      input = [<<64_257::utf8>>]
+
+      assert :string.titlecase(input) == [70, 105]
+    end
+
+    test "expands ligature ﬁ (64257) to flat list when followed by separate empty binary" do
+      input = [<<64_257::utf8>>, ""]
+
+      assert :string.titlecase(input) == [70, 105, "", ""]
+    end
+
+    test "expands ligature ﬁ (64257) to flat list when followed by separate integer" do
+      input = [<<64_257::utf8>>, 97]
+
+      assert :string.titlecase(input) == [70, 105, "", 97]
+    end
+
+    test "expands ligature ﬀ (64256) to nested list when binary has trailing content" do
+      input = [<<64_256::utf8, "ox">>]
+
+      assert :string.titlecase(input) == [[70, 102], "ox"]
+    end
+
+    test "expands ligature ﬀ (64256) to flat list when followed by separate binary" do
+      input = [<<64_256::utf8>>, "ox"]
+
+      assert :string.titlecase(input) == [70, 102, "", "ox"]
+    end
+
+    test "expands ligature ﬄ (64260) to nested list when binary has trailing content" do
+      input = [<<64_260::utf8, "at">>]
+
+      assert :string.titlecase(input) == [[70, 102, 108], "at"]
+    end
+
+    test "expands ligature ﬄ (64260) to flat list when followed by separate binary" do
+      input = [<<64_260::utf8>>, "at"]
+
+      assert :string.titlecase(input) == [70, 102, 108, "", "at"]
     end
 
     test "raises ArgumentError for invalid UTF-8 binary in list" do
       invalid_binary = <<255, 255>>
 
-      assert_raise ArgumentError, fn ->
+      assert_error ArgumentError, "argument error: <<255, 255>>", fn ->
         :string.titlecase([invalid_binary])
       end
     end
@@ -194,12 +256,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.titlecase([""]) == []
     end
 
-    # Nested list tests
-    test "processes nested list with only integers, rest only integers" do
+    # Section: with nested list
+
+    test "processes nested list with single integer, rest is single integer" do
       assert :string.titlecase([[97], 98]) == [65, 98]
     end
 
-    test "processes nested list with multiple integers, rest with integers" do
+    test "processes nested list with multiple integers, rest is multiple integers" do
       assert :string.titlecase([[104, 101], 108, 108]) == [72, 101, 108, 108]
     end
 
@@ -235,50 +298,101 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.titlecase([[223], 97]) == [83, 115, 97]
     end
 
-    test "processes triple nested list" do
-      assert :string.titlecase([[[[122]]]]) == [90]
+    # Section: edge cases
+
+    test "returns empty list for empty nested list" do
+      assert :string.titlecase([[]]) == []
     end
 
-    # Error handling tests
+    test "returns zero codepoint as-is" do
+      assert :string.titlecase([0]) == [0]
+    end
+
+    test "returns large codepoint outside BMP as-is" do
+      # 😀 emoji
+      assert :string.titlecase([128_512]) == [128_512]
+    end
+
+    test "handles multiple empty binaries in list" do
+      assert :string.titlecase(["", "", 97]) == [65]
+    end
+
+    test "handles nested list with empty binary" do
+      assert :string.titlecase([[""], 97]) == [65]
+    end
+
+    test "raises FunctionClauseError for negative integer" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [-1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.titlecase([-1])
+      end
+    end
+
+    test "raises FunctionClauseError for very large integer" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [9_999_999])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.titlecase([9_999_999])
+      end
+    end
+
+    test "raises FunctionClauseError for non-byte-aligned bitstring" do
+      expected_msg =
+        build_function_clause_error_msg(":string.titlecase/1", [<<1::1, 0::1, 1::1>>])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.titlecase(<<1::1, 0::1, 1::1>>)
+      end
+    end
+
+    test "raises FunctionClauseError for list with non-byte-aligned bitstring" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.titlecase([<<1::1, 0::1, 1::1>>])
+      end
+    end
+
+    # Section: error handling
+
     test "raises FunctionClauseError for integer input" do
-      assert_raise FunctionClauseError, fn ->
+      expected_msg = build_function_clause_error_msg(":string.titlecase/1", [42])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :string.titlecase(42)
       end
     end
 
     test "raises FunctionClauseError for atom input" do
-      assert_raise FunctionClauseError, fn ->
+      expected_msg = build_function_clause_error_msg(":string.titlecase/1", [:test])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :string.titlecase(:test)
       end
     end
 
     test "raises FunctionClauseError for float input" do
-      assert_raise FunctionClauseError, fn ->
+      expected_msg = build_function_clause_error_msg(":string.titlecase/1", [3.14])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :string.titlecase(3.14)
       end
     end
 
     test "raises FunctionClauseError for list with atom first element" do
-      assert_raise FunctionClauseError, fn ->
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:invalid])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :string.titlecase([:invalid])
       end
     end
 
     test "raises FunctionClauseError for list with float first element" do
-      assert_raise FunctionClauseError, fn ->
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [3.14])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :string.titlecase([3.14])
-      end
-    end
-
-    test "raises FunctionClauseError for list with map first element" do
-      assert_raise FunctionClauseError, fn ->
-        :string.titlecase([%{a: 1}])
-      end
-    end
-
-    test "raises FunctionClauseError for list with tuple first element" do
-      assert_raise FunctionClauseError, fn ->
-        :string.titlecase([{1, 2}])
       end
     end
   end
