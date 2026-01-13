@@ -141,6 +141,67 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "fold/3" do
+    setup do
+      [opts: [{:version, 2}]]
+    end
+
+    test "folds over an empty set and returns the initial accumulator", %{opts: opts} do
+      set = :sets.new(opts)
+      fun = fn _elem, acc -> acc end
+
+      result = :sets.fold(fun, 1, set)
+
+      assert result == 1
+    end
+
+    test "folds over a set with a single element", %{opts: opts} do
+      set = :sets.from_list([2], opts)
+      fun = fn elem, acc -> [elem | acc] end
+
+      result = :sets.fold(fun, [], set)
+
+      assert result == [2]
+    end
+
+    test "sums multiple elements", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      fun = fn elem, acc -> acc + elem end
+
+      result = :sets.fold(fun, 0, set)
+
+      assert result == 6
+    end
+
+    test "raises FunctionClauseError if the function has wrong arity", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      fun = fn _elem -> :ignored end
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [fun, 0, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(fun, 0, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the function argument is not a function", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [:not_a_function, 0, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(:not_a_function, 0, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the set argument is not a set" do
+      fun = fn _elem, acc -> acc end
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [fun, 0, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(fun, 0, :not_a_set)
+      end
+    end
+  end
+
   describe "is_element/2" do
     test "returns true if element is in the set" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
