@@ -1517,7 +1517,7 @@ export default class Interpreter {
     return ++Interpreter.#uniqueIntegerCounter;
   }
   static resetUniqueIntegerCounter() {
-    this.uniqueIntegerCounter = 0n;
+    Interpreter.#uniqueIntegerCounter = 0n;
   }
 }
 
