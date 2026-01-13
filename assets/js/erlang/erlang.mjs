@@ -1585,8 +1585,8 @@ const Erlang = {
 
   // Start unique_integer/0
   "unique_integer/0": () => {
-    Interpreter.uniqueIntegerCounter += 1n;
-    return Type.integer(Interpreter.uniqueIntegerCounter);
+    const value = Interpreter.getAndIncrementUniqueIntegerCounter();
+    return Type.integer(value);
   },
   // End unique_integer/0
   // Deps: []
