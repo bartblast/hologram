@@ -115,12 +115,12 @@ describe("Erlang_String", () => {
       });
 
       it("uses range check for character (codepoint 68976)", () => {
-        const input = Type.bitstring(String.fromCodePoint(68976));
+        const input = Type.bitstring(String.fromCodePoint(68_976));
         const result = titlecase(input);
 
         assert.deepStrictEqual(
           result,
-          Type.bitstring(String.fromCodePoint(68976)),
+          Type.bitstring(String.fromCodePoint(68_976)),
         );
       });
 
@@ -135,7 +135,7 @@ describe("Erlang_String", () => {
       });
 
       it("uses custom mapping for ligature ﬁ (64257 → [70, 105] = 'Fi')", () => {
-        const input = Type.bitstring(String.fromCodePoint(64257) + "re");
+        const input = Type.bitstring(String.fromCodePoint(64_257) + "re");
         const result = titlecase(input);
 
         assert.deepStrictEqual(result, Type.bitstring("Fire"));
@@ -158,7 +158,7 @@ describe("Erlang_String", () => {
         assert.deepStrictEqual(result, Type.bitstring("Ffi"));
       });
 
-      it("uses JavaScript toUpperCase for regular character", () => {
+      it("titlecases word without special case rules", () => {
         const input = Type.bitstring("world");
         const result = titlecase(input);
 
@@ -238,7 +238,7 @@ describe("Erlang_String", () => {
       });
 
       it("expands first codepoint to three codepoints (64259 → [70, 102, 105])", () => {
-        const input = Type.list([Type.integer(64259), Type.integer(120)]); // "ﬃx"
+        const input = Type.list([Type.integer(64_259), Type.integer(120)]); // "ﬃx"
         const result = titlecase(input);
 
         assert.deepStrictEqual(
@@ -282,21 +282,19 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("uses JavaScript toUpperCase for regular codepoint", () => {
+      it("titlecases codepoint without special case rules", () => {
         const input = Type.list([Type.integer(119)]); // "w"
         const result = titlecase(input);
 
         assert.deepStrictEqual(result, Type.list([Type.integer(87)])); // "W"
       });
 
-      it("raises ArgumentError for surrogate pair codepoint", () => {
-        const input = Type.list([Type.integer(55296)]);
+      it("does not validate surrogate pair codepoint in charlist", () => {
+        // Erlang does not validate surrogate pairs in charlists
+        const input = Type.list([Type.integer(55_296)]);
+        const result = titlecase(input);
 
-        assertBoxedError(
-          () => titlecase(input),
-          "ArgumentError",
-          "argument error: [55296]",
-        );
+        assert.deepStrictEqual(result, Type.list([Type.integer(55_296)]));
       });
     });
 
@@ -350,10 +348,13 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("expands binary first char with ligature ﬁ (64257)", () => {
-        const input = Type.list([
-          Type.bitstring(String.fromCodePoint(64257) + "le"),
-        ]);
+      it("expands ligature ﬁ (64257) to nested list when binary has trailing content", () => {
+        const segments = [
+          Type.bitstringSegment(Type.integer(64_257), {type: "utf8"}),
+          Type.bitstringSegment(Type.bitstring("le"), {type: "bitstring"}),
+        ];
+
+        const input = Type.list([Bitstring.fromSegments(segments)]);
         const result = titlecase(input);
 
         assert.deepStrictEqual(
@@ -365,6 +366,150 @@ describe("Erlang_String", () => {
         );
       });
 
+      it("expands ligature ﬁ (64257) to flat list when followed by separate binary", () => {
+        const input = Type.list([
+          Type.bitstring(String.fromCodePoint(64_257)),
+          Type.bitstring("ox"),
+        ]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.integer(70),
+            Type.integer(105),
+            Type.bitstring(""),
+            Type.bitstring("ox"),
+          ]),
+        );
+      });
+
+      it("expands ligature ﬁ (64257) to flat list when alone in list", () => {
+        const input = Type.list([Type.bitstring(String.fromCodePoint(64_257))]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Type.integer(70), Type.integer(105)]),
+        );
+      });
+
+      it("expands ligature ﬁ (64257) to flat list when followed by separate empty binary", () => {
+        const input = Type.list([
+          Type.bitstring(String.fromCodePoint(64_257)),
+          Type.bitstring(""),
+        ]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.integer(70),
+            Type.integer(105),
+            Type.bitstring(""),
+            Type.bitstring(""),
+          ]),
+        );
+      });
+
+      it("expands ligature ﬁ (64257) to flat list when followed by separate integer", () => {
+        const input = Type.list([
+          Type.bitstring(String.fromCodePoint(64_257)),
+          Type.integer(97),
+        ]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.integer(70),
+            Type.integer(105),
+            Type.bitstring(""),
+            Type.integer(97),
+          ]),
+        );
+      });
+
+      it("expands ligature ﬀ (64256) to nested list when binary has trailing content", () => {
+        const segments = [
+          Type.bitstringSegment(Type.integer(64_256), {type: "utf8"}),
+          Type.bitstringSegment(Type.bitstring("ox"), {type: "bitstring"}),
+        ];
+
+        const input = Type.list([Bitstring.fromSegments(segments)]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.list([Type.integer(70), Type.integer(102)]),
+            Type.bitstring("ox"),
+          ]),
+        );
+      });
+
+      it("expands ligature ﬀ (64256) to flat list when followed by separate binary", () => {
+        const input = Type.list([
+          Type.bitstring(String.fromCodePoint(64_256)),
+          Type.bitstring("ox"),
+        ]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.integer(70),
+            Type.integer(102),
+            Type.bitstring(""),
+            Type.bitstring("ox"),
+          ]),
+        );
+      });
+
+      it("expands ligature ﬄ (64260) to nested list when binary has trailing content", () => {
+        const segments = [
+          Type.bitstringSegment(Type.integer(64_260), {type: "utf8"}),
+          Type.bitstringSegment(Type.bitstring("at"), {type: "bitstring"}),
+        ];
+
+        const input = Type.list([Bitstring.fromSegments(segments)]);
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.list([Type.integer(70), Type.integer(102), Type.integer(108)]),
+            Type.bitstring("at"),
+          ]),
+        );
+      });
+
+      it("expands ligature ﬄ (64260) to flat list when followed by separate binary", () => {
+        const input = Type.list([
+          Type.bitstring(String.fromCodePoint(64_260)),
+          Type.bitstring("at"),
+        ]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.integer(70),
+            Type.integer(102),
+            Type.integer(108),
+            Type.bitstring(""),
+            Type.bitstring("at"),
+          ]),
+        );
+      });
+
       it("raises ArgumentError for invalid UTF-8 binary in list", () => {
         const invalidBinary = Bitstring.fromBytes([255, 255]);
         const input = Type.list([invalidBinary]);
@@ -372,7 +517,7 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "ArgumentError",
-          "argument error: [<<255, 255>>]",
+          "argument error: <<255, 255>>",
         );
       });
 
@@ -385,7 +530,7 @@ describe("Erlang_String", () => {
     });
 
     describe("with nested list", () => {
-      it("processes nested list with only integers, rest only integers ", () => {
+      it("processes nested list with single integer, rest is single integer", () => {
         const input = Type.list([
           Type.list([Type.integer(97)]),
           Type.integer(98),
@@ -399,7 +544,7 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("processes nested list with multiple integers, rest with integers ", () => {
+      it("processes nested list with multiple integers, rest is multiple integers", () => {
         const input = Type.list([
           Type.list([Type.integer(104), Type.integer(101)]), // "he"
           Type.integer(108),
@@ -443,6 +588,7 @@ describe("Erlang_String", () => {
           Type.list([Type.integer(97)]),
           Type.bitstring("test"),
         ]);
+
         const result = titlecase(input);
 
         assert.deepStrictEqual(
@@ -522,15 +668,100 @@ describe("Erlang_String", () => {
           Type.list([Type.integer(83), Type.integer(115), Type.integer(97)]),
         );
       });
+    });
 
-      it("processes triple nested list", () => {
+    describe("edge cases", () => {
+      it("returns empty list for empty nested list", () => {
+        const input = Type.list([Type.list()]);
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(result, Type.list());
+      });
+
+      it("returns zero codepoint as-is", () => {
+        const input = Type.list([Type.integer(0)]);
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(result, Type.list([Type.integer(0)]));
+      });
+
+      it("returns large codepoint outside BMP as-is", () => {
+        const input = Type.list([Type.integer(128_512)]); // 😀 emoji
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(result, Type.list([Type.integer(128_512)]));
+      });
+
+      it("handles multiple empty binaries in list", () => {
         const input = Type.list([
-          Type.list([Type.list([Type.list([Type.integer(122)])])]),
+          Type.bitstring(""),
+          Type.bitstring(""),
+          Type.integer(97),
         ]);
 
         const result = titlecase(input);
 
-        assert.deepStrictEqual(result, Type.list([Type.integer(90)]));
+        assert.deepStrictEqual(result, Type.list([Type.integer(65)]));
+      });
+
+      it("handles nested list with empty binary", () => {
+        const input = Type.list([
+          Type.list([Type.bitstring("")]),
+          Type.integer(97),
+        ]);
+
+        const result = titlecase(input);
+
+        assert.deepStrictEqual(result, Type.list([Type.integer(65)]));
+      });
+
+      it("raises FunctionClauseError for negative integer", () => {
+        const input = Type.list([Type.integer(-1)]);
+
+        assertBoxedError(
+          () => titlecase(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.integer(-1),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for very large integer", () => {
+        const input = Type.list([Type.integer(9_999_999)]);
+
+        assertBoxedError(
+          () => titlecase(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.integer(9_999_999),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for non-byte-aligned bitstring", () => {
+        const bitstring = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () => titlecase(bitstring),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
+            bitstring,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for list with non-byte-aligned bitstring", () => {
+        const bitstring = Type.bitstring([1, 0, 1]);
+        const input = Type.list([bitstring]);
+
+        assertBoxedError(
+          () => titlecase(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            bitstring,
+          ]),
+        );
       });
     });
 
@@ -577,8 +808,8 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.atom("invalid"),
           ]),
         );
       });
@@ -589,8 +820,8 @@ describe("Erlang_String", () => {
         assertBoxedError(
           () => titlecase(input),
           "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.titlecase/1", [
-            input,
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.float(3.14),
           ]),
         );
       });
