@@ -308,6 +308,62 @@ const Erlang_Lists = {
   // End keysort/2
   // Deps: [:erlang.element/2]
 
+  // Start keyreplace/4
+  "keyreplace/4": function (key, index, tuples, newtuple) {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keyreplace/4",
+          arguments,
+        ),
+      );
+    }
+
+    if (index.value < 1n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keyreplace/4",
+          arguments,
+        ),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
+          key,
+          index,
+          thirdArg,
+          newtuple,
+        ]),
+      );
+    }
+
+    let result = tuples.data;
+
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        result = [
+          ...tuples.data.slice(0, i),
+          newtuple,
+          ...tuples.data.slice(i + 1),
+        ];
+        break;
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End keyreplace/4
+  // Deps: []
+
   // Start map/2
   "map/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
