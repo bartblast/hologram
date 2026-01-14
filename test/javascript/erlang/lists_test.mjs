@@ -26,10 +26,28 @@ const atomF = Type.atom("f");
 const atomG = Type.atom("g");
 const atomH = Type.atom("h");
 const atomI = Type.atom("i");
+const atomX = Type.atom("x");
 
 const emptyList = Type.list();
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
+
+const funArity2 = Type.anonymousFunction(
+  2,
+  [
+    {
+      params: (_context) => [
+        Type.variablePattern("x"),
+        Type.variablePattern("y"),
+      ],
+      guards: [],
+      body: (context) => {
+        return Erlang["+/2"](context.vars.x, context.vars.y);
+      },
+    },
+  ],
+  contextFixture(),
+);
 
 const improperList = Type.improperList([
   Type.integer(1),
@@ -50,22 +68,7 @@ const properList = Type.list([
   Type.integer(3),
 ]);
 
-const funArity2 = Type.anonymousFunction(
-  2,
-  [
-    {
-      params: (_context) => [
-        Type.variablePattern("x"),
-        Type.variablePattern("y"),
-      ],
-      guards: [],
-      body: (context) => {
-        return Erlang["+/2"](context.vars.x, context.vars.y);
-      },
-    },
-  ],
-  contextFixture(),
-);
+const tupleX = Type.tuple([atomX]);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs
@@ -1032,6 +1035,184 @@ describe("Erlang_Lists", () => {
           ),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    });
+  });
+
+  describe("keyreplace/4", () => {
+    const keyreplace = Erlang_Lists["keyreplace/4"];
+
+    it("returns the original list if tuples list is empty", () => {
+      const result = keyreplace(atomC, integer1, emptyList, tupleX);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("single tuple, no match", () => {
+      const tuples = Type.list([Type.tuple([atomA, integer2, float3])]);
+      const result = keyreplace(atomC, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, tuples);
+    });
+
+    it("single tuple, match at first index", () => {
+      const tuples = Type.list([Type.tuple([atomA, integer2, float3])]);
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("single tuple, match at middle index", () => {
+      const tuples = Type.list([Type.tuple([integer1, atomB, float3])]);
+      const result = keyreplace(atomB, integer2, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("single tuple, match at last index", () => {
+      const tuples = Type.list([Type.tuple([integer1, float2, atomC])]);
+      const result = keyreplace(atomC, integer3, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("multiple tuples, no match", () => {
+      const tuples = Type.list([
+        Type.tuple([atomA, integer2, float3]),
+        Type.tuple([atomD, atomE, atomF]),
+        Type.tuple([atomG, atomH, atomI]),
+      ]);
+
+      const result = keyreplace(atomC, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, tuples);
+    });
+
+    it("multiple tuples, match first tuple", () => {
+      const tuple2 = Type.tuple([atomD, atomE, atomF]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+
+      const tuples = Type.list([
+        Type.tuple([atomA, integer2, float3]),
+        tuple2,
+        tuple3,
+      ]);
+
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+      const expected = Type.list([tupleX, tuple2, tuple3]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match middle tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+
+      const tuples = Type.list([
+        tuple1,
+        Type.tuple([atomA, integer2, float3]),
+        tuple3,
+      ]);
+
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+      const expected = Type.list([tuple1, tupleX, tuple3]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match last tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple2 = Type.tuple([atomG, atomH, atomI]);
+
+      const tuples = Type.list([
+        tuple1,
+        tuple2,
+        Type.tuple([atomA, integer2, float3]),
+      ]);
+
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+      const expected = Type.list([tuple1, tuple2, tupleX]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("applies non-strict comparison", () => {
+      const tuples = Type.list([Type.tuple([float2])]);
+      const result = keyreplace(integer2, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is not an integer", () => {
+      assertBoxedError(
+        () => keyreplace(atomA, float2, Type.list(), Type.tuple()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+          atomA,
+          float2,
+          Type.list(),
+          Type.tuple(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is smaller than 1", () => {
+      assertBoxedError(
+        () => keyreplace(atomA, integer0, Type.list(), Type.tuple()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+          atomA,
+          integer0,
+          Type.list(),
+          Type.tuple(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
+      const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.keyreplace3/4",
+        [atomA, integer1, tuples, Type.tuple()],
+      );
+
+      assertBoxedError(
+        () => keyreplace(atomA, integer1, tuples, Type.tuple()),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.keyreplace3/4",
+        [atomA, integer1, Type.tuple([atomD]), Type.tuple()],
+      );
+
+      const tuples = Type.improperList([
+        Type.tuple([atomB]),
+        Type.tuple([atomC]),
+        Type.tuple([atomD]),
+      ]);
+
+      assertBoxedError(
+        () => keyreplace(atomA, integer1, tuples, Type.tuple()),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the fourth argument (newTuple) is not a tuple", () => {
+      assertBoxedError(
+        () => keyreplace(atomA, integer1, Type.list(), atomX),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+          atomA,
+          integer1,
+          Type.list(),
+          atomX,
+        ]),
       );
     });
   });

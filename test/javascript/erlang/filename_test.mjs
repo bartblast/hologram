@@ -97,6 +97,20 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("binary with invalid UTF-8 bytes", () => {
+      // <<0xFF, 0xFE>> is invalid UTF-8
+      const filename = Bitstring.fromBytes([
+        112, 97, 116, 104, 47, 116, 111, 47, 0xff, 0xfe, 46, 116, 120, 116,
+      ]);
+
+      const result = basename(filename);
+
+      // Should preserve raw bytes for the invalid UTF-8
+      const expected = Bitstring.fromBytes([0xff, 0xfe, 46, 116, 120, 116]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("atom input", () => {
       const filename = Type.atom("path/to/file.txt");
       const result = basename(filename);
@@ -128,6 +142,54 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("iolist with invalid UTF-8 bytes", () => {
+      // Pure charlist: [112, 97, 116, 104, 47, 116, 111, 47, 0xFF, 0xFE, 46, 116, 120, 116]
+      // "path/to/" + [0xFF, 0xFE] + ".txt"
+      const filename = Type.list([
+        Type.integer(112), // 'p'
+        Type.integer(97), // 'a'
+        Type.integer(116), // 't'
+        Type.integer(104), // 'h'
+        Type.integer(47), // '/'
+        Type.integer(116), // 't'
+        Type.integer(111), // 'o'
+        Type.integer(47), // '/'
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(46), // '.'
+        Type.integer(116), // 't'
+        Type.integer(120), // 'x'
+        Type.integer(116), // 't'
+      ]);
+
+      const result = basename(filename);
+
+      // Should return raw bytes as integers: [0xFF, 0xFE, ?., ?t, ?x, ?t]
+      const expected = Type.list([
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(46), // '.'
+        Type.integer(116), // 't'
+        Type.integer(120), // 'x'
+        Type.integer(116), // 't'
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("charlist with only slashes", () => {
+      const filename = Type.list([
+        Type.integer(47), // '/'
+        Type.integer(47), // '/'
+        Type.integer(47), // '/'
+      ]);
+
+      const result = basename(filename);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
       const arg = Type.integer(123);
 
@@ -146,6 +208,183 @@ describe("Erlang_Filename", () => {
 
       assertBoxedError(
         () => basename(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+  });
+
+  describe("flatten/1", () => {
+    const flatten = Erlang_Filename["flatten/1"];
+
+    it("binary", () => {
+      const filename = Type.bitstring("path/to/file.txt");
+      const result = flatten(filename);
+
+      assert.deepStrictEqual(result, filename);
+    });
+
+    it("atom", () => {
+      const filename = Type.atom("myfile");
+      const result = flatten(filename);
+      const expected = Type.charlist("myfile");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("flat list of integers", () => {
+      const filename = Type.list([
+        Type.integer(112),
+        Type.integer(97),
+        Type.integer(116),
+        Type.integer(104),
+      ]);
+
+      const result = flatten(filename);
+
+      assert.deepStrictEqual(result, filename);
+    });
+
+    it("flat list of bitstrings", () => {
+      const filename = Type.list([
+        Type.bitstring("foo"),
+        Type.bitstring("bar"),
+      ]);
+
+      const result = flatten(filename);
+
+      assert.deepStrictEqual(result, filename);
+    });
+
+    it("flat list of atoms", () => {
+      // # ?f = 102, ?o = 111, ?全 = 20840, ?息 = 24687, ?图 = 22270, ?b = 98, ?a = 97, ?r = 114
+      const filename = Type.list([
+        Type.atom("foo"),
+        Type.atom("全息图"),
+        Type.atom("bar"),
+      ]);
+
+      const result = flatten(filename);
+
+      const expected = Type.list([
+        Type.integer(102),
+        Type.integer(111),
+        Type.integer(111),
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+        Type.integer(98),
+        Type.integer(97),
+        Type.integer(114),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("nested list of integers", () => {
+      const filename = Type.list([
+        Type.integer(112),
+        Type.list([Type.integer(97), Type.integer(116)]),
+        Type.integer(104),
+      ]);
+
+      const result = flatten(filename);
+
+      const expected = Type.list([
+        Type.integer(112),
+        Type.integer(97),
+        Type.integer(116),
+        Type.integer(104),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("deeply nested list of integers", () => {
+      const filename = Type.list([
+        Type.list([
+          Type.list([Type.integer(97), Type.integer(98)]),
+          Type.integer(99),
+        ]),
+        Type.integer(100),
+      ]);
+
+      const result = flatten(filename);
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+        Type.integer(100),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list", () => {
+      const filename = Type.list();
+      const result = flatten(filename);
+
+      assert.deepStrictEqual(result, filename);
+    });
+
+    it("list with an empty list element", () => {
+      const filename = Type.list([
+        Type.integer(97),
+        Type.list(),
+        Type.integer(98),
+      ]);
+
+      const result = flatten(filename);
+      const expected = Type.list([Type.integer(97), Type.integer(98)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("mixed list with bitstrings, atoms, integers and nested lists", () => {
+      // ?t = 116, ?o = 111
+      const filename = Type.list([
+        Type.bitstring("path"),
+        Type.list([Type.integer(47), Type.atom("to")]),
+        Type.integer(63),
+        Type.list([Type.bitstring("file.txt")]),
+      ]);
+
+      const result = flatten(filename);
+
+      const expected = Type.list([
+        Type.bitstring("path"),
+        Type.integer(47),
+        Type.integer(116),
+        Type.integer(111),
+        Type.integer(63),
+        Type.bitstring("file.txt"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the argument is not a binary, atom, or list", () => {
+      const arg = Type.integer(123);
+
+      assertBoxedError(
+        () => flatten(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => flatten(arg),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,

@@ -262,6 +262,54 @@ const Erlang_Lists = {
   // End keymember/3
   // Deps: [:lists.keyfind/3]
 
+  // Start keyreplace/4
+  "keyreplace/4": function (key, index, tuples, newTuple) {
+    if (!Type.isInteger(index) || index.value < 1n || !Type.isTuple(newTuple)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keyreplace/4",
+          arguments,
+        ),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
+          key,
+          index,
+          thirdArg,
+          newTuple,
+        ]),
+      );
+    }
+
+    let resultData = tuples.data;
+
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        resultData = [
+          ...tuples.data.slice(0, i),
+          newTuple,
+          ...tuples.data.slice(i + 1),
+        ];
+        break;
+      }
+    }
+
+    return Type.list(resultData);
+  },
+  // End keyreplace/4
+  // Deps: []
+
   // Start keysort/2
   "keysort/2": (index, tuples) => {
     if (!Type.isInteger(index) || index.value <= 0n) {

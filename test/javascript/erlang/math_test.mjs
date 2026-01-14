@@ -53,7 +53,7 @@ describe("Erlang_Math", () => {
     it("keeps signed positive zero float unchanged", () => {
       const result = testedFun(Type.float(+0.0));
 
-      assert.deepStrictEqual(result, Type.float(0.0));
+      assert.deepStrictEqual(result, Type.float(+0.0));
     });
 
     it("keeps unsigned zero float unchanged", () => {
@@ -62,19 +62,91 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, Type.float(0.0));
     });
 
-    it("keeps positive integer unchanged", () => {
+    it("converts positive integer to float", () => {
       const result = testedFun(Type.integer(1));
 
       assert.deepStrictEqual(result, Type.float(1.0));
     });
 
-    it("keeps negative integer unchanged", () => {
+    it("converts negative integer to float", () => {
       const result = testedFun(Type.integer(-1));
 
       assert.deepStrictEqual(result, Type.float(-1.0));
     });
 
-    it("keeps zero integer unchanged", () => {
+    it("converts zero integer to float", () => {
+      const result = testedFun(Type.integer(0));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
+  describe("floor/1", () => {
+    const testedFun = Erlang_Math["floor/1"];
+
+    it("rounds positive float with fractional part down", () => {
+      const result = testedFun(Type.float(1.23));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("rounds negative float with fractional part down", () => {
+      const result = testedFun(Type.float(-1.23));
+
+      assert.deepStrictEqual(result, Type.float(-2.0));
+    });
+
+    it("keeps positive float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(1.0));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("keeps negative float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(-1.0));
+
+      assert.deepStrictEqual(result, Type.float(-1.0));
+    });
+
+    it("keeps signed negative zero float unchanged", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("keeps signed positive zero float unchanged", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("keeps unsigned zero float unchanged", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("converts positive integer to float", () => {
+      const result = testedFun(Type.integer(1));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("converts negative integer to float", () => {
+      const result = testedFun(Type.integer(-1));
+
+      assert.deepStrictEqual(result, Type.float(-1.0));
+    });
+
+    it("converts zero integer to float", () => {
       const result = testedFun(Type.integer(0));
 
       assert.deepStrictEqual(result, Type.float(0.0));

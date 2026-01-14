@@ -5,10 +5,12 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
   freeze,
 } from "../support/helpers.mjs";
 
+import Erlang_Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Erlang_Sets from "../../../assets/js/erlang/sets.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
@@ -35,6 +37,317 @@ const set123 = Erlang_Sets["from_list/2"](
 // Always update both together.
 
 describe("Erlang_Sets", () => {
+  describe("filter/2", () => {
+    const filter_2 = Erlang_Sets["filter/2"];
+
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("elem")],
+          guards: [],
+          body: (context) => {
+            return Erlang[">/2"](context.vars.elem, integer2);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("filters elements from a non-empty set", () => {
+      const result = filter_2(fun, set123);
+
+      assert.deepStrictEqual(
+        result,
+        Erlang_Sets["from_list/2"](Type.list([integer3]), opts),
+      );
+    });
+
+    it("returns an empty set if the predicate filters out all elements", () => {
+      const filterAllFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(10));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = filter_2(filterAllFun, set123);
+
+      assert.deepStrictEqual(
+        result,
+        Erlang_Sets["from_list/2"](Type.list(), opts),
+      );
+    });
+
+    it("returns the same set if the predicate matches all elements", () => {
+      const matchAllFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(0));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = filter_2(matchAllFun, set123);
+
+      assert.deepStrictEqual(result, set123);
+    });
+
+    it("filters elements from an empty set", () => {
+      const emptySet = Erlang_Sets["new/1"](opts);
+      const result = filter_2(fun, emptySet);
+
+      assert.deepStrictEqual(
+        result,
+        Erlang_Sets["from_list/2"](Type.list(), opts),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.filter/2",
+        [Type.atom("invalid"), set123],
+      );
+
+      assertBoxedError(
+        () => filter_2(Type.atom("invalid"), set123),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with wrong arity", () => {
+      const wrongArityFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("x"),
+              Type.variablePattern("y"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang["==/2"](context.vars.x, context.vars.y);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.filter/2",
+        [wrongArityFun, set123],
+      );
+
+      assertBoxedError(
+        () => filter_2(wrongArityFun, set123),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.filter/2",
+        [fun, atomAbc],
+      );
+
+      assertBoxedError(
+        () => filter_2(fun, atomAbc),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises ErlangError if the predicate does not return a boolean", () => {
+      const badFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => {
+              return Type.atom("not_a_boolean");
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMsg = Interpreter.buildErlangErrorMsg(
+        `{:bad_filter, :not_a_boolean}`,
+      );
+
+      assertBoxedError(
+        () => filter_2(badFun, set123),
+        "ErlangError",
+        expectedMsg,
+      );
+    });
+  });
+
+  describe("fold/3", () => {
+    const fold_3 = Erlang_Sets["fold/3"];
+
+    // Returns the accumulator unchanged (_elem, acc -> acc)
+    const returnAccFun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.matchPlaceholder(),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return context.vars.acc;
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("folds over an empty set and returns the initial accumulator", () => {
+      const set = Erlang_Sets["new/1"](opts);
+      const result = fold_3(returnAccFun, integer1, set);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("folds over a set with a single element", () => {
+      const set = Erlang_Sets["from_list/2"](Type.list([integer2]), opts);
+
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("elem"),
+              Type.variablePattern("acc"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Interpreter.consOperator(
+                context.vars.elem,
+                context.vars.acc,
+              );
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = fold_3(fun, Type.list(), set);
+      const expected = Type.list([integer2]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("folds over a set with multiple elements", () => {
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
+
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("elem"),
+              Type.variablePattern("acc"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang_Erlang["+/2"](context.vars.acc, context.vars.elem);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = fold_3(fun, Type.integer(0), set);
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("raises FunctionClauseError if the first argument is not a function", () => {
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.fold/3",
+        [atomAbc, Type.integer(0), set],
+      );
+
+      assertBoxedError(
+        () => fold_3(atomAbc, Type.integer(0), set),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the function has wrong arity", () => {
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
+
+      const fun = Type.anonymousFunction(
+        1, // Wrong arity - should be 2
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return context.vars.elem;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.fold/3",
+        [fun, Type.integer(0), set],
+      );
+
+      assertBoxedError(
+        () => fold_3(fun, Type.integer(0), set),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument is not a set", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.fold/3",
+        [returnAccFun, Type.integer(0), atomAbc],
+      );
+
+      assertBoxedError(
+        () => fold_3(returnAccFun, Type.integer(0), atomAbc),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+  });
+
   describe("from_list/2", () => {
     const from_list_2 = Erlang_Sets["from_list/2"];
 

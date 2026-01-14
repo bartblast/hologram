@@ -917,7 +917,7 @@ describe("Hologram", () => {
       const queuedActions = InitActionQueue.dequeueAll();
 
       const expectedAction = Erlang_Maps["put/3"](
-        Type.atom("component_3"),
+        Type.atom("target"),
         cid3,
         action3,
       );

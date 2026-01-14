@@ -23,7 +23,7 @@ test_locals_without_parens = [
     Enum.flat_map(
       [
         "*.{ex,exs}",
-        "{benchmarks,config,lib}/**/*.{ex,exs}",
+        "{benchmarks,config,lib,scripts}/**/*.{ex,exs}",
         "test/elixir/**/*.{ex,exs}"
       ],
       &Path.wildcard(&1, match_dot: true)

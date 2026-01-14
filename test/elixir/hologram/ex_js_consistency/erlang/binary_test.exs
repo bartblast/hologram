@@ -169,4 +169,40 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    {:binary, :first, [<<>>]}
     end
   end
+
+  describe "last/1" do
+    test "returns last byte of a single-byte binary" do
+      assert :binary.last(<<42>>) == 42
+    end
+
+    test "returns last byte of a multi-byte binary" do
+      assert :binary.last(@binary) == 33
+    end
+
+    test "returns last byte of a text-based binary" do
+      assert :binary.last("ELIXIR") == 82
+    end
+
+    test "returns last byte of UTF-8 multi-byte character" do
+      assert :binary.last("é") == 169
+    end
+
+    test "raises ArgumentError if subject is not a bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:binary, :last, [:abc]}
+    end
+
+    test "raises ArgumentError if subject is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
+                   {:binary, :last, [<<1::1, 0::1, 1::1>>]}
+    end
+
+    test "raises ArgumentError if subject is an empty binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "a zero-sized binary is not allowed"),
+                   {:binary, :last, [""]}
+    end
+  end
 end

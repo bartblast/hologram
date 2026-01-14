@@ -27,26 +27,26 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
 
     test "keeps signed negative zero float unchanged" do
-      assert :math.ceil(-0.0) == 0.0
+      assert :math.ceil(-0.0) == -0.0
     end
 
     test "keeps signed positive zero float unchanged" do
-      assert :math.ceil(+0.0) == 0.0
+      assert :math.ceil(+0.0) == +0.0
     end
 
     test "keeps unsigned zero float unchanged" do
       assert :math.ceil(0.0) == 0.0
     end
 
-    test "keeps positive integer unchanged" do
+    test "converts positive integer to float" do
       assert :math.ceil(1) == 1.0
     end
 
-    test "keeps negative integer unchanged" do
+    test "converts negative integer to float" do
       assert :math.ceil(-1) == -1.0
     end
 
-    test "keeps zero integer unchanged" do
+    test "converts zero integer to float" do
       assert :math.ceil(0) == 0.0
     end
 
@@ -54,6 +54,54 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a number"),
                    {:math, :ceil, [:abc]}
+    end
+  end
+
+  describe "floor/1" do
+    test "rounds positive float with fractional part down" do
+      assert :math.floor(1.23) == 1.0
+    end
+
+    test "rounds negative float with fractional part down" do
+      assert :math.floor(-1.23) == -2.0
+    end
+
+    test "keeps positive float without fractional part unchanged" do
+      assert :math.floor(1.0) == 1.0
+    end
+
+    test "keeps negative float without fractional part unchanged" do
+      assert :math.floor(-1.0) == -1.0
+    end
+
+    test "keeps signed negative zero float unchanged" do
+      assert :math.floor(-0.0) == -0.0
+    end
+
+    test "keeps signed positive zero float unchanged" do
+      assert :math.floor(+0.0) == +0.0
+    end
+
+    test "keeps unsigned zero float unchanged" do
+      assert :math.floor(0.0) == 0.0
+    end
+
+    test "converts positive integer to float" do
+      assert :math.floor(1) == 1.0
+    end
+
+    test "converts negative integer to float" do
+      assert :math.floor(-1) == -1.0
+    end
+
+    test "convets zero integer to float" do
+      assert :math.floor(0) == 0.0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:math, :floor, [:abc]}
     end
   end
 
