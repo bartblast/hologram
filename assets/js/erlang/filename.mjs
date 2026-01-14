@@ -173,8 +173,7 @@ const Erlang_Filename = {
   "split/1": (filename) => {
     const DIR_SEPARATOR_BYTE = 47;
 
-    // flatten/1 handles argument type checking and raises
-    // FunctionClauseError if needed.
+    // flatten/1 handles argument type checking and raises FunctionClauseError if needed.
     const flattened = Erlang_Filename["flatten/1"](filename);
     const flattenedIsBinary = Type.isBinary(flattened);
 
@@ -184,12 +183,11 @@ const Erlang_Filename = {
         ? Bitstring.isEmpty(flattened)
         : flattened.data.length === 0
     ) {
-      return Type.list([]);
+      return Type.list();
     }
 
     // TODO: Once implemented, use :binary.split/3 on <<"/">> with [global] option
     // and filter out empty components.
-
     const splitPathBytes = (bytes) => {
       const {parts, currentPart} = [...bytes].reduce(
         (acc, byte, index) => {
@@ -251,7 +249,7 @@ const Erlang_Filename = {
     return Type.list(resultParts);
   },
   // End split/1
-  // Deps: [:filename.flatten/1, :erlang.iolist_to_binary/1]
+  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1]
 };
 
 export default Erlang_Filename;
