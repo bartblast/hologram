@@ -79,6 +79,10 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.basename(filename) == expected
     end
 
+    test "charlist with only slashes" do
+      assert :filename.basename([?/, ?/, ?/]) == []
+    end
+
     test "raises FunctionClauseError if the argument is not a bitstring or atom or list" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),

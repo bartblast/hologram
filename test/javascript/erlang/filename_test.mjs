@@ -175,6 +175,19 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("charlist with only slashes", () => {
+      const filename = Type.list([
+        Type.integer(47), // '/'
+        Type.integer(47), // '/'
+        Type.integer(47), // '/'
+      ]);
+
+      const result = basename(filename);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
       const arg = Type.integer(123);
 
