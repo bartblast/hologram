@@ -85,6 +85,27 @@ const Erlang_Sets = {
   // End filter/2
   // Deps: []
 
+  // Start fold/3
+  "fold/3": (fun, initialAcc, set) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2 || !Type.isMap(set)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3", [
+          fun,
+          initialAcc,
+          set,
+        ]),
+      );
+    }
+
+    const elements = Erlang_Maps["keys/1"](set);
+
+    return elements.data.reduce((acc, elem) => {
+      return Interpreter.callAnonymousFunction(fun, [elem, acc]);
+    }, initialAcc);
+  },
+  // End fold/3
+  // Deps: [:maps.keys/1]
+
   // Start from_list/2
   "from_list/2": (list, opts) => {
     Erlang_Sets["_validate_opts/1"](opts);
@@ -116,26 +137,6 @@ const Erlang_Sets = {
   },
   // End new/1
   // Deps: [:sets._validate_opts/1]
-
-  // Start fold/3
-  "fold/3": (fun, initialAcc, set) => {
-    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2 || !Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3", [
-          fun,
-          initialAcc,
-          set,
-        ]),
-      );
-    }
-
-    const elements = Erlang_Maps["keys/1"](set);
-    return elements.data.reduce((acc, elem) => {
-      return Interpreter.callAnonymousFunction(fun, [elem, acc]);
-    }, initialAcc);
-  },
-  // End fold/3
-  // Deps: [:maps.keys/1]
 
   // Start to_list/1
   "to_list/1": (set) => {

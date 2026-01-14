@@ -199,6 +199,155 @@ describe("Erlang_Sets", () => {
     });
   });
 
+  describe("fold/3", () => {
+    const fold_3 = Erlang_Sets["fold/3"];
+
+    // Returns the accumulator unchanged (_elem, acc -> acc)
+    const returnAccFun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.matchPlaceholder(),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return context.vars.acc;
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("folds over an empty set and returns the initial accumulator", () => {
+      const set = Erlang_Sets["new/1"](opts);
+      const result = fold_3(returnAccFun, integer1, set);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("folds over a set with a single element", () => {
+      const set = Erlang_Sets["from_list/2"](Type.list([integer2]), opts);
+
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("elem"),
+              Type.variablePattern("acc"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Interpreter.consOperator(
+                context.vars.elem,
+                context.vars.acc,
+              );
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = fold_3(fun, Type.list(), set);
+      const expected = Type.list([integer2]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("folds over a set with multiple elements", () => {
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
+
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("elem"),
+              Type.variablePattern("acc"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang_Erlang["+/2"](context.vars.acc, context.vars.elem);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = fold_3(fun, Type.integer(0), set);
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("raises FunctionClauseError if the first argument is not a function", () => {
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.fold/3",
+        [atomAbc, Type.integer(0), set],
+      );
+
+      assertBoxedError(
+        () => fold_3(atomAbc, Type.integer(0), set),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the function has wrong arity", () => {
+      const set = Erlang_Sets["from_list/2"](
+        Type.list([integer1, integer2, integer3]),
+        opts,
+      );
+
+      const fun = Type.anonymousFunction(
+        1, // Wrong arity - should be 2
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return context.vars.elem;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.fold/3",
+        [fun, Type.integer(0), set],
+      );
+
+      assertBoxedError(
+        () => fold_3(fun, Type.integer(0), set),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument is not a set", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.fold/3",
+        [returnAccFun, Type.integer(0), atomAbc],
+      );
+
+      assertBoxedError(
+        () => fold_3(returnAccFun, Type.integer(0), atomAbc),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+  });
+
   describe("from_list/2", () => {
     const from_list_2 = Erlang_Sets["from_list/2"];
 
@@ -307,153 +456,6 @@ describe("Erlang_Sets", () => {
           "Hologram requires to specify :sets version explicitely",
         );
       });
-    });
-  });
-
-  describe("fold/3", () => {
-    const fold_3 = Erlang_Sets["fold/3"];
-
-    // Helper function that returns the accumulator unchanged (elem, acc -> acc)
-    const returnAccFun = Type.anonymousFunction(
-      2,
-      [
-        {
-          params: (_context) => [
-            Type.variablePattern("elem"),
-            Type.variablePattern("acc"),
-          ],
-          guards: [],
-          body: (context) => {
-            return context.vars.acc;
-          },
-        },
-      ],
-      contextFixture(),
-    );
-
-    it("folds over an empty set and returns the initial accumulator", () => {
-      const set = Erlang_Sets["new/1"](opts);
-
-      const result = fold_3(returnAccFun, integer1, set);
-
-      assert.deepStrictEqual(result, integer1);
-    });
-
-    it("folds over a set with a single element", () => {
-      const set = Erlang_Sets["from_list/2"](Type.list([integer2]), opts);
-      const fun = Type.anonymousFunction(
-        2,
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("elem"),
-              Type.variablePattern("acc"),
-            ],
-            guards: [],
-            body: (context) => {
-              return Interpreter.consOperator(
-                context.vars.elem,
-                context.vars.acc,
-              );
-            },
-          },
-        ],
-        contextFixture(),
-      );
-
-      const result = fold_3(fun, Type.list([]), set);
-      const expected = Type.list([integer2]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("sums multiple elements", () => {
-      const set = Erlang_Sets["from_list/2"](
-        Type.list([integer1, integer2, integer3]),
-        opts,
-      );
-      const fun = Type.anonymousFunction(
-        2,
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("elem"),
-              Type.variablePattern("acc"),
-            ],
-            guards: [],
-            body: (context) => {
-              return Erlang_Erlang["+/2"](context.vars.acc, context.vars.elem);
-            },
-          },
-        ],
-        contextFixture(),
-      );
-
-      const result = fold_3(fun, Type.integer(0n), set);
-
-      assert.deepStrictEqual(result, Type.integer(6n));
-    });
-
-    it("raises FunctionClauseError if the function has wrong arity", () => {
-      const set = Erlang_Sets["from_list/2"](
-        Type.list([integer1, integer2, integer3]),
-        opts,
-      );
-      const fun = Type.anonymousFunction(
-        1, // Wrong arity - should be 2
-        [
-          {
-            params: (_context) => [Type.variablePattern("elem")],
-            guards: [],
-            body: (context) => {
-              return context.vars.elem;
-            },
-          },
-        ],
-        contextFixture(),
-      );
-
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.fold/3",
-        [fun, Type.integer(0n), set],
-      );
-
-      assertBoxedError(
-        () => fold_3(fun, Type.integer(0n), set),
-        "FunctionClauseError",
-        expectedMsg,
-      );
-    });
-
-    it("raises FunctionClauseError if the function argument is not a function", () => {
-      const set = Erlang_Sets["from_list/2"](
-        Type.list([integer1, integer2, integer3]),
-        opts,
-      );
-
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.fold/3",
-        [atomAbc, Type.integer(0n), set],
-      );
-
-      assertBoxedError(
-        () => fold_3(atomAbc, Type.integer(0n), set),
-        "FunctionClauseError",
-        expectedMsg,
-      );
-    });
-
-    it("raises FunctionClauseError if the set argument is not a map", () => {
-      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.fold/3",
-        [returnAccFun, Type.integer(0n), atomAbc],
-      );
-
-      assertBoxedError(
-        () => fold_3(returnAccFun, Type.integer(0n), atomAbc),
-        "FunctionClauseError",
-        expectedMsg,
-      );
     });
   });
 
