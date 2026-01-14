@@ -263,17 +263,8 @@ const Erlang_Lists = {
   // Deps: [:lists.keyfind/3]
 
   // Start keyreplace/4
-  "keyreplace/4": function (key, index, tuples, newtuple) {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keyreplace/4",
-          arguments,
-        ),
-      );
-    }
-
-    if (index.value < 1n) {
+  "keyreplace/4": function (key, index, tuples, newTuple) {
+    if (!Type.isInteger(index) || index.value < 1n || !Type.isTuple(newTuple)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(
           ":lists.keyreplace/4",
@@ -284,17 +275,18 @@ const Erlang_Lists = {
 
     if (!Type.isProperList(tuples)) {
       const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
+
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
           key,
           index,
           thirdArg,
-          newtuple,
+          newTuple,
         ]),
       );
     }
 
-    let result = tuples.data;
+    let resultData = tuples.data;
 
     for (let i = 0; i < tuples.data.length; i++) {
       const tuple = tuples.data[i];
@@ -304,16 +296,16 @@ const Erlang_Lists = {
         tuple.data.length >= index.value &&
         Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
       ) {
-        result = [
+        resultData = [
           ...tuples.data.slice(0, i),
-          newtuple,
+          newTuple,
           ...tuples.data.slice(i + 1),
         ];
         break;
       }
     }
 
-    return Type.list(result);
+    return Type.list(resultData);
   },
   // End keyreplace/4
   // Deps: []
