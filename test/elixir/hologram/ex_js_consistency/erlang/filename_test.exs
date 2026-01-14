@@ -267,10 +267,12 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     end
 
     test "binary with invalid UTF-8 bytes" do
-      # "usr/" + <<0xFF, 0xFE>> (invalid UTF-8) + "/bin"
+      # <<0xFF, 0xFE>> is invalid UTF-8
       filename = <<"usr/", 0xFF, 0xFE, "/bin">>
-      # Should preserve raw bytes: ["usr", <<0xFF, 0xFE>>, "bin"]
+
+      # Should preserve invalid UTF-8 bytes
       expected = ["usr", <<0xFF, 0xFE>>, "bin"]
+
       assert :filename.split(filename) == expected
     end
 
@@ -278,8 +280,10 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       # Pure charlist: [117, 115, 114, 47, 0xFF, 0xFE, 47, 98, 105, 110]
       # "usr/" + [0xFF, 0xFE] + "/bin"
       filename = [?u, ?s, ?r, ?/, 0xFF, 0xFE, ?/, ?b, ?i, ?n]
+
       # Should return raw bytes as integers: [[117, 115, 114], [0xFF, 0xFE], [98, 105, 110]]
       expected = [~c"usr", [0xFF, 0xFE], ~c"bin"]
+
       assert :filename.split(filename) == expected
     end
 

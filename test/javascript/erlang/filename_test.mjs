@@ -400,6 +400,7 @@ describe("Erlang_Filename", () => {
     it("absolute Unix path", () => {
       const filename = Type.bitstring("/usr/local/bin");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("/"),
         Type.bitstring("usr"),
@@ -413,6 +414,7 @@ describe("Erlang_Filename", () => {
     it("relative Unix path", () => {
       const filename = Type.bitstring("foo/bar");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("foo"),
         Type.bitstring("bar"),
@@ -440,7 +442,7 @@ describe("Erlang_Filename", () => {
     it("empty string", () => {
       const filename = Type.bitstring("");
       const result = split(filename);
-      const expected = Type.list([]);
+      const expected = Type.list();
 
       assert.deepStrictEqual(result, expected);
     });
@@ -504,6 +506,7 @@ describe("Erlang_Filename", () => {
     it("path with dot in middle components", () => {
       const filename = Type.bitstring("foo/./bar");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("foo"),
         Type.bitstring("."),
@@ -516,6 +519,7 @@ describe("Erlang_Filename", () => {
     it("path with double dot in middle components", () => {
       const filename = Type.bitstring("foo/../bar");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("foo"),
         Type.bitstring(".."),
@@ -528,6 +532,7 @@ describe("Erlang_Filename", () => {
     it("path with trailing slash", () => {
       const filename = Type.bitstring("foo/bar/");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("foo"),
         Type.bitstring("bar"),
@@ -539,6 +544,7 @@ describe("Erlang_Filename", () => {
     it("absolute path with trailing slash", () => {
       const filename = Type.bitstring("/foo/bar/");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("/"),
         Type.bitstring("foo"),
@@ -551,6 +557,7 @@ describe("Erlang_Filename", () => {
     it("path with multiple consecutive slashes in middle", () => {
       const filename = Type.bitstring("foo//bar");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("foo"),
         Type.bitstring("bar"),
@@ -562,6 +569,7 @@ describe("Erlang_Filename", () => {
     it("drive letter with colon and forward slash", () => {
       const filename = Type.bitstring("a:/msdev/include");
       const result = split(filename);
+
       const expected = Type.list([
         Type.bitstring("a:"),
         Type.bitstring("msdev"),
@@ -582,6 +590,7 @@ describe("Erlang_Filename", () => {
     it("charlist input with absolute path", () => {
       const filename = Type.charlist("/usr/local/bin");
       const result = split(filename);
+
       const expected = Type.list([
         Type.charlist("/"),
         Type.charlist("usr"),
@@ -601,19 +610,20 @@ describe("Erlang_Filename", () => {
     });
 
     it("empty list input", () => {
-      const filename = Type.list([]);
+      const filename = Type.list();
       const result = split(filename);
-      const expected = Type.list([]);
+      const expected = Type.list();
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("iolist input", () => {
       const filename = Type.list([
-        Type.bitstring("foo"),
+        Type.charlist("foo"),
         Type.integer(47), // '/'
-        Type.bitstring("bar"),
+        Type.charlist("bar"),
       ]);
+
       const result = split(filename);
       const expected = Type.list([Type.charlist("foo"), Type.charlist("bar")]);
 
@@ -627,9 +637,11 @@ describe("Erlang_Filename", () => {
       ]);
 
       const result = split(filename);
-      // Should preserve raw bytes: ["usr", <<0xFF, 0xFE>>, "bin"]
+
       const invalidUtf8Part = Bitstring.fromBytes([0xff, 0xfe]);
       Bitstring.maybeSetTextFromBytes(invalidUtf8Part);
+
+      // Should preserve invalid UTF-8 bytes
       const expected = Type.list([
         Type.bitstring("usr"),
         invalidUtf8Part,
@@ -656,6 +668,7 @@ describe("Erlang_Filename", () => {
       ]);
 
       const result = split(filename);
+
       // Should return raw bytes as integers: [[117, 115, 114], [0xFF, 0xFE], [98, 105, 110]]
       const expected = Type.list([
         Type.charlist("usr"),
@@ -674,7 +687,7 @@ describe("Erlang_Filename", () => {
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
-          Type.list([]),
+          Type.list(),
         ]),
       );
     });
