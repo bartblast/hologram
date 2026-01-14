@@ -204,21 +204,27 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map2);
     }
 
-    const accInitial = Type.map(Object.values(map1.data));
+    const resultMap = Utils.shallowCloneObject(map1);
+    resultMap.data = Utils.shallowCloneObject(map1.data);
 
-    const result = Object.values(map2.data).reduce((accMap, [key, value2]) => {
-      const value1 = Erlang_Maps["get/3"](key, accMap, null);
+    Object.values(map2.data).forEach(([key, value2]) => {
+      const encodedKey = Type.encodeMapKey(key);
+      const value1 = resultMap.data[encodedKey];
       const newValue =
-        value1 !== null
-          ? Interpreter.callAnonymousFunction(combiner, [key, value1, value2])
+        value1 !== undefined
+          ? Interpreter.callAnonymousFunction(combiner, [
+              key,
+              value1[1],
+              value2,
+            ])
           : value2;
-      return Erlang_Maps["put/3"](key, newValue, accMap);
-    }, accInitial);
+      resultMap.data[encodedKey] = [key, newValue];
+    });
 
-    return result;
+    return resultMap;
   },
   // End merge_with/3
-  // Deps: [:maps.get/3, :maps.put/3]
+  // Deps: []
 
   // Start next/1
   "next/1": (iterator) => {
