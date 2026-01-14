@@ -46,6 +46,14 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.basename("path/to/file.txt") == "file.txt"
     end
 
+    test "binary with invalid UTF-8 bytes" do
+      # "path/to/" + <<0xFF, 0xFE>> (invalid UTF-8) + ".txt"
+      filename = <<"path/to/", 0xFF, 0xFE, ".txt">>
+      # Should preserve raw bytes: <<0xFF, 0xFE, ".", "t", "x", "t">>
+      expected = <<0xFF, 0xFE, ".", "t", "x", "t">>
+      assert :filename.basename(filename) == expected
+    end
+
     test "atom input" do
       assert :filename.basename(:"path/to/file.txt") == ~c"file.txt"
     end
@@ -56,6 +64,15 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
 
     test "non-empty iolist input" do
       assert :filename.basename([~c"path/to/", ?f, ?i, ?l, ?e, ~c".txt"]) == ~c"file.txt"
+    end
+
+    test "iolist with invalid UTF-8 bytes" do
+      # Pure charlist: [112, 97, 116, 104, 47, 116, 111, 47, 0xFF, 0xFE, 46, 116, 120, 116]
+      # "path/to/" + [0xFF, 0xFE] + ".txt"
+      filename = [?p, ?a, ?t, ?h, ?/, ?t, ?o, ?/, 0xFF, 0xFE, ?., ?t, ?x, ?t]
+      # Should return raw bytes as integers: [0xFF, 0xFE, ?., ?t, ?x, ?t]
+      expected = [0xFF, 0xFE, ?., ?t, ?x, ?t]
+      assert :filename.basename(filename) == expected
     end
 
     test "raises FunctionClauseError if the argument is not a bitstring or atom or list" do
