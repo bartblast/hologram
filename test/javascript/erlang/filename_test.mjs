@@ -98,13 +98,14 @@ describe("Erlang_Filename", () => {
     });
 
     it("binary with invalid UTF-8 bytes", () => {
-      // "path/to/" + [0xFF, 0xFE] (invalid UTF-8) + ".txt"
+      // <<0xFF, 0xFE>> is invalid UTF-8
       const filename = Bitstring.fromBytes([
         112, 97, 116, 104, 47, 116, 111, 47, 0xff, 0xfe, 46, 116, 120, 116,
       ]);
 
       const result = basename(filename);
-      // Should preserve raw bytes: [0xFF, 0xFE, 46, 116, 120, 116]
+
+      // Should preserve raw bytes for the invalid UTF-8
       const expected = Bitstring.fromBytes([0xff, 0xfe, 46, 116, 120, 116]);
 
       assert.deepStrictEqual(result, expected);
@@ -162,7 +163,8 @@ describe("Erlang_Filename", () => {
       ]);
 
       const result = basename(filename);
-      // Should return raw bytes as integers: [0xFF, 0xFE, 46, 116, 120, 116]
+
+      // Should return raw bytes as integers: [0xFF, 0xFE, ?., ?t, ?x, ?t]
       const expected = Type.list([
         Type.integer(0xff),
         Type.integer(0xfe),
