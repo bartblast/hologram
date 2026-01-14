@@ -599,6 +599,94 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keyreplace/4" do
+    test "returns a copy of the list with the first matching tuple replaced" do
+      assert :lists.keyreplace(7, 3, [{1, 2}, :abc, {5, 6, 7}], {:replaced}) == [
+               {1, 2},
+               :abc,
+               {:replaced}
+             ]
+    end
+
+    test "replaces only the first matching tuple" do
+      assert :lists.keyreplace(:a, 1, [{:a, 1}, {:a, 2}, {:a, 3}], {:new}) == [
+               {:new},
+               {:a, 2},
+               {:a, 3}
+             ]
+    end
+
+    test "returns the original list if there is no matching tuple" do
+      assert :lists.keyreplace(7, 3, [:abc], {:new}) == [:abc]
+    end
+
+    test "skips non-tuple elements when searching" do
+      assert :lists.keyreplace(:key, 1, [:abc, 123, {:key, :value}], {:new}) == [
+               :abc,
+               123,
+               {:new}
+             ]
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.keyreplace/4", [:abc, :xyz, [], {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keyreplace(:abc, :xyz, [], {})
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
+      expected_msg = build_function_clause_error_msg(":lists.keyreplace/4", [:abc, 0, [], {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keyreplace(:abc, 0, [], {})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.keyreplace3/4", [:abc, 1, :xyz, {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keyreplace(:abc, 1, :xyz, {})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.keyreplace3/4", [7, 4, 3, {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keyreplace(7, 4, [1, 2 | 3], {})
+      end
+    end
+
+    test "loose equality: 1 == 1.0" do
+      # SHOULD replace {1.0, :a} when searching for 1 (loose equality like keyfind)
+      assert :lists.keyreplace(1, 1, [{1.0, :a}, {1, :b}], {:replaced}) == [
+               {:replaced},
+               {1, :b}
+             ]
+
+      # SHOULD replace {1, :a} when searching for 1.0 (loose equality like keyfind)
+      assert :lists.keyreplace(1.0, 1, [{1, :a}, {1.0, :b}], {:replaced}) == [
+               {:replaced},
+               {1.0, :b}
+             ]
+    end
+
+    test "returns empty list when input is empty" do
+      assert :lists.keyreplace(1, 1, [], {:new}) == []
+    end
+
+    test "skips tuples smaller than the index" do
+      assert :lists.keyreplace(5, 5, [{1, 2}, {1, 2, 3, 4, 5}], {:replaced}) == [
+               {1, 2},
+               {:replaced}
+             ]
+    end
+  end
+
   describe "map/2" do
     setup do
       [fun: fn elem -> elem * 10 end]
