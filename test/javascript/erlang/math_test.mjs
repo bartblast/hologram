@@ -53,7 +53,7 @@ describe("Erlang_Math", () => {
     it("keeps signed positive zero float unchanged", () => {
       const result = testedFun(Type.float(+0.0));
 
-      assert.deepStrictEqual(result, Type.float(0.0));
+      assert.deepStrictEqual(result, Type.float(+0.0));
     });
 
     it("keeps unsigned zero float unchanged", () => {
