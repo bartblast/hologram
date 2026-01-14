@@ -62,7 +62,6 @@ const Erlang_Filename = {
 
     // TODO: Once implemented, replace extractBasenameBytes with :binary.split/3
     // on <<"/">> with [global] option, filter out <<>>.
-
     const extractBasenameBytes = (bytes) => {
       const lastNonSeparatorIndex = [...bytes]
         .reverse()
