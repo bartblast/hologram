@@ -57,6 +57,54 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
   end
 
+  describe "floor/1" do
+    test "rounds positive float with fractional part down" do
+      assert :math.floor(1.23) == 1.0
+    end
+
+    test "rounds negative float with fractional part down" do
+      assert :math.floor(-1.23) == -2.0
+    end
+
+    test "keeps positive float without fractional part unchanged" do
+      assert :math.floor(1.0) == 1.0
+    end
+
+    test "keeps negative float without fractional part unchanged" do
+      assert :math.floor(-1.0) == -1.0
+    end
+
+    test "keeps signed negative zero float unchanged" do
+      assert :math.floor(-0.0) == 0.0
+    end
+
+    test "keeps signed positive zero float unchanged" do
+      assert :math.floor(+0.0) == 0.0
+    end
+
+    test "keeps unsigned zero float unchanged" do
+      assert :math.floor(0.0) == 0.0
+    end
+
+    test "keeps positive integer unchanged" do
+      assert :math.floor(1) == 1.0
+    end
+
+    test "keeps negative integer unchanged" do
+      assert :math.floor(-1) == -1.0
+    end
+
+    test "keeps zero integer unchanged" do
+      assert :math.floor(0) == 0.0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:math, :floor, [:abc]}
+    end
+  end
+
   describe "pow/2" do
     test "returns base integer value raised to exponent integer value" do
       assert :math.pow(7, 3) == 343.0
