@@ -62,19 +62,19 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, Type.float(0.0));
     });
 
-    it("keeps positive integer unchanged", () => {
+    it("converts positive integer to float", () => {
       const result = testedFun(Type.integer(1));
 
       assert.deepStrictEqual(result, Type.float(1.0));
     });
 
-    it("keeps negative integer unchanged", () => {
+    it("converts negative integer to float", () => {
       const result = testedFun(Type.integer(-1));
 
       assert.deepStrictEqual(result, Type.float(-1.0));
     });
 
-    it("keeps zero integer unchanged", () => {
+    it("converts zero integer to float", () => {
       const result = testedFun(Type.integer(0));
 
       assert.deepStrictEqual(result, Type.float(0.0));
@@ -125,7 +125,7 @@ describe("Erlang_Math", () => {
     it("keeps signed positive zero float unchanged", () => {
       const result = testedFun(Type.float(+0.0));
 
-      assert.deepStrictEqual(result, Type.float(0.0));
+      assert.deepStrictEqual(result, Type.float(+0.0));
     });
 
     it("keeps unsigned zero float unchanged", () => {
@@ -134,19 +134,19 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, Type.float(0.0));
     });
 
-    it("keeps positive integer unchanged", () => {
+    it("converts positive integer to float", () => {
       const result = testedFun(Type.integer(1));
 
       assert.deepStrictEqual(result, Type.float(1.0));
     });
 
-    it("keeps negative integer unchanged", () => {
+    it("converts negative integer to float", () => {
       const result = testedFun(Type.integer(-1));
 
       assert.deepStrictEqual(result, Type.float(-1.0));
     });
 
-    it("keeps zero integer unchanged", () => {
+    it("converts zero integer to float", () => {
       const result = testedFun(Type.integer(0));
 
       assert.deepStrictEqual(result, Type.float(0.0));
