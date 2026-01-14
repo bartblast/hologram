@@ -172,4 +172,121 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
                    fn -> :filename.flatten(arg) end
     end
   end
+
+  describe "split/1" do
+    test "absolute Unix path" do
+      assert :filename.split("/usr/local/bin") == ["/", "usr", "local", "bin"]
+    end
+
+    test "relative Unix path" do
+      assert :filename.split("foo/bar") == ["foo", "bar"]
+    end
+
+    test "single component" do
+      assert :filename.split("foo") == ["foo"]
+    end
+
+    test "root path" do
+      assert :filename.split("/") == ["/"]
+    end
+
+    test "empty string" do
+      assert :filename.split("") == []
+    end
+
+    test "multiple consecutive slashes" do
+      assert :filename.split("//") == ["/"]
+    end
+
+    test "dot component" do
+      assert :filename.split(".") == ["."]
+    end
+
+    test "double dot component" do
+      assert :filename.split("..") == [".."]
+    end
+
+    test "path with dot in middle" do
+      assert :filename.split("/./") == ["/", "."]
+    end
+
+    test "path with double dot in middle" do
+      assert :filename.split("/../") == ["/", ".."]
+    end
+
+    test "relative path with dot prefix" do
+      assert :filename.split("./foo") == [".", "foo"]
+    end
+
+    test "relative path with double dot prefix" do
+      assert :filename.split("../foo") == ["..", "foo"]
+    end
+
+    test "path with dot in middle components" do
+      assert :filename.split("foo/./bar") == ["foo", ".", "bar"]
+    end
+
+    test "path with double dot in middle components" do
+      assert :filename.split("foo/../bar") == ["foo", "..", "bar"]
+    end
+
+    test "path with trailing slash" do
+      assert :filename.split("foo/bar/") == ["foo", "bar"]
+    end
+
+    test "absolute path with trailing slash" do
+      assert :filename.split("/foo/bar/") == ["/", "foo", "bar"]
+    end
+
+    test "path with multiple consecutive slashes in middle" do
+      assert :filename.split("foo//bar") == ["foo", "bar"]
+    end
+
+    test "drive letter with colon and forward slash" do
+      assert :filename.split("a:/msdev/include") == ["a:", "msdev", "include"]
+    end
+
+    test "charlist input" do
+      assert :filename.split(~c"foo/bar") == [~c"foo", ~c"bar"]
+    end
+
+    test "charlist input with absolute path" do
+      assert :filename.split(~c"/usr/local/bin") == [~c"/", ~c"usr", ~c"local", ~c"bin"]
+    end
+
+    test "atom input" do
+      assert :filename.split(:"foo/bar") == [~c"foo", ~c"bar"]
+    end
+
+    test "empty list input" do
+      assert :filename.split([]) == []
+    end
+
+    test "iolist input" do
+      assert :filename.split([~c"foo", ?/, ~c"bar"]) == [~c"foo", ~c"bar"]
+    end
+
+    test "binary with invalid UTF-8 bytes" do
+      # "usr/" + <<0xFF, 0xFE>> (invalid UTF-8) + "/bin"
+      filename = <<"usr/", 0xFF, 0xFE, "/bin">>
+      # Should preserve raw bytes: ["usr", <<0xFF, 0xFE>>, "bin"]
+      expected = ["usr", <<0xFF, 0xFE>>, "bin"]
+      assert :filename.split(filename) == expected
+    end
+
+    test "iolist with invalid UTF-8 bytes" do
+      # Pure charlist: [117, 115, 114, 47, 0xFF, 0xFE, 47, 98, 105, 110]
+      # "usr/" + [0xFF, 0xFE] + "/bin"
+      filename = [?u, ?s, ?r, ?/, 0xFF, 0xFE, ?/, ?b, ?i, ?n]
+      # Should return raw bytes as integers: [[117, 115, 114], [0xFF, 0xFE], [98, 105, 110]]
+      expected = [~c"usr", [0xFF, 0xFE], ~c"bin"]
+      assert :filename.split(filename) == expected
+    end
+
+    test "raises FunctionClauseError if the argument is not a valid filename type" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.split(123) end
+    end
+  end
 end
