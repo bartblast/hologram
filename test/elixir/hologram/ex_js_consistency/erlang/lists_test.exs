@@ -831,6 +831,62 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "max/1" do
+    test "returns the element from a list of length 1" do
+      assert :lists.max([3]) == 3
+    end
+
+    test "returns the larger element from a list of size 2 with second being largest" do
+      assert :lists.max([1, 3]) == 3
+    end
+
+    test "returns the larger element from a list of size 2 with first being largest" do
+      assert :lists.max([3, 1]) == 3
+    end
+
+    test "returns the element from a list of size 2 when both are the same" do
+      assert :lists.max([3, 3]) == 3
+    end
+
+    test "applies structural comparison" do
+      list = Enum.shuffle([:a, 2.0, 3, "d", pid("0.1.2"), {0, 1}])
+
+      assert :lists.max(list) == "d"
+    end
+
+    test "returns the largest element from a large list with many duplicates" do
+      list = Enum.shuffle([1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5])
+
+      assert :lists.max(list) == 5
+    end
+
+    test "raises FunctionClauseError if the argument is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.max/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.max(:abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an improper list" do
+      # Notice that the error message says :lists.max/2 (not :lists.max/1)
+      # :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
+      expected_msg = build_function_clause_error_msg(":lists.max/2")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.max([1, 2 | 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an empty list" do
+      expected_msg = build_function_clause_error_msg(":lists.max/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.max([])
+      end
+    end
+  end
+
   describe "member/2" do
     test "is a member of a proper list" do
       assert :lists.member(2, [1, 2, 3]) == true

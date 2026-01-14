@@ -446,6 +446,35 @@ const Erlang_Lists = {
   // End mapfoldl/3
   // Deps: []
 
+  // Start max/1
+  "max/1": (list) => {
+    if (!Type.isList(list) || list.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [list]),
+      );
+    }
+
+    // Notice that the error message says :lists.max/2 (not :lists.max/1)
+    // :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/2", [list]),
+      );
+    }
+
+    let max = list.data[0];
+
+    for (let i = 1; i < list.data.length; i++) {
+      if (Interpreter.compareTerms(list.data[i], max) > 0) {
+        max = list.data[i];
+      }
+    }
+
+    return max;
+  },
+  // End max/1
+  // Deps: []
+
   // Start member/2
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {
