@@ -204,17 +204,16 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map2);
     }
 
-    const resultMap = Utils.shallowCloneObject(map1);
-    resultMap.data = Utils.shallowCloneObject(map1.data);
+    const resultMap = Type.cloneMap(map1);
 
     Object.values(map2.data).forEach(([key, value2]) => {
       const encodedKey = Type.encodeMapKey(key);
-      const value1 = resultMap.data[encodedKey];
+      const value1Entry = resultMap.data[encodedKey];
       const newValue =
-        value1 !== undefined
+        value1Entry !== undefined
           ? Interpreter.callAnonymousFunction(combiner, [
               key,
-              value1[1],
+              value1Entry[1],
               value2,
             ])
           : value2;

@@ -316,6 +316,18 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert result == %{:atom_key => [1, 10], "string_key" => 2.5, 123 => "value"}
     end
 
+    test "doesn't mutate its arguments", %{combiner: combiner} do
+      map_1 = %{a: 1, b: 2}
+      map_2 = %{b: 3, c: 4}
+      map_1_copy = Map.new(map_1)
+      map_2_copy = Map.new(map_2)
+
+      _result = :maps.merge_with(combiner, map_1, map_2)
+
+      assert map_1 == map_1_copy
+      assert map_2 == map_2_copy
+    end
+
     test "raises ArgumentError if the first argument is not an anonymous function" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a fun that takes three arguments"),

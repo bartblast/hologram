@@ -700,6 +700,26 @@ describe("Erlang_Maps", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("doesn't mutate its arguments", () => {
+      const map1 = Type.map([
+        [atomA, integer1],
+        [atomB, integer2],
+      ]);
+
+      const map2 = Type.map([
+        [atomB, Type.integer(3)],
+        [atomC, Type.integer(4)],
+      ]);
+
+      const map1Keys = Object.keys(map1.data).sort();
+      const map2Keys = Object.keys(map2.data).sort();
+
+      merge_with(combiner, map1, map2);
+
+      assert.deepStrictEqual(Object.keys(map1.data).sort(), map1Keys);
+      assert.deepStrictEqual(Object.keys(map2.data).sort(), map2Keys);
+    });
+
     it("raises ArgumentError if the first argument is not an anonymous function", () => {
       const map1 = Type.map([[atomA, integer1]]);
       const map2 = Type.map([[atomB, integer2]]);
