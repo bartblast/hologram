@@ -38,15 +38,15 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert :math.ceil(0.0) == 0.0
     end
 
-    test "keeps positive integer unchanged" do
+    test "converts positive integer to float" do
       assert :math.ceil(1) == 1.0
     end
 
-    test "keeps negative integer unchanged" do
+    test "converts negative integer to float" do
       assert :math.ceil(-1) == -1.0
     end
 
-    test "keeps zero integer unchanged" do
+    test "converts zero integer to float" do
       assert :math.ceil(0) == 0.0
     end
 
@@ -75,26 +75,26 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
 
     test "keeps signed negative zero float unchanged" do
-      assert :math.floor(-0.0) == 0.0
+      assert :math.floor(-0.0) == -0.0
     end
 
     test "keeps signed positive zero float unchanged" do
-      assert :math.floor(+0.0) == 0.0
+      assert :math.floor(+0.0) == +0.0
     end
 
     test "keeps unsigned zero float unchanged" do
       assert :math.floor(0.0) == 0.0
     end
 
-    test "keeps positive integer unchanged" do
+    test "converts positive integer to float" do
       assert :math.floor(1) == 1.0
     end
 
-    test "keeps negative integer unchanged" do
+    test "converts negative integer to float" do
       assert :math.floor(-1) == -1.0
     end
 
-    test "keeps zero integer unchanged" do
+    test "convets zero integer to float" do
       assert :math.floor(0) == 0.0
     end
 
