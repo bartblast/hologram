@@ -27,11 +27,11 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
 
     test "keeps signed negative zero float unchanged" do
-      assert :math.ceil(-0.0) == 0.0
+      assert :math.ceil(-0.0) == -0.0
     end
 
     test "keeps signed positive zero float unchanged" do
-      assert :math.ceil(+0.0) == 0.0
+      assert :math.ceil(+0.0) == +0.0
     end
 
     test "keeps unsigned zero float unchanged" do
