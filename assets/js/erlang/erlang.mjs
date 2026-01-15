@@ -738,6 +738,7 @@ const Erlang = {
   // Start float_to_list/2
   "float_to_list/2": (float, opts) => {
     const binary = Erlang["float_to_binary/2"](float, opts);
+
     return Bitstring.toCodepoints(binary);
   },
   // End float_to_list/2
