@@ -9,6 +9,37 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   @moduletag :consistency
 
+  describe "del_element/2" do
+    test "removes an existing element from the set" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      expected = :sets.from_list([1, 3], [{:version, 2}])
+      result = :sets.del_element(2, set)
+      assert result == expected
+    end
+
+    test "returns the same set if element is not present" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+      result = :sets.del_element(42, set)
+      assert result == expected
+    end
+
+    test "returns empty set when removing from empty set" do
+      set = :sets.from_list([], [{:version, 2}])
+      expected = :sets.from_list([], [{:version, 2}])
+      result = :sets.del_element(:any, set)
+      assert result == expected
+    end
+
+    test "raises FunctionClauseError if argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.del_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.del_element(:elem, :not_a_set)
+      end
+    end
+  end
+
   describe "filter/2" do
     setup do
       [
@@ -195,37 +226,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     test "raises CaseClauseError for invalid versions" do
       assert_error CaseClauseError, "no case clause matching: :abc", fn ->
         :sets.from_list([], version: :abc)
-      end
-    end
-  end
-
-  describe "del_element/2" do
-    test "removes an existing element from the set" do
-      set = :sets.from_list([1, 2, 3], [{:version, 2}])
-      expected = :sets.from_list([1, 3], [{:version, 2}])
-      result = :sets.del_element(2, set)
-      assert result == expected
-    end
-
-    test "returns the same set if element is not present" do
-      set = :sets.from_list([1, 2, 3], [{:version, 2}])
-      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
-      result = :sets.del_element(42, set)
-      assert result == expected
-    end
-
-    test "returns empty set when removing from empty set" do
-      set = :sets.from_list([], [{:version, 2}])
-      expected = :sets.from_list([], [{:version, 2}])
-      result = :sets.del_element(:any, set)
-      assert result == expected
-    end
-
-    test "raises FunctionClauseError if argument is not a set" do
-      expected_msg = build_function_clause_error_msg(":sets.del_element/2", [:elem, :not_a_set])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.del_element(:elem, :not_a_set)
       end
     end
   end
