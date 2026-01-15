@@ -92,8 +92,8 @@ describe("Erlang_Math", () => {
   describe("exp/1", () => {
     const exp = Erlang_Math["exp/1"];
 
-    it("returns correct value if passing a positive float value", () => {
-      const number = Type.float(2);
+    it("positive float", () => {
+      const number = Type.float(2.0);
 
       const result = exp(number);
       const expected = Type.float(7.38905609893065);
@@ -101,8 +101,8 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing a negative float value", () => {
-      const number = Type.float(-2);
+    it("negative float", () => {
+      const number = Type.float(-2.0);
 
       const result = exp(number);
       const expected = Type.float(0.1353352832366127);
@@ -110,7 +110,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing one as a float", () => {
+    it("one float", () => {
       const number = Type.float(1.0);
 
       const result = exp(number);
@@ -119,8 +119,8 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing zero as a float", () => {
-      const number = Type.float(0);
+    it("unsigned zero float", () => {
+      const number = Type.float(0.0);
 
       const result = exp(number);
       const expected = Type.float(1.0);
@@ -128,7 +128,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing signed positive zero float", () => {
+    it("positive zero float", () => {
       const number = Type.float(+0.0);
 
       const result = exp(number);
@@ -137,7 +137,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing signed negative zero float", () => {
+    it("negative zero float", () => {
       const number = Type.float(-0.0);
 
       const result = exp(number);
@@ -146,7 +146,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing a positive integer", () => {
+    it("positive integer", () => {
       const number = Type.integer(2);
 
       const result = exp(number);
@@ -155,7 +155,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing a negative integer", () => {
+    it("negative integer", () => {
       const number = Type.integer(-2);
 
       const result = exp(number);
@@ -164,7 +164,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing one as an integer", () => {
+    it("one integer", () => {
       const number = Type.integer(1);
 
       const result = exp(number);
@@ -173,7 +173,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing zero as an integer", () => {
+    it("zero integer", () => {
       const number = Type.integer(0);
 
       const result = exp(number);
@@ -182,7 +182,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing an integer below Number.MIN_SAFE_INTEGER", () => {
+    it("integer below Number.MIN_SAFE_INTEGER", () => {
       // Number.MIN_SAFE_INTEGER = -9_007_199_254_740_991
       const number = Type.integer(-9007199254740992n);
 
@@ -193,14 +193,17 @@ describe("Erlang_Math", () => {
     });
 
     // The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
-    it("returns correct value for the largest input that does not overflow", () => {
-      const result = exp(Type.float(709.782));
+    it("largest float before overflow", () => {
+      const number = Type.float(709.782);
 
-      assert.deepStrictEqual(result, Type.float(1.7964120280206387e308));
+      const result = exp(number);
+      const expected = Type.float(1.7964120280206387e308);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     // The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
-    it("raises ArithmeticError for the smallest input that overflows", () => {
+    it("smallest float that overflows", () => {
       assertBoxedError(
         () => exp(Type.float(709.783)),
         "ArithmeticError",
@@ -208,11 +211,9 @@ describe("Erlang_Math", () => {
       );
     });
 
-    it("raises ArgumentError if the argument is not a number", () => {
-      const integerString = Type.string("12345");
-
+    it("non-number argument", () => {
       assertBoxedError(
-        () => exp(integerString),
+        () => exp(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );

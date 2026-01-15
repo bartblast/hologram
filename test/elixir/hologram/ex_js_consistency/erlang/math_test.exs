@@ -58,7 +58,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
   end
 
   describe "exp/1" do
-    test "returns correct value if passing a positive float value" do
+    test "positive float" do
       number = 2.0
 
       result = :math.exp(number)
@@ -67,7 +67,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing a negative float value" do
+    test "negative float" do
       number = -2.0
 
       result = :math.exp(number)
@@ -76,7 +76,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing one as a float" do
+    test "one float" do
       number = 1.0
 
       result = :math.exp(number)
@@ -85,7 +85,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing zero as a float" do
+    test "unsigned zero float" do
       number = 0.0
 
       result = :math.exp(number)
@@ -94,7 +94,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing signed positive zero float" do
+    test "positive zero float" do
       number = +0.0
 
       result = :math.exp(number)
@@ -103,7 +103,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing signed negative zero float" do
+    test "negative zero float" do
       number = -0.0
 
       result = :math.exp(number)
@@ -112,7 +112,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing a positive integer" do
+    test "positive integer" do
       number = 2
 
       result = :math.exp(number)
@@ -121,7 +121,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing a negative integer" do
+    test "negative integer" do
       number = -2
 
       result = :math.exp(number)
@@ -130,7 +130,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing one as an integer" do
+    test "one integer" do
       number = 1
 
       result = :math.exp(number)
@@ -139,7 +139,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing zero as an integer" do
+    test "zero integer" do
       number = 0
 
       result = :math.exp(number)
@@ -148,7 +148,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing an integer below Number.MIN_SAFE_INTEGER" do
+    test "integer below Number.MIN_SAFE_INTEGER" do
       # Number.MIN_SAFE_INTEGER = -9_007_199_254_740_991
       number = -9_007_199_254_740_992
 
@@ -159,25 +159,23 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
 
     # The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
-    test "returns correct value for the largest input that does not overflow" do
+    test "largest float before overflow" do
       result = :math.exp(709.782)
 
       assert result == 1.7964120280206387e308
     end
 
     # The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
-    test "raises ArithmeticError for the smallest input that overflows" do
+    test "smallest float that overflows" do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression",
                    {:math, :exp, [709.783]}
     end
 
-    test "raises ArgumentError if the argument is not a number" do
-      integer_string = prevent_term_typing_violation("12345")
-
+    test "non-number argument" do
       assert_error ArgumentError,
-                   ~r"errors were found at the given arguments:\n\n  \* 1st argument: not a number",
-                   {:math, :exp, [integer_string]}
+                   build_argument_error_msg(1, "not a number"),
+                   {:math, :exp, [:abc]}
     end
   end
 
