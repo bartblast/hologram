@@ -37,8 +37,13 @@ const Erlang_Math = {
     }
 
     const value = Type.isInteger(number) ? Number(number.value) : number.value;
+    const result = Math.exp(value);
 
-    return Type.float(Math.exp(value));
+    if (!Number.isFinite(result)) {
+      Interpreter.raiseArithmeticError();
+    }
+
+    return Type.float(result);
   },
   // End exp/1
   // Deps: []

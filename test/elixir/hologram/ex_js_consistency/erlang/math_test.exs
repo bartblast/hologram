@@ -94,6 +94,24 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
+    test "returns correct value if passing signed positive zero float" do
+      number = +0.0
+
+      result = :math.exp(number)
+      expected = 1.0
+
+      assert result == expected
+    end
+
+    test "returns correct value if passing signed negative zero float" do
+      number = -0.0
+
+      result = :math.exp(number)
+      expected = 1.0
+
+      assert result == expected
+    end
+
     test "returns correct value if passing a positive integer" do
       number = 2
 
@@ -103,7 +121,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
-    test "returns correct value if passing negative integer" do
+    test "returns correct value if passing a negative integer" do
       number = -2
 
       result = :math.exp(number)
@@ -128,6 +146,20 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       expected = 1.0
 
       assert result == expected
+    end
+
+    # The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
+    test "returns correct value for the largest input that does not overflow" do
+      result = :math.exp(709.782)
+
+      assert result == 1.7964120280206387e308
+    end
+
+    # The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
+    test "raises ArithmeticError for the smallest input that overflows" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :exp, [709.783]}
     end
 
     test "raises ArgumentError if the argument is not a number" do

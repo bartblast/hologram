@@ -128,6 +128,24 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("returns correct value if passing signed positive zero float", () => {
+      const number = Type.float(+0.0);
+
+      const result = exp(number);
+      const expected = Type.float(1.0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns correct value if passing signed negative zero float", () => {
+      const number = Type.float(-0.0);
+
+      const result = exp(number);
+      const expected = Type.float(1.0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("returns correct value if passing a positive integer", () => {
       const number = Type.integer(2);
 
@@ -137,7 +155,7 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns correct value if passing negative integer", () => {
+    it("returns correct value if passing a negative integer", () => {
       const number = Type.integer(-2);
 
       const result = exp(number);
@@ -162,6 +180,22 @@ describe("Erlang_Math", () => {
       const expected = Type.float(1.0);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    // The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
+    it("returns correct value for the largest input that does not overflow", () => {
+      const result = exp(Type.float(709.782));
+
+      assert.deepStrictEqual(result, Type.float(1.7964120280206387e308));
+    });
+
+    // The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
+    it("raises ArithmeticError for the smallest input that overflows", () => {
+      assertBoxedError(
+        () => exp(Type.float(709.783)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
     });
 
     it("raises ArgumentError if the argument is not a number", () => {
