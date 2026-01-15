@@ -148,6 +148,16 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
       assert result == expected
     end
 
+    test "returns correct value if passing an integer below Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER = -9_007_199_254_740_991
+      number = -9_007_199_254_740_992
+
+      result = :math.exp(number)
+      expected = 0.0
+
+      assert result == expected
+    end
+
     # The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
     test "returns correct value for the largest input that does not overflow" do
       result = :math.exp(709.782)

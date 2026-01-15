@@ -182,6 +182,16 @@ describe("Erlang_Math", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("returns correct value if passing an integer below Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER = -9_007_199_254_740_991
+      const number = Type.integer(-9007199254740992n);
+
+      const result = exp(number);
+      const expected = Type.float(0.0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     // The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
     it("returns correct value for the largest input that does not overflow", () => {
       const result = exp(Type.float(709.782));
