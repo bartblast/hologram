@@ -162,7 +162,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     test "largest float before overflow" do
       result = :math.exp(709.782)
 
-      assert result == 1.7964120280206387e308
+      assert result == 1.796_412_028_020_638_7e308
     end
 
     # The overflow threshold is ln(Number.MAX_VALUE) ≈ 709.782712893384
