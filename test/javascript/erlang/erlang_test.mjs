@@ -4798,6 +4798,381 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_integer/1", () => {
+    const list_to_integer = Erlang["list_to_integer/1"];
+
+    it("delegates to list_to_integer/2 with base 10", () => {
+      const list = Type.list([
+        Type.integer(49),
+        Type.integer(50),
+        Type.integer(51),
+      ]);
+      const result = list_to_integer(list);
+      const expected = Erlang["list_to_integer/2"](list, Type.integer(10));
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("list_to_integer/2", () => {
+    const list_to_integer = Erlang["list_to_integer/2"];
+
+    it("base 2", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(49),
+          Type.integer(49),
+          Type.integer(49),
+          Type.integer(49),
+        ]),
+        Type.integer(2),
+      );
+      const expected = Type.integer(15);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base 8", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(49), Type.integer(55), Type.integer(55)]),
+        Type.integer(8),
+      );
+      const expected = Type.integer(127);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base 10", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+        Type.integer(10),
+      );
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base 16", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(51), Type.integer(70), Type.integer(70)]),
+        Type.integer(16),
+      );
+      const expected = Type.integer(1023);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base 36", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(90), Type.integer(90)]),
+        Type.integer(36),
+      );
+      const expected = Type.integer(1295);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("positive integer without sign", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+        Type.integer(10),
+      );
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("positive integer with plus sign", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(43),
+          Type.integer(49),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+        Type.integer(10),
+      );
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("negative integer", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(45),
+          Type.integer(49),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+        Type.integer(10),
+      );
+      const expected = Type.integer(-123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("zero", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(48)]),
+        Type.integer(10),
+      );
+      const expected = Type.integer(0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("lowercase letters", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(97),
+          Type.integer(98),
+          Type.integer(99),
+          Type.integer(100),
+        ]),
+        Type.integer(16),
+      );
+      const expected = Type.integer(43981);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("uppercase letters", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(65),
+          Type.integer(66),
+          Type.integer(67),
+          Type.integer(68),
+        ]),
+        Type.integer(16),
+      );
+      const expected = Type.integer(43981);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("mixed case letters", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(97),
+          Type.integer(66),
+          Type.integer(99),
+          Type.integer(68),
+        ]),
+        Type.integer(16),
+      );
+      const expected = Type.integer(43981);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles leading zeros", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(48),
+          Type.integer(48),
+          Type.integer(49),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+        Type.integer(10),
+      );
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts very large base 10 integer", () => {
+      // Test that list_to_integer handles numbers well beyond
+      // Number.MAX_SAFE_INTEGER (9007199254740991) using BigInt
+      const codes = "999999999999999999999999999999"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+      const result = list_to_integer(Type.list(codes), Type.integer(10));
+      const expected = Type.integer(BigInt("999999999999999999999999999999"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts very large negative base 10 integer", () => {
+      // Test that list_to_integer handles numbers well below
+      // Number.MIN_SAFE_INTEGER (-9007199254740991) using BigInt
+      const codes = "-999999999999999999999999999999"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+      const result = list_to_integer(Type.list(codes), Type.integer(10));
+      const expected = Type.integer(BigInt("-999999999999999999999999999999"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.atom("abc"), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not a proper list", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.improperList([
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(51),
+            ]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if list is empty", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list(), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if list contains non-integer element", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([Type.integer(49), Type.atom("abc"), Type.integer(51)]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if list contains characters outside of the alphabet", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(50)]), Type.integer(2)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on sign in non-leading position", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(45),
+              Type.integer(51),
+            ]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on multiple signs", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([
+              Type.integer(43),
+              Type.integer(45),
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(51),
+            ]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on minus sign only", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(45)]), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on plus sign only", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(43)]), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(49)]), Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if base is less than 2", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+            Type.integer(1),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if base is greater than 36", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+            Type.integer(37),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+  });
+
   describe("list_to_pid/1", () => {
     const fun = Erlang["list_to_pid/1"];
 
