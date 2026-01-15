@@ -2749,6 +2749,44 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "float_to_list/2" do
+    test "returns a list of character codes with short option" do
+      result = :erlang.float_to_list(2.0, [:short])
+      # assert result == ~c"2.0"
+      assert result == [50, 46, 48]
+    end
+
+    test "works with decimals option" do
+      result = :erlang.float_to_list(0.5, decimals: 2)
+      # assert result == ~c"0.50"
+      assert result == [48, 46, 53, 48]
+    end
+
+    test "works with scientific option" do
+      result = :erlang.float_to_list(100.0, scientific: 1)
+      # assert result == ~c"1.0e+02"
+      assert result == [49, 46, 48, 101, 43, 48, 50]
+    end
+
+    test "works with default options" do
+      result = :erlang.float_to_list(0.0, [])
+      assert is_list(result)
+      assert Enum.all?(result, &is_integer/1)
+    end
+
+    test "raises ArgumentError if the first argument is not a float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a float"),
+                   {:erlang, :float_to_list, [123, []]}
+    end
+
+    test "raises ArgumentError if the second argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a list"),
+                   {:erlang, :float_to_list, [1.23, :invalid]}
+    end
+  end
+
   describe "floor/1" do
     test "rounds positive float with fractional part down" do
       assert :erlang.floor(1.23) == 1
