@@ -3172,6 +3172,155 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_integer/1" do
+    test "delegates to list_to_integer/2 with base 10" do
+      assert :erlang.list_to_integer([49, 50, 51]) ==
+               :erlang.list_to_integer([49, 50, 51], 10)
+    end
+  end
+
+  describe "list_to_integer/2" do
+    test "base 2" do
+      assert :erlang.list_to_integer([49, 49, 49, 49], 2) == 15
+    end
+
+    test "base 8" do
+      assert :erlang.list_to_integer([49, 55, 55], 8) == 127
+    end
+
+    test "base 10" do
+      assert :erlang.list_to_integer([49, 50, 51], 10) == 123
+    end
+
+    test "base 16" do
+      assert :erlang.list_to_integer([51, 70, 70], 16) == 1023
+    end
+
+    test "base 36" do
+      assert :erlang.list_to_integer([90, 90], 36) == 1295
+    end
+
+    test "positive integer without sign" do
+      assert :erlang.list_to_integer([49, 50, 51], 10) == 123
+    end
+
+    test "positive integer with plus sign" do
+      assert :erlang.list_to_integer([43, 49, 50, 51], 10) == 123
+    end
+
+    test "negative integer" do
+      assert :erlang.list_to_integer([45, 49, 50, 51], 10) == -123
+    end
+
+    test "zero" do
+      assert :erlang.list_to_integer([48], 10) == 0
+    end
+
+    test "lowercase letters" do
+      assert :erlang.list_to_integer([97, 98, 99, 100], 16) == 43_981
+    end
+
+    test "uppercase letters" do
+      assert :erlang.list_to_integer([65, 66, 67, 68], 16) == 43_981
+    end
+
+    test "mixed case letters" do
+      assert :erlang.list_to_integer([97, 66, 99, 68], 16) == 43_981
+    end
+
+    test "handles leading zeros" do
+      assert :erlang.list_to_integer([48, 48, 49, 50, 51], 10) == 123
+    end
+
+    test "converts very large base 10 integer" do
+      # Test that list_to_integer handles numbers well beyond
+      # Number.MAX_SAFE_INTEGER (9007199254740991)
+      large_list = List.duplicate(57, 30)
+      large_int = :erlang.list_to_integer(large_list, 10)
+      assert large_int == 999_999_999_999_999_999_999_999_999_999
+    end
+
+    test "converts very large negative base 10 integer" do
+      # Test that list_to_integer handles numbers well below
+      # Number.MIN_SAFE_INTEGER (-9007199254740991)
+      large_list = List.duplicate(57, 30)
+      large_int = :erlang.list_to_integer([45 | large_list], 10)
+      assert large_int == -999_999_999_999_999_999_999_999_999_999
+    end
+
+    test "raises ArgumentError if the first argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_integer, [:abc, 10]}
+    end
+
+    test "raises ArgumentError if the first argument is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   {:erlang, :list_to_integer, [[1 | 2], 10]}
+    end
+
+    test "raises ArgumentError if list is empty" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :list_to_integer, [[], 10]}
+    end
+
+    test "raises ArgumentError if list contains non-integer element" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :list_to_integer, [[49, :abc, 51], 10]}
+    end
+
+    test "raises ArgumentError if list contains characters outside of the alphabet" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :list_to_integer, [[50], 2]}
+    end
+
+    test "raises ArgumentError on sign in non-leading position" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :list_to_integer, [[49, 50, 45, 51], 10]}
+    end
+
+    test "raises ArgumentError on multiple signs" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :list_to_integer, [[43, 45, 49, 50, 51], 10]}
+    end
+
+    test "raises ArgumentError on minus sign only" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :list_to_integer, [[45], 10]}
+    end
+
+    test "raises ArgumentError on plus sign only" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :list_to_integer, [[43], 10]}
+    end
+
+    test "raises ArgumentError if the second argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :list_to_integer, [[49], :abc]}
+    end
+
+    test "raises ArgumentError if base is less than 2" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :list_to_integer, [[49, 50, 51], 1]}
+    end
+
+    test "raises ArgumentError if base is greater than 36" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :list_to_integer, [[49, 50, 51], 37]}
+    end
+  end
+
   describe "list_to_pid/1" do
     test "valid textual representation of PID" do
       assert :erlang.list_to_pid(~c"<0.11.222>") == pid("0.11.222")

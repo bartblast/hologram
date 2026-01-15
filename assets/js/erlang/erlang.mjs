@@ -1207,6 +1207,87 @@ const Erlang = {
   // End length/1
   // Deps: []
 
+  // Start list_to_integer/1
+  "list_to_integer/1": (list) => {
+    return Erlang["list_to_integer/2"](list, Type.integer(10n));
+  },
+  // End list_to_integer/1
+  // Deps: [:erlang.list_to_integer/2]
+
+  // Start list_to_integer/2
+  "list_to_integer/2": (list, base) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    if (list.data.length === 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    }
+
+    const codes = [];
+    for (const code of list.data) {
+      if (!Type.isInteger(code)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not a textual representation of an integer",
+          ),
+        );
+      }
+      codes.push(Number(code.value));
+    }
+
+    const str = String.fromCharCode(...codes);
+    const baseNum = Number(base.value);
+    const strLower = str.toLowerCase();
+
+    let validPattern;
+    if (baseNum <= 10) {
+      const maxDigit = baseNum - 1;
+      validPattern = new RegExp(`^[+-]?[0-${maxDigit}]+$`);
+    } else {
+      const maxLetter = String.fromCharCode(97 + baseNum - 11);
+      validPattern = new RegExp(`^[+-]?[0-9a-${maxLetter}]+$`);
+    }
+
+    if (!validPattern.test(strLower)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    }
+
+    const result =
+      baseNum === 10 ? BigInt(strLower) : BigInt(parseInt(strLower, baseNum));
+    return Type.integer(result);
+  },
+  // End list_to_integer/2
+  // Deps: []
+
   // Start list_to_pid/1
   "list_to_pid/1": (codePoints) => {
     if (!Type.isList(codePoints)) {
