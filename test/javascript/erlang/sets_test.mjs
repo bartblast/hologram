@@ -43,7 +43,6 @@ describe("Erlang_Sets", () => {
 
     it("removes an existing element from the set", () => {
       const result = del_element_2(integer2, set123);
-
       const expected = from_list_2(Type.list([integer1, integer3]), opts);
 
       assert.deepStrictEqual(result, expected);
@@ -61,6 +60,13 @@ describe("Erlang_Sets", () => {
       const result = del_element_2(Type.atom("any"), emptySet);
 
       assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("uses strict matching (integer vs float)", () => {
+      const set = from_list_2(Type.list([integer2]), opts);
+      const result = del_element_2(float2, set);
+
+      assert.deepStrictEqual(result, set);
     });
 
     it("raises FunctionClauseError if argument is not a set", () => {
