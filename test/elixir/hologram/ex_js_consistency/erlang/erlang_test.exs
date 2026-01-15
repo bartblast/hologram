@@ -6,7 +6,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   """
 
   use Hologram.Test.BasicCase, async: true
+
   alias Hologram.Commons.SystemUtils
+  alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1
 
   @moduletag :consistency
 
@@ -1274,6 +1276,64 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    "argument error: nil",
                    fn -> :erlang.andalso(arg, true) end
+    end
+  end
+
+  describe "apply/3" do
+    test "invokes a function with no params" do
+      assert :erlang.apply(Module1, :fun_0, []) == 123
+    end
+
+    test "invokes a function with a single param" do
+      assert :erlang.apply(Module1, :fun_1, [9]) == 109
+    end
+
+    test "invokes a function with multiple params" do
+      assert :erlang.apply(Module1, :fun_2, [3, 4]) == 7
+    end
+
+    test "raises ArgumentError if the first argument is not an atom" do
+      expected_msg =
+        "you attempted to apply a function named :fun_0 on 123. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.apply(123, :fun_0, [])
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an atom"),
+                   {:erlang, :apply, [Module1, 123, []]}
+    end
+
+    test "raises ArgumentError if the third argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a list"),
+                   {:erlang, :apply, [Module1, :fun_0, 123]}
+    end
+
+    test "raises ArgumentError if the third argument is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a proper list"),
+                   {:erlang, :apply, [Module1, :fun_2, [1 | 2]]}
+    end
+
+    test "raises UndefinedFunctionError if the module doesn't exist" do
+      expected_msg =
+        build_undefined_function_error_msg({NonexistentModule, :fun_2, 2}, [], false)
+
+      assert_error UndefinedFunctionError, expected_msg, fn ->
+        :erlang.apply(NonexistentModule, :fun_2, [1, 2])
+      end
+    end
+
+    test "raises UndefinedFunctionError if the function doesn't exist" do
+      expected_msg = build_undefined_function_error_msg({Module1, :nonexistent_fun, 2})
+
+      assert_error UndefinedFunctionError, expected_msg, fn ->
+        :erlang.apply(Module1, :nonexistent_fun, [1, 2])
+      end
     end
   end
 
