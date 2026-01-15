@@ -351,7 +351,7 @@ const Erlang_Binary = {
     }
     return false;
   },
-  // End _boyer_moore_search/3
+  // End _aho_corasick_search/3
   // Deps: []
 
   // Start _parse_search_opts/1

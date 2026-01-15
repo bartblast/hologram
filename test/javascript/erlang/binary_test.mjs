@@ -387,21 +387,231 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("_boyer_moore_pattern_matcher", () => {
+  describe("_boyer_moore_pattern_matcher/1", () => {
     it("computes bad shift table correctly", () => {
       const pattern = Bitstring.fromBytes([104, 101, 108, 108, 111]);
-      const result = Erlang_Binary._boyer_moore_pattern_matcher(pattern);
+      const result = Erlang_Binary["_boyer_moore_pattern_matcher/1"](pattern);
       assert(Type.isCompiledPattern(result));
     });
   });
 
-  describe("_aho_corasick_pattern_matcher", () => {
+  describe("_boyer_moore_search/3", () => {
+    const subjectFunc = Erlang_Binary["_boyer_moore_search/3"];
+
+    describe("with default options (empty list)", () => {
+      it("finds pattern at the beginning of subject", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("hello");
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const options = Type.list([]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert.deepStrictEqual(result.index, 0);
+        assert.deepStrictEqual(result.length, 5);
+      });
+
+      it("finds pattern in the middle of subject", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const options = Type.list([]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert.deepStrictEqual(result.index, 6);
+        assert.deepStrictEqual(result.length, 5);
+      });
+
+      it("returns false when pattern is not found", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("xyz");
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const options = Type.list([]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert.strictEqual(result, false);
+      });
+    });
+
+    describe("with scope option", () => {
+      it("finds pattern starting at specified index", () => {
+        const subject = Bitstring.fromText("abcdefg");
+        const pattern = Bitstring.fromText("def");
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(3), Type.integer(7)]),
+          ]),
+        ]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert.deepStrictEqual(result.index, 3);
+      });
+
+      it("returns false when pattern is before scope start", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("hello");
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(6), Type.integer(5)]),
+          ]),
+        ]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert.strictEqual(result, false);
+      });
+    });
+  });
+
+  describe("_aho_corasick_pattern_matcher/1", () => {
     it("builds trie structure for multiple patterns", () => {
       const pattern1 = Bitstring.fromBytes([104, 101]); // "he"
       const pattern2 = Bitstring.fromBytes([115, 104, 101]); // "she"
       const patternList = Type.list([pattern1, pattern2]);
-      const result = Erlang_Binary._aho_corasick_pattern_matcher(patternList);
+      const result =
+        Erlang_Binary["_aho_corasick_pattern_matcher/1"](patternList);
       assert(Type.isCompiledPattern(result));
+    });
+  });
+
+  describe("_aho_corasick_search/3", () => {
+    const subjectFunc = Erlang_Binary["_aho_corasick_search/3"];
+
+    describe("with default options (empty list)", () => {
+      it("finds first pattern in subject", () => {
+        const subject = Bitstring.fromText("she sells shells");
+        const pattern1 = Bitstring.fromText("she");
+        const pattern2 = Bitstring.fromText("shells");
+        const patternList = Type.list([pattern1, pattern2]);
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](patternList);
+        const options = Type.list([]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert(result && result.foundIndex >= 0);
+      });
+
+      it("returns false when no patterns are found", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern1 = Bitstring.fromText("xyz");
+        const pattern2 = Bitstring.fromText("abc");
+        const patternList = Type.list([pattern1, pattern2]);
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](patternList);
+        const options = Type.list([]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert.strictEqual(result, false);
+      });
+    });
+
+    describe("with scope option", () => {
+      it("searches within specified scope", () => {
+        const subject = Bitstring.fromText("she sells shells");
+        const pattern1 = Bitstring.fromText("she");
+        const pattern2 = Bitstring.fromText("sells");
+        const patternList = Type.list([pattern1, pattern2]);
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](patternList);
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.integer(16)]),
+          ]),
+        ]);
+
+        const result = subjectFunc(subject, compiledPattern, options);
+
+        assert(result && result.foundIndex >= 0);
+      });
+    });
+  });
+
+  describe("_parse_search_opts/1", () => {
+    const parseFun = Erlang_Binary["_parse_search_opts/1"];
+
+    describe("with empty list (default options)", () => {
+      it("returns default start and length values", () => {
+        const options = Type.list([]);
+        const result = parseFun(options);
+
+        assert.strictEqual(result.start, 0);
+        assert.strictEqual(result.length, -1);
+      });
+    });
+
+    describe("with scope option", () => {
+      it("parses scope tuple with valid integers", () => {
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(5), Type.integer(10)]),
+          ]),
+        ]);
+        const result = parseFun(options);
+
+        assert.deepStrictEqual(result.start, Type.integer(5));
+        assert.deepStrictEqual(result.length, Type.integer(10));
+      });
+
+      it("returns zero start when scope start is negative", () => {
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(-5), Type.integer(10)]),
+          ]),
+        ]);
+        const result = parseFun(options);
+
+        assert.deepStrictEqual(result.start, Type.integer(-5));
+        assert.deepStrictEqual(result.length, Type.integer(10));
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises FunctionClauseError when options is not a list", () => {
+        const options = Type.atom("invalid");
+
+        assertBoxedError(
+          () => parseFun(options),
+          "FunctionClauseError",
+          /invalid options/,
+        );
+      });
+
+      it("raises FunctionClauseError when options is an improper list", () => {
+        const options = Type.improperList(
+          [Type.atom("test")],
+          Type.atom("tail"),
+        );
+
+        assertBoxedError(
+          () => parseFun(options),
+          "FunctionClauseError",
+          /invalid options/,
+        );
+      });
+
+      it("raises FunctionClauseError when scope contains non-integers", () => {
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.atom("invalid"), Type.integer(10)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => parseFun(options),
+          "FunctionClauseError",
+          /invalid options/,
+        );
+      });
     });
   });
 });
