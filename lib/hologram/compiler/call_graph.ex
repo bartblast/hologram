@@ -29,6 +29,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},
     {{:erlang, :binary_to_integer, 1}, {:erlang, :binary_to_integer, 2}},
     {{:erlang, :error, 1}, {:erlang, :error, 2}},
+    {{:erlang, :float_to_list, 2}, {:erlang, :float_to_binary, 2}},
     {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
     {{:erlang, :integer_to_list, 1}, {:erlang, :integer_to_list, 2}},
     {{:erlang, :iolist_to_binary, 1}, {:lists, :flatten, 1}},
