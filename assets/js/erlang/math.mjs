@@ -28,6 +28,21 @@ const Erlang_Math = {
   // End ceil/1
   // Deps: []
 
+  // Start exp/1
+  "exp/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    const value = Type.isInteger(number) ? Number(number.value) : number.value;
+
+    return Type.float(Math.exp(value));
+  },
+  // End exp/1
+  // Deps: []
+
   // Start floor/1
   "floor/1": (number) => {
     if (!Type.isNumber(number)) {
@@ -35,7 +50,6 @@ const Erlang_Math = {
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     }
-
     return Type.isInteger(number)
       ? Type.float(Number(number.value))
       : Type.float(Math.floor(number.value));
