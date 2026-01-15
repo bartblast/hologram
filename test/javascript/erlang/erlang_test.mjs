@@ -4156,6 +4156,95 @@ describe("Erlang", () => {
     });
   });
 
+  describe("float_to_list/2", () => {
+    const float_to_list = Erlang["float_to_list/2"];
+
+    it("returns a list of character code points", () => {
+      const input = Type.float(2.0);
+      const opts = Type.list([Type.atom("short")]);
+      const result = float_to_list(input, opts);
+
+      // "2.0" -> [50, 46, 48]
+      const expected = Type.list([
+        Type.integer(50),
+        Type.integer(46),
+        Type.integer(48),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("works with decimals option", () => {
+      const input = Type.float(0.5);
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(2)]),
+      ]);
+      const result = float_to_list(input, opts);
+
+      // "0.50" -> [48, 46, 53, 48]
+      const expected = Type.list([
+        Type.integer(48),
+        Type.integer(46),
+        Type.integer(53),
+        Type.integer(48),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("works with scientific option", () => {
+      const input = Type.float(100.0);
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(1)]),
+      ]);
+      const result = float_to_list(input, opts);
+
+      // "1.0e+02" -> [49, 46, 48, 101, 43, 48, 50]
+      const expected = Type.list([
+        Type.integer(49),
+        Type.integer(46),
+        Type.integer(48),
+        Type.integer(101),
+        Type.integer(43),
+        Type.integer(48),
+        Type.integer(50),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("works with short option", () => {
+      const input = Type.float(0.0);
+      const opts = Type.list([Type.atom("short")]);
+      const result = float_to_list(input, opts);
+
+      // "0.0" -> [48, 46, 48]
+      const expected = Type.list([
+        Type.integer(48),
+        Type.integer(46),
+        Type.integer(48),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a float", () => {
+      assertBoxedError(
+        () => float_to_list(Type.integer(123), Type.list()),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a list", () => {
+      assertBoxedError(
+        () => float_to_list(Type.float(1.23), Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    });
+  });
+
   describe("floor/1", () => {
     const testedFun = Erlang["floor/1"];
 
