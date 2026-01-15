@@ -1147,7 +1147,7 @@ describe("Type", () => {
     });
 
     it("returns false for list containing invalid codepoint", () => {
-      // Max Unicode code point value is 1,114,112
+      // Max Unicode code point value is 1,114,111 (U+10FFFF)
       const arg = Type.list([Type.integer(97), Type.integer(1114113)]);
       const result = Type.isCharlist(arg);
 
