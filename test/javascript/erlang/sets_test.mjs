@@ -37,6 +37,47 @@ const set123 = Erlang_Sets["from_list/2"](
 // Always update both together.
 
 describe("Erlang_Sets", () => {
+  describe("del_element/2", () => {
+    const del_element_2 = Erlang_Sets["del_element/2"];
+    const from_list_2 = Erlang_Sets["from_list/2"];
+
+    it("removes an existing element from the set", () => {
+      const result = del_element_2(integer2, set123);
+
+      const expected = from_list_2(Type.list([integer1, integer3]), opts);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns the same set if element is not present", () => {
+      const integer42 = Type.integer(42);
+      const result = del_element_2(integer42, set123);
+
+      assert.deepStrictEqual(result, set123);
+    });
+
+    it("returns empty set when removing from empty set", () => {
+      const emptySet = from_list_2(Type.list(), opts);
+      const result = del_element_2(Type.atom("any"), emptySet);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("raises FunctionClauseError if argument is not a set", () => {
+      const elem = Type.atom("elem");
+      const notASet = Type.atom("not_a_set");
+
+      assertBoxedError(
+        () => del_element_2(elem, notASet),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
+          elem,
+          notASet,
+        ]),
+      );
+    });
+  });
+
   describe("filter/2", () => {
     const filter_2 = Erlang_Sets["filter/2"];
 
@@ -456,47 +497,6 @@ describe("Erlang_Sets", () => {
           "Hologram requires to specify :sets version explicitely",
         );
       });
-    });
-  });
-
-  describe("del_element/2", () => {
-    const del_element_2 = Erlang_Sets["del_element/2"];
-    const from_list_2 = Erlang_Sets["from_list/2"];
-
-    it("removes an existing element from the set", () => {
-      const result = del_element_2(integer2, set123);
-
-      const expected = from_list_2(Type.list([integer1, integer3]), opts);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("returns the same set if element is not present", () => {
-      const integer42 = Type.integer(42);
-      const result = del_element_2(integer42, set123);
-
-      assert.deepStrictEqual(result, set123);
-    });
-
-    it("returns empty set when removing from empty set", () => {
-      const emptySet = from_list_2(Type.list(), opts);
-      const result = del_element_2(Type.atom("any"), emptySet);
-
-      assert.deepStrictEqual(result, emptySet);
-    });
-
-    it("raises FunctionClauseError if argument is not a set", () => {
-      const elem = Type.atom("elem");
-      const notASet = Type.atom("not_a_set");
-
-      assertBoxedError(
-        () => del_element_2(elem, notASet),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
-          elem,
-          notASet,
-        ]),
-      );
     });
   });
 

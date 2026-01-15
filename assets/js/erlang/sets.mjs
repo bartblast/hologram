@@ -58,6 +58,22 @@ const Erlang_Sets = {
   // End _validate_opts/1
   // Deps: [:lists.keyfind/3]
 
+  // Start del_element/2
+  "del_element/2": (element, set) => {
+    if (!Type.isMap(set)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
+          element,
+          set,
+        ]),
+      );
+    }
+
+    return Erlang_Maps["remove/2"](element, set);
+  },
+  // End del_element/2
+  // Deps: [:maps.remove/2]
+
   // Start filter/2
   "filter/2": (fun, set) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1 || !Type.isMap(set)) {
@@ -113,22 +129,6 @@ const Erlang_Sets = {
   },
   // End from_list/2
   // Deps: [:maps.from_keys/2, :sets._validate_opts/1]
-
-  // Start del_element/2
-  "del_element/2": (element, set) => {
-    if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.del_element/2", [
-          element,
-          set,
-        ]),
-      );
-    }
-
-    return Erlang_Maps["remove/2"](element, set);
-  },
-  // End del_element/2
-  // Deps: [:maps.remove/2]
 
   // Start is_element/2
   "is_element/2": (element, set) => {
