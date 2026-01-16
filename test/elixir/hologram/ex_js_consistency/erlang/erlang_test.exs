@@ -3248,6 +3248,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert large_int == -999_999_999_999_999_999_999_999_999_999
     end
 
+    test "converts very large (above Number.MAX_SAFE_INTEGER) base 16 integer" do
+      large_list = List.duplicate(?F, 20)
+      large_int = :erlang.list_to_integer(large_list, 16)
+
+      assert large_int == 0xFFFFFFFFFFFFFFFFFFFF
+    end
+
     test "raises ArgumentError if the first argument is not a list" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
