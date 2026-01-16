@@ -5007,6 +5007,19 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("converts very large (above Number.MAX_SAFE_INTEGER) base 16 integer", () => {
+      // Test that list_to_integer handles numbers well beyond
+      // Number.MAX_SAFE_INTEGER using BigInt for non-base-10
+      const codes = "FFFFFFFFFFFFFFFFFFFF"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(16));
+      const expected = Type.integer(BigInt("0xFFFFFFFFFFFFFFFFFFFF"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises ArgumentError if the first argument is not a list", () => {
       assertBoxedError(
         () => list_to_integer(Type.atom("abc"), Type.integer(10)),
