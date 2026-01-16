@@ -52,6 +52,82 @@ const Erlang_Filename = {
   // End _do_flatten/2
   // Deps: [:erlang.atom_to_list/1]
 
+  // Start _dirname_raw/1
+  "_dirname_raw/1": (filenameBinary) => {
+    // Helpers
+
+    const computeResultBytes = (
+      lastSlashIndex,
+      trimmedBytes,
+      DIR_SEPARATOR_BYTE,
+    ) => {
+      if (lastSlashIndex === -1) return [46]; // No separator found - return '.'
+
+      // lastSlashIndex is the distance from end (reversed index);
+      // if equal to length-1, the separator is at position 0 (array start), meaning root
+      if (lastSlashIndex === trimmedBytes.length - 1) {
+        return [DIR_SEPARATOR_BYTE]; // Only separator at start - return '/'
+      }
+
+      // Return bytes before the last separator (convert reversed index back to normal index)
+      // Formula: normal_index = array_length - 1 - reversed_index
+      return trimmedBytes.slice(0, trimmedBytes.length - 1 - lastSlashIndex);
+    };
+
+    // Search from end of array; returns reversed index (distance from end)
+    // Example: [47, 47, 65] with separator 47 returns 1 (A is 1 position from end)
+    const findLastNonSeparatorIndex = (bytes, DIR_SEPARATOR_BYTE) => {
+      const reversed = [...bytes].reverse();
+      const index = reversed.findIndex((byte) => byte !== DIR_SEPARATOR_BYTE);
+
+      return index === -1 ? -1 : index;
+    };
+
+    // Search from end of array; returns reversed index (distance from end)
+    // Example: [65, 47, 66] with separator 47 returns 1 (separator is 1 position from end)
+    const findLastSeparatorIndex = (bytes, DIR_SEPARATOR_BYTE) => {
+      const reversed = [...bytes].reverse();
+      const index = reversed.findIndex((byte) => byte === DIR_SEPARATOR_BYTE);
+
+      return index === -1 ? -1 : index;
+    };
+
+    // Main logic
+
+    const DIR_SEPARATOR_BYTE = 47; // '/'
+    const bytes = filenameBinary.bytes;
+
+    // Trim trailing separators
+    const reversedIndex = findLastNonSeparatorIndex(bytes, DIR_SEPARATOR_BYTE);
+
+    // All separators - return single separator
+    if (reversedIndex === -1) {
+      const result = Bitstring.fromBytes([DIR_SEPARATOR_BYTE]);
+      Bitstring.maybeSetTextFromBytes(result);
+      return result;
+    }
+
+    const trimmedBytes = bytes.slice(0, bytes.length - reversedIndex);
+
+    // Find last separator in trimmed bytes
+    const lastSlashIndex = findLastSeparatorIndex(
+      trimmedBytes,
+      DIR_SEPARATOR_BYTE,
+    );
+
+    const resultBytes = computeResultBytes(
+      lastSlashIndex,
+      trimmedBytes,
+      DIR_SEPARATOR_BYTE,
+    );
+
+    const result = Bitstring.fromBytes(resultBytes);
+    Bitstring.maybeSetTextFromBytes(result);
+
+    return result;
+  },
+  // End _dirname_raw/1
+
   // Start basename/1
   "basename/1": (filename) => {
     const DIR_SEPARATOR_BYTE = 47;
@@ -233,6 +309,101 @@ const Erlang_Filename = {
   },
   // End basename/2
   // Deps: [:erlang.iolist_to_binary/1, :filename.basename/1, :filename.flatten/1]
+
+  // Start dirname/1
+  "dirname/1": (filename) => {
+    // Helpers
+
+    const computeDirname = (text) => {
+      // For paths without trailing slashes: dirname is everything before last slash
+      const lastSlashIndex = text.lastIndexOf("/");
+
+      if (lastSlashIndex === -1) return "."; // Single component - dirname is current directory
+
+      if (lastSlashIndex === 0) return "/"; // Root-relative path - dirname is root
+
+      // Multi-component path - return everything before last slash
+      return text.substring(0, lastSlashIndex);
+    };
+
+    // Handle trailing slashes: the trimmed directory path IS the parent directory
+    // (trailing slash indicates the argument itself is a directory, not a filename)
+    const computeDirnameWithTrailingSlashes = (trimmedText) => {
+      if (trimmedText.length === 0) return "/"; // Original was all slashes
+
+      return trimmedText;
+    };
+
+    // Extract trimmed text and detect trailing slashes in single pass
+    const extractTrimmedTextAndTrailingSlashes = (text) => {
+      // Regex ^(.*?)\/*$ captures everything before trailing slashes
+      // Comparing trimmed length to original length tells us if trailing slashes existed
+      const match = text.match(/^(.*?)\/*$/);
+      const trimmedText = match[1];
+      // If trimmed text is shorter, there were trailing slashes that were stripped
+      const hasTrailingSlashes = trimmedText.length < text.length;
+
+      return {trimmedText, hasTrailingSlashes};
+    };
+
+    // Handle invalid UTF-8 result
+    const handleInvalidUtf8Result = (rawResult, isBinaryInput) => {
+      if (rawResult.text !== false) {
+        // Result turned out to be valid UTF-8 (e.g., ".")
+        const resultBinary = Type.bitstring(rawResult.text);
+
+        return isBinaryInput
+          ? resultBinary
+          : Bitstring.toCodepoints(resultBinary);
+      }
+
+      if (isBinaryInput) return rawResult;
+
+      // Return raw bytes as list of integers
+      Bitstring.maybeSetBytesFromText(rawResult);
+      const result = Type.list(
+        [...rawResult.bytes].map((byte) => Type.integer(byte)),
+      );
+
+      return result;
+    };
+
+    // Main logic
+
+    // flatten/1 handles argument type checking and raises
+    // FunctionClauseError if needed.
+    const flattened = Erlang_Filename["flatten/1"](filename);
+    const isBinaryInput = Type.isBinary(flattened);
+
+    const binary = isBinaryInput
+      ? flattened
+      : Erlang["iolist_to_binary/1"](flattened);
+
+    Bitstring.maybeSetBytesFromText(binary);
+    Bitstring.maybeSetTextFromBytes(binary);
+
+    // Handle invalid UTF-8
+    if (binary.text === false) {
+      const rawResult = Erlang_Filename["_dirname_raw/1"](binary);
+
+      return handleInvalidUtf8Result(rawResult, isBinaryInput);
+    }
+
+    // Handle valid UTF-8 - extract trimmed text and detect trailing slashes in one pass
+    const {trimmedText, hasTrailingSlashes} =
+      extractTrimmedTextAndTrailingSlashes(binary.text);
+
+    const resultText = hasTrailingSlashes
+      ? computeDirnameWithTrailingSlashes(trimmedText)
+      : computeDirname(trimmedText);
+
+    const resultBinary = Type.bitstring(resultText);
+
+    // Return result in the same format as input
+    return isBinaryInput ? resultBinary : Bitstring.toCodepoints(resultBinary);
+  },
+  // End dirname/1
+  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1, :filename._dirname_raw/1]
 
   // Start extension/1
   "extension/1": (filename) => {

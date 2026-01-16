@@ -298,6 +298,112 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     end
   end
 
+  describe "dirname/1" do
+    test "path with multiple components" do
+      assert :filename.dirname("foo/bar/baz.erl") == "foo/bar"
+    end
+
+    test "single filename without path" do
+      assert :filename.dirname("foo") == "."
+    end
+
+    test "root path" do
+      assert :filename.dirname("/") == "/"
+    end
+
+    test "absolute path with one component" do
+      assert :filename.dirname("/foo") == "/"
+    end
+
+    test "absolute path with trailing slash" do
+      assert :filename.dirname("/foo/") == "/foo"
+    end
+
+    test "relative path with trailing slash" do
+      assert :filename.dirname("foo/") == "foo"
+    end
+
+    test "single dot" do
+      assert :filename.dirname(".") == "."
+    end
+
+    test "double dots" do
+      assert :filename.dirname("..") == "."
+    end
+
+    test "absolute path with multiple components" do
+      assert :filename.dirname("/foo/bar") == "/foo"
+    end
+
+    test "deep relative path" do
+      assert :filename.dirname("a/b/c/d/e") == "a/b/c/d"
+    end
+
+    test "empty string" do
+      assert :filename.dirname("") == "."
+    end
+
+    test "filename with extension only" do
+      assert :filename.dirname("foo.txt") == "."
+    end
+
+    test "atom input" do
+      assert :filename.dirname(:file) == ~c"."
+    end
+
+    test "atom input with path" do
+      assert :filename.dirname(:"foo/bar") == ~c"foo"
+    end
+
+    test "list input" do
+      assert :filename.dirname([?f, ?o, ?o]) == [?.]
+    end
+
+    test "iolist input with path" do
+      assert :filename.dirname([~c"foo/", ?b, ?a, ?r]) == ~c"foo"
+    end
+
+    test "empty list input" do
+      assert :filename.dirname([]) == ~c"."
+    end
+
+    test "multiple trailing slashes" do
+      assert :filename.dirname("foo/bar///") == "foo/bar"
+    end
+
+    test "handles invalid UTF-8 binary" do
+      filename = <<255, 47, 254>>
+
+      assert :filename.dirname(filename) == <<255>>
+    end
+
+    test "handles invalid UTF-8 list" do
+      filename = [255, 47, 254]
+
+      assert :filename.dirname(filename) == [255]
+    end
+
+    test "invalid UTF-8 with no separator" do
+      filename = <<255, 254, 253>>
+
+      assert :filename.dirname(filename) == "."
+    end
+
+    test "raises FunctionClauseError if the argument is not a bitstring or atom or list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.dirname(123) end
+    end
+
+    test "raises FunctionClauseError if the argument is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
+                   fn -> :filename.dirname(arg) end
+    end
+  end
+
   describe "extension/1" do
     test "file with extension" do
       assert :filename.extension("foo.erl") == ".erl"
