@@ -1660,6 +1660,107 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("max/1", () => {
+    const max = Erlang_Lists["max/1"];
+    const shuffle = (array) => array.sort(() => Math.random() - 0.5);
+
+    it("returns the element from a list of length 1", () => {
+      const list = Type.list([integer3]);
+      const result = max(list);
+
+      assert.deepStrictEqual(result, integer3);
+    });
+
+    it("returns the larger element from a list of size 2 with second being largest", () => {
+      const list = Type.list([integer1, integer3]);
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer3);
+    });
+
+    it("returns the larger element from a list of size 2 with first being largest", () => {
+      const list = Type.list([integer3, integer1]);
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer3);
+    });
+
+    it("returns the element from a list of size 2 when both are the same", () => {
+      const list = Type.list([integer3, integer3]);
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer3);
+    });
+
+    it("applies structural comparison", () => {
+      const data = [
+        atomA,
+        float2,
+        integer3,
+        Type.bitstring("d"),
+        Type.pid("my_node", [0, 1, 2]),
+        Type.tuple([integer0, integer1]),
+      ];
+
+      const list = Type.list(shuffle(data));
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, Type.bitstring("d"));
+    });
+
+    it("returns the largest element from a large list with many duplicates", () => {
+      const data = [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5].map(
+        Type.integer,
+      );
+
+      const list = Type.list(shuffle(data));
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer5);
+    });
+
+    it("raises FunctionClauseError if the argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.max/1",
+        [atomAbc],
+      );
+
+      assertBoxedError(
+        () => max(atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is an improper list", () => {
+      // Notice that the error message says :lists.max/2 (not :lists.max/1)
+      // :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.max/2",
+        [improperList],
+      );
+
+      assertBoxedError(
+        () => max(improperList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is an empty list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.max/1",
+        [emptyList],
+      );
+
+      assertBoxedError(
+        () => max(emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("member/2", () => {
     const member = Erlang_Lists["member/2"];
 
