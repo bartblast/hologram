@@ -274,7 +274,7 @@ describe("Erlang_String", () => {
         Type.atom("all"),
       );
 
-      assert.deepStrictEqual(result, Type.list([string]));
+      assert.deepStrictEqual(result, Type.list([Bitstring.toText(string)]));
     });
 
     it("returns unchanged string inside a list if the pattern is not present inside the string", () => {
@@ -285,7 +285,7 @@ describe("Erlang_String", () => {
         Type.atom("all"),
       );
 
-      assert.deepStrictEqual(result, Type.list([string]));
+      assert.deepStrictEqual(result, Type.list([Bitstring.toText(string)]));
     });
 
     it("returns a list of each words separated by the replacement with the direction set to :all", () => {
@@ -368,7 +368,7 @@ describe("Erlang_String", () => {
         Type.atom("all"),
       );
 
-      assert.deepStrictEqual(result, ["Hello ", "🌍", " World"]);
+      assert.deepStrictEqual(result, Type.list(["Hello ", "🌍", " World"]));
     });
   });
 
