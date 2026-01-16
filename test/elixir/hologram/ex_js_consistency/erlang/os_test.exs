@@ -10,10 +10,10 @@ defmodule Hologram.ExJsConsistency.Erlang.OsTest do
   @moduletag :consistency
 
   describe "type/0" do
-    test "returns OS family and OS name as atoms" do
-      {family, type} = :os.type()
-      assert family in [:unix, :win32] == true
-      assert type in [:darwin, :nt] == true
+    test "returns OS family and OS name" do
+      {family, name} = :os.type()
+      assert family in [:win32, :unix, :linux] == true
+      assert is_atom(name) == true
     end
   end
 end

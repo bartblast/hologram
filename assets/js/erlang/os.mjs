@@ -23,7 +23,7 @@ const classify = (value) => {
   if (v.includes("sun")) return {family: "unix", name: "sunos"};
   if (v.includes("aix")) return {family: "unix", name: "aix"};
   if (v.includes("hp-ux")) return {family: "unix", name: "hp-ux"};
-  return {family: "unknown", name: "unknown"};
+  return {}; // TODO: return empty object or null?
 };
 
 const Erlang_Os = {
