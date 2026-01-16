@@ -18,6 +18,7 @@ import Erlang_Math from "../../../assets/js/erlang/math.mjs";
 import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
 import Erlang_Rand from "../../../assets/js/erlang/rand.mjs";
 import Erlang_Re from "../../../assets/js/erlang/re.mjs";
+import Erlang_Os from "../../../assets/js/erlang/os.mjs";
 import Erlang_Sets from "../../../assets/js/erlang/sets.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
@@ -258,6 +259,7 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Rand = Erlang_Rand;
   globalThis.Erlang_Re = Erlang_Re;
+  globalThis.Erlang_Os = Erlang_Os;
   globalThis.Erlang_Sets = Erlang_Sets;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Code = Elixir_Code;
