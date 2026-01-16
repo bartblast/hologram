@@ -75,7 +75,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
     {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
     {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}},
-    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :characters_to_binary, 3}}
+    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :characters_to_nfd_binary, 1}, {:unicode, :characters_to_binary, 3}}
   ]
 
   # These functions are transpiled manually for at least one of the following reasons:

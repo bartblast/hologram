@@ -340,4 +340,84 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       end
     end
   end
+
+  describe "characters_to_nfd_binary/1" do
+    test "decomposes combining characters to NFD" do
+      assert :unicode.characters_to_nfd_binary("å") == "a\u030a"
+    end
+
+    test "handles already decomposed text" do
+      # "a\u030a" is already in NFD form
+      input = "a\u030a"
+      assert :unicode.characters_to_nfd_binary(input) == input
+    end
+
+    test "decomposes nested chardata" do
+      input = [<<"abc..">>, [<<"a">>, 0x030A], <<"a">>, [0x0308], <<"o">>, 0x0308]
+      assert :unicode.characters_to_nfd_binary(input) == "abc..a\u030aa\u0308o\u0308"
+    end
+
+    test "handles empty binary" do
+      assert :unicode.characters_to_nfd_binary("") == ""
+    end
+
+    test "handles empty list" do
+      assert :unicode.characters_to_nfd_binary([]) == ""
+    end
+
+    test "handles deeply nested lists" do
+      input = [[[<<"a">>, 0x030A]]]
+      assert :unicode.characters_to_nfd_binary(input) == "a\u030a"
+    end
+
+    test "raises ArgumentError on invalid code point" do
+      input = [97, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = [<<"abc">>, invalid_binary]
+      expected = {:error, <<"abc">>, invalid_binary}
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = [<<"a">>, 0x030A, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "handles multiple combining marks" do
+      input = [<<"o">>, 0x0308, 0x0304]
+      # NFD preserves combining marks in canonical order
+      assert :unicode.characters_to_nfd_binary(input) == "o\u0308\u0304"
+    end
+
+    test "handles large input" do
+      large_input = String.duplicate("abcdefghij", 100)
+      assert :unicode.characters_to_nfd_binary(large_input) == large_input
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = [<<"hello">>, <<"  ">>, <<"å">>, <<"  world">>]
+      assert :unicode.characters_to_nfd_binary(input) == "hello  a\u030a  world"
+    end
+
+    test "preserves non-combining characters" do
+      input = [0x3042, 0x3044]
+      assert :unicode.characters_to_nfd_binary(input) == "あい"
+    end
+  end
 end
