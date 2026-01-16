@@ -226,6 +226,30 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfc_binary(input) == expected
     end
 
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+      input = ["a", invalid_binary]
+      expected = {:error, "a", invalid_binary}
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+      input = ["a", invalid_binary]
+      expected = {:error, "a", invalid_binary}
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+      input = ["a", invalid_binary]
+      expected = {:error, "a", invalid_binary}
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
     test "raises ArgumentError on invalid code point after normalization" do
       input = ["a", 0x030A, 0x110000]
 

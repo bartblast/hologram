@@ -372,6 +372,54 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("rejects overlong UTF-8 sequence in binary", () => {
+      // Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      const invalidBinary = Bitstring.fromBytes([0xc0, 0x80]);
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate range in binary", () => {
+      // CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      const invalidBinary = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects code points above U+10FFFF in binary", () => {
+      // Leader 0xF5 starts sequences above Unicode max (invalid)
+      const invalidBinary = Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]);
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises ArgumentError on invalid code point after normalization", () => {
       const input = Type.list([
         Type.bitstring("a"),
