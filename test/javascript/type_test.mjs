@@ -735,6 +735,58 @@ describe("Type", () => {
     });
   });
 
+  describe("isCharlist()", () => {
+    it("returns true for proper list of valid codepoints", () => {
+      const arg = Type.list([
+        Type.integer(104),
+        Type.integer(101),
+        Type.integer(108),
+        Type.integer(108),
+        Type.integer(111),
+      ]); // "hello"
+
+      const result = Type.isCharlist(arg);
+
+      assert.isTrue(result);
+    });
+
+    it("returns true for empty list", () => {
+      const arg = Type.list();
+      const result = Type.isCharlist(arg);
+
+      assert.isTrue(result);
+    });
+
+    it("returns false for improper list", () => {
+      const arg = Type.improperList([Type.integer(97), Type.integer(98)]);
+      const result = Type.isCharlist(arg);
+
+      assert.isFalse(result);
+    });
+
+    it("returns false for non-list type", () => {
+      const arg = Type.atom("abc");
+      const result = Type.isCharlist(arg);
+
+      assert.isFalse(result);
+    });
+
+    it("returns false for list containing non-integer item", () => {
+      const arg = Type.list([Type.integer(97), Type.atom("b")]);
+      const result = Type.isCharlist(arg);
+
+      assert.isFalse(result);
+    });
+
+    it("returns false for list containing invalid codepoint", () => {
+      // Max Unicode code point value is 1,114,111 (U+10FFFF)
+      const arg = Type.list([Type.integer(97), Type.integer(1_114_113)]);
+      const result = Type.isCharlist(arg);
+
+      assert.isFalse(result);
+    });
+  });
+
   describe("isCompiledPattern()", () => {
     const ref = Type.reference("nonode@nohost", [0, 1, 2, 3]);
 
@@ -1106,57 +1158,6 @@ describe("Type", () => {
     it("returns false for boxed types other than list", () => {
       const arg = Type.atom("abc");
       const result = Type.isProperList(arg);
-
-      assert.isFalse(result);
-    });
-  });
-
-  describe("isCharlist()", () => {
-    it("returns true for proper list of valid codepoints", () => {
-      const arg = Type.list([
-        Type.integer(104),
-        Type.integer(101),
-        Type.integer(108),
-        Type.integer(108),
-        Type.integer(111),
-      ]); // "hello"
-      const result = Type.isCharlist(arg);
-
-      assert.isTrue(result);
-    });
-
-    it("returns true for empty list", () => {
-      const arg = Type.list([]);
-      const result = Type.isCharlist(arg);
-
-      assert.isTrue(result);
-    });
-
-    it("returns false for improper list", () => {
-      const arg = Type.improperList([Type.integer(97), Type.integer(98)]);
-      const result = Type.isCharlist(arg);
-
-      assert.isFalse(result);
-    });
-
-    it("returns false for list containing non-integer", () => {
-      const arg = Type.list([Type.integer(97), Type.atom("b")]);
-      const result = Type.isCharlist(arg);
-
-      assert.isFalse(result);
-    });
-
-    it("returns false for list containing invalid codepoint", () => {
-      // Max Unicode code point value is 1,114,111 (U+10FFFF)
-      const arg = Type.list([Type.integer(97), Type.integer(1114113)]);
-      const result = Type.isCharlist(arg);
-
-      assert.isFalse(result);
-    });
-
-    it("returns false for non-list type", () => {
-      const arg = Type.atom("abc");
-      const result = Type.isCharlist(arg);
 
       assert.isFalse(result);
     });
