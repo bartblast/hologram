@@ -90,27 +90,87 @@ const Erlang_Unicode = {
     // Helpers
 
     // Scans forward once to find the longest valid UTF-8 prefix.
-    // Uses UTF-8 byte structure to validate incrementally: single-byte (0xxxxxxx),
-    // multi-byte leaders (11xxxxxx), and continuation bytes (10xxxxxx).
+    // Validates UTF-8 by checking byte structure, decoding code points,
+    // and rejecting overlong encodings, surrogates, and out-of-range values.
+    // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      const getSequenceLength = (byte) => {
-        if ((byte & 0x80) === 0) return 1;
-        if ((byte & 0xe0) === 0xc0) return 2;
-        if ((byte & 0xf0) === 0xe0) return 3;
-        if ((byte & 0xf8) === 0xf0) return 4;
-        return -1;
+      // Determines the expected UTF-8 sequence length from the leader byte.
+      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
+      const getSequenceLength = (leaderByte) => {
+        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
+        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
+        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
+        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
+        return -1; // Invalid leader byte
       };
 
+      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
       const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
 
-      const isValidSequence = (start, length) => {
-        if (start + length > bytes.length) return false;
-
-        return Array.from({length: length - 1}, (_, i) => i + 1).every(
-          (offset) => isValidContinuation(bytes[start + offset]),
+      // Decodes a UTF-8 sequence starting at the given position.
+      // Returns the decoded Unicode code point value.
+      const decodeCodePoint = (start, length) => {
+        if (length === 1) {
+          return bytes[start];
+        }
+        if (length === 2) {
+          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
+        }
+        if (length === 3) {
+          return (
+            ((bytes[start] & 0x0f) << 12) |
+            ((bytes[start + 1] & 0x3f) << 6) |
+            (bytes[start + 2] & 0x3f)
+          );
+        }
+        // length === 4
+        return (
+          ((bytes[start] & 0x07) << 18) |
+          ((bytes[start + 1] & 0x3f) << 12) |
+          ((bytes[start + 2] & 0x3f) << 6) |
+          (bytes[start + 3] & 0x3f)
         );
       };
 
+      // Validates that a code point is within UTF-8 rules:
+      // - Not an overlong encoding (using more bytes than necessary)
+      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
+      // - Not above maximum Unicode (U+10FFFF)
+      const isValidCodePoint = (codePoint, encodingLength) => {
+        // Check for overlong encodings (security issue)
+        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
+        if (codePoint < minValueForLength[encodingLength]) return false;
+
+        // Reject UTF-16 surrogates (U+D800–U+DFFF)
+        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
+
+        // Reject code points beyond Unicode range (> U+10FFFF)
+        if (codePoint > 0x10ffff) return false;
+
+        return true;
+      };
+
+      // Validates a complete UTF-8 sequence at the given position.
+      // Checks: sufficient bytes, valid continuations, and valid code point.
+      const isValidSequence = (start, length) => {
+        // Check if we have enough bytes
+        if (start + length > bytes.length) return false;
+
+        // Verify all continuation bytes have correct pattern (10xxxxxx)
+        // Uses functional approach: creates array of indices, tests each with .every()
+        const allContinuationsValid = Array.from(
+          {length: length - 1},
+          (_, i) => i + 1,
+        ).every((offset) => isValidContinuation(bytes[start + offset]));
+
+        if (!allContinuationsValid) return false;
+
+        // Decode and validate the code point value
+        const codePoint = decodeCodePoint(start, length);
+        return isValidCodePoint(codePoint, length);
+      };
+
+      // Main loop: scan forward, validating each sequence
       let pos = 0;
       while (pos < bytes.length) {
         const seqLength = getSequenceLength(bytes[pos]);
