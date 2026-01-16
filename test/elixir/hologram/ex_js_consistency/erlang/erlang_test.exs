@@ -3244,7 +3244,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "very large (above Number.MAX_SAFE_INTEGER) integer with letter digits" do
-      # Number.MAX_SAFE_INTEGER = 9007199254740991      
+      # Number.MAX_SAFE_INTEGER = 9007199254740991
       large_list = List.duplicate(?F, 20)
       large_int = :erlang.list_to_integer(large_list, 16)
 
@@ -3769,6 +3769,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a boolean" do
       assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
+    end
+  end
+
+  describe "unique_integer/0" do
+    test "returns a unique integer each time it is called" do
+      int1 = :erlang.unique_integer()
+      int2 = :erlang.unique_integer()
+      int3 = :erlang.unique_integer()
+
+      assert int1 != int2
+      assert int2 != int3
+      assert int1 != int3
+    end
+
+    test "returns unique integers over many calls" do
+      integers = Enum.map(1..100, fn _i -> :erlang.unique_integer() end)
+      unique_integers = Enum.uniq(integers)
+
+      assert length(integers) == length(unique_integers)
     end
   end
 end
