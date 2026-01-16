@@ -166,6 +166,19 @@ const Erlang_Sets = {
   },
   // End to_list/1
   // Deps: [:maps.keys/1]
+
+  // Start size/1
+  "size/1": (set) => {
+    if (!Type.isMap(set)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [set]),
+      );
+    }
+
+    return Type.integer(Erlang_Maps["keys/1"](set).data.length);
+  },
+  // End size/1
+  // Deps: [:maps.keys/1]
 };
 
 export default Erlang_Sets;
