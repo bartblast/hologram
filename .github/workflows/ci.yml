@@ -1,8 +1,7 @@
 name: CI
 
-# Define workflow that runs when changes are pushed to the
-# `dev` or `master` branch or pushed to a PR branch that targets the `dev`
-# or `master` branch.
+# Fast lane: PRs and feature branches run 4 lib tests + 1 feature test (5 total)
+# Full matrix: Merges to dev/master run all 72 lib tests + 36 feature tests (108 total)
 on:
   push:
     branches:
@@ -11,399 +10,38 @@ on:
     branches:
       - "**"
 
-# Sets the ENV `MIX_ENV` to `test` for running tests
-env:
-  MIX_ENV: test
-
 permissions:
   contents: read
 
 jobs:
-  lib_tests:
-    runs-on: ${{ matrix.os }}
-    name: Lib Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
-    strategy:
-      fail-fast: false
-      # Specify the Elixir and OTP versions to use when building
-      # and running the workflow steps.
-      matrix:
-        # TODO: change back to windows-latest when erlef/setup-beam supports win25
-        os: [ubuntu-latest, windows-2022]
-        elixir:
-          # Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0
-          # - "1.13.4"
-          # - "1.14.5"
-          - "1.15.8"
-          - "1.16.3"
-          - "1.17.3"
-          - "1.18.2"
-        otp:
-          # See: https://hexdocs.pm/elixir/compatibility-and-deprecations.html#between-elixir-and-erlang-otp
-          # cowlib 2.14+ requires Erlang/OTP 23+.
-          # - "22.3"
-          # Elixir 1.15+ requires Erlang/OTP 24+.
-          # - "23.3"
-          - "24.3"
-          - "25.3"
-          - "26.2"
-          - "27.2"
-        node:
-          #  Web Crypto API requires Node 19+.
-          # - "18.20.4"
-          # A few JS libs used by Hologram require Node 20+.
-          # - "19.9.0"
-          - "20.16.0"
-          - "21.7.3"
-          - "22.9.0"
-        exclude:
-          - elixir: "1.15.8"
-            otp: "27.2"
-          - elixir: "1.16.3"
-            otp: "27.2"
-          - elixir: "1.17.3"
-            otp: "24.3"
-          - elixir: "1.18.2"
-            otp: "24.3"
-    env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
-    steps:
-      # Step: Setup Elixir + Erlang/OTP image as the base.
-      - name: Set up Elixir
-        uses: erlef/setup-beam@v1
-        with:
-          hexpm-mirrors: |
-            https://builds.hex.pm
-            https://cdn.jsdelivr.net/hex
-          elixir-version: ${{ matrix.elixir }}
-          otp-version: ${{ matrix.otp }}
-
-      # Step: Checkout the code.
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      # Step: Setup Node.js.
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node }}
-
-      ### LIB CHECKS ###
-
-      # Step: Define how to cache the lib Elixir dependencies.
-      - name: Cache lib Elixir deps
-        id: cache-lib-elixir-deps
-        uses: actions/cache@v5
-        env:
-          cache-name: cache-lib-elixir-deps
-        with:
-          path: deps
-          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
-
-      # Step: Define how to cache the lib Elixir build.
-      - name: Cache lib Elixir build
-        id: cache-lib-elixir-build
-        uses: actions/cache@v5
-        env:
-          cache-name: cache-lib-elixir-build
-        with:
-          path: _build
-          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
-
-      # Step: Download lib Elixir dependencies.
-      # If unchanged, uses the cached version.
-      - name: Download lib Elixir deps
-        uses: nick-fields/retry@v3
-        with:
-          command: mix deps.get
-          timeout_minutes: 3
-          max_attempts: 10
-
-      # Step: Download lib JavaScript dependencies.
-      - name: Download lib JavaScript deps
-        uses: nick-fields/retry@v3
-        with:
-          command: cd assets && npm clean-install
-          shell: bash
-          timeout_minutes: 3
-          max_attempts: 10
-
-      # Step: Compile the lib project treating any warnings as errors.
-      - name: Check lib project compiles without warnings
-        run: mix compile --all-warnings --warnings-as-errors
-
-      # Step: Check if lib mix.lock has any unused dependencies.
-      - name: Check lib unused Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
-      - name: Check lib retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
-
-      # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
-      - name: Check lib security vulnerabilities in Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix deps.audit
-
-      # Step: Check that the lib Elixir code has already been formatted.
-      - name: Check lib Elixir code formatted
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix format --check-formatted
-
-      # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
-      - name: Check lib JavaScript, JSON & YAML code formatted
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix format.js.check
-
-      # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
-      - name: Check lib doc and spec coverage
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix doctor
-
-      # Step: Run lib Elixir static code analysis with Credo.
-      - name: Run lib Elixir static code analysis with Credo
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix credo --strict
-
-      # Step: Run lib Elixir security-focused analysis with Sobelow.
-      - name: Run lib Elixir security-focused analysis with Sobelow
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix sobelow --config
-
-      # Step: Restore lib Dialyzer PLT cache.
-      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-      - name: Restore lib Dialyzer PLT cache
-        id: restore-lib-dialyzer-plt-cache
-        uses: actions/cache/restore@v5
-        with:
-          key: |
-            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
-          path: |
-            priv/plts
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-
-      # Step: Create lib Dialyzer PLTs if no cache was found.
-      - name: Create lib Dialyzer PLTs
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        run: mix dialyzer --plt
-
-      # Step: Save lib Dialyzer PLT cache.
-      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
-      # so we separate the cache restore and save steps in case running dialyzer fails.
-      - name: Save lib Dialyzer PLT cache
-        id: save-lib-dialyzer-plt-cache
-        uses: actions/cache/save@v5
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        with:
-          key: |
-            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
-          path: |
-            priv/plts
-
-      # Step: Run lib Elixir static code analysis with Dialyzer.
-      - name: Run lib Elixir static code analysis with Dialyzer
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix dialyzer --format github
-
-      # Step: Check that all lib test scripts have valid file names.
-      - name: Check lib test file names
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix holo.test.check_file_names test/elixir
-
-      # Step: Run lib JavaScript static code analysis with ESLint.
-      - name: Run lib JavaScript static code analysis with ESLint
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix eslint
-
-      # Step: Execute lib Elixir tests.
-      - name: Run lib Elixir tests
-        run: mix test --warnings-as-errors --exclude consistency
-
-      # Step: Execute lib Elixir consistency tests.
-      - name: Run lib Elixir consistency tests
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix test --warnings-as-errors --only consistency
-
-      # Step: Execute lib JavaScript tests.
-      - name: Run lib JavaScript tests
-        run: mix test.js
-
-  feature_tests:
+  # Determine which matrix strategy to use based on the branch
+  determine_strategy:
     runs-on: ubuntu-latest
-    name: Feature Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
-    defaults:
-      run:
-        working-directory: test/features
-    strategy:
-      fail-fast: false
-      # Specify the Elixir and OTP versions to use when building
-      # and running the workflow steps.
-      matrix:
-        elixir:
-          # Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0
-          # - "1.13.4"
-          # - "1.14.5"
-          - "1.15.8"
-          - "1.16.3"
-          - "1.17.3"
-          - "1.18.2"
-        otp:
-          # See: https://hexdocs.pm/elixir/compatibility-and-deprecations.html#between-elixir-and-erlang-otp
-          # cowlib 2.14+ requires Erlang/OTP 23+.
-          # - "22.3"
-          # Elixir 1.15+ requires Erlang/OTP 24+.
-          # - "23.3"
-          - "24.3"
-          - "25.3"
-          - "26.2"
-          - "27.2"
-        node:
-          #  Web Crypto API requires Node 19+.
-          # - "18.20.4"
-          # A few JS libs used by Hologram require Node 20+.
-          # - "19.9.0"
-          - "20.16.0"
-          - "21.7.3"
-          - "22.9.0"
-        exclude:
-          - elixir: "1.15.8"
-            otp: "27.2"
-          - elixir: "1.16.3"
-            otp: "27.2"
-          - elixir: "1.17.3"
-            otp: "24.3"
-          - elixir: "1.18.2"
-            otp: "24.3"
-    env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+    outputs:
+      matrix_mode: ${{ steps.check.outputs.matrix_mode }}
     steps:
-      # Step: Setup Elixir + Erlang/OTP image as the base.
-      - name: Set up Elixir
-        uses: erlef/setup-beam@v1
-        with:
-          hexpm-mirrors: |
-            https://builds.hex.pm
-            https://cdn.jsdelivr.net/hex
-          elixir-version: ${{ matrix.elixir }}
-          otp-version: ${{ matrix.otp }}
+      - id: check
+        shell: bash
+        run: |
+          # Run full matrix only when pushing to dev or master branches
+          if [[ "${{ github.event_name }}" == "push" && ("${{ github.ref }}" == "refs/heads/dev" || "${{ github.ref }}" == "refs/heads/master") ]]; then
+            echo "matrix_mode=full" >> $GITHUB_OUTPUT
+            echo "Running FULL matrix (108 jobs) for ${{ github.ref }}"
+          else
+            echo "matrix_mode=fast" >> $GITHUB_OUTPUT
+            echo "Running FAST lane (5 jobs) for PR or feature branch"
+          fi
 
-      # Step: Checkout the code.
-      - name: Checkout code
-        uses: actions/checkout@v6
+  # Run lib tests with conditional matrix
+  lib_tests:
+    needs: determine_strategy
+    uses: ./.github/workflows/ci-lib-tests.yml
+    with:
+      matrix_mode: ${{ needs.determine_strategy.outputs.matrix_mode }}
 
-      # Step: Setup Node.js.
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node }}
-
-      ### FEATURE TESTS APP CHECKS ###
-
-      # Step: Define how to cache the feature tests app Elixir dependencies.
-      - name: Cache feature tests app Elixir deps
-        id: cache-feature-tests-app-elixir-deps
-        uses: actions/cache@v5
-        env:
-          cache-name: cache-feature-tests-app-elixir-deps
-        with:
-          path: test/features/deps
-          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
-
-      # Step: Define how to cache the feature tests app Elixir build.
-      - name: Cache feature tests app Elixir build
-        id: cache-feature-tests-app-elixir-build
-        uses: actions/cache@v5
-        env:
-          cache-name: cache-feature-tests-app-elixir-build
-        with:
-          path: test/features/_build
-          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
-
-      # Step: Download feature tests app Elixir dependencies.
-      # If unchanged, uses the cached version.
-      - name: Download feature tests app Elixir deps
-        uses: nick-fields/retry@v3
-        with:
-          # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
-          command: cd test/features && mix deps.get
-          shell: bash
-          timeout_minutes: 3
-          max_attempts: 10
-
-      # Step: Compile the feature tests app project treating any warnings as errors.
-      - name: Check feature tests app project compiles without warnings
-        run: mix compile --all-warnings --warnings-as-errors
-
-      # Step: Check if feature tests app mix.lock has any unused dependencies.
-      - name: Check feature tests app unused Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix deps.unlock --check-unused
-
-      # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
-      - name: Check feature tests app retired Elixir deps
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix hex.audit
-
-      # Step: Check that the feature tests app Elixir code has already been formatted.
-      - name: Check feature tests app Elixir code formatted
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix format --check-formatted
-
-      # Step: Run feature tests app Elixir static code analysis with Credo.
-      - name: Run feature tests app Elixir static code analysis with Credo
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix credo --strict
-
-      # Step: Restore feature tests app Dialyzer PLT cache.
-      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-      - name: Restore feature tests app Dialyzer PLT cache
-        id: restore-feature-tests-app-dialyzer-plt-cache
-        uses: actions/cache/restore@v5
-        with:
-          key: |
-            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
-          path: |
-            test/features/priv/plts
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-
-      # Step: Create feature tests app Dialyzer PLTs if no cache was found.
-      - name: Create feature tests app Dialyzer PLTs
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        run: mix dialyzer --plt
-
-      # Step: Save feature tests app Dialyzer PLT cache.
-      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
-      # so we separate the cache restore and save steps in case running dialyzer fails.
-      - name: Save feature tests app Dialyzer PLT cache
-        id: save-feature-tests-app-dialyzer-plt-cache
-        uses: actions/cache/save@v5
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        with:
-          key: |
-            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
-          path: |
-            test/features/priv/plts
-
-      # Step: Run feature tests app Elixir static code analysis with Dialyzer.
-      - name: Run feature tests app Elixir static code analysis with Dialyzer
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix dialyzer --format github
-
-      # Step: Check that all feature tests app test scripts have valid file names.
-      - name: Check feature tests app test file names
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix holo.test.check_file_names test
-
-      # Step: Execute feature tests app Elixir tests.
-      - name: Run feature tests app Elixir tests
-        run: mix test --warnings-as-errors
-
-      # Step: Archive the browser screenshots of tests that failed.
-      - name: Archive fail screenshots
-        # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
-        if: success() || failure()
-        uses: actions/upload-artifact@v6
-        with:
-          name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
-          path: test/features/tmp/screenshots
+  # Run feature tests with conditional matrix
+  feature_tests:
+    needs: determine_strategy
+    uses: ./.github/workflows/ci-feature-tests.yml
+    with:
+      matrix_mode: ${{ needs.determine_strategy.outputs.matrix_mode }}

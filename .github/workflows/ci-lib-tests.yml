@@ -1,0 +1,187 @@
+name: CI - Lib Tests (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      matrix_mode:
+        required: true
+        type: string
+        description: 'fast or full'
+
+env:
+  MIX_ENV: test
+
+permissions:
+  contents: read
+
+jobs:
+  lib_tests:
+    runs-on: ${{ matrix.os }}
+    name: Lib Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ inputs.matrix_mode == 'fast' && fromJSON('{"include":[{"os":"ubuntu-latest","elixir":"1.18.2","otp":"27.2","node":"22.9.0"},{"os":"ubuntu-latest","elixir":"1.15.8","otp":"24.3","node":"20.16.0"},{"os":"ubuntu-latest","elixir":"1.17.3","otp":"26.2","node":"21.7.3"},{"os":"windows-2022","elixir":"1.18.2","otp":"27.2","node":"22.9.0"}]}') || fromJSON('{"os":["ubuntu-latest","windows-2022"],"elixir":["1.15.8","1.16.3","1.17.3","1.18.2"],"otp":["24.3","25.3","26.2","27.2"],"node":["20.16.0","21.7.3","22.9.0"],"exclude":[{"elixir":"1.15.8","otp":"27.2"},{"elixir":"1.16.3","otp":"27.2"},{"elixir":"1.17.3","otp":"24.3"},{"elixir":"1.18.2","otp":"24.3"}]}') }}
+    env:
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### LIB CHECKS ###
+
+      # Step: Define how to cache the lib Elixir dependencies.
+      - name: Cache lib Elixir deps
+        id: cache-lib-elixir-deps
+        uses: actions/cache@v5
+        env:
+          cache-name: cache-lib-elixir-deps
+        with:
+          path: deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Define how to cache the lib Elixir build.
+      - name: Cache lib Elixir build
+        id: cache-lib-elixir-build
+        uses: actions/cache@v5
+        env:
+          cache-name: cache-lib-elixir-build
+        with:
+          path: _build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+
+      # Step: Download lib Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download lib Elixir deps
+        uses: nick-fields/retry@v3
+        with:
+          command: mix deps.get
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Download lib JavaScript dependencies.
+      - name: Download lib JavaScript deps
+        uses: nick-fields/retry@v3
+        with:
+          command: cd assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the lib project treating any warnings as errors.
+      - name: Check lib project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if lib mix.lock has any unused dependencies.
+      - name: Check lib unused Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.unlock --check-unused
+
+      # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
+      - name: Check lib retired Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix hex.audit
+
+      # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
+      - name: Check lib security vulnerabilities in Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.audit
+
+      # Step: Check that the lib Elixir code has already been formatted.
+      - name: Check lib Elixir code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format --check-formatted
+
+      # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
+      - name: Check lib JavaScript, JSON & YAML code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format.js.check
+
+      # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
+      - name: Check lib doc and spec coverage
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix doctor
+
+      # Step: Run lib Elixir static code analysis with Credo.
+      - name: Run lib Elixir static code analysis with Credo
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix credo --strict
+
+      # Step: Run lib Elixir security-focused analysis with Sobelow.
+      - name: Run lib Elixir security-focused analysis with Sobelow
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix sobelow --config
+
+      # Step: Restore lib Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore lib Dialyzer PLT cache
+        id: restore-lib-dialyzer-plt-cache
+        uses: actions/cache/restore@v5
+        with:
+          key: |
+            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          path: |
+            priv/plts
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+
+      # Step: Create lib Dialyzer PLTs if no cache was found.
+      - name: Create lib Dialyzer PLTs
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save lib Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save lib Dialyzer PLT cache
+        id: save-lib-dialyzer-plt-cache
+        uses: actions/cache/save@v5
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
+          path: |
+            priv/plts
+
+      # Step: Run lib Elixir static code analysis with Dialyzer.
+      - name: Run lib Elixir static code analysis with Dialyzer
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix dialyzer --format github
+
+      # Step: Check that all lib test scripts have valid file names.
+      - name: Check lib test file names
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix holo.test.check_file_names test/elixir
+
+      # Step: Run lib JavaScript static code analysis with ESLint.
+      - name: Run lib JavaScript static code analysis with ESLint
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix eslint
+
+      # Step: Execute lib Elixir tests.
+      - name: Run lib Elixir tests
+        run: mix test --warnings-as-errors --exclude consistency
+
+      # Step: Execute lib Elixir consistency tests.
+      - name: Run lib Elixir consistency tests
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix test --warnings-as-errors --only consistency
+
+      # Step: Execute lib JavaScript tests.
+      - name: Run lib JavaScript tests
+        run: mix test.js
