@@ -3746,6 +3746,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "unique_integer/0" do
+    test "returns a unique integer each time it is called" do
+      int1 = :erlang.unique_integer()
+      int2 = :erlang.unique_integer()
+      int3 = :erlang.unique_integer()
+
+      assert int1 != int2
+      assert int2 != int3
+      assert int1 != int3
+    end
+
+    test "returns unique integers over many calls" do
+      integers = Enum.map(1..100, fn _i -> :erlang.unique_integer() end)
+      unique_integers = Enum.uniq(integers)
+
+      assert length(integers) == length(unique_integers)
+    end
+  end
+
   describe "xor/2" do
     test "true xor false" do
       assert :erlang.xor(true, false) == true
@@ -3769,25 +3788,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a boolean" do
       assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
-    end
-  end
-
-  describe "unique_integer/0" do
-    test "returns a unique integer each time it is called" do
-      int1 = :erlang.unique_integer()
-      int2 = :erlang.unique_integer()
-      int3 = :erlang.unique_integer()
-
-      assert int1 != int2
-      assert int2 != int3
-      assert int1 != int3
-    end
-
-    test "returns unique integers over many calls" do
-      integers = Enum.map(1..100, fn _i -> :erlang.unique_integer() end)
-      unique_integers = Enum.uniq(integers)
-
-      assert length(integers) == length(unique_integers)
     end
   end
 end

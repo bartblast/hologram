@@ -1687,6 +1687,13 @@ const Erlang = {
   // End tuple_to_list/1
   // Deps: []
 
+  // Start unique_integer/0
+  "unique_integer/0": () => {
+    return Type.integer(ERTS.uniqueIntegerSequence.next());
+  },
+  // End unique_integer/0
+  // Deps: []
+
   // Start xor/2
   "xor/2": (left, right) => {
     if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
@@ -1696,13 +1703,6 @@ const Erlang = {
     return Type.boolean(left.value != right.value);
   },
   // End xor/2
-  // Deps: []
-
-  // Start unique_integer/0
-  "unique_integer/0": () => {
-    return Type.integer(ERTS.uniqueIntegerSequence.next());
-  },
-  // End unique_integer/0
   // Deps: []
 };
 
