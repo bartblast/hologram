@@ -364,6 +364,16 @@ export default class Type {
     return Type.isList(term) && term.isProper === true;
   }
 
+  static isCharlist(term) {
+    if (!Type.isProperList(term)) {
+      return false;
+    }
+
+    return term.data.every(
+      (elem) => Type.isInteger(elem) && Bitstring.validateCodePoint(elem.value),
+    );
+  }
+
   // Deps: [:maps.get/3]
   static isRange(term) {
     return (

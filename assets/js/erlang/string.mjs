@@ -10,6 +10,56 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_String = {
+  // Start join/2
+  // -spec join(StringList, Separator) -> String
+  //        when StringList :: [string()], Separator :: string(), String :: string().
+  "join/2": function (stringList, separator) {
+    const errorMsg = Interpreter.buildFunctionClauseErrorMsg(
+      ":string.join/2",
+      arguments,
+    );
+
+    // Validate stringList is a list (pattern matching)
+    if (!Type.isList(stringList)) {
+      Interpreter.raiseFunctionClauseError(errorMsg);
+    }
+
+    // Validate stringList is a proper list (per spec, prevent crashes)
+    if (!Type.isProperList(stringList)) {
+      Interpreter.raiseFunctionClauseError(errorMsg);
+    }
+
+    // Validate separator is a charlist (per spec, prevent crashes)
+    if (!Type.isCharlist(separator)) {
+      Interpreter.raiseFunctionClauseError(errorMsg);
+    }
+
+    // Handle empty list case - return empty list
+    if (stringList.data.length === 0) {
+      return Type.list([]);
+    }
+
+    // Validate all elements in stringList are charlists (per spec, prevent crashes)
+    for (const element of stringList.data) {
+      if (!Type.isCharlist(element)) {
+        Interpreter.raiseFunctionClauseError(errorMsg);
+      }
+    }
+
+    // Join the strings (charlists) with separator
+    const result = [];
+    for (let i = 0; i < stringList.data.length; i++) {
+      if (i > 0) {
+        result.push(...separator.data);
+      }
+      result.push(...stringList.data[i].data);
+    }
+
+    return Type.list(result);
+  },
+  // End join/2
+  // Deps: []
+
   // Start titlecase/1
   "titlecase/1": (subject) => {
     // Custom uppercase mapping where Erlang differs from JavaScript's toUpperCase()
