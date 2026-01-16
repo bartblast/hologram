@@ -272,7 +272,7 @@ const Erlang_String = {
       const codepointNum = Number(firstCodepoint.value);
       const rest = cpResult.data.slice(1);
 
-      return { codepointNum, rest };
+      return {codepointNum, rest};
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -302,7 +302,7 @@ const Erlang_String = {
         return Type.bitstring("");
       }
 
-      const { codepointNum, rest } = extraction;
+      const {codepointNum, rest} = extraction;
       const restBinary = rest[0]; // Tail of the improper list
       const restText = Bitstring.toText(restBinary);
 
@@ -320,7 +320,7 @@ const Erlang_String = {
         return Type.list();
       }
 
-      const { codepointNum, rest } = extraction;
+      const {codepointNum, rest} = extraction;
       const uppercasedCodepoints = uppercaseCodepoint(codepointNum).map((cp) =>
         Type.integer(cp),
       );

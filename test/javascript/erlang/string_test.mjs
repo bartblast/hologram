@@ -9,7 +9,7 @@ import {
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_String from "../../../assets/js/erlang/string.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import { it } from "node:test";
+import {it} from "node:test";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -704,8 +704,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬁ (64257) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_257), { type: "utf8" }),
-          Type.bitstringSegment(Type.bitstring("le"), { type: "bitstring" }),
+          Type.bitstringSegment(Type.integer(64_257), {type: "utf8"}),
+          Type.bitstringSegment(Type.bitstring("le"), {type: "bitstring"}),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -790,8 +790,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬀ (64256) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_256), { type: "utf8" }),
-          Type.bitstringSegment(Type.bitstring("ox"), { type: "bitstring" }),
+          Type.bitstringSegment(Type.integer(64_256), {type: "utf8"}),
+          Type.bitstringSegment(Type.bitstring("ox"), {type: "bitstring"}),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -828,8 +828,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬄ (64260) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_260), { type: "utf8" }),
-          Type.bitstringSegment(Type.bitstring("at"), { type: "bitstring" }),
+          Type.bitstringSegment(Type.integer(64_260), {type: "utf8"}),
+          Type.bitstringSegment(Type.bitstring("at"), {type: "bitstring"}),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
