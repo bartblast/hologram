@@ -113,7 +113,7 @@ const Erlang_Lists = {
 
     return Type.list(result);
   },
-  // End
+  // End flatmap/2
   // Deps: []
 
   // Start flatten/1
