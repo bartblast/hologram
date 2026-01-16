@@ -965,5 +965,101 @@ describe("Erlang_Unicode", () => {
       const result = fun(input);
       assert.deepStrictEqual(result, Type.bitstring("A"));
     });
+
+    it("rejects overlong encoding (2-byte for ASCII)", () => {
+      // Overlong encoding: 'A' (U+0041) encoded as 2 bytes: 0xC1 0x81
+      const invalidBinary = Bitstring.fromBytes([0xc1, 0x81]);
+      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abc"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects overlong encoding (3-byte for 2-byte range)", () => {
+      // Overlong encoding: U+007F encoded as 3 bytes: 0xE0 0x81 0xBF
+      const invalidBinary = Bitstring.fromBytes([0xe0, 0x81, 0xbf]);
+      const input = Type.list([Type.bitstring("test"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("test"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate (high surrogate)", () => {
+      // UTF-16 high surrogate: U+D800 encoded as 0xED 0xA0 0x80
+      const invalidBinary = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+      const input = Type.list([Type.bitstring("hello"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("hello"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate (low surrogate)", () => {
+      // UTF-16 low surrogate: U+DFFF encoded as 0xED 0xBF 0xBF
+      const invalidBinary = Bitstring.fromBytes([0xed, 0xbf, 0xbf]);
+      const input = Type.list([Type.bitstring("world"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("world"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects code point above U+10FFFF", () => {
+      // U+110000 encoded as 4 bytes: 0xF4 0x90 0x80 0x80
+      const invalidBinary = Bitstring.fromBytes([0xf4, 0x90, 0x80, 0x80]);
+      const input = Type.list([Type.bitstring("xyz"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("xyz"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects 4-byte overlong encoding", () => {
+      // Overlong encoding: U+FFFF encoded as 4 bytes: 0xF0 0x8F 0xBF 0xBF
+      const invalidBinary = Bitstring.fromBytes([0xf0, 0x8f, 0xbf, 0xbf]);
+      const input = Type.list([Type.bitstring("pre"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("pre"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 });

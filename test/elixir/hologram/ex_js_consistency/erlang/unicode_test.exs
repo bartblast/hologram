@@ -598,5 +598,53 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       input = "\uFF21"
       assert :unicode.characters_to_nfkc_binary(input) == "A"
     end
+
+    test "rejects overlong encoding (2-byte for ASCII)" do
+      # Overlong encoding: 'A' (U+0041) encoded as 2 bytes: 0xC1 0x81
+      invalid_binary = <<0xC1, 0x81>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects overlong encoding (3-byte for 2-byte range)" do
+      # Overlong encoding: U+007F encoded as 3 bytes: 0xE0 0x81 0xBF
+      invalid_binary = <<0xE0, 0x81, 0xBF>>
+      input = ["test", invalid_binary]
+      expected = {:error, "test", invalid_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate (high surrogate)" do
+      # UTF-16 high surrogate: U+D800 encoded as 0xED 0xA0 0x80
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+      input = ["hello", invalid_binary]
+      expected = {:error, "hello", invalid_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate (low surrogate)" do
+      # UTF-16 low surrogate: U+DFFF encoded as 0xED 0xBF 0xBF
+      invalid_binary = <<0xED, 0xBF, 0xBF>>
+      input = ["world", invalid_binary]
+      expected = {:error, "world", invalid_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects code point above U+10FFFF" do
+      # U+110000 encoded as 4 bytes: 0xF4 0x90 0x80 0x80
+      invalid_binary = <<0xF4, 0x90, 0x80, 0x80>>
+      input = ["xyz", invalid_binary]
+      expected = {:error, "xyz", invalid_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects 4-byte overlong encoding" do
+      # Overlong encoding: U+FFFF encoded as 4 bytes: 0xF0 0x8F 0xBF 0xBF
+      invalid_binary = <<0xF0, 0x8F, 0xBF, 0xBF>>
+      input = ["pre", invalid_binary]
+      expected = {:error, "pre", invalid_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
   end
 end
