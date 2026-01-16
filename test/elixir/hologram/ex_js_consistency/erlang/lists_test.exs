@@ -126,6 +126,60 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "flatmap/2" do
+    setup do
+      [fun: fn x -> [x, x * 10] end]
+    end
+
+    test "maps and flattens one level", %{fun: fun} do
+      assert :lists.flatmap(fun, [1, 2, 3]) == [1, 10, 2, 20, 3, 30]
+    end
+
+    test "empty list", %{fun: fun} do
+      assert :lists.flatmap(fun, []) == []
+    end
+
+    test "mapper returns empty lists" do
+      assert :lists.flatmap(fn _x -> [] end, [1, 2, 3]) == []
+    end
+
+    test "only single-level flatten" do
+      assert :lists.flatmap(fn x -> [[x]] end, [1, 2]) == [[1], [2]]
+    end
+
+    test "raises FunctionClauseError if first arg is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.flatmap/2", [:abc, []])
+      assert_error FunctionClauseError, expected_msg, fn -> :lists.flatmap(:abc, []) end
+    end
+
+    test "raises FunctionClauseError if first arg has arity != 1" do
+      expected_msg = ~r/no function clause matching in :lists\.flatmap\/2/
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatmap(fn x, y -> x + y end, [])
+      end
+    end
+
+    test "raises FunctionClauseError if second arg is not a list", %{fun: fun} do
+      expected_msg = ~r/no function clause matching in :lists\.flatmap_1\/2/
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatmap(fun, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if second arg is an improper list", %{fun: fun} do
+      expected_msg = build_function_clause_error_msg(":lists.flatmap_1/2", [fun, 3])
+      assert_error FunctionClauseError, expected_msg, fn -> :lists.flatmap(fun, [1, 2 | 3]) end
+    end
+
+    test "raises ArgumentError if mapper does not return a proper list" do
+      assert_error ArgumentError, "argument error", fn ->
+        :lists.flatmap(fn x -> x * 10 end, [1, 2, 3])
+      end
+    end
+  end
+
   describe "flatten/1" do
     test "works with empty list" do
       assert :lists.flatten([]) == []
