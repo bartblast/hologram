@@ -1697,6 +1697,13 @@ const Erlang = {
   },
   // End xor/2
   // Deps: []
+
+  // Start unique_integer/0
+  "unique_integer/0": () => {
+    return Type.integer(ERTS.uniqueIntegerSequence.next());
+  },
+  // End unique_integer/0
+  // Deps: []
 };
 
 export default Erlang;

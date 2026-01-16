@@ -6068,4 +6068,14 @@ describe("Erlang", () => {
       );
     });
   });
+
+  describe("unique_integer/0", () => {
+    it("guarantees uniqueness across multiple calls", () => {
+      const int1 = Erlang["unique_integer/0"]();
+      const int2 = Erlang["unique_integer/0"]();
+
+      // Use strict inequality check on the BigInt values
+      assert.notStrictEqual(int1.value, int2.value);
+    });
+  });
 });
