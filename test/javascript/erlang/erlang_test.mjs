@@ -6034,12 +6034,16 @@ describe("Erlang", () => {
   });
 
   describe("unique_integer/0", () => {
-    it("guarantees uniqueness across multiple calls", () => {
-      const int1 = Erlang["unique_integer/0"]();
-      const int2 = Erlang["unique_integer/0"]();
+    const unique_integer = Erlang["unique_integer/0"];
 
-      // Use strict inequality check on the BigInt values
-      assert.notStrictEqual(int1.value, int2.value);
+    it("returns a unique integer each time it is called", () => {
+      const integer1 = unique_integer();
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer();
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
     });
   });
 
