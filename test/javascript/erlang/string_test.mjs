@@ -239,7 +239,7 @@ describe("Erlang_String", () => {
     });
 
     it("raises HologramInterpreterError if third argument is not a binary", () => {
-      assert.throw(
+      assert.throws(
         () =>
           replace(
             string,
