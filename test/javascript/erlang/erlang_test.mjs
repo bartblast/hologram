@@ -4807,6 +4807,7 @@ describe("Erlang", () => {
         Type.integer(50),
         Type.integer(51),
       ]);
+
       const result = list_to_integer(list);
       const expected = Erlang["list_to_integer/2"](list, Type.integer(10));
 
@@ -4818,26 +4819,18 @@ describe("Erlang", () => {
     const list_to_integer = Erlang["list_to_integer/2"];
 
     it("base 2", () => {
+      // 0b1010 = 10
       const result = list_to_integer(
         Type.list([
           Type.integer(49),
+          Type.integer(48),
           Type.integer(49),
-          Type.integer(49),
-          Type.integer(49),
+          Type.integer(48),
         ]),
         Type.integer(2),
       );
-      const expected = Type.integer(15);
 
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("base 8", () => {
-      const result = list_to_integer(
-        Type.list([Type.integer(49), Type.integer(55), Type.integer(55)]),
-        Type.integer(8),
-      );
-      const expected = Type.integer(127);
+      const expected = Type.integer(10);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -4847,37 +4840,32 @@ describe("Erlang", () => {
         Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
         Type.integer(10),
       );
+
       const expected = Type.integer(123);
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("base 16", () => {
+      // 0x3AF = 943
       const result = list_to_integer(
-        Type.list([Type.integer(51), Type.integer(70), Type.integer(70)]),
+        Type.list([Type.integer(51), Type.integer(65), Type.integer(70)]),
         Type.integer(16),
       );
-      const expected = Type.integer(1023);
+
+      const expected = Type.integer(943);
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("base 36", () => {
+      // "YZ" = 1259
       const result = list_to_integer(
-        Type.list([Type.integer(90), Type.integer(90)]),
+        Type.list([Type.integer(89), Type.integer(90)]),
         Type.integer(36),
       );
-      const expected = Type.integer(1295);
 
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("positive integer without sign", () => {
-      const result = list_to_integer(
-        Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
-        Type.integer(10),
-      );
-      const expected = Type.integer(123);
+      const expected = Type.integer(1259);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -4892,6 +4880,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(10),
       );
+
       const expected = Type.integer(123);
 
       assert.deepStrictEqual(result, expected);
@@ -4907,6 +4896,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(10),
       );
+
       const expected = Type.integer(-123);
 
       assert.deepStrictEqual(result, expected);
@@ -4917,6 +4907,7 @@ describe("Erlang", () => {
         Type.list([Type.integer(48)]),
         Type.integer(10),
       );
+
       const expected = Type.integer(0);
 
       assert.deepStrictEqual(result, expected);
@@ -4932,6 +4923,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(16),
       );
+
       const expected = Type.integer(43981);
 
       assert.deepStrictEqual(result, expected);
@@ -4947,6 +4939,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(16),
       );
+
       const expected = Type.integer(43981);
 
       assert.deepStrictEqual(result, expected);
@@ -4962,12 +4955,13 @@ describe("Erlang", () => {
         ]),
         Type.integer(16),
       );
+
       const expected = Type.integer(43981);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("handles leading zeros", () => {
+    it("leading zeros", () => {
       const result = list_to_integer(
         Type.list([
           Type.integer(48),
@@ -4978,44 +4972,56 @@ describe("Erlang", () => {
         ]),
         Type.integer(10),
       );
+
       const expected = Type.integer(123);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts very large base 10 integer", () => {
-      // Test that list_to_integer handles numbers well beyond
-      // Number.MAX_SAFE_INTEGER (9007199254740991) using BigInt
+    it("very large (above Number.MAX_SAFE_INTEGER) base 10 integer", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
       const codes = "999999999999999999999999999999"
         .split("")
         .map((c) => Type.integer(c.charCodeAt(0)));
+
       const result = list_to_integer(Type.list(codes), Type.integer(10));
       const expected = Type.integer(BigInt("999999999999999999999999999999"));
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts very large negative base 10 integer", () => {
-      // Test that list_to_integer handles numbers well below
-      // Number.MIN_SAFE_INTEGER (-9007199254740991) using BigInt
+    it("very large (below Number.MIN_SAFE_INTEGER) negative base 10 integer", () => {
+      // Number.MIN_SAFE_INTEGER = -9007199254740991
       const codes = "-999999999999999999999999999999"
         .split("")
         .map((c) => Type.integer(c.charCodeAt(0)));
+
       const result = list_to_integer(Type.list(codes), Type.integer(10));
       const expected = Type.integer(BigInt("-999999999999999999999999999999"));
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts very large (above Number.MAX_SAFE_INTEGER) base 16 integer", () => {
-      // Test that list_to_integer handles numbers well beyond
-      // Number.MAX_SAFE_INTEGER using BigInt for non-base-10
+    it("very large (above Number.MAX_SAFE_INTEGER) integer with letter digits", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
       const codes = "FFFFFFFFFFFFFFFFFFFF"
         .split("")
         .map((c) => Type.integer(c.charCodeAt(0)));
 
       const result = list_to_integer(Type.list(codes), Type.integer(16));
       const expected = Type.integer(BigInt("0xFFFFFFFFFFFFFFFFFFFF"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("very large (below Number.MIN_SAFE_INTEGER) negative integer with letter digits", () => {
+      // Number.MIN_SAFE_INTEGER = -9007199254740991
+      const codes = "-FFFFFFFFFFFFFFFFFFFF"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(16));
+      const expected = Type.integer(-BigInt("0xFFFFFFFFFFFFFFFFFFFF"));
 
       assert.deepStrictEqual(result, expected);
     });
