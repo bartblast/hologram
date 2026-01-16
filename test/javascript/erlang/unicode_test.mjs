@@ -800,4 +800,170 @@ describe("Erlang_Unicode", () => {
       );
     });
   });
+
+  describe("characters_to_nfkc_binary/1", () => {
+    const fun = Erlang_Unicode["characters_to_nfkc_binary/1"];
+
+    it("normalizes combining characters to NFKC", () => {
+      const input = Type.bitstring("a\u030a");
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("å"));
+    });
+
+    it("handles already normalized text", () => {
+      const input = Type.bitstring("åäö");
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("åäö"));
+    });
+
+    it("normalizes nested chardata", () => {
+      const input = Type.list([
+        Type.bitstring("abc.."),
+        Type.list([Type.bitstring("a"), Type.integer(0x030a)]),
+        Type.bitstring("a"),
+        Type.list([Type.integer(0x0308)]),
+        Type.bitstring("o"),
+        Type.integer(0x0308),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("abc..åäö"));
+    });
+
+    it("handles empty binary", () => {
+      const input = Type.bitstring("");
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles empty list", () => {
+      const input = Type.list();
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles deeply nested lists", () => {
+      const input = Type.list([
+        Type.list([Type.list([Type.bitstring("a"), Type.integer(0x030a)])]),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("å"));
+    });
+
+    it("raises ArgumentError on invalid code point", () => {
+      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("returns error tuple on invalid UTF-8 in binary", () => {
+      const invalidBinary = Bitstring.fromBytes([255, 255]);
+      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abc"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError on invalid code point after normalization", () => {
+      const input = Type.list([
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.integer(0x110000),
+      ]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("handles multiple combining marks", () => {
+      const input = Type.list([
+        Type.bitstring("o"),
+        Type.integer(0x0308), // Combining diaeresis
+        Type.integer(0x0304), // Combining macron
+      ]);
+
+      const result = fun(input);
+
+      // Normalized form combines these in canonical order
+      assert.deepStrictEqual(result, Type.bitstring("ȫ"));
+    });
+
+    it("handles large input", () => {
+      const largeInput = "abcdefghij".repeat(100);
+      const input = Type.bitstring(largeInput);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(largeInput));
+    });
+
+    it("handles mixed ASCII and Unicode", () => {
+      const input = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring(" "),
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.bitstring(" world"),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("hello å world"));
+    });
+
+    it("preserves non-combining characters", () => {
+      const input = Type.list([
+        Type.integer(0x3042), // Hiragana A
+        Type.integer(0x3044), // Hiragana I
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("あい"));
+    });
+
+    it("normalizes compatibility characters", () => {
+      // NFKC normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
+      const input = Type.bitstring("\u210C"); // ℌ DOUBLE-STRUCK CAPITAL H
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("H"));
+    });
+
+    it("normalizes ligatures", () => {
+      // NFKC normalizes ligatures like ﬁ (U+FB01) to fi (U+0066 U+0069)
+      const input = Type.bitstring("\uFB01"); // ﬁ LATIN SMALL LIGATURE FI
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("fi"));
+    });
+
+    it("normalizes width variants", () => {
+      // NFKC normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
+      const input = Type.bitstring("\uFF21"); // Ａ FULLWIDTH LATIN CAPITAL LETTER A
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("A"));
+    });
+  });
 });
