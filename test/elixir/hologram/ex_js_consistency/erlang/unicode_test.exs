@@ -710,4 +710,183 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       end
     end
   end
+
+  describe "characters_to_nfkd_binary/1" do
+    test "normalizes combining characters to NFKD" do
+      # Input: "a" + combining ring above (decomposed form)
+      # NFKD: keeps it as decomposed
+      assert :unicode.characters_to_nfkd_binary("a\u030a") == "a\u030a"
+    end
+
+    test "decomposes already normalized precomposed characters" do
+      # Input: precomposed "å" (U+00E5)
+      # NFKD: decomposes to "a" + combining ring above (U+0061 + U+030A)
+      assert :unicode.characters_to_nfkd_binary("å") == "a\u030a"
+    end
+
+    test "normalizes nested chardata" do
+      input = [
+        "abc..",
+        ["a", 0x030A],
+        "a",
+        [0x0308],
+        "o",
+        0x0308
+      ]
+
+      # Expected: "abc.." + "a\u030a" + "a\u0308" + "o\u0308"
+      assert :unicode.characters_to_nfkd_binary(input) == "abc..a\u030aa\u0308o\u0308"
+    end
+
+    test "handles empty binary" do
+      assert :unicode.characters_to_nfkd_binary("") == ""
+    end
+
+    test "handles empty list" do
+      assert :unicode.characters_to_nfkd_binary([]) == ""
+    end
+
+    test "handles deeply nested lists" do
+      input = [
+        [
+          [
+            "a",
+            0x030A
+          ]
+        ]
+      ]
+
+      assert :unicode.characters_to_nfkd_binary(input) == "a\u030a"
+    end
+
+    test "raises ArgumentError on invalid code point" do
+      input = [97, 0x110000]
+
+      expected_msg = build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(input)
+      end
+    end
+
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = [
+        "a",
+        0x030A,
+        0x110000
+      ]
+
+      expected_msg = build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(input)
+      end
+    end
+
+    test "handles multiple combining marks" do
+      input = [
+        "o",
+        0x0308,
+        0x0304
+      ]
+
+      # NFKD keeps combining marks as-is
+      assert :unicode.characters_to_nfkd_binary(input) == "o\u0308\u0304"
+    end
+
+    test "handles large input" do
+      large_input = String.duplicate("abcdefghij", 100)
+      assert :unicode.characters_to_nfkd_binary(large_input) == large_input
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = [
+        "hello",
+        " ",
+        "a",
+        0x030A,
+        " world"
+      ]
+
+      assert :unicode.characters_to_nfkd_binary(input) == "hello a\u030a world"
+    end
+
+    test "preserves non-combining characters" do
+      input = [0x3042, 0x3044]
+      assert :unicode.characters_to_nfkd_binary(input) == "あい"
+    end
+
+    test "normalizes compatibility characters" do
+      # NFKD normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
+      input = "\u210C"
+      assert :unicode.characters_to_nfkd_binary(input) == "H"
+    end
+
+    test "normalizes ligatures" do
+      # NFKD normalizes ligatures like ﬁ (U+FB01) to fi (U+0066 U+0069)
+      input = "\uFB01"
+      assert :unicode.characters_to_nfkd_binary(input) == "fi"
+    end
+
+    test "normalizes width variants" do
+      # NFKD normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
+      input = "\uFF21"
+      assert :unicode.characters_to_nfkd_binary(input) == "A"
+    end
+
+    test "rejects overlong encoding (2-byte for ASCII)" do
+      # Overlong encoding: 'A' (U+0041) encoded as 2 bytes: 0xC1 0x81
+      invalid_binary = <<0xC1, 0x81>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects overlong encoding (3-byte for 2-byte range)" do
+      # Overlong encoding: U+007F encoded as 3 bytes: 0xE0 0x81 0xBF
+      invalid_binary = <<0xE0, 0x81, 0xBF>>
+      input = ["test", invalid_binary]
+      expected = {:error, "test", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate (high surrogate)" do
+      # UTF-16 high surrogate: U+D800 encoded as 0xED 0xA0 0x80
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+      input = ["hello", invalid_binary]
+      expected = {:error, "hello", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate (low surrogate)" do
+      # UTF-16 low surrogate: U+DFFF encoded as 0xED 0xBF 0xBF
+      invalid_binary = <<0xED, 0xBF, 0xBF>>
+      input = ["world", invalid_binary]
+      expected = {:error, "world", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects code point above U+10FFFF" do
+      # U+110000 encoded as 4 bytes: 0xF4 0x90 0x80 0x80
+      invalid_binary = <<0xF4, 0x90, 0x80, 0x80>>
+      input = ["xyz", invalid_binary]
+      expected = {:error, "xyz", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects 4-byte overlong encoding" do
+      # Overlong encoding: U+FFFF encoded as 4 bytes: 0xF0 0x8F 0xBF 0xBF
+      invalid_binary = <<0xF0, 0x8F, 0xBF, 0xBF>>
+      input = ["pre", invalid_binary]
+      expected = {:error, "pre", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+  end
 end
