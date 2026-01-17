@@ -345,7 +345,7 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["Hel", "p", ""]));
     });
 
-    it("returns when patterns are consecutive", () => {
+    it("returns a list with empty strings between consecutive pattern replacements", () => {
       const result = replace(
         Type.bitstring("lololo"),
         Type.bitstring("lo"),
@@ -359,7 +359,7 @@ describe("Erlang_String", () => {
       );
     });
 
-    it("returns when patterns are unicode", () => {
+    it("correctly replaces unicode patterns (emoji)", () => {
       const result = replace(
         Type.bitstring("Hello 👋 World"),
         Type.bitstring("👋"),
