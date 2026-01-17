@@ -1279,7 +1279,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-describe "apply/2" do
+  describe "apply/2" do
     setup do
       [
         fun_no_args: fn -> 42 end,
