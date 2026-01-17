@@ -19,152 +19,177 @@ defineGlobalErlangAndElixirModules();
 
 describe("Erlang_String", () => {
   describe("join/2", () => {
-    describe("valid inputs", () => {
-      it("single element", () => {
-        const stringList = Type.list([Type.charlist("hello")]);
-        const separator = Type.charlist(", ");
-        const result = Erlang_String["join/2"](stringList, separator);
+    const join = Erlang_String["join/2"];
 
-        assert.deepStrictEqual(result, Type.charlist("hello"));
-      });
+    it("single element", () => {
+      const list = Type.list([Type.charlist("hello")]);
+      const separator = Type.charlist(", ");
 
-      it("multiple elements", () => {
-        const stringList = Type.list([
-          Type.charlist("one"),
-          Type.charlist("two"),
-          Type.charlist("three"),
-        ]);
-        const separator = Type.charlist(", ");
-        const result = Erlang_String["join/2"](stringList, separator);
+      const result = join(list, separator);
+      const expected = Type.charlist("hello");
 
-        assert.deepStrictEqual(result, Type.charlist("one, two, three"));
-      });
-
-      it("empty separator", () => {
-        const stringList = Type.list([
-          Type.charlist("hello"),
-          Type.charlist("world"),
-        ]);
-        const separator = Type.charlist("");
-        const result = Erlang_String["join/2"](stringList, separator);
-
-        assert.deepStrictEqual(result, Type.charlist("helloworld"));
-      });
-
-      it("empty strings (charlists) in list", () => {
-        const stringList = Type.list([
-          Type.charlist(""),
-          Type.charlist("hello"),
-          Type.charlist(""),
-          Type.charlist("world"),
-          Type.charlist(""),
-        ]);
-        const separator = Type.charlist("-");
-        const result = Erlang_String["join/2"](stringList, separator);
-
-        assert.deepStrictEqual(result, Type.charlist("-hello--world-"));
-      });
-
-      it("multi-character separator", () => {
-        const stringList = Type.list([
-          Type.charlist("apple"),
-          Type.charlist("banana"),
-          Type.charlist("cherry"),
-        ]);
-        const separator = Type.charlist(" and ");
-        const result = Erlang_String["join/2"](stringList, separator);
-
-        assert.deepStrictEqual(
-          result,
-          Type.charlist("apple and banana and cherry"),
-        );
-      });
-
-      it("empty list", () => {
-        const stringList = Type.list([]);
-        const separator = Type.charlist(", ");
-        const result = Erlang_String["join/2"](stringList, separator);
-
-        assert.deepStrictEqual(result, Type.list([]));
-      });
+      assert.deepStrictEqual(result, expected);
     });
 
-    describe("error conditions", () => {
-      it("first argument is not a list", () => {
-        const stringList = Type.atom("not_a_list");
-        const separator = Type.charlist(", ");
+    it("multiple elements", () => {
+      const list = Type.list([
+        Type.charlist("one"),
+        Type.charlist("two"),
+        Type.charlist("three"),
+      ]);
 
-        assertBoxedError(
-          () => Erlang_String["join/2"](stringList, separator),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-            stringList,
-            separator,
-          ]),
-        );
-      });
+      const separator = Type.charlist(", ");
 
-      it("first argument is an improper list", () => {
-        const stringList = Type.improperList([
-          Type.charlist("hello"),
-          Type.atom("tail"),
-        ]);
-        const separator = Type.charlist(", ");
+      const result = join(list, separator);
+      const expected = Type.charlist("one, two, three");
 
-        assertBoxedError(
-          () => Erlang_String["join/2"](stringList, separator),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-            stringList,
-            separator,
-          ]),
-        );
-      });
+      assert.deepStrictEqual(result, expected);
+    });
 
-      it("second argument is not a proper list", () => {
-        const stringList = Type.list([Type.charlist("hello")]);
-        const separator = Type.atom("not_a_list");
+    it("no elements", () => {
+      const list = Type.list();
+      const separator = Type.charlist(", ");
 
-        assertBoxedError(
-          () => Erlang_String["join/2"](stringList, separator),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-            stringList,
-            separator,
-          ]),
-        );
-      });
+      const result = join(list, separator);
+      const expected = Type.list();
 
-      it("separator is not a charlist (list of atoms)", () => {
-        const stringList = Type.list([Type.charlist("hello")]);
-        const separator = Type.list([Type.atom("a"), Type.atom("b")]);
+      assert.deepStrictEqual(result, expected);
+    });
 
-        assertBoxedError(
-          () => Erlang_String["join/2"](stringList, separator),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-            stringList,
-            separator,
-          ]),
-        );
-      });
+    it("single-character separator", () => {
+      const list = Type.list([
+        Type.charlist("apple"),
+        Type.charlist("banana"),
+        Type.charlist("cherry"),
+      ]);
 
-      it("list contains non-charlist element", () => {
-        const stringList = Type.list([
-          Type.charlist("hello"),
-          Type.atom("not_a_charlist"),
-        ]);
-        const separator = Type.charlist(", ");
+      const separator = Type.charlist(",");
 
-        assertBoxedError(
-          () => Erlang_String["join/2"](stringList, separator),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-            stringList,
-            separator,
-          ]),
-        );
-      });
+      const result = join(list, separator);
+      const expected = Type.charlist("apple,banana,cherry");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multi-character separator", () => {
+      const list = Type.list([
+        Type.charlist("apple"),
+        Type.charlist("banana"),
+        Type.charlist("cherry"),
+      ]);
+
+      const separator = Type.charlist(" and ");
+
+      const result = join(list, separator);
+      const expected = Type.charlist("apple and banana and cherry");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty separator", () => {
+      const list = Type.list([Type.charlist("hello"), Type.charlist("world")]);
+
+      const separator = Type.charlist("");
+
+      const result = join(list, separator);
+      const expected = Type.charlist("helloworld");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty charlists in list", () => {
+      const list = Type.list([
+        Type.charlist(""),
+        Type.charlist("hello"),
+        Type.charlist(""),
+        Type.charlist("world"),
+        Type.charlist(""),
+      ]);
+
+      const separator = Type.charlist("-");
+
+      const result = join(list, separator);
+      const expected = Type.charlist("-hello--world-");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("lists with non-integer elements", () => {
+      const list = Type.list([
+        Type.list([Type.atom("a"), Type.atom("b")]),
+        Type.list([Type.atom("c"), Type.atom("d")]),
+      ]);
+
+      const separator = Type.charlist("abc");
+
+      const result = join(list, separator);
+
+      const expected = Type.list([
+        Type.atom("a"),
+        Type.atom("b"),
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+        Type.atom("c"),
+        Type.atom("d"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a list", () => {
+      const list = Type.atom("not_a_list");
+      const separator = Type.charlist(", ");
+
+      assertBoxedError(
+        () => join(list, separator),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
+          list,
+          separator,
+        ]),
+      );
+    });
+
+    it("raises ErlangError if the first argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.charlist("hello"),
+        Type.atom("tail"),
+      ]);
+
+      const separator = Type.charlist(", ");
+
+      assertBoxedError(
+        () => join(list, separator),
+        "ErlangError",
+        Interpreter.buildErlangErrorMsg("{:bad_generator, :tail}"),
+      );
+    });
+
+    it("raises FunctionClauseError for empty list with non-list separator", () => {
+      const list = Type.list();
+      const separator = Type.atom("not_a_list");
+
+      assertBoxedError(
+        () => join(list, separator),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
+          list,
+          separator,
+        ]),
+      );
+    });
+
+    it("raises ArgumentError for multiple elements with non-list separator", () => {
+      const list = Type.list([Type.charlist("hello"), Type.charlist("world")]);
+
+      const separator = Type.atom("not_a_list");
+
+      assertBoxedError(
+        () => join(list, separator),
+        "ArgumentError",
+        "argument error",
+      );
     });
   });
 

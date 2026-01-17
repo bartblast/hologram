@@ -18,12 +18,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.join([~c"one", ~c"two", ~c"three"], ~c", ") == ~c"one, two, three"
     end
 
-    test "empty separator" do
-      assert :string.join([~c"hello", ~c"world"], ~c"") == ~c"helloworld"
+    test "no elements" do
+      assert :string.join([], ~c", ") == []
     end
 
-    test "empty strings (charlists) in list" do
-      assert :string.join([~c"", ~c"hello", ~c"", ~c"world", ~c""], ~c"-") == ~c"-hello--world-"
+    test "single-character separator" do
+      assert :string.join([~c"apple", ~c"banana", ~c"cherry"], ~c",") ==
+               ~c"apple,banana,cherry"
     end
 
     test "multi-character separator" do
@@ -31,16 +32,46 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
                ~c"apple and banana and cherry"
     end
 
-    test "empty list" do
-      assert :string.join([], ~c", ") == []
+    test "empty separator" do
+      assert :string.join([~c"hello", ~c"world"], ~c"") == ~c"helloworld"
     end
 
-    test "first argument is not a list" do
+    test "empty charlists in list" do
+      assert :string.join([~c"", ~c"hello", ~c"", ~c"world", ~c""], ~c"-") == ~c"-hello--world-"
+    end
+
+    test "lists with non-integer elements" do
+      assert :string.join([[:a, :b], [:c, :d]], ~c"abc") == [:a, :b, 97, 98, 99, :c, :d]
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":string.join/2", [:not_a_list, ~c", "]),
                    fn ->
                      :string.join(:not_a_list, ~c", ")
                    end
+    end
+
+    test "raises ErlangError if the first argument is an improper list" do
+      list = [~c"hello" | :tail]
+
+      assert_error ErlangError, "Erlang error: {:bad_generator, :tail}", fn ->
+        :string.join(list, ~c", ")
+      end
+    end
+
+    test "raises FunctionClauseError for empty list with non-list separator" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":string.join/2", [[], :not_a_list]),
+                   fn ->
+                     :string.join([], :not_a_list)
+                   end
+    end
+
+    test "raises ArgumentError for multiple elements with non-list separator" do
+      assert_error ArgumentError, "argument error", fn ->
+        :string.join([~c"hello", ~c"world"], :not_a_list)
+      end
     end
   end
 

@@ -11,48 +11,63 @@ import Type from "../type.mjs";
 
 const Erlang_String = {
   // Start join/2
-  // -spec join(StringList, Separator) -> String
-  //        when StringList :: [string()], Separator :: string(), String :: string().
-  "join/2": function (stringList, separator) {
-    const errorMsg = Interpreter.buildFunctionClauseErrorMsg(
-      ":string.join/2",
-      arguments,
-    );
-
-    // Validate stringList is a list (pattern matching)
-    if (!Type.isList(stringList)) {
-      Interpreter.raiseFunctionClauseError(errorMsg);
+  "join/2": function (list, separator) {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
+      );
     }
 
-    // Validate stringList is a proper list (per spec, prevent crashes)
-    if (!Type.isProperList(stringList)) {
-      Interpreter.raiseFunctionClauseError(errorMsg);
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseErlangError(
+        Interpreter.buildErlangErrorMsg(
+          `{:bad_generator, ${Interpreter.inspect(list.data.at(-1))}}`,
+        ),
+      );
     }
 
-    // Validate separator is a charlist (per spec, prevent crashes)
-    if (!Type.isCharlist(separator)) {
-      Interpreter.raiseFunctionClauseError(errorMsg);
-    }
-
-    // Handle empty list case - return empty list
-    if (stringList.data.length === 0) {
-      return Type.list([]);
-    }
-
-    // Validate all elements in stringList are charlists (per spec, prevent crashes)
-    for (const element of stringList.data) {
-      if (!Type.isCharlist(element)) {
-        Interpreter.raiseFunctionClauseError(errorMsg);
+    if (list.data.length === 0) {
+      if (!Type.isProperList(separator)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
+        );
       }
+
+      return Type.list();
     }
 
-    // Join the strings (charlists) with separator
+    // Single element case - return element as-is (separator not used, no validation needed)
+    if (list.data.length === 1) {
+      const element = list.data[0];
+
+      if (!Type.isList(element)) {
+        Interpreter.raiseArgumentError("argument error");
+      }
+
+      return element;
+    }
+
+    // Multiple elements - validate separator is a list (for concatenation)
+    if (!Type.isList(separator)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    // Join the strings with separator
     const result = [];
-    for (let i = 0; i < stringList.data.length; i++) {
+
+    for (let i = 0; i < list.data.length; i++) {
+      const element = list.data[i];
+
+      // Each element must be a list (for concatenation)
+      if (!Type.isList(element)) {
+        Interpreter.raiseArgumentError("argument error");
+      }
+
       if (i > 0) {
         result.push(...separator.data);
       }
-      result.push(...stringList.data[i].data);
+
+      result.push(...element.data);
     }
 
     return Type.list(result);
