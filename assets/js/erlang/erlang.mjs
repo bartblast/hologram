@@ -274,11 +274,10 @@ const Erlang = {
       Interpreter.raiseBadFunctionError(fun);
     }
 
-    if (!Type.isList(args) || !Type.isProperList(args)) {
+    if (!Type.isProperList(args)) {
       Interpreter.raiseArgumentError("argument error");
     }
 
-    // Call the anonymous function with the provided arguments
     return Interpreter.callAnonymousFunction(fun, args.data);
   },
   // End apply/2

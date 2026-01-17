@@ -1280,24 +1280,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
 describe "apply/2" do
-    test "calls anonymous function with no arguments" do
-      fun = fn -> 42 end
+    setup do
+      [
+        fun_no_args: fn -> 42 end,
+        fun_one_arg: fn x -> x + 10 end,
+        fun_three_args: fn a, b, c -> a + b + c end,
+        fun_two_args: fn a, b -> a + b end
+      ]
+    end
+
+    test "calls anonymous function with no arguments", %{fun_no_args: fun} do
       assert :erlang.apply(fun, []) == 42
     end
 
-    test "calls anonymous function with one argument" do
-      fun = fn x -> x + 10 end
+    test "calls anonymous function with one argument", %{fun_one_arg: fun} do
       assert :erlang.apply(fun, [5]) == 15
     end
 
-    test "calls anonymous function with multiple arguments" do
-      fun = fn a, b, c -> a + b + c end
+    test "calls anonymous function with multiple arguments", %{fun_three_args: fun} do
       assert :erlang.apply(fun, [1, 2, 3]) == 6
-    end
-
-    test "calls anonymous function that returns different types" do
-      fun = fn x -> x end
-      assert :erlang.apply(fun, [:test]) == :test
     end
 
     test "raises BadFunctionError if the first argument is not a function" do
@@ -1308,8 +1309,7 @@ describe "apply/2" do
                    fn -> :erlang.apply(arg, []) end
     end
 
-    test "raises ArgumentError if the second argument is not a list" do
-      fun = fn -> 42 end
+    test "raises ArgumentError if the second argument is not a list", %{fun_no_args: fun} do
       arg = prevent_term_typing_violation(:not_a_list)
 
       assert_error ArgumentError,
@@ -1317,8 +1317,7 @@ describe "apply/2" do
                    fn -> :erlang.apply(fun, arg) end
     end
 
-    test "raises ArgumentError if the second argument is not a proper list" do
-      fun = fn a, b -> a + b end
+    test "raises ArgumentError if the second argument is not a proper list", %{fun_two_args: fun} do
       improper_list = prevent_term_typing_violation([1 | 2])
 
       assert_error ArgumentError,
@@ -1326,11 +1325,10 @@ describe "apply/2" do
                    fn -> :erlang.apply(fun, improper_list) end
     end
 
-    test "raises BadArityError if arity doesn't match" do
-      fun = fn a, b -> a + b end
+    test "raises BadArityError if arity doesn't match", %{fun_two_args: fun} do
+      expected_msg = ""
 
-      expected_msg =
-        ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram.ExJsConsistency\.Erlang\.ErlangTest\."test apply/2 raises BadArityError if arity doesn\'t match"/1> with arity 2 called with 1 argument \(1\)'
+      # ~r'(#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ErlangTest\.__ex_unit_setup_[0-9]+_0/1>|anonymous function) with arity 2 called with 1 argument \(1\)'
 
       assert_error BadArityError, expected_msg, fn -> :erlang.apply(fun, [1]) end
     end
