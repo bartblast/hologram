@@ -25,6 +25,7 @@ export default class EtfDecoder {
   static #ATOM_UTF8_EXT = 118;
   static #SMALL_ATOM_UTF8_EXT = 119;
 
+  // TODO: migrate main logic
   static decode(binary) {
     Bitstring.maybeSetBytesFromText(binary);
 
