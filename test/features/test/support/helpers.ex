@@ -369,10 +369,6 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  defp timed_out?(start_time) do
-    DateTime.diff(DateTime.utc_now(), start_time, :millisecond) > @max_wait_time
-  end
-
   defp validate_count(query, elements) do
     if Query.matches_count?(query, Enum.count(elements)) do
       {:ok, elements}
@@ -385,10 +381,12 @@ defmodule HologramFeatureTests.Helpers do
          session,
          expected_page,
          opts \\ [],
-         start_time \\ DateTime.utc_now()
+         start_time \\ nil
        ) do
+    start_time = start_time || current_time()
+
     callback = fn mounted_page ->
-      if mounted_page != inspect(expected_page) && !timed_out?(start_time) do
+      if mounted_page != inspect(expected_page) && !max_time_exceeded?(start_time) do
         maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
         :timer.sleep(100)
         wait_for_page_mounting(session, expected_page, opts, start_time)
@@ -400,8 +398,10 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, script, [], callback)
   end
 
-  defp wait_for_path(session, path, start_time \\ DateTime.utc_now()) do
-    if Browser.current_path(session) != path && !timed_out?(start_time) do
+  defp wait_for_path(session, path, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    if Browser.current_path(session) != path && !max_time_exceeded?(start_time) do
       :timer.sleep(100)
       wait_for_path(session, path, start_time)
     end
@@ -409,9 +409,11 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
-  defp wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do
+  defp wait_for_server_connection(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
     callback = fn connected? ->
-      if !connected? && !timed_out?(start_time) do
+      if !connected? && !max_time_exceeded?(start_time) do
         :timer.sleep(100)
         wait_for_server_connection(session, start_time)
       end
@@ -422,10 +424,12 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, script, [], callback)
   end
 
-  defp wait_for_js_error(session, start_time \\ DateTime.utc_now()) do
+  defp wait_for_js_error(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
     Browser.execute_script(session, "1 + 1")
 
-    if !timed_out?(start_time) do
+    if !max_time_exceeded?(start_time) do
       :timer.sleep(100)
       wait_for_js_error(session, start_time)
     end
