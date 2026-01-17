@@ -9,7 +9,6 @@ import {
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_String from "../../../assets/js/erlang/string.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import {it} from "node:test";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
