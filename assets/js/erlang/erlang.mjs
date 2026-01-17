@@ -1694,6 +1694,36 @@ const Erlang = {
   // End unique_integer/0
   // Deps: []
 
+  // Start unique_integer/1
+  // Simplified: always returns monotonic, positive integers regardless of modifiers.
+  "unique_integer/1": (modifierList) => {
+    if (!Type.isList(modifierList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(modifierList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    const validModifiers = ["monotonic", "positive"];
+
+    for (const modifier of modifierList.data) {
+      if (!Type.isAtom(modifier) || !validModifiers.includes(modifier.value)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+        );
+      }
+    }
+
+    return Erlang["unique_integer/0"]();
+  },
+  // End unique_integer/1
+  // Deps: [:erlang.unique_integer/0]
+
   // Start xor/2
   "xor/2": (left, right) => {
     if (!Type.isBoolean(left) || !Type.isBoolean(right)) {

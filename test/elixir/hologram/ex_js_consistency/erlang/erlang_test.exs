@@ -3758,6 +3758,72 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "unique_integer/1" do
+    test "returns a unique integer each time it is called with empty modifier list" do
+      integer_1 = :erlang.unique_integer([])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with positive modifier" do
+      integer_1 = :erlang.unique_integer([:positive])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:positive])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with monotonic modifier" do
+      integer_1 = :erlang.unique_integer([:monotonic])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:monotonic])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with both positive and monotonic modifiers" do
+      integer_1 = :erlang.unique_integer([:positive, :monotonic])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:positive, :monotonic])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :unique_integer, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   {:erlang, :unique_integer, [[:positive | :abc]]}
+    end
+
+    test "raises ArgumentError if the modifier is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid modifier"),
+                   {:erlang, :unique_integer, [[123]]}
+    end
+
+    test "raises ArgumentError if the modifier is not a valid modifier" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid modifier"),
+                   {:erlang, :unique_integer, [[:invalid]]}
+    end
+  end
+
   describe "xor/2" do
     test "true xor false" do
       assert :erlang.xor(true, false) == true

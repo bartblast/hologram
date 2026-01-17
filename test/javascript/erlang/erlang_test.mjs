@@ -6047,6 +6047,90 @@ describe("Erlang", () => {
     });
   });
 
+  // Simplified: always returns monotonic, positive integers regardless of modifiers.
+  describe("unique_integer/1", () => {
+    const unique_integer = Erlang["unique_integer/1"];
+
+    it("returns a unique integer each time it is called with empty modifier list", () => {
+      const integer1 = unique_integer(Type.list([]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with positive modifier", () => {
+      const integer1 = unique_integer(Type.list([Type.atom("positive")]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([Type.atom("positive")]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with monotonic modifier", () => {
+      const integer1 = unique_integer(Type.list([Type.atom("monotonic")]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([Type.atom("monotonic")]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with both positive and monotonic modifiers", () => {
+      const integer1 = unique_integer(
+        Type.list([Type.atom("positive"), Type.atom("monotonic")]),
+      );
+
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(
+        Type.list([Type.atom("positive"), Type.atom("monotonic")]),
+      );
+
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => unique_integer(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a proper list", () => {
+      assertBoxedError(
+        () =>
+          unique_integer(Type.improperList([Type.atom("positive"), atomAbc])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if the modifier is not an atom", () => {
+      assertBoxedError(
+        () => unique_integer(Type.list([Type.integer(123)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+      );
+    });
+
+    it("raises ArgumentError if the modifier is not a valid modifier", () => {
+      assertBoxedError(
+        () => unique_integer(Type.list([Type.atom("invalid")])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+      );
+    });
+  });
+
   describe("xor/2", () => {
     const xor = Erlang["xor/2"];
 
