@@ -1326,9 +1326,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises BadArityError if arity doesn't match", %{fun_two_args: fun} do
-      expected_msg = ""
-
-      # ~r'(#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ErlangTest\.__ex_unit_setup_[0-9]+_0/1>|anonymous function) with arity 2 called with 1 argument \(1\)'
+      expected_msg =
+        ~r'(#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ErlangTest\.__ex_unit_setup_[0-9]+_0/1>|anonymous function) with arity 2 called with 1 argument \(1\)'
 
       assert_error BadArityError, expected_msg, fn -> :erlang.apply(fun, [1]) end
     end
