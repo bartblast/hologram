@@ -303,22 +303,21 @@ defmodule HologramFeatureTests.Helpers do
     :erlang.monotonic_time(:milli_seconds)
   end
 
+  # credo:disable-for-lines:15 Credo.Check.Refactor.ABCSize
   defp do_execute_query_once(%{driver: driver} = parent, query) do
-    try do
-      with {:ok, query} <- Query.validate(query),
-           compiled_query <- Query.compile(query),
-           {:ok, elements} <- driver.find_elements(parent, compiled_query),
-           {:ok, elements} <- filter_by_visibility(query, elements),
-           {:ok, elements} <- filter_by_text(query, elements),
-           {:ok, elements} <- filter_by_selected(query, elements),
-           {:ok, elements} <- validate_count(query, elements),
-           {:ok, elements} <- apply_at(query, elements) do
-        {:ok, %Query{query | result: elements}}
-      end
-    rescue
-      StaleReferenceError ->
-        {:error, :stale_reference}
+    with {:ok, query} <- Query.validate(query),
+         compiled_query <- Query.compile(query),
+         {:ok, elements} <- driver.find_elements(parent, compiled_query),
+         {:ok, elements} <- filter_by_visibility(query, elements),
+         {:ok, elements} <- filter_by_text(query, elements),
+         {:ok, elements} <- filter_by_selected(query, elements),
+         {:ok, elements} <- validate_count(query, elements),
+         {:ok, elements} <- apply_at(query, elements) do
+      {:ok, %Query{query | result: elements}}
     end
+  rescue
+    StaleReferenceError ->
+      {:error, :stale_reference}
   end
 
   defp filter_by_selected(query, elements) do
