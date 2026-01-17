@@ -182,7 +182,7 @@ defmodule HologramFeatureTests.Helpers do
     case do_execute_query_once(parent, query) do
       {:ok, _query} = found ->
         # Element found - retry until it disappears or timeout
-        if max_time_exceeded?(start_time) do
+        if timed_out?(start_time) do
           found
         else
           execute_refute_query(parent, query, start_time)
@@ -347,10 +347,6 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  defp max_time_exceeded?(start_time) do
-    current_time() - start_time > @max_wait_time
-  end
-
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
   defp maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page) do
     if opts[:debug] do
@@ -367,6 +363,10 @@ defmodule HologramFeatureTests.Helpers do
       {:ok, element_text} -> element_text =~ ~r/#{Regex.escape(text)}/
       {:error, _reason} -> false
     end
+  end
+
+  defp timed_out?(start_time) do
+    current_time() - start_time > @max_wait_time
   end
 
   defp validate_count(query, elements) do
@@ -386,7 +386,7 @@ defmodule HologramFeatureTests.Helpers do
     start_time = start_time || current_time()
 
     callback = fn mounted_page ->
-      if mounted_page != inspect(expected_page) && !max_time_exceeded?(start_time) do
+      if mounted_page != inspect(expected_page) && !timed_out?(start_time) do
         maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
         :timer.sleep(100)
         wait_for_page_mounting(session, expected_page, opts, start_time)
@@ -401,7 +401,7 @@ defmodule HologramFeatureTests.Helpers do
   defp wait_for_path(session, path, start_time \\ nil) do
     start_time = start_time || current_time()
 
-    if Browser.current_path(session) != path && !max_time_exceeded?(start_time) do
+    if Browser.current_path(session) != path && !timed_out?(start_time) do
       :timer.sleep(100)
       wait_for_path(session, path, start_time)
     end
@@ -413,7 +413,7 @@ defmodule HologramFeatureTests.Helpers do
     start_time = start_time || current_time()
 
     callback = fn connected? ->
-      if !connected? && !max_time_exceeded?(start_time) do
+      if !connected? && !timed_out?(start_time) do
         :timer.sleep(100)
         wait_for_server_connection(session, start_time)
       end
@@ -429,7 +429,7 @@ defmodule HologramFeatureTests.Helpers do
 
     Browser.execute_script(session, "1 + 1")
 
-    if !max_time_exceeded?(start_time) do
+    if !timed_out?(start_time) do
       :timer.sleep(100)
       wait_for_js_error(session, start_time)
     end
