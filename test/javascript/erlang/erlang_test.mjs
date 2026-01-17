@@ -1474,7 +1474,7 @@ describe("Erlang", () => {
     });
   });
 
-describe("apply/2", () => {
+  describe("apply/2", () => {
     const apply = Erlang["apply/2"];
 
     const funNoArgs = Type.anonymousFunction(
