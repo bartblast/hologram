@@ -53,6 +53,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:sets, :from_list, 2}, {:maps, :from_keys, 2}},
     {{:sets, :from_list, 2}, {:sets, :_validate_opts, 1}},
     {{:sets, :is_element, 2}, {:maps, :is_key, 2}},
+    {{:sets, :is_subset, 2}, {:sets, :is_element, 2}},
+    {{:sets, :is_subset, 2}, {:sets, :to_list, 1}},
     {{:sets, :new, 1}, {:sets, :_validate_opts, 1}},
     {{:sets, :to_list, 1}, {:maps, :keys, 1}},
     {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
