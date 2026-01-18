@@ -506,6 +506,47 @@ describe("Erlang_Sets", () => {
     });
   });
 
+  describe("add_element/2", () => {
+    const add_element_2 = Erlang_Sets["add_element/2"];
+    const from_list_2 = Erlang_Sets["from_list/2"];
+
+    it("adds a new element to the set", () => {
+      const set = from_list_2(Type.list([integer1, integer3]), opts);
+      const result = add_element_2(integer2, set);
+
+      assert.deepStrictEqual(result, set123);
+    });
+
+    it("returns the same set if element is already present", () => {
+      const result = add_element_2(integer2, set123);
+
+      assert.deepStrictEqual(result, set123);
+    });
+
+    it("adds element to empty set", () => {
+      const emptySet = from_list_2(Type.list(), opts);
+      const result = add_element_2(integer1, emptySet);
+
+      const expected = from_list_2(Type.list([integer1]), opts);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if argument is not a set", () => {
+      const elem = Type.atom("elem");
+      const notASet = Type.atom("not_a_set");
+
+      assertBoxedError(
+        () => add_element_2(elem, notASet),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.add_element/2", [
+          elem,
+          notASet,
+        ]),
+      );
+    });
+  });
+
   describe("is_element/2", () => {
     const is_element_2 = Erlang_Sets["is_element/2"];
 

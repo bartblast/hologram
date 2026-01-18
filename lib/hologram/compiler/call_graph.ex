@@ -47,6 +47,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:maps, :get, 2}, {:maps, :get, 3}},
     {{:maps, :update, 3}, {:maps, :is_key, 2}},
     {{:maps, :update, 3}, {:maps, :put, 3}},
+    {{:sets, :add_element, 2}, {:maps, :put, 3}},
     {{:sets, :_validate_opts, 1}, {:lists, :keyfind, 3}},
     {{:sets, :del_element, 2}, {:maps, :remove, 2}},
     {{:sets, :fold, 3}, {:maps, :keys, 1}},
