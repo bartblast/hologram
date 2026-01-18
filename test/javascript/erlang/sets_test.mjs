@@ -662,4 +662,84 @@ describe("Erlang_Sets", () => {
       );
     });
   });
+
+  describe("is_subset/2", () => {
+    const is_subset = Erlang_Sets["is_subset/2"];
+
+    it("should always return true if set1 is an empty set", () => {
+      const set1 = Erlang_Sets["new/1"](opts);
+      const set2 = Erlang_Sets["new/1"](opts);
+      const result = is_subset(set1, set2);
+
+      assertBoxedTrue(result);
+    });
+
+    it("should always return true if set1 is empty and set2 isn't", () => {
+      const set1 = Erlang_Sets["new/1"](opts);
+      const result = is_subset(set1, set123);
+
+      assertBoxedTrue(result);
+    });
+
+    it("should return false if not all elements in set1 are in set2", () => {
+      const set1 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1)]),
+        opts,
+      );
+      const set2 = Erlang_Sets["new/1"](opts);
+      const result = is_subset(set1, set2);
+
+      assertBoxedFalse(result);
+    });
+
+    it("should return true if both sets are the same", () => {
+      const set1 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(2)]),
+        opts,
+      );
+      const set2 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(2)]),
+        opts,
+      );
+      const result = is_subset(set1, set2);
+
+      assertBoxedTrue(result);
+    });
+
+    it("should return true if all elements in set1 are in set2", () => {
+      const set1 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1)]),
+        opts,
+      );
+      const set2 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(2)]),
+        opts,
+      );
+      const result = is_subset(set1, set2);
+
+      assertBoxedTrue(result);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a set", () => {
+      const expectedMessage =
+        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3");
+
+      assertBoxedError(
+        () => is_subset(atomAbc, set123),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      const expectedMessage =
+        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3");
+
+      assertBoxedError(
+        () => is_subset(set123, atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
 });

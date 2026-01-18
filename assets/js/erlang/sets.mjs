@@ -166,6 +166,33 @@ const Erlang_Sets = {
   },
   // End to_list/1
   // Deps: [:maps.keys/1]
+
+  // Start is_subset/2
+  "is_subset/2": (set1, set2) => {
+    if (!Type.isMap(set1) || !Type.isMap(set2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3"),
+      );
+    }
+
+    if (set1.data.length === 0) {
+      return Type.boolean(true);
+    }
+
+    const set1Array = Erlang_Sets["to_list/1"](set1).data;
+
+    return Type.boolean(
+      set1Array.every(
+        (item) =>
+          Interpreter.compareTerms(
+            Erlang_Sets["is_element/2"](item, set2),
+            Type.boolean(true),
+          ) == 0,
+      ),
+    );
+  },
+  // End is_subset/2
+  // Deps: [:sets.to_list/1, :sets.is_element/2]
 };
 
 export default Erlang_Sets;

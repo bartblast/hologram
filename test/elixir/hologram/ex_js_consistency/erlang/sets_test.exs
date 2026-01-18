@@ -330,4 +330,77 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       end
     end
   end
+
+  describe "is_subset/2" do
+    setup do
+      empty_set = :sets.new(version: 2)
+      set_123 = :sets.from_list([1, 2, 3], version: 2)
+
+      [empty_set: empty_set, set_123: set_123]
+    end
+
+    test "returns true if set1 is an empty set", %{empty_set: empty_set} do
+      assert :sets.is_subset(empty_set, empty_set) == true
+    end
+
+    test "returns true if set1 is empty and set2 isn't", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_subset(empty_set, set_123) == true
+    end
+
+    test "returns false if not all elements in set1 are in set2", %{empty_set: empty_set} do
+      set1 = :sets.from_list([1], version: 2)
+      assert :sets.is_subset(set1, empty_set) == false
+    end
+
+    test "returns true if both sets are the same" do
+      set1 = :sets.from_list([1, 2], version: 2)
+      set2 = :sets.from_list([1, 2], version: 2)
+      assert :sets.is_subset(set1, set2) == true
+    end
+
+    test "returns true if all elements in set1 are in set2" do
+      set1 = :sets.from_list([1], version: 2)
+      set2 = :sets.from_list([1, 2], version: 2)
+      assert :sets.is_subset(set1, set2) == true
+    end
+
+    test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
+      expected_msg = ~r"""
+      no function clause matching in :sets\.fold/3
+
+      The following arguments were given to :sets\.fold/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in :sets\.is_subset/2>
+
+          # 2
+          true
+
+          # 3
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(:abc, set_123)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
+      expected_msg = ~r"""
+      no function clause matching in :sets\.is_element/2
+
+      The following arguments were given to :sets\.is_element/2:
+
+          # 1
+          1
+
+          # 2
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(set_123, :abc)
+      end
+    end
+  end
 end
