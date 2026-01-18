@@ -146,27 +146,6 @@ const Erlang_Sets = {
   // End is_element/2
   // Deps: [:maps.is_key/2]
 
-  // Start new/1
-  "new/1": (opts) => {
-    Erlang_Sets["_validate_opts/1"](opts);
-    return Type.map();
-  },
-  // End new/1
-  // Deps: [:sets._validate_opts/1]
-
-  // Start to_list/1
-  "to_list/1": (set) => {
-    if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set]),
-      );
-    }
-
-    return Erlang_Maps["keys/1"](set);
-  },
-  // End to_list/1
-  // Deps: [:maps.keys/1]
-
   // Start is_subset/2
   "is_subset/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
@@ -192,7 +171,28 @@ const Erlang_Sets = {
     );
   },
   // End is_subset/2
-  // Deps: [:sets.to_list/1, :sets.is_element/2]
+  // Deps: [:sets.is_element/2, :sets.to_list/1]
+
+  // Start new/1
+  "new/1": (opts) => {
+    Erlang_Sets["_validate_opts/1"](opts);
+    return Type.map();
+  },
+  // End new/1
+  // Deps: [:sets._validate_opts/1]
+
+  // Start to_list/1
+  "to_list/1": (set) => {
+    if (!Type.isMap(set)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.to_list/1", [set]),
+      );
+    }
+
+    return Erlang_Maps["keys/1"](set);
+  },
+  // End to_list/1
+  // Deps: [:maps.keys/1]
 };
 
 export default Erlang_Sets;
