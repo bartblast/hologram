@@ -16,6 +16,19 @@ defmodule Hologram.MixProject do
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
       "format.js.check":
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
+      sa: [
+        "format --check-formatted",
+        "format.js.check",
+        "cmd cd test/features && mix format --check-formatted",
+        "credo",
+        "dialyzer",
+        "doctor",
+        "sobelow --config",
+        "deps.audit",
+        "eslint",
+        "deps.unlock --check-unused",
+        "holo.test.check_file_names test/elixir/hologram"
+      ],
       setup: [
         "deps.get",
         "cmd --cd assets npm install",
@@ -99,6 +112,7 @@ defmodule Hologram.MixProject do
 
   def preferred_cli_env do
     [
+      sa: :test,
       t: :test,
       "test.js": :test
     ]
