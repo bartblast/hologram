@@ -341,6 +341,100 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
     end
   end
 
+  describe "characters_to_nfc_list/1" do
+    test "empty list" do
+      assert :unicode.characters_to_nfc_list([]) == []
+    end
+
+    test "empty binary" do
+      assert :unicode.characters_to_nfc_list(<<>>) == []
+    end
+
+    test "ASCII text as binary" do
+      assert :unicode.characters_to_nfc_list(<<"abc">>) == ~c"abc"
+    end
+
+    test "ASCII text as list of codepoints" do
+      assert :unicode.characters_to_nfc_list([?a, ?b, ?c]) == ~c"abc"
+    end
+
+    test "combining characters - a + combining ring above (778) becomes å (229)" do
+      assert :unicode.characters_to_nfc_list([?a, 778]) == [229]
+    end
+
+    test "already composed character å (229) stays as is" do
+      assert :unicode.characters_to_nfc_list([229]) == [229]
+    end
+
+    test "multiple combining characters" do
+      # "abc..a" + ring + "a" + diaeresis + "o" + diaeresis
+      input = [<<"abc..a">>, 778, ?a, 776, ?o, 776]
+      result = :unicode.characters_to_nfc_list(input)
+      expected = [?a, ?b, ?c, ?., ?., 229, 228, 246]
+      assert result == expected
+    end
+
+    test "nested list" do
+      assert :unicode.characters_to_nfc_list([[?a, ?b]]) == ~c"ab"
+    end
+
+    test "list with binaries" do
+      assert :unicode.characters_to_nfc_list([<<"ab">>, [?c]]) == ~c"abc"
+    end
+
+    test "combining characters in binary (UTF-8 encoded)" do
+      # a (97) + combining ring (778) encoded as UTF-8: <<97, 204, 138>>
+      assert :unicode.characters_to_nfc_list(<<97, 204, 138>>) == [229]
+    end
+
+    test "invalid codepoint (too large)" do
+      input = [1_114_113]
+
+      assert_raise ArgumentError, ~r/not valid character data/, fn ->
+        :unicode.characters_to_nfc_list(input)
+      end
+    end
+
+    test "invalid codepoint (negative)" do
+      input = [-1]
+
+      assert_raise ArgumentError, ~r/not valid character data/, fn ->
+        :unicode.characters_to_nfc_list(input)
+      end
+    end
+
+    test "invalid UTF-8 binary" do
+      invalid_utf8 = <<0xFF, 0xFE>>
+      result = :unicode.characters_to_nfc_list(invalid_utf8)
+      expected = {:error, [], invalid_utf8}
+      assert result == expected
+    end
+
+    test "valid data followed by invalid UTF-8" do
+      invalid_utf8 = <<0xFF, 0xFE>>
+      input = [<<"abc">>, invalid_utf8]
+      result = :unicode.characters_to_nfc_list(input)
+      expected = {:error, ~c"abc", invalid_utf8}
+      assert result == expected
+    end
+
+    test "non-chardata input (atom)" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :unicode.characters_to_nfc_list(:abc)
+                   end
+    end
+
+    test "non-chardata input (float)" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :unicode.characters_to_nfc_list(123.45)
+                   end
+    end
+  end
+
   describe "characters_to_nfd_binary/1" do
     test "decomposes combining characters to NFD" do
       assert :unicode.characters_to_nfd_binary("å") == "a\u030a"

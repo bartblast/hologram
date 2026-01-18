@@ -546,6 +546,180 @@ describe("Erlang_Unicode", () => {
     });
   });
 
+  describe("characters_to_nfc_list/1", () => {
+    const fun = Erlang_Unicode["characters_to_nfc_list/1"];
+
+    it("empty list", () => {
+      const result = fun(Type.list());
+      assert.deepStrictEqual(result, Type.list());
+    });
+
+    it("empty binary", () => {
+      const result = fun(Type.bitstring(""));
+      assert.deepStrictEqual(result, Type.list());
+    });
+
+    it("ASCII text as binary", () => {
+      const result = fun(Type.bitstring("abc"));
+      const expected = Type.list([
+        Type.integer(97), // a
+        Type.integer(98), // b
+        Type.integer(99), // c
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("ASCII text as list of codepoints", () => {
+      const result = fun(
+        Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
+      );
+      const expected = Type.list([
+        Type.integer(97), // a
+        Type.integer(98), // b
+        Type.integer(99), // c
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("combining characters - a + combining ring above (778) becomes å (229)", () => {
+      const result = fun(Type.list([Type.integer(97), Type.integer(778)]));
+      const expected = Type.list([Type.integer(229)]); // å
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("already composed character å (229) stays as is", () => {
+      const result = fun(Type.list([Type.integer(229)]));
+      const expected = Type.list([Type.integer(229)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple combining characters", () => {
+      // "abc..a" + ring + "a" + diaeresis + "o" + diaeresis
+      const result = fun(
+        Type.list([
+          Type.bitstring("abc..a"),
+          Type.integer(778), // combining ring above
+          Type.integer(97), // a
+          Type.integer(776), // combining diaeresis
+          Type.integer(111), // o
+          Type.integer(776), // combining diaeresis
+        ]),
+      );
+      const expected = Type.list([
+        Type.integer(97), // a
+        Type.integer(98), // b
+        Type.integer(99), // c
+        Type.integer(46), // .
+        Type.integer(46), // .
+        Type.integer(229), // å (a + ring composed)
+        Type.integer(228), // ä (a + diaeresis composed)
+        Type.integer(246), // ö (o + diaeresis composed)
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("nested list", () => {
+      const result = fun(
+        Type.list([Type.list([Type.integer(97), Type.integer(98)])]),
+      );
+      const expected = Type.list([Type.integer(97), Type.integer(98)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("list with binaries", () => {
+      const result = fun(
+        Type.list([Type.bitstring("ab"), Type.list([Type.integer(99)])]),
+      );
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("combining characters in binary (UTF-8 encoded)", () => {
+      // Create a string with combining characters
+      const combiningStr = String.fromCodePoint(97, 778); // a + combining ring
+      const result = fun(Type.bitstring(combiningStr));
+      const expected = Type.list([Type.integer(229)]); // å
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("invalid codepoint (too large)", () => {
+      const input = Type.list([Type.integer(1114113)]); // Max is 1,114,112
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("invalid codepoint (negative)", () => {
+      const input = Type.list([Type.integer(-1)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("invalid UTF-8 binary", () => {
+      const invalidUtf8 = Bitstring.fromBytes([0xff, 0xfe]);
+      const result = fun(invalidUtf8);
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list(),
+        invalidUtf8,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("valid data followed by invalid UTF-8", () => {
+      const invalidUtf8 = Bitstring.fromBytes([0xff, 0xfe]);
+      const input = Type.list([Type.bitstring("abc"), invalidUtf8]);
+      const result = fun(input);
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
+        invalidUtf8,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("non-chardata input (atom)", () => {
+      assertBoxedError(
+        () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("non-chardata input (float)", () => {
+      assertBoxedError(
+        () => fun(Type.float(123.45)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+  });
+
   describe("characters_to_nfd_binary/1", () => {
     const fun = Erlang_Unicode["characters_to_nfd_binary/1"];
 

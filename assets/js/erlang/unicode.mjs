@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Lists from "./lists.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -294,6 +295,150 @@ const Erlang_Unicode = {
   },
   // End characters_to_nfc_binary/1
   // Deps: [:unicode.characters_to_binary/3]
+
+  // Start characters_to_nfc_list/1
+  "characters_to_nfc_list/1": (chardata) => {
+    // Helpers
+
+    // Converts a binary to NFC-normalized list of codepoints.
+    // Uses JavaScript's String.normalize('NFC') for canonical composition.
+    // Pass preDecodedText for performance - avoids redundant UTF-8 decoding.
+    const convertBinaryToNormalizedCodepoints = (
+      binary,
+      preDecodedText = null,
+    ) => {
+      const text =
+        preDecodedText !== null ? preDecodedText : Bitstring.toText(binary);
+      const normalized = text.normalize("NFC");
+      return Array.from(normalized).map((char) =>
+        Type.integer(char.codePointAt(0)),
+      );
+    };
+
+    // Converts a single codepoint integer to a UTF-8 encoded binary.
+    const convertCodepointToBinary = (codepoint) => {
+      const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
+      return Bitstring.fromSegments([segment]);
+    };
+
+    // Creates an error tuple: {:error, normalized_so_far, rest}
+    const createErrorTuple = (normalizedCodepoints, rest) => {
+      return Type.tuple([
+        Type.atom("error"),
+        Type.list(normalizedCodepoints),
+        rest,
+      ]);
+    };
+
+    // Handles invalid codepoint errors. Raises ArgumentError if no valid data
+    // exists yet (matching Erlang behavior), otherwise returns error tuple.
+    const handleInvalidCodepoint = (chunks, remainingElems) => {
+      // No valid data before error - raise ArgumentError (matching Erlang)
+      if (chunks.length === 0) {
+        raiseInvalidChardataError();
+      }
+      // Normalize valid prefix and return error tuple
+      const validBinary = Bitstring.concat(chunks);
+      const codepoints = convertBinaryToNormalizedCodepoints(validBinary);
+      return createErrorTuple(codepoints, Type.list(remainingElems));
+    };
+
+    // Handles invalid UTF-8 errors. Always returns error tuple (invalid UTF-8
+    // in binaries returns tuples, not exceptions), even if no valid data exists.
+    const handleInvalidUtf8 = (chunks, invalidBinary) => {
+      // Early return for no valid prefix
+      if (chunks.length === 0) {
+        return createErrorTuple([], invalidBinary);
+      }
+      // Normalize valid prefix and return error tuple
+      const validBinary = Bitstring.concat(chunks);
+      const codepoints = convertBinaryToNormalizedCodepoints(validBinary);
+      return createErrorTuple(codepoints, invalidBinary);
+    };
+
+    // Processes a single list element, validating and accumulating it.
+    // Returns { type, data } object: type is 'valid', 'error', or 'invalid'.
+    const processElement = (elem, index, flatData, chunks) => {
+      // Guard: reject invalid types
+      if (!Type.isBinary(elem) && !Type.isInteger(elem)) {
+        return {type: "invalid"};
+      }
+
+      // Process binary elements (no nested ifs - use ternary for early exit)
+      if (Type.isBinary(elem)) {
+        const text = Bitstring.toText(elem);
+        return text === false
+          ? {type: "error", data: handleInvalidUtf8(chunks, elem)}
+          : {type: "valid", data: elem};
+      }
+
+      // Process integer elements (guaranteed integer at this point)
+      const isValidCodepoint = Bitstring.validateCodePoint(elem.value);
+      if (!isValidCodepoint) {
+        const remainingElems = flatData.slice(index);
+        return {
+          type: "error",
+          data: handleInvalidCodepoint(chunks, remainingElems),
+        };
+      }
+      return {type: "valid", data: convertCodepointToBinary(elem)};
+    };
+
+    const raiseInvalidChardataError = () => {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    };
+
+    // Main logic
+
+    // Guard: reject non-list, non-binary input early
+    const isBinary = Type.isBinary(chardata);
+    const isList = Type.isList(chardata);
+
+    if (!isBinary && !isList) {
+      raiseInvalidChardataError();
+    }
+
+    // Fast path for binary input
+    if (isBinary) {
+      const text = Bitstring.toText(chardata);
+      if (text === false) {
+        return createErrorTuple([], chardata);
+      }
+      const codepoints = convertBinaryToNormalizedCodepoints(chardata, text);
+      return Type.list(codepoints);
+    }
+
+    // List path (guaranteed to be list at this point)
+    const flatData = Erlang_Lists["flatten/1"](chardata).data;
+    const chunks = [];
+
+    // Process elements: concatenate all valid data first (combining characters
+    // may span multiple elements), then normalize. O(n) single pass.
+    for (let i = 0; i < flatData.length; ++i) {
+      const result = processElement(flatData[i], i, flatData, chunks);
+
+      if (result.type === "error") {
+        return result.data;
+      }
+      if (result.type === "invalid") {
+        raiseInvalidChardataError();
+      }
+      // result.type === "valid" - accumulate
+      chunks.push(result.data);
+    }
+
+    // All elements valid - concatenate, normalize, and return
+    const binary = Bitstring.concat(chunks);
+    const codepoints = convertBinaryToNormalizedCodepoints(binary);
+    return Type.list(codepoints);
+  },
+  // End characters_to_nfc_list/1
+  // Deps: [:lists.flatten/1]
 
   // Start characters_to_nfd_binary/1
   "characters_to_nfd_binary/1": (data) => {
