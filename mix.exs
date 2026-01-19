@@ -11,9 +11,9 @@ defmodule Hologram.MixProject do
     [
       eslint:
         "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** scripts/** test/javascript/** --no-error-on-unmatched-pattern",
-      f: ["format", "format.js", "cmd cd test/features && mix format"],
+      f: ["format", "format.js", "cmd --cd test/features mix format"],
       "format.js":
-        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' ''scripts/**/*.{mjs,js,json}'' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
       "format.js.check":
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
       setup: [

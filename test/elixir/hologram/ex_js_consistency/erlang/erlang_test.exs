@@ -1947,7 +1947,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "binary_to_term/1" do
-    @describetag :binary
     test "decodes small positive integer (SMALL_INTEGER_EXT)" do
       binary = :erlang.term_to_binary(42)
       assert :erlang.binary_to_term(binary) == 42

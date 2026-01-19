@@ -1,10 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
-<<<<<<< HEAD
 import ERTS from "../erts.mjs";
-=======
->>>>>>> 992abcfdf (fix: adjust mix aliases)
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -858,12 +855,13 @@ const Erlang = {
       const tailResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = tailResult.newOffset;
 
-      // If tail is NIL (empty list), it's a proper list
-      if (Type.isList(tailResult.term) && tailResult.term.data.length === 0) {
-        return {
-          term: Type.list(elements),
-          newOffset: currentOffset,
-        };
+      // If tail is a list, merge it to preserve proper list semantics
+      if (Type.isList(tailResult.term)) {
+        const merged = elements.concat(tailResult.term.data);
+
+        return Type.isProperList(tailResult.term)
+          ? {term: Type.list(merged), newOffset: currentOffset}
+          : {term: Type.improperList(merged), newOffset: currentOffset};
       }
 
       // Otherwise, it's an improper list
@@ -873,7 +871,6 @@ const Erlang = {
         newOffset: currentOffset,
       };
     };
-
     // Map decoder
 
     const decodeMap = (dataView, bytes, offset) => {
@@ -895,26 +892,39 @@ const Erlang = {
       };
     };
 
-    Bitstring.maybeSetBytesFromText(binary);
+    try {
+      Bitstring.maybeSetBytesFromText(binary);
 
-    const bytes = binary.bytes;
-    const dataView = new DataView(
-      bytes.buffer,
-      bytes.byteOffset,
-      bytes.byteLength,
-    );
-
-    // Check ETF version byte (must be 131)
-    if (dataView.getUint8(0) !== 131) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "invalid external representation of a term",
-        ),
+      const bytes = binary.bytes;
+      const dataView = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength,
       );
-    }
 
-    return decodeTerm(dataView, bytes, 1);
+      // Check ETF version byte (must be 131)
+      if (dataView.getUint8(0) !== 131) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      const result = decodeTerm(dataView, bytes, 1);
+      return result.term;
+    } catch (err) {
+      if (err instanceof RangeError || err instanceof TypeError) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      throw err;
+    }
   },
   // End binary_to_term/1
   // Deps: []
