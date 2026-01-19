@@ -1,7 +1,10 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+<<<<<<< HEAD
 import ERTS from "../erts.mjs";
+=======
+>>>>>>> 992abcfdf (fix: adjust mix aliases)
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
