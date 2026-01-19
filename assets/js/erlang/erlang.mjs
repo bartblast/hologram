@@ -751,6 +751,11 @@ const Erlang = {
 
     const decodeAtom = (dataView, bytes, offset, isUtf8) => {
       const length = dataView.getUint16(offset);
+      if (offset + 2 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          `atom length exceeds available bytes: ${length}`,
+        );
+      }
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
 
       const decoder = new TextDecoder(isUtf8 ? "utf-8" : "latin1");
@@ -764,6 +769,11 @@ const Erlang = {
 
     const decodeSmallAtom = (dataView, bytes, offset, isUtf8) => {
       const length = dataView.getUint8(offset);
+      if (offset + 2 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          `atom length exceeds available bytes: ${length}`,
+        );
+      }
       const atomBytes = bytes.slice(offset + 1, offset + 1 + length);
 
       const decoder = new TextDecoder(isUtf8 ? "utf-8" : "latin1");
@@ -779,6 +789,11 @@ const Erlang = {
 
     const decodeBinary = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
+      if (offset + 2 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          `atom length exceeds available bytes: ${length}`,
+        );
+      }
       const binaryBytes = bytes.slice(offset + 4, offset + 4 + length);
 
       return {
@@ -827,6 +842,11 @@ const Erlang = {
 
     const decodeString = (dataView, bytes, offset) => {
       const length = dataView.getUint16(offset);
+      if (offset + 2 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          `string length exceeds available bytes: ${length}`,
+        );
+      }
       const elements = [];
 
       for (let i = 0; i < length; i++) {
