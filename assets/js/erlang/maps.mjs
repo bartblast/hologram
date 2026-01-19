@@ -185,6 +185,46 @@ const Erlang_Maps = {
   // End merge/2
   // Deps: []
 
+  // Start merge_with/3
+  "merge_with/3": (combiner, map1, map2) => {
+    if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const resultMap = Type.cloneMap(map1);
+
+    Object.values(map2.data).forEach(([key, value2]) => {
+      const encodedKey = Type.encodeMapKey(key);
+      const value1Entry = resultMap.data[encodedKey];
+      const newValue =
+        value1Entry !== undefined
+          ? Interpreter.callAnonymousFunction(combiner, [
+              key,
+              value1Entry[1],
+              value2,
+            ])
+          : value2;
+      resultMap.data[encodedKey] = [key, newValue];
+    });
+
+    return resultMap;
+  },
+  // End merge_with/3
+  // Deps: []
+
   // Start next/1
   "next/1": (iterator) => {
     if (!Type.isIterator(iterator)) {
