@@ -204,23 +204,19 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map2);
     }
 
-    const resultMap = Type.cloneMap(map1);
+    const result = Type.cloneMap(map1);
 
-    Object.values(map2.data).forEach(([key, value2]) => {
-      const encodedKey = Type.encodeMapKey(key);
-      const value1Entry = resultMap.data[encodedKey];
-      const newValue =
-        value1Entry !== undefined
-          ? Interpreter.callAnonymousFunction(combiner, [
-              key,
-              value1Entry[1],
-              value2,
-            ])
-          : value2;
-      resultMap.data[encodedKey] = [key, newValue];
+    Object.entries(map2.data).forEach(([encodedKey, [key, value2]]) => {
+      const value1 = result.data[encodedKey]?.[1];
+
+      const newValue = value1
+        ? Interpreter.callAnonymousFunction(combiner, [key, value1, value2])
+        : value2;
+
+      result.data[encodedKey] = [key, newValue];
     });
 
-    return resultMap;
+    return result;
   },
   // End merge_with/3
   // Deps: []

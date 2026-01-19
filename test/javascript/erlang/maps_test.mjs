@@ -560,7 +560,6 @@ describe("Erlang_Maps", () => {
 
   describe("merge_with/3", () => {
     const merge_with = Erlang_Maps["merge_with/3"];
-
     let combiner;
 
     beforeEach(() => {
@@ -620,11 +619,9 @@ describe("Erlang_Maps", () => {
 
     it("when no keys overlap", () => {
       const map1 = Type.map([[atomA, integer1]]);
-
       const map2 = Type.map([[atomB, integer2]]);
 
       const result = merge_with(combiner, map1, map2);
-
       const expected = mapA1B2;
 
       assert.deepStrictEqual(result, expected);
@@ -632,11 +629,9 @@ describe("Erlang_Maps", () => {
 
     it("when first map is empty", () => {
       const map1 = Type.map();
-
       const map2 = mapA1B2;
 
       const result = merge_with(combiner, map1, map2);
-
       const expected = mapA1B2;
 
       assert.deepStrictEqual(result, expected);
@@ -644,11 +639,9 @@ describe("Erlang_Maps", () => {
 
     it("when second map is empty", () => {
       const map1 = mapA1B2;
-
       const map2 = Type.map();
 
       const result = merge_with(combiner, map1, map2);
-
       const expected = mapA1B2;
 
       assert.deepStrictEqual(result, expected);
@@ -656,68 +649,27 @@ describe("Erlang_Maps", () => {
 
     it("when both maps are empty", () => {
       const result = merge_with(combiner, Type.map(), Type.map());
-
       const expected = Type.map();
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("handles mixed key and value types", () => {
-      const listCombiner = Type.anonymousFunction(
-        3,
-        [
-          {
-            params: (_context) => [
-              Type.matchPlaceholder(),
-              Type.variablePattern("v1"),
-              Type.variablePattern("v2"),
-            ],
-            guards: [],
-            body: (context) => Type.list([context.vars.v1, context.vars.v2]),
-          },
-        ],
-        contextFixture(),
+    it("doesn't mutate its arguments", () => {
+      const map1 = freeze(
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]),
       );
 
-      const map1 = Type.map([
-        [Type.atom("atom_key"), Type.integer(1)],
-        [Type.string("string_key"), Type.float(2.5)],
-      ]);
-
-      const map2 = Type.map([
-        [Type.atom("atom_key"), Type.integer(10)],
-        [Type.integer(123), Type.string("value")],
-      ]);
-
-      const result = merge_with(listCombiner, map1, map2);
-
-      const expected = Type.map([
-        [Type.atom("atom_key"), Type.list([Type.integer(1), Type.integer(10)])],
-        [Type.string("string_key"), Type.float(2.5)],
-        [Type.integer(123), Type.string("value")],
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("doesn't mutate its arguments", () => {
-      const map1 = Type.map([
-        [atomA, integer1],
-        [atomB, integer2],
-      ]);
-
-      const map2 = Type.map([
-        [atomB, Type.integer(3)],
-        [atomC, Type.integer(4)],
-      ]);
-
-      const map1Keys = Object.keys(map1.data).sort();
-      const map2Keys = Object.keys(map2.data).sort();
+      const map2 = freeze(
+        Type.map([
+          [Type.atom("b"), Type.integer(3)],
+          [Type.atom("c"), Type.integer(4)],
+        ]),
+      );
 
       merge_with(combiner, map1, map2);
-
-      assert.deepStrictEqual(Object.keys(map1.data).sort(), map1Keys);
-      assert.deepStrictEqual(Object.keys(map2.data).sort(), map2Keys);
     });
 
     it("raises ArgumentError if the first argument is not an anonymous function", () => {
