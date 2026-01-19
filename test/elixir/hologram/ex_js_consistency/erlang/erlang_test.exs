@@ -3409,6 +3409,35 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "localtime/0" do
+    test "returns a tuple with date and time" do
+      result = :erlang.localtime()
+      {{year, month, day}, {hour, minute, second}} = result
+
+      # type checks
+      assert is_tuple(result)
+      assert tuple_size(result) === 2
+      assert is_integer(year)
+      assert is_integer(month)
+      assert is_integer(day)
+      assert is_integer(hour)
+      assert is_integer(minute)
+      assert is_integer(second)
+
+      # range checks
+      assert month >= 1
+      assert month <= 12
+      assert day >= 1
+      assert day <= 31
+      assert hour >= 0
+      assert hour <= 23
+      assert minute >= 0
+      assert minute <= 59
+      assert second >= 0
+      assert second <= 59
+    end
+  end
+
   describe "make_ref/0" do
     test "returns a reference" do
       result = :erlang.make_ref()
