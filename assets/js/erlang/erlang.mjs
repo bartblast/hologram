@@ -892,7 +892,26 @@ const Erlang = {
       };
     };
 
-    return EtfDecoder.decode(binary);
+    Bitstring.maybeSetBytesFromText(binary);
+
+    const bytes = binary.bytes;
+    const dataView = new DataView(
+      bytes.buffer,
+      bytes.byteOffset,
+      bytes.byteLength,
+    );
+
+    // Check ETF version byte (must be 131)
+    if (dataView.getUint8(0) !== 131) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "invalid external representation of a term",
+        ),
+      );
+    }
+
+    return decodeTerm(dataView, bytes, 1);
   },
   // End binary_to_term/1
   // Deps: []
