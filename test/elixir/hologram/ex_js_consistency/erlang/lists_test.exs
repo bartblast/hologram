@@ -586,102 +586,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
-  describe "keytake/3" do
-    test "returns false if tuples list is empty" do
-      assert :lists.keytake(:c, 1, []) == false
-    end
-
-    test "single tuple, no match" do
-      assert :lists.keytake(:c, 1, [{:a, 2, 3.0}]) == false
-    end
-
-    test "single tuple, match at first index" do
-      assert :lists.keytake(:a, 1, [{:a, 2, 3.0}]) == {:value, {:a, 2, 3.0}, []}
-    end
-
-    test "single tuple, match at middle index" do
-      assert :lists.keytake(:b, 2, [{1, :b, 3.0}]) == {:value, {1, :b, 3.0}, []}
-    end
-
-    test "single tuple, match at last index" do
-      assert :lists.keytake(:c, 3, [{1, 2.0, :c}]) == {:value, {1, 2.0, :c}, []}
-    end
-
-    test "multiple tuples, no match" do
-      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
-
-      assert :lists.keytake(:c, 1, tuples) == false
-    end
-
-    test "multiple tuples, match first tuple" do
-      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
-
-      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
-    end
-
-    test "multiple tuples, match middle tuple" do
-      tuples = [{:d, :e, :f}, {:a, 2, 3.0}, {:g, :h, :i}]
-
-      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
-    end
-
-    test "multiple tuples, match last tuple" do
-      tuples = [{:d, :e, :f}, {:g, :h, :i}, {:a, 2, 3.0}]
-
-      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
-    end
-
-    test "skips tuple when its size is smaller than the index" do
-      tuples = [{:a}, {:b, :a, :c}]
-
-      assert :lists.keytake(:a, 2, tuples) == {:value, {:b, :a, :c}, [{:a}]}
-    end
-
-    test "returns only the first matching tuple" do
-      tuples = [{:a, 1}, {:a, 2}]
-
-      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 1}, [{:a, 2}]}
-    end
-
-    test "applies non-strict comparison" do
-      assert :lists.keytake(2, 1, [{2.0}]) == {:value, {2.0}, []}
-    end
-
-    test "raises FunctionClauseError if the second argument (index) is not an integer" do
-      expected_msg = build_function_clause_error_msg(":lists.keytake/3", [:a, 2.0, []])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keytake(:a, 2.0, [])
-      end
-    end
-
-    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
-      expected_msg = build_function_clause_error_msg(":lists.keytake/3", [:a, 0, []])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keytake(:a, 0, [])
-      end
-    end
-
-    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
-      expected_msg =
-        build_function_clause_error_msg(":lists.keytake/4", [:a, 1, {{:b}, {:c}}, []])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keytake(:a, 1, {{:b}, {:c}})
-      end
-    end
-
-    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
-      expected_msg =
-        build_function_clause_error_msg(":lists.keytake/4", [:a, 1, {:d}, [{:c}, {:b}]])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keytake(:a, 1, [{:b}, {:c} | {:d}])
-      end
-    end
-  end
-
   describe "keysort/2" do
     test "returns the empty list if the input is the empty list" do
       assert :lists.keysort(3, []) === []
@@ -783,6 +687,102 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    fn -> :lists.keysort(1, [{:a}, {}]) end
+    end
+  end
+
+  describe "keytake/3" do
+    test "returns false if tuples list is empty" do
+      assert :lists.keytake(:c, 1, []) == false
+    end
+
+    test "single tuple, no match" do
+      assert :lists.keytake(:c, 1, [{:a, 2, 3.0}]) == false
+    end
+
+    test "single tuple, match at first index" do
+      assert :lists.keytake(:a, 1, [{:a, 2, 3.0}]) == {:value, {:a, 2, 3.0}, []}
+    end
+
+    test "single tuple, match at middle index" do
+      assert :lists.keytake(:b, 2, [{1, :b, 3.0}]) == {:value, {1, :b, 3.0}, []}
+    end
+
+    test "single tuple, match at last index" do
+      assert :lists.keytake(:c, 3, [{1, 2.0, :c}]) == {:value, {1, 2.0, :c}, []}
+    end
+
+    test "multiple tuples, no match" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keytake(:c, 1, tuples) == false
+    end
+
+    test "multiple tuples, match first tuple" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
+    end
+
+    test "multiple tuples, match middle tuple" do
+      tuples = [{:d, :e, :f}, {:a, 2, 3.0}, {:g, :h, :i}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
+    end
+
+    test "multiple tuples, match last tuple" do
+      tuples = [{:d, :e, :f}, {:g, :h, :i}, {:a, 2, 3.0}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
+    end
+
+    test "skips tuple when its size is smaller than the index" do
+      tuples = [{:a}, {:b, :a, :c}]
+
+      assert :lists.keytake(:a, 2, tuples) == {:value, {:b, :a, :c}, [{:a}]}
+    end
+
+    test "returns only the first matching tuple" do
+      tuples = [{:a, 1}, {:a, 2}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 1}, [{:a, 2}]}
+    end
+
+    test "applies non-strict comparison" do
+      assert :lists.keytake(2, 1, [{2.0}]) == {:value, {2.0}, []}
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.keytake/3", [:a, 2.0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 2.0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
+      expected_msg = build_function_clause_error_msg(":lists.keytake/3", [:a, 0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.keytake/4", [:a, 1, {{:b}, {:c}}, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 1, {{:b}, {:c}})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.keytake/4", [:a, 1, {:d}, [{:c}, {:b}]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 1, [{:b}, {:c} | {:d}])
+      end
     end
   end
 
