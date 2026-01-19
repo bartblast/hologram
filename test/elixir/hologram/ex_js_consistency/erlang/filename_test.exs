@@ -584,6 +584,38 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     test "filename is three dots" do
       assert :filename.rootname("...") == ".."
     end
+
+    test "atom input" do
+      assert :filename.rootname(:"/jam.src/foo.erl") == ~c"/jam.src/foo"
+    end
+
+    test "iolist with invalid UTF-8 bytes" do
+      # Charlist with invalid UTF-8: [47, 102, 111, 111, 46, 0xFF, 0xFE]
+      # "/foo." + [0xFF, 0xFE]
+      filename = [?/, ?f, ?o, ?o, ?., 0xFF, 0xFE]
+
+      result = :filename.rootname(filename)
+
+      # Should return the root without the extension [0xFF, 0xFE]
+      # Result: [47, 102, 111, 111]
+      expected = [?/, ?f, ?o, ?o]
+
+      assert result == expected
+    end
+
+    test "raises FunctionClauseError if the argument is not a bitstring or atom or list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.rootname(123) end
+    end
+
+    test "raises FunctionClauseError if the argument is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
+                   fn -> :filename.rootname(arg) end
+    end
   end
 
   describe "rootname/2" do
@@ -691,6 +723,42 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
 
     test "extension with double dots" do
       assert :filename.rootname("foo.erl", "..erl") == "foo.erl"
+    end
+
+    test "atom filename input" do
+      assert :filename.rootname(:"foo.erl", ".erl") == "foo"
+    end
+
+    test "atom extension input" do
+      assert :filename.rootname("foo.erl", :".erl") == "foo"
+    end
+
+    test "raises FunctionClauseError if the first argument is not a bitstring or atom or list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.rootname(123, ".erl") end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a bitstring or atom or list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.rootname("foo.erl", 123) end
+    end
+
+    test "raises FunctionClauseError if the first argument is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
+                   fn -> :filename.rootname(arg, ".erl") end
+    end
+
+    test "raises FunctionClauseError if the second argument is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
+                   fn -> :filename.rootname("foo.erl", arg) end
     end
   end
 

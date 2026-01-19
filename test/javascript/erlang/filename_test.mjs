@@ -1315,6 +1315,67 @@ describe("Erlang_Filename", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("atom input", () => {
+      const filename = Type.atom("/jam.src/foo.erl");
+      const result = rootname(filename);
+      const expected = Type.charlist("/jam.src/foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("iolist with invalid UTF-8 bytes", () => {
+      // Charlist with invalid UTF-8: [47, 102, 111, 111, 46, 0xFF, 0xFE]
+      // "/foo." + [0xFF, 0xFE]
+      const filename = Type.list([
+        Type.integer(47), // '/'
+        Type.integer(102), // 'f'
+        Type.integer(111), // 'o'
+        Type.integer(111), // 'o'
+        Type.integer(46), // '.'
+        Type.integer(0xff),
+        Type.integer(0xfe),
+      ]);
+
+      const result = rootname(filename);
+
+      // Should return the root without the extension [0xFF, 0xFE]
+      // Result: [47, 102, 111, 111]
+      const expected = Type.list([
+        Type.integer(47), // '/'
+        Type.integer(102), // 'f'
+        Type.integer(111), // 'o'
+        Type.integer(111), // 'o'
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
+      const arg = Type.integer(123);
+
+      assertBoxedError(
+        () => rootname(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => rootname(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
   });
 
   describe("rootname/2", () => {
@@ -1515,6 +1576,80 @@ describe("Erlang_Filename", () => {
       const expected = Type.bitstring("foo.erl");
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom filename input", () => {
+      const filename = Type.atom("foo.erl");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom extension input", () => {
+      const filename = Type.bitstring("foo.erl");
+      const ext = Type.atom(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a bitstring or atom or list", () => {
+      const arg1 = Type.integer(123);
+      const arg2 = Type.bitstring(".erl");
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg1,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a bitstring or atom or list", () => {
+      const arg1 = Type.bitstring("foo.erl");
+      const arg2 = Type.integer(123);
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg2,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is a non-binary bitstring", () => {
+      const arg1 = Type.bitstring([1, 0, 1]);
+      const arg2 = Type.bitstring(".erl");
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg1,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is a non-binary bitstring", () => {
+      const arg1 = Type.bitstring("foo.erl");
+      const arg2 = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg2,
+          Type.list(),
+        ]),
+      );
     });
   });
 
