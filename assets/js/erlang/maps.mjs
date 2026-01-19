@@ -282,10 +282,9 @@ const Erlang_Maps = {
 
   // Start take/2
   "take/2": (key, map1) => {
-    const SENTINEL = Symbol("not_found");
-    const value = Erlang_Maps["get/3"](key, map1, SENTINEL);
+    const value = Erlang_Maps["get/3"](key, map1, null);
 
-    if (value === SENTINEL) {
+    if (value === null) {
       return Type.atom("error");
     }
 
