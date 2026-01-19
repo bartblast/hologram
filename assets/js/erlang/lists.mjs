@@ -310,6 +310,39 @@ const Erlang_Lists = {
   // End keyreplace/4
   // Deps: []
 
+  // Start keytake/3
+  "keytake/3": function (key, index, tuples) {
+    if (!Type.isInteger(index) || index.value < 1n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", arguments),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      // Client-side error message is intentionally simplified.
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/4"),
+      );
+    }
+
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        const rest = [...tuples.data.slice(0, i), ...tuples.data.slice(i + 1)];
+        return Type.tuple([Type.atom("value"), tuple, Type.list(rest)]);
+      }
+    }
+
+    return Type.boolean(false);
+  },
+  // End keytake/3
+  // Deps: []
+
   // Start keysort/2
   "keysort/2": (index, tuples) => {
     if (!Type.isInteger(index) || index.value <= 0n) {
