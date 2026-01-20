@@ -715,9 +715,9 @@ const Erlang_Lists = {
       errorMsg =
         list.data.length <= 2
           ? Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [
-            fun,
-            list,
-          ])
+              fun,
+              list,
+            ])
           : Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
 
       Interpreter.raiseFunctionClauseError(errorMsg);
