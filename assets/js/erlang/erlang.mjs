@@ -1837,6 +1837,14 @@ const Erlang = {
   //
   // See monotonic_time/0 documentation for browser-based timing limitations.
   "monotonic_time/1": (unit) => {
+    // Explicitly reject integer time units (e.g., ticks-per-second like 1000, 1000000)
+    // which Erlang supports but we intentionally exclude for web-based simplicity
+    if (Type.isInteger(unit)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: Integer time units are unsupported; use :second, :millisecond, :microsecond, :nanosecond, :native or :perf_counter\n",
+      );
+    }
+
     return Erlang._monotonicTime(unit);
   },
   // End monotonic_time/1
