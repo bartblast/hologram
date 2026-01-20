@@ -8,6 +8,13 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Init = {
+  /**
+   * Retrieves values associated with a command-line flag.
+   * In the browser context, values are stored in MemoryStorage with key {:init_argument, flag}.
+   *
+   * @param {Object} flag - A boxed atom representing the flag name.
+   * @returns {Object} A boxed tuple {:ok, Arg} if the flag exists, or the boxed atom :error if not.
+   */
   // Start get_argument/1
   "get_argument/1": (flag) => {
     if (!Type.isAtom(flag)) {
