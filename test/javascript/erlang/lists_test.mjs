@@ -1420,6 +1420,214 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keytake/3", () => {
+    const keytake = Erlang_Lists["keytake/3"];
+
+    it("returns false if tuples list is empty", () => {
+      const result = keytake(atomC, integer1, emptyList);
+
+      assertBoxedFalse(result);
+    });
+
+    it("single tuple, no match", () => {
+      const tuples = Type.list([Type.tuple([atomA, integer2, float3])]);
+      const result = keytake(atomC, integer1, tuples);
+
+      assertBoxedFalse(result);
+    });
+
+    it("single tuple, match at first index", () => {
+      const tuple = Type.tuple([atomA, integer2, float3]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(atomA, integer1, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single tuple, match at middle index", () => {
+      const tuple = Type.tuple([integer1, atomB, float3]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(atomB, integer2, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single tuple, match at last index", () => {
+      const tuple = Type.tuple([integer1, float2, atomC]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(atomC, integer3, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, no match", () => {
+      const tuples = Type.list([
+        Type.tuple([atomA, integer2, float3]),
+        Type.tuple([atomD, atomE, atomF]),
+        Type.tuple([atomG, atomH, atomI]),
+      ]);
+
+      const result = keytake(atomC, integer1, tuples);
+
+      assertBoxedFalse(result);
+    });
+
+    it("multiple tuples, match first tuple", () => {
+      const tuple1 = Type.tuple([atomA, integer2, float3]);
+      const tuple2 = Type.tuple([atomD, atomE, atomF]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+      const tuples = Type.list([tuple1, tuple2, tuple3]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple1,
+        Type.list([tuple2, tuple3]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match middle tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple2 = Type.tuple([atomA, integer2, float3]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+      const tuples = Type.list([tuple1, tuple2, tuple3]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple2,
+        Type.list([tuple1, tuple3]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match last tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple2 = Type.tuple([atomG, atomH, atomI]);
+      const tuple3 = Type.tuple([atomA, integer2, float3]);
+      const tuples = Type.list([tuple1, tuple2, tuple3]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple3,
+        Type.list([tuple1, tuple2]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("skips tuple when its size is smaller than the index", () => {
+      const tuple1 = Type.tuple([atomA]);
+      const tuple2 = Type.tuple([atomB, atomA, atomC]);
+      const tuples = Type.list([tuple1, tuple2]);
+
+      const result = keytake(atomA, integer2, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple2,
+        Type.list([tuple1]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns only the first matching tuple", () => {
+      const tuple1 = Type.tuple([atomA, integer1]);
+      const tuple2 = Type.tuple([atomA, integer2]);
+      const tuples = Type.list([tuple1, tuple2]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple1,
+        Type.list([tuple2]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("applies non-strict comparison", () => {
+      const tuple = Type.tuple([float2]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(integer2, integer1, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is not an integer", () => {
+      assertBoxedError(
+        () => keytake(atomA, float2, Type.list()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", [
+          atomA,
+          float2,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is smaller than 1", () => {
+      assertBoxedError(
+        () => keytake(atomA, integer0, Type.list()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", [
+          atomA,
+          integer0,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
+      // Client-side error message is intentionally simplified.
+      const expectedMsg =
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/4");
+
+      const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
+
+      assertBoxedError(
+        () => keytake(atomA, integer1, tuples),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
+      // Client-side error message is intentionally simplified.
+      const expectedMsg =
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/4");
+
+      const tuples = Type.improperList([
+        Type.tuple([atomB]),
+        Type.tuple([atomC]),
+        Type.tuple([atomD]),
+      ]);
+
+      assertBoxedError(
+        () => keytake(atomA, integer1, tuples),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+  });
+
   describe("map/2", () => {
     const fun = Type.anonymousFunction(
       1,
