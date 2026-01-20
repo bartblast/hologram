@@ -6047,6 +6047,87 @@ describe("Erlang", () => {
     });
   });
 
+  describe("monotonic_time/0", () => {
+    const monotonic_time = Erlang["monotonic_time/0"];
+
+    it("returns an integer", () => {
+      const result = monotonic_time();
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("is monotonic (non-decreasing)", () => {
+      const first = monotonic_time();
+      const second = monotonic_time();
+
+      assert.isAtLeast(Interpreter.compareTerms(second, first), 0);
+    });
+  });
+
+  describe("monotonic_time/1", () => {
+    const monotonic_time = Erlang["monotonic_time/1"];
+    const units = [
+      "second",
+      "millisecond",
+      "microsecond",
+      "nanosecond",
+      "native",
+      "perf_counter",
+    ];
+
+    units.forEach((unit) => {
+      it(`returns an integer for ${unit}`, () => {
+        const result = monotonic_time(Type.atom(unit));
+
+        assert.isTrue(Type.isInteger(result));
+      });
+    });
+
+    it("is monotonic (non-decreasing)", () => {
+      const first = monotonic_time(Type.atom("nanosecond"));
+      const second = monotonic_time(Type.atom("nanosecond"));
+
+      assert.isAtLeast(Interpreter.compareTerms(second, first), 0);
+    });
+
+    it("raises ArgumentError for invalid unit atom", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.atom("minute")),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: invalid time unit\n",
+      );
+    });
+
+    it("returns same value for native as monotonic_time/0", () => {
+      const time0 = Erlang["monotonic_time/0"]();
+      const time1 = monotonic_time(Type.atom("native"));
+
+      // Should be very close (within reasonable execution time difference)
+      const diff = time1.value - time0.value;
+      assert.isTrue(diff >= 0n && diff < 10_000_000n); // Less than 10ms difference
+    });
+
+    it("different units return proportionally different magnitudes", () => {
+      const seconds = monotonic_time(Type.atom("second"));
+      const milliseconds = monotonic_time(Type.atom("millisecond"));
+      const microseconds = monotonic_time(Type.atom("microsecond"));
+      const nanoseconds = monotonic_time(Type.atom("nanosecond"));
+
+      // Test that larger units are smaller in magnitude (or same order)
+      // Use abs to handle both positive and negative time values
+      const absSeconds = seconds.value < 0n ? -seconds.value : seconds.value;
+      const absMilliseconds =
+        milliseconds.value < 0n ? -milliseconds.value : milliseconds.value;
+      const absMicroseconds =
+        microseconds.value < 0n ? -microseconds.value : microseconds.value;
+      const absNanoseconds =
+        nanoseconds.value < 0n ? -nanoseconds.value : nanoseconds.value;
+
+      assert.isTrue(absMilliseconds >= absSeconds);
+      assert.isTrue(absMicroseconds >= absMilliseconds);
+      assert.isTrue(absNanoseconds >= absMicroseconds);
+    });
+  });
+
   // Simplified: always returns monotonic, positive integers regardless of modifiers.
   describe("unique_integer/1", () => {
     const unique_integer = Erlang["unique_integer/1"];

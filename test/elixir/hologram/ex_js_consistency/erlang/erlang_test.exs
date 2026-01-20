@@ -3758,6 +3758,63 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "monotonic_time/0" do
+    test "returns an integer" do
+      assert is_integer(:erlang.monotonic_time())
+    end
+
+    test "is monotonic (non-decreasing)" do
+      first = :erlang.monotonic_time()
+      second = :erlang.monotonic_time()
+
+      assert second >= first
+    end
+  end
+
+  describe "monotonic_time/1" do
+    test "returns an integer for all supported units" do
+      for unit <- [:second, :millisecond, :microsecond, :nanosecond, :native, :perf_counter] do
+        assert is_integer(:erlang.monotonic_time(unit))
+      end
+    end
+
+    test "is monotonic (non-decreasing)" do
+      first = :erlang.monotonic_time(:nanosecond)
+      second = :erlang.monotonic_time(:nanosecond)
+
+      assert second >= first
+    end
+
+    test "raises ArgumentError for invalid unit atom" do
+      assert_error ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: invalid time unit\n",
+                   {:erlang, :monotonic_time, [:minute]}
+    end
+
+    test "returns same value for native as monotonic_time/0" do
+      time0 = :erlang.monotonic_time()
+      time1 = :erlang.monotonic_time(:native)
+
+      # Should be very close (within reasonable execution time difference)
+      diff = time1 - time0
+      # Less than 10ms difference in nanoseconds
+      assert diff >= 0 and diff < 10_000_000
+    end
+
+    test "different units return proportionally different magnitudes" do
+      seconds = :erlang.monotonic_time(:second)
+      milliseconds = :erlang.monotonic_time(:millisecond)
+      microseconds = :erlang.monotonic_time(:microsecond)
+      nanoseconds = :erlang.monotonic_time(:nanosecond)
+
+      # Test that larger units are smaller in magnitude (or same order)
+      # abs() handles both positive and negative time values
+      assert abs(milliseconds) >= abs(seconds)
+      assert abs(microseconds) >= abs(milliseconds)
+      assert abs(nanoseconds) >= abs(microseconds)
+    end
+  end
+
   describe "unique_integer/1" do
     test "returns a unique integer each time it is called with empty modifier list" do
       integer_1 = :erlang.unique_integer([])

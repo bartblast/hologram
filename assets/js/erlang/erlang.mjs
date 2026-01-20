@@ -36,6 +36,57 @@ MFAs for sorting:
 */
 
 const Erlang = {
+  // Helper: raw monotonic time source (nanoseconds, relative to page load)
+  _monotonicTimeInNanoseconds: () => {
+    const nowMs = performance.now();
+    const nowNs = Math.round(nowMs * 1_000_000);
+
+    return BigInt(nowNs);
+  },
+
+  // Helper: converts monotonic time to the requested unit
+  _monotonicTime: (unit) => {
+    if (!Type.isAtom(unit)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: invalid time unit\n",
+      );
+    }
+
+    const unitValue = unit.value;
+    const validUnits = [
+      "second",
+      "millisecond",
+      "microsecond",
+      "nanosecond",
+      "native",
+      "perf_counter",
+    ];
+
+    if (!validUnits.includes(unitValue)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: invalid time unit\n",
+      );
+    }
+
+    const nowNs = Erlang._monotonicTimeInNanoseconds();
+
+    switch (unitValue) {
+      case "second":
+        return Type.integer(nowNs / 1_000_000_000n);
+      case "millisecond":
+        return Type.integer(nowNs / 1_000_000n);
+      case "microsecond":
+        return Type.integer(nowNs / 1_000n);
+      case "nanosecond":
+      case "native":
+      case "perf_counter":
+        return Type.integer(nowNs);
+      default:
+        // Should be unreachable due to validation
+        return Type.integer(nowNs);
+    }
+  },
+
   // Start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
@@ -1723,6 +1774,73 @@ const Erlang = {
   },
   // End unique_integer/1
   // Deps: [:erlang.unique_integer/0]
+
+  // Start monotonic_time/0
+  //
+  // Returns monotonically non-decreasing time in native unit (nanoseconds).
+  //
+  // BROWSER-BASED LIMITATIONS:
+  // 1. Uses performance.now() which measures time since page navigation, NOT system
+  //    uptime like the Erlang VM. This means:
+  //    - Values reset to 0 on page load/refresh
+  //    - Always returns positive values (Erlang VM can return negative values)
+  //    - No consistency across browser tabs/windows
+  //
+  // 2. Resolution depends on browser security settings:
+  //    - Typically 100µs (0.1ms) in modern browsers due to Spectre/Meltdown mitigations
+  //    - Can be 1ms or lower resolution in some security contexts
+  //    - Sub-microsecond precision available only with proper CORS headers
+  //
+  // 3. Monotonic guarantee only within single page session:
+  //    - Browser guarantees non-decreasing values within same navigation
+  //    - Does not survive page reloads or cross-tab comparisons
+  //
+  // These limitations are acceptable for web-based applications where:
+  // - Absolute time values don't need cross-process consistency
+  // - Relative time measurements (durations, intervals) are primary use case
+  // - Page lifespan is the relevant timeframe for monotonic guarantees
+  "monotonic_time/0": () => {
+    return Erlang._monotonicTime(Type.atom("native"));
+  },
+  // End monotonic_time/0
+  // Deps: [_monotonicTime/1]
+
+  // Start monotonic_time/1
+  //
+  // Returns monotonically non-decreasing time in the specified unit.
+  //
+  // SUPPORTED UNITS (atoms only):
+  // - :second, :millisecond, :microsecond, :nanosecond - standard time units
+  // - :native - nanosecond resolution (same as monotonic_time/0)
+  // - :perf_counter - treated identically to :native in browser environment
+  //
+  // UNIT HANDLING DIFFERENCES FROM ERLANG:
+  // 1. Integer time units NOT supported:
+  //    - Erlang accepts integers representing ticks-per-second (e.g., 1000, 1000000)
+  //    - Intentionally excluded because:
+  //      a) Adds significant complexity for rare use case
+  //      b) Browser-based time doesn't need low-level tick control
+  //      c) Standard atom units cover all practical web scenarios
+  //      d) Aligns with "web-based behavior only" design principle
+  //
+  // 2. :native and :perf_counter are identical:
+  //    - Both return nanoseconds from performance.now()
+  //    - Erlang VM might return slightly different values
+  //    - Browser doesn't expose separate performance counter concept
+  //    - :perf_counter included for API compatibility only
+  //
+  // 3. Unit conversion uses integer division (truncation):
+  //    - Nanoseconds -> microseconds: divide by 1,000 (truncate)
+  //    - Nanoseconds -> milliseconds: divide by 1,000,000 (truncate)
+  //    - Nanoseconds -> seconds: divide by 1,000,000,000 (truncate)
+  //    - Matches Erlang's behavior for time unit conversions
+  //
+  // See monotonic_time/0 documentation for browser-based timing limitations.
+  "monotonic_time/1": (unit) => {
+    return Erlang._monotonicTime(unit);
+  },
+  // End monotonic_time/1
+  // Deps: [_monotonicTime/1]
 
   // Start xor/2
   "xor/2": (left, right) => {
