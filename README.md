@@ -8,7 +8,7 @@ Website: https://hologram.page
 
 ### Main Sponsor
 
-<a href="https://www.curiosum.com" target="_blank">
+<a href="https://www.curiosum.com/?utm_source=github.com&utm_medium=sponsor-logo&utm_campaign=sponsoring_hologram" target="_blank">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".sponsors/curiosum_logo_horizontal_mono_white.png">
     <source media="(prefers-color-scheme: light)" srcset=".sponsors/curiosum_logo_horizontal_mono_black.png">
@@ -16,7 +16,7 @@ Website: https://hologram.page
   </picture>
 </a>
 
-[Curiosum](https://www.curiosum.com)
+[Curiosum](https://www.curiosum.com/?utm_source=hologram.page&utm_medium=sponsor-logo&utm_campaign=sponsoring_hologram)
 
 ### Milestones Sponsor
 
