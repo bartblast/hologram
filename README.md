@@ -16,7 +16,7 @@ Website: https://hologram.page
   </picture>
 </a>
 
-[Curiosum](https://www.curiosum.com/?utm_source=hologram.page&utm_medium=sponsor-logo&utm_campaign=sponsoring_hologram)
+[Curiosum](https://www.curiosum.com/?utm_source=github.com&utm_medium=sponsor-logo&utm_campaign=sponsoring_hologram)
 
 ### Milestones Sponsor
 
