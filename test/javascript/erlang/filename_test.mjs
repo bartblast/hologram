@@ -380,6 +380,46 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("trailing dot is a valid extension", () => {
+      const filename = Type.bitstring("file.");
+      const result = extension(filename);
+      const expected = Type.bitstring(".");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("hidden file with extension", () => {
+      const filename = Type.bitstring(".hidden.txt");
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("double dot", () => {
+      const filename = Type.bitstring("..");
+      const result = extension(filename);
+      const expected = Type.bitstring(".");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("root path", () => {
+      const filename = Type.bitstring("/");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("current directory", () => {
+      const filename = Type.bitstring(".");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
       const arg = Type.integer(123);
 

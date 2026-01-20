@@ -175,6 +175,26 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.extension(filename) == [46, 254]
     end
 
+    test "trailing dot is a valid extension" do
+      assert :filename.extension("file.") == "."
+    end
+
+    test "hidden file with extension" do
+      assert :filename.extension(".hidden.txt") == ".txt"
+    end
+
+    test "double dot" do
+      assert :filename.extension("..") == "."
+    end
+
+    test "root path" do
+      assert :filename.extension("/") == ""
+    end
+
+    test "current directory" do
+      assert :filename.extension(".") == ""
+    end
+
     test "raises FunctionClauseError if the argument is not a bitstring or atom or list" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
