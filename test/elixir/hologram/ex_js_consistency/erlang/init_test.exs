@@ -26,6 +26,10 @@ defmodule Hologram.ExJsConsistency.Erlang.InitTest do
       assert {:ok, [[_progname]]} = :init.get_argument(:progname)
     end
 
+    test "returns :error for nil" do
+      assert :init.get_argument(nil) == :error
+    end
+
     test "returns :error if the argument is not an atom (integer)" do
       assert :init.get_argument(1) == :error
     end

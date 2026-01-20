@@ -88,6 +88,13 @@ describe("Erlang_Init", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("returns :error for nil", () => {
+      const result = get_argument(Type.atom("nil"));
+      const expected = Type.atom("error");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("returns :error if the argument is not an atom (integer)", () => {
       const result = get_argument(Type.integer(1));
       const expected = Type.atom("error");
