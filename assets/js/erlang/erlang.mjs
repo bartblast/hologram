@@ -268,6 +268,21 @@ const Erlang = {
   // End andalso/2
   // Deps: []
 
+  // Start apply/2
+  "apply/2": (fun, args) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseBadFunctionError(fun);
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Interpreter.callAnonymousFunction(fun, args.data);
+  },
+  // End apply/2
+  // Deps: []
+
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
   // Start apply/3

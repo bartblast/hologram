@@ -39,6 +39,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:filename, :_do_flatten, 2}, {:erlang, :atom_to_list, 1}},
     {{:filename, :basename, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :basename, 1}, {:filename, :flatten, 1}},
+    {{:filename, :extension, 1}, {:erlang, :iolist_to_binary, 1}},
+    {{:filename, :extension, 1}, {:filename, :flatten, 1}},
     {{:filename, :flatten, 1}, {:filename, :_do_flatten, 2}},
     {{:filename, :split, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :split, 1}, {:filename, :flatten, 1}},

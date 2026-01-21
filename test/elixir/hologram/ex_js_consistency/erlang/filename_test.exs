@@ -98,6 +98,118 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     end
   end
 
+  describe "extension/1" do
+    test "file with extension" do
+      assert :filename.extension("foo.erl") == ".erl"
+    end
+
+    test "file without extension" do
+      assert :filename.extension("foo") == ""
+    end
+
+    test "file with path and extension" do
+      assert :filename.extension("path/to/file.txt") == ".txt"
+    end
+
+    test "file with multiple dots in filename" do
+      assert :filename.extension("archive.tar.gz") == ".gz"
+    end
+
+    test "file starting with dot" do
+      assert :filename.extension(".hidden") == ""
+    end
+
+    test "directory path without extension" do
+      assert :filename.extension("beam.src/kalle") == ""
+    end
+
+    test "absolute path with extension" do
+      assert :filename.extension("/usr/local/foo.txt") == ".txt"
+    end
+
+    test "empty string" do
+      assert :filename.extension("") == ""
+    end
+
+    test "path with trailing slash" do
+      assert :filename.extension("path/to/dir/") == ""
+    end
+
+    test "file with dot in directory name" do
+      assert :filename.extension("path.dir/file") == ""
+    end
+
+    test "file with multiple dots including in directory" do
+      assert :filename.extension("path.dir/file.tar.gz") == ".gz"
+    end
+
+    test "atom input with extension" do
+      assert :filename.extension(:"file.txt") == ~c".txt"
+    end
+
+    test "atom input without extension" do
+      assert :filename.extension(:file) == ~c""
+    end
+
+    test "empty list input" do
+      assert :filename.extension([]) == []
+    end
+
+    test "iolist input with extension" do
+      assert :filename.extension([~c"path/to/", ?f, ?i, ?l, ?e, ~c".txt"]) == ~c".txt"
+    end
+
+    test "bitstring input" do
+      assert :filename.extension("file.txt") == ".txt"
+    end
+
+    test "handles invalid UTF-8 binary" do
+      filename = <<255, 46, 254>>
+
+      assert :filename.extension(filename) == <<46, 254>>
+    end
+
+    test "handles invalid UTF-8 iolist" do
+      filename = [255, 46, 254]
+
+      assert :filename.extension(filename) == [46, 254]
+    end
+
+    test "trailing dot is a valid extension" do
+      assert :filename.extension("file.") == "."
+    end
+
+    test "hidden file with extension" do
+      assert :filename.extension(".hidden.txt") == ".txt"
+    end
+
+    test "double dot" do
+      assert :filename.extension("..") == "."
+    end
+
+    test "root path" do
+      assert :filename.extension("/") == ""
+    end
+
+    test "current directory" do
+      assert :filename.extension(".") == ""
+    end
+
+    test "raises FunctionClauseError if the argument is not a bitstring or atom or list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.extension(123) end
+    end
+
+    test "raises FunctionClauseError if the argument is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
+                   fn -> :filename.extension(arg) end
+    end
+  end
+
   describe "flatten/1" do
     test "binary" do
       filename = "path/to/file.txt"

@@ -158,6 +158,112 @@ const Erlang_Filename = {
   // End basename/1
   // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1]
 
+  // Start extension/1
+  "extension/1": (filename) => {
+    // Helper functions
+
+    const asBinary = (component) => {
+      if (Type.isBinary(component)) {
+        Bitstring.maybeSetBytesFromText(component);
+        return component;
+      }
+
+      const binary = Erlang["iolist_to_binary/1"](component);
+      Bitstring.maybeSetBytesFromText(binary);
+      return binary;
+    };
+
+    const findBasenameWindow = (bytes) => {
+      const lastNonSlashIndex = bytes.findLastIndex((byte) => byte !== 47);
+      if (lastNonSlashIndex === -1) {
+        return null;
+      }
+
+      const lastSlashBeforeBasename = bytes
+        .subarray(0, lastNonSlashIndex + 1)
+        .findLastIndex((byte) => byte === 47);
+
+      const start =
+        lastSlashBeforeBasename === -1 ? 0 : lastSlashBeforeBasename + 1;
+      const end = lastNonSlashIndex + 1; // exclusive
+
+      return {start, end};
+    };
+
+    const findExtensionBytes = (bytes, start, end) => {
+      const basenameSlice = bytes.subarray(start, end);
+      const lastDotInBasename = basenameSlice.findLastIndex(
+        (byte) => byte === 46,
+      );
+
+      // No dot, or dot at basename start (e.g., ".bashrc")
+      if (lastDotInBasename <= 0) {
+        return null;
+      }
+
+      return bytes.slice(start + lastDotInBasename, end);
+    };
+
+    const renderEmpty = () =>
+      outputIsBinary ? Type.bitstring("") : Type.list([]);
+
+    const renderInvalid = (extensionBinary) =>
+      outputIsBinary
+        ? extensionBinary
+        : Type.list(
+            [...extensionBinary.bytes].map((byte) => Type.integer(byte)),
+          );
+
+    // Main logic
+
+    // flatten/1 handles argument type checking and raises FunctionClauseError if needed.
+    const flattened = Erlang_Filename["flatten/1"](filename);
+    const outputIsBinary = Type.isBinary(flattened);
+
+    // Work on bytes directly
+    const filenameBinary = asBinary(flattened);
+    const bytes = filenameBinary.bytes;
+
+    // Empty input yields empty extension
+    if (bytes.length === 0) {
+      return renderEmpty();
+    }
+
+    // Locate basename window (after last slash, trimmed of trailing slashes)
+    const basenameWindow = findBasenameWindow(bytes);
+    if (!basenameWindow) {
+      return renderEmpty();
+    }
+
+    const {start: basenameStart, end: basenameEnd} = basenameWindow;
+
+    // Extract extension bytes from basename
+    const extensionBytes = findExtensionBytes(
+      bytes,
+      basenameStart,
+      basenameEnd,
+    );
+    if (extensionBytes === null) {
+      return renderEmpty();
+    }
+
+    const extensionBinary = Bitstring.fromBytes(extensionBytes);
+    Bitstring.maybeSetTextFromBytes(extensionBinary);
+
+    // Preserve invalid UTF-8 as raw bytes
+    if (extensionBinary.text === false) {
+      return renderInvalid(extensionBinary);
+    }
+
+    if (outputIsBinary) {
+      return Type.bitstring(extensionBinary.text);
+    }
+
+    return Bitstring.toCodepoints(extensionBinary);
+  },
+  // End extension/1
+  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1]
+
   // Start flatten/1
   "flatten/1": (filename) => {
     if (Type.isBinary(filename)) {
