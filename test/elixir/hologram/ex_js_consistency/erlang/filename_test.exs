@@ -169,7 +169,7 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.extension(filename) == <<46, 254>>
     end
 
-    test "handles invalid UTF-8 list" do
+    test "handles invalid UTF-8 iolist" do
       filename = [255, 46, 254]
 
       assert :filename.extension(filename) == [46, 254]

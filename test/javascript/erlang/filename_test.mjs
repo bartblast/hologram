@@ -333,12 +333,12 @@ describe("Erlang_Filename", () => {
 
     it("iolist input with extension", () => {
       const filename = Type.list([
-        Type.bitstring("path/to/"),
+        Type.charlist("path/to/"),
         Type.integer(102), // 'f'
         Type.integer(105), // 'i'
         Type.integer(108), // 'l'
         Type.integer(101), // 'e'
-        Type.bitstring(".txt"),
+        Type.charlist(".txt"),
       ]);
 
       const result = extension(filename);
@@ -361,7 +361,6 @@ describe("Erlang_Filename", () => {
 
     it("handles invalid UTF-8 binary", () => {
       const filename = Bitstring.fromBytes(new Uint8Array([255, 46, 254]));
-
       const result = extension(filename);
 
       assert.deepStrictEqual(result.bytes, new Uint8Array([46, 254]));
