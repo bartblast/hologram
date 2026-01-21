@@ -66,7 +66,7 @@ jobs:
           - elixir: "1.18.2"
             otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '24.13.0') }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
