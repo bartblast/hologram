@@ -792,6 +792,12 @@ export default class Interpreter {
     );
   }
 
+  static raiseBadFunctionError(arg) {
+    const message = "expected a function, got: " + Interpreter.inspect(arg);
+
+    Interpreter.raiseError("BadFunctionError", message);
+  }
+
   static raiseBadMapError(arg) {
     const message = "expected a map, got: " + Interpreter.inspect(arg);
 

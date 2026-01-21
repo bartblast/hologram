@@ -6553,6 +6553,14 @@ describe("Interpreter", () => {
     });
   });
 
+  it("raiseBadFunctionError()", () => {
+    assertBoxedError(
+      () => Interpreter.raiseBadFunctionError(Type.atom("abc")),
+      "BadFunctionError",
+      "expected a function, got: :abc",
+    );
+  });
+
   it("raiseBadMapError()", () => {
     assertBoxedError(
       () => Interpreter.raiseBadMapError(Type.atom("abc")),
