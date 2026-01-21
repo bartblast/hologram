@@ -53,8 +53,9 @@ jobs:
           # A few JS libs used by Hologram require Node 20+.
           # - "19.9.0"
           # Node.js only tests the build step. Actual JS runs in browsers.
-          # Only test with pinned stable Node.js LTS version.
-          - "22.9.0"
+          # Use latest LTS version only.
+          # Must match .tool-versions for dev/CI parity.
+          - "24.13.0"
         exclude:
           - elixir: "1.15.8"
             otp: "27.2"
@@ -247,8 +248,9 @@ jobs:
           # Run feature tests on latest pinned stable OTP version only
           - "27.2"
         node:
-          # Run feature tests on latest pinned stable Node.js LTS version only
-          - "22.9.0"
+          # Run feature tests on latest LTS version only.
+          # Must match .tool-versions for dev/CI parity.
+          - "24.13.0"
     env:
       IS_HIGHEST_MATRIX_COMBINATION: "true"
     steps:
