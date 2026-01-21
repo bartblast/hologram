@@ -217,6 +217,236 @@ describe("Erlang_Filename", () => {
     });
   });
 
+  describe("extension/1", () => {
+    const extension = Erlang_Filename["extension/1"];
+
+    it("file with extension", () => {
+      const filename = Type.bitstring("foo.erl");
+      const result = extension(filename);
+      const expected = Type.bitstring(".erl");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file without extension", () => {
+      const filename = Type.bitstring("foo");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with path and extension", () => {
+      const filename = Type.bitstring("path/to/file.txt");
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with multiple dots in filename", () => {
+      const filename = Type.bitstring("archive.tar.gz");
+      const result = extension(filename);
+      const expected = Type.bitstring(".gz");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file starting with dot", () => {
+      const filename = Type.bitstring(".hidden");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("directory path without extension", () => {
+      const filename = Type.bitstring("beam.src/kalle");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("absolute path with extension", () => {
+      const filename = Type.bitstring("/usr/local/foo.txt");
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty string", () => {
+      const filename = Type.bitstring("");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with trailing slash", () => {
+      const filename = Type.bitstring("path/to/dir/");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with dot in directory name", () => {
+      const filename = Type.bitstring("path.dir/file");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with multiple dots including in directory", () => {
+      const filename = Type.bitstring("path.dir/file.tar.gz");
+      const result = extension(filename);
+      const expected = Type.bitstring(".gz");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input with extension", () => {
+      const filename = Type.atom("file.txt");
+      const result = extension(filename);
+      const expected = Type.charlist(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input without extension", () => {
+      const filename = Type.atom("file");
+      const result = extension(filename);
+      const expected = Type.charlist("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list input", () => {
+      const emptyList = Type.list();
+      const result = extension(emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("iolist input with extension", () => {
+      const filename = Type.list([
+        Type.bitstring("path/to/"),
+        Type.integer(102), // 'f'
+        Type.integer(105), // 'i'
+        Type.integer(108), // 'l'
+        Type.integer(101), // 'e'
+        Type.bitstring(".txt"),
+      ]);
+
+      const result = extension(filename);
+      const expected = Type.charlist(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("bitstring input", () => {
+      // "file.txt"
+      const filename = Bitstring.fromBytes([
+        102, 105, 108, 101, 46, 116, 120, 116,
+      ]);
+
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles invalid UTF-8 binary", () => {
+      const filename = Bitstring.fromBytes(new Uint8Array([255, 46, 254]));
+
+      const result = extension(filename);
+
+      assert.deepStrictEqual(result.bytes, new Uint8Array([46, 254]));
+    });
+
+    it("handles invalid UTF-8 iolist", () => {
+      const filename = Type.list([
+        Type.integer(255),
+        Type.integer(46),
+        Type.integer(254),
+      ]);
+
+      const result = extension(filename);
+      const expected = Type.list([Type.integer(46), Type.integer(254)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("trailing dot is a valid extension", () => {
+      const filename = Type.bitstring("file.");
+      const result = extension(filename);
+      const expected = Type.bitstring(".");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("hidden file with extension", () => {
+      const filename = Type.bitstring(".hidden.txt");
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("double dot", () => {
+      const filename = Type.bitstring("..");
+      const result = extension(filename);
+      const expected = Type.bitstring(".");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("root path", () => {
+      const filename = Type.bitstring("/");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("current directory", () => {
+      const filename = Type.bitstring(".");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
+      const arg = Type.integer(123);
+
+      assertBoxedError(
+        () => extension(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => extension(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+  });
+
   describe("flatten/1", () => {
     const flatten = Erlang_Filename["flatten/1"];
 
