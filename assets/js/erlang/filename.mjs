@@ -158,6 +158,81 @@ const Erlang_Filename = {
   // End basename/1
   // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1]
 
+  // Start basename/2
+  "basename/2": (filename, ext) => {
+    // flatten/1 handles argument type checking and raises FunctionClauseError if needed.
+    const flattenedFilename = Erlang_Filename["flatten/1"](filename);
+    const flattenedExt = Erlang_Filename["flatten/1"](ext);
+
+    // Get the basename using basename/1
+    const bname = Erlang_Filename["basename/1"](flattenedFilename);
+    const bnameIsBinary = Type.isBinary(bname);
+
+    // Convert both to binary for comparison (to simplify logic)
+    let bnameAsBinary = bname;
+    if (!bnameIsBinary) {
+      bnameAsBinary = Erlang["iolist_to_binary/1"](bname);
+    }
+
+    let extAsBinary = flattenedExt;
+    if (!Type.isBinary(extAsBinary)) {
+      extAsBinary = Erlang["iolist_to_binary/1"](extAsBinary);
+    }
+
+    // Make shallow copies to avoid modifying original values
+    // Note: maybeSetBytesFromText() only populates fields if missing - it doesn't mutate byte arrays
+    const bnameForComparison = {...bnameAsBinary};
+    const extForComparison = {...extAsBinary};
+
+    // Ensure we have bytes for comparison
+    Bitstring.maybeSetBytesFromText(bnameForComparison);
+    Bitstring.maybeSetBytesFromText(extForComparison);
+
+    const bnameBytes = bnameForComparison.bytes;
+    const extBytes = extForComparison.bytes;
+
+    // If extension is longer than basename, return basename as-is
+    if (extBytes.length > bnameBytes.length) return bname;
+
+    // Check if basename ends with extension
+    let extMatches = true;
+    for (let i = 0; i < extBytes.length; i++) {
+      if (bnameBytes[bnameBytes.length - extBytes.length + i] !== extBytes[i]) {
+        extMatches = false;
+        break;
+      }
+    }
+
+    if (!extMatches) return bname;
+
+    // Extension matches - remove it and return the result
+    // Important: Erlang's basename/2 returns binary when extension is binary, regardless of filename type
+    const partLength = bnameBytes.length - extBytes.length;
+    // TODO: Once :erlang.binary_part/3 can be used with slices, replace this with:
+    // const resultBinary = Erlang["binary_part/3"](bnameAsBinary, Type.integer(0), Type.integer(partLength))
+    const resultBytes = bnameBytes.slice(0, partLength);
+
+    const extIsBinary = Type.isBinary(flattenedExt);
+    const resultBinary = Bitstring.fromBytes(resultBytes);
+    Bitstring.maybeSetTextFromBytes(resultBinary);
+
+    if (resultBinary.text === false) {
+      // Invalid UTF-8, preserve raw bytes
+      return extIsBinary
+        ? resultBinary
+        : Type.list([...resultBytes].map((byte) => Type.integer(byte)));
+    }
+
+    // Valid UTF-8
+    // Return as binary if extension is binary OR original basename was binary
+    // Return as charlist only if both filename and extension are lists
+    return extIsBinary || bnameIsBinary
+      ? Type.bitstring(resultBinary.text)
+      : Bitstring.toCodepoints(resultBinary);
+  },
+  // End basename/2
+  // Deps: [:erlang.iolist_to_binary/1, :filename.basename/1, :filename.flatten/1]
+
   // Start extension/1
   "extension/1": (filename) => {
     // Helper functions
