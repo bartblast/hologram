@@ -69,6 +69,18 @@ describe("Interpreter", () => {
     assert.equal(result, expected);
   });
 
+  it("buildBadFunctionErrorMsg()", () => {
+    const term = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const result = Interpreter.buildBadFunctionErrorMsg(term);
+    const expected = "expected a function, got: %{a: 1, b: 2}";
+
+    assert.equal(result, expected);
+  });
+
   describe("buildContext()", () => {
     it("module undefined, vars undefined", () => {
       const result = Interpreter.buildContext();
@@ -114,6 +126,7 @@ describe("Interpreter", () => {
 
   it("buildErlangErrorMsg()", () => {
     const result = Interpreter.buildErlangErrorMsg("my message");
+
     assert.equal(result, "Erlang error: my message");
   });
 
@@ -6554,10 +6567,12 @@ describe("Interpreter", () => {
   });
 
   it("raiseBadFunctionError()", () => {
+    const term = Type.atom("abc");
+
     assertBoxedError(
-      () => Interpreter.raiseBadFunctionError(Type.atom("abc")),
+      () => Interpreter.raiseBadFunctionError(term),
       "BadFunctionError",
-      "expected a function, got: :abc",
+      Interpreter.buildBadFunctionErrorMsg(term),
     );
   });
 
