@@ -131,49 +131,75 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       [fun: fn x -> [x, x * 10] end]
     end
 
-    test "maps and flattens one level", %{fun: fun} do
-      assert :lists.flatmap(fun, [1, 2, 3]) == [1, 10, 2, 20, 3, 30]
-    end
-
-    test "empty list", %{fun: fun} do
+    test "returns empty list when given empty list", %{fun: fun} do
       assert :lists.flatmap(fun, []) == []
     end
 
-    test "mapper returns empty lists" do
+    test "works with single element list", %{fun: fun} do
+      assert :lists.flatmap(fun, [1]) == [1, 10]
+    end
+
+    test "works with multiple element list", %{fun: fun} do
+      assert :lists.flatmap(fun, [1, 2, 3]) == [1, 10, 2, 20, 3, 30]
+    end
+
+    test "returns empty list when mapper returns empty lists" do
       assert :lists.flatmap(fn _x -> [] end, [1, 2, 3]) == []
     end
 
-    test "only single-level flatten" do
-      assert :lists.flatmap(fn x -> [[x]] end, [1, 2]) == [[1], [2]]
+    test "flattens only one level" do
+      assert :lists.flatmap(fn x -> [[[x]]] end, [1, 2]) == [[[1]], [[2]]]
     end
 
-    test "raises FunctionClauseError if first arg is not an anonymous function" do
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
       expected_msg = build_function_clause_error_msg(":lists.flatmap/2", [:abc, []])
+
       assert_error FunctionClauseError, expected_msg, fn -> :lists.flatmap(:abc, []) end
     end
 
-    test "raises FunctionClauseError if first arg has arity != 1" do
-      expected_msg = ~r/no function clause matching in :lists\.flatmap\/2/
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 1" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.flatmap/2
+
+      The following arguments were given to :lists\.flatmap/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test flatmap/2 raises FunctionClauseError if the first argument is an anonymous function with arity different than 1"/1>
+
+          # 2
+          \[\]
+      """s
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.flatmap(fn x, y -> x + y end, [])
       end
     end
 
-    test "raises FunctionClauseError if second arg is not a list", %{fun: fun} do
-      expected_msg = ~r/no function clause matching in :lists\.flatmap_1\/2/
+    test "raises FunctionClauseError if the second argument is not a list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.flatmap_1/2
+
+      The following arguments were given to :lists\.flatmap_1/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          :abc
+      """s
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.flatmap(fun, :abc)
       end
     end
 
-    test "raises FunctionClauseError if second arg is an improper list", %{fun: fun} do
+    test "raises FunctionClauseError if the second argument is an improper list", %{fun: fun} do
       expected_msg = build_function_clause_error_msg(":lists.flatmap_1/2", [fun, 3])
+
       assert_error FunctionClauseError, expected_msg, fn -> :lists.flatmap(fun, [1, 2 | 3]) end
     end
 
-    test "raises ArgumentError if mapper does not return a proper list" do
+    test "raises ArgumentError if the mapper does not return a proper list" do
       assert_error ArgumentError, "argument error", fn ->
         :lists.flatmap(fn x -> x * 10 end, [1, 2, 3])
       end

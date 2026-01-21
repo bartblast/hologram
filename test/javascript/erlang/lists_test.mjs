@@ -425,7 +425,21 @@ describe("Erlang_Lists", () => {
       contextFixture(),
     );
 
-    it("maps and flattens one level", () => {
+    it("returns empty list when given empty list", () => {
+      const result = flatmap(fun, emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("works with single element list", () => {
+      const list = Type.list([integer1]);
+      const result = flatmap(fun, list);
+      const expected = Type.list([integer1, Type.integer(10)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("works with multiple element list", () => {
       const list = Type.list([integer1, integer2, integer3]);
       const result = flatmap(fun, list);
 
@@ -441,17 +455,12 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("empty list", () => {
-      const result = flatmap(fun, emptyList);
-      assert.deepStrictEqual(result, emptyList);
-    });
-
-    it("mapper returns empty lists", () => {
+    it("returns empty list when mapper returns empty lists", () => {
       const emptyFun = Type.anonymousFunction(
         1,
         [
           {
-            params: (_context) => [Type.variablePattern("_")],
+            params: (_context) => [Type.matchPlaceholder()],
             guards: [],
             body: (_context) => {
               return emptyList;
@@ -467,7 +476,7 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(result, emptyList);
     });
 
-    it("only single-level flatten", () => {
+    it("flattens only one level", () => {
       const nestedFun = Type.anonymousFunction(
         1,
         [
@@ -475,7 +484,7 @@ describe("Erlang_Lists", () => {
             params: (_context) => [Type.variablePattern("x")],
             guards: [],
             body: (context) => {
-              return Type.list([Type.list([context.vars.x])]);
+              return Type.list([Type.list([Type.list([context.vars.x])])]);
             },
           },
         ],
@@ -486,14 +495,14 @@ describe("Erlang_Lists", () => {
       const result = flatmap(nestedFun, list);
 
       const expected = Type.list([
-        Type.list([integer1]),
-        Type.list([integer2]),
+        Type.list([Type.list([integer1])]),
+        Type.list([Type.list([integer2])]),
       ]);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("raises FunctionClauseError if first arg is not an anonymous function", () => {
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.flatmap/2",
         [atomAbc, emptyList],
@@ -506,7 +515,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises FunctionClauseError if first arg has arity != 1", () => {
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.flatmap/2",
         [funArity2, emptyList],
@@ -519,7 +528,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises FunctionClauseError if second arg is not a list", () => {
+    it("raises FunctionClauseError if the second argument is not a list", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.flatmap_1/2",
         [fun, atomAbc],
@@ -532,10 +541,10 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises FunctionClauseError if second arg is an improper list", () => {
+    it("raises FunctionClauseError if the second argument is an improper list", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.flatmap_1/2",
-        [fun, improperList],
+        [fun, integer3],
       );
 
       assertBoxedError(
@@ -545,7 +554,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises ArgumentError if mapper does not return a proper list", () => {
+    it("raises ArgumentError if the mapper does not return a proper list", () => {
       const badFun = Type.anonymousFunction(
         1,
         [

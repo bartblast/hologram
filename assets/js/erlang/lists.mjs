@@ -92,11 +92,20 @@ const Erlang_Lists = {
       );
     }
 
-    if (!Type.isProperList(list)) {
+    if (!Type.isList(list)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2", [
           fun,
           list,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2", [
+          fun,
+          list.data.at(-1),
         ]),
       );
     }
