@@ -68,6 +68,10 @@ const properList = Type.list([
   Type.integer(3),
 ]);
 
+const list1 = Type.list([Type.integer(1)]);
+const list2 = Type.list([Type.integer(1), Type.integer(2)]);
+const list3 = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+
 const tupleX = Type.tuple([atomX]);
 
 // IMPORTANT!
@@ -2124,39 +2128,196 @@ describe("Erlang_Lists", () => {
     });
   });
 
-  describe("reverse/1", () => {
-    const reverse = Erlang_Lists["reverse/1"];
+  describe("prefix/2", () => {
+    const prefix = Erlang_Lists["prefix/2"];
 
-    it("returns a list with the elements in the argument in reverse order", () => {
-      const result = reverse(properList);
-
-      const expected = Type.list([
-        Type.integer(3),
-        Type.integer(2),
-        Type.integer(1),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
+    it("returns true if the first one-element list is a prefix of the second list", () => {
+      const result = prefix(list1, list2);
+      assertBoxedTrue(result);
     });
 
-    it("raises FunctionClauseError if the argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.reverse/1",
-        [Type.atom("abc")],
-      );
+    it("returns true if the first multiple-element list is a prefix of the second list", () => {
+      const result = prefix(list2, list3);
+      assertBoxedTrue(result);
+    });
 
+    it("returns true if the lists are the same", () => {
+      const result = prefix(list2, list2);
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both lists contain the same single element", () => {
+      const result = prefix(list1, list1);
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both lists are empty", () => {
+      const result = prefix(Type.list(), Type.list());
+      assertBoxedTrue(result);
+    });
+
+    it("returns true when the first list is empty", () => {
+      const result = prefix(Type.list(), list2);
+      assertBoxedTrue(result);
+    });
+
+    it("returns false if the first list is not a prefix of the second list", () => {
+      const result = prefix(list2, list1);
+      assertBoxedFalse(result);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a list", () => {
       assertBoxedError(
-        () => reverse(Type.atom("abc")),
+        () => prefix(Type.atom("a"), list2),
         "FunctionClauseError",
-        expectedMessage,
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.atom("a"),
+          list2,
+        ]),
       );
     });
 
-    it("raises ArgumentError if the argument is not a proper list", () => {
+    it("raises FunctionClauseError if the second argument is not a list", () => {
       assertBoxedError(
-        () => reverse(improperList),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        () => prefix(list2, Type.atom("a")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          list2,
+          Type.atom("a"),
+        ]),
+      );
+    });
+
+    it("returns false if the first argument is an improper list that has no common prefix with the second proper list", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2)]),
+        Type.list([Type.integer(3), Type.integer(4)]),
+      );
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the first argument is an improper list that shares a shorter prefix with the second proper list", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        Type.list([Type.integer(1), Type.integer(4)]),
+      );
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the second argument is an improper list that has no common prefix with the first proper list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(2)]),
+        Type.improperList([Type.integer(3), Type.integer(4)]),
+      );
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the second argument is an improper list that shares a shorter prefix with the first proper list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(4)]),
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if both lists are improper with no common prefix", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2)]),
+        Type.improperList([Type.integer(3), Type.integer(4)]),
+      );
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if both lists are improper with a common shorter prefix", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        Type.improperList([Type.integer(1), Type.integer(4), Type.integer(3)]),
+      );
+      assertBoxedFalse(result);
+    });
+
+    it("raises FunctionClauseError if the first argument is an improper list where everything but the last element is a prefix of the second proper list", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.integer(3),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is an improper list where everything but the last element is a prefix of the first proper list", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.list([Type.integer(1), Type.integer(2)]),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          emptyList,
+          Type.integer(3),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if both lists are improper and have a common prefix made of everything but the last element", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(4),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.integer(3),
+          Type.integer(4),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first improper list would be a prefix of the second improper list had the first list been proper", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+              Type.integer(4),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.integer(3),
+          Type.improperList([Type.integer(3), Type.integer(4)]),
+        ]),
       );
     });
   });

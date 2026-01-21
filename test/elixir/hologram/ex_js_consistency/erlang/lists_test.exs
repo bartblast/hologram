@@ -1080,6 +1080,96 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "prefix/2" do
+    test "returns true if the first one-element list is a prefix of the second list" do
+      assert :lists.prefix([1], [1, 2])
+    end
+
+    test "returns true if the first multiple-element list is a prefix of the second list" do
+      assert :lists.prefix([1, 2], [1, 2, 3])
+    end
+
+    test "returns true if the lists are the same" do
+      assert :lists.prefix([1, 2], [1, 2])
+    end
+
+    test "returns true if both lists contain the same single element" do
+      assert :lists.prefix([1], [1])
+    end
+
+    test "returns true if both lists are empty" do
+      assert :lists.prefix([], [])
+    end
+
+    test "returns true when the first list is empty" do
+      assert :lists.prefix([], [1, 2])
+    end
+
+    test "returns false if the first list is not a prefix of the second list" do
+      refute :lists.prefix([1, 2], [1])
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [:a, [1, 2]]),
+                   {:lists, :prefix, [:a, [1, 2]]}
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [[1, 2], :a]),
+                   {:lists, :prefix, [[1, 2], :a]}
+    end
+
+    test "returns false if the first argument is an improper list that has no common prefix with the second proper list" do
+      refute :lists.prefix([1 | 2], [3, 4])
+    end
+
+    test "returns false if the first argument is an improper list that shares a shorter prefix with the second proper list" do
+      refute :lists.prefix([1, 2 | 3], [1, 4])
+    end
+
+    test "returns false if the second argument is an improper list that has no common prefix with the first proper list" do
+      refute :lists.prefix([1, 2], [3 | 4])
+    end
+
+    test "returns false if the second argument is an improper list that shares a shorter prefix with the first proper list" do
+      refute :lists.prefix([1, 4], [1, 2 | 3])
+    end
+
+    test "returns false if both lists are improper with no common prefix" do
+      refute :lists.prefix([1 | 2], [3 | 4])
+    end
+
+    test "returns false if both lists are improper with a common shorter prefix" do
+      refute :lists.prefix([1, 2 | 3], [1, 4 | 3])
+    end
+
+    test "raises FunctionClauseError if the first argument is an improper list where everything but the last element is a prefix of the second proper list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, []]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2]]}
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list where everything but the last element is a prefix of the first proper list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [[], 3]),
+                   {:lists, :prefix, [[1, 2], [1, 2 | 3]]}
+    end
+
+    test "raises FunctionClauseError if both lists are improper and have a common prefix made of everything but the last element" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, 4]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2 | 4]]}
+    end
+
+    test "raises FunctionClauseError if the first improper list would be a prefix of the second improper list had the first list been proper" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, [3 | 4]]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2, 3 | 4]]}
+    end
+  end
+
   describe "reverse/1" do
     test "returns a list with the elements in the argument in reverse order" do
       assert :lists.reverse([1, 2, 3]) == [3, 2, 1]

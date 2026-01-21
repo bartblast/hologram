@@ -562,6 +562,67 @@ const Erlang_Lists = {
   // End min/1
   // Deps: []
 
+  // Start prefix/2
+  "prefix/2": (list1, list2) => {
+    if (!Type.isList(list1) || !Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          list1,
+          list2,
+        ]),
+      );
+    }
+
+    const length1 = list1.data.length;
+    const length2 = list2.data.length;
+    let index = 0;
+
+    const tail = (list) => {
+      if (Type.isProperList(list)) {
+        return Type.list(list.data.slice(index));
+      } else {
+        if (list.data.length === index + 1) {
+          return list.data.at(-1);
+        } else {
+          return Type.improperList(list.data.slice(index));
+        }
+      }
+    };
+
+    // Emulate the Erlang implementation to ensure that the same errors are raised when improper lists are involved
+    while (true) {
+      // The end of an improper list has been reached, raise error
+      if (
+        (length1 === index + 1 && Type.isImproperList(list1)) ||
+        (length2 === index + 1 && Type.isImproperList(list2))
+      ) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+            tail(list1),
+            tail(list2),
+          ]),
+        );
+      } // Next element matches, so the first list could be a prefix of the second list
+      else if (
+        length1 > index &&
+        length2 > index &&
+        Interpreter.isStrictlyEqual(list1.data[index], list2.data[index])
+      ) {
+        index++;
+      }
+      // Reached the end of the first list, so it is a prefix
+      else if (length1 === index) {
+        return Type.boolean(true);
+      }
+      // Otherwise, not a prefix
+      else {
+        return Type.boolean(false);
+      }
+    }
+  },
+  // End prefix/2
+  // Deps: []
+
   // Start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
