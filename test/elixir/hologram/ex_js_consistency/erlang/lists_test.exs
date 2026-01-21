@@ -1109,16 +1109,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       refute :lists.prefix([1, 2], [1])
     end
 
-    test "raises FunctionClauseError if the first argument is not a list" do
-      assert_error FunctionClauseError,
-                   build_function_clause_error_msg(":lists.prefix/2", [:a, [1, 2]]),
-                   {:lists, :prefix, [:a, [1, 2]]}
-    end
-
-    test "raises FunctionClauseError if the second argument is not a list" do
-      assert_error FunctionClauseError,
-                   build_function_clause_error_msg(":lists.prefix/2", [[1, 2], :a]),
-                   {:lists, :prefix, [[1, 2], :a]}
+    test "returns false if the first list has an element that differs from the corresponding element in the second list" do
+      refute :lists.prefix([1, 3], [1, 2, 3])
     end
 
     test "returns false if the first argument is an improper list that has no common prefix with the second proper list" do
@@ -1143,6 +1135,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "returns false if both lists are improper with a common shorter prefix" do
       refute :lists.prefix([1, 2 | 3], [1, 4 | 3])
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [:a, [1, 2]]),
+                   {:lists, :prefix, [:a, [1, 2]]}
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [[1, 2], :a]),
+                   {:lists, :prefix, [[1, 2], :a]}
     end
 
     test "raises FunctionClauseError if the first argument is an improper list where everything but the last element is a prefix of the second proper list" do

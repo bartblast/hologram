@@ -2133,36 +2133,106 @@ describe("Erlang_Lists", () => {
 
     it("returns true if the first one-element list is a prefix of the second list", () => {
       const result = prefix(list1, list2);
+
       assertBoxedTrue(result);
     });
 
     it("returns true if the first multiple-element list is a prefix of the second list", () => {
       const result = prefix(list2, list3);
+
       assertBoxedTrue(result);
     });
 
     it("returns true if the lists are the same", () => {
       const result = prefix(list2, list2);
+
       assertBoxedTrue(result);
     });
 
     it("returns true if both lists contain the same single element", () => {
       const result = prefix(list1, list1);
+
       assertBoxedTrue(result);
     });
 
     it("returns true if both lists are empty", () => {
       const result = prefix(Type.list(), Type.list());
+
       assertBoxedTrue(result);
     });
 
     it("returns true when the first list is empty", () => {
       const result = prefix(Type.list(), list2);
+
       assertBoxedTrue(result);
     });
 
     it("returns false if the first list is not a prefix of the second list", () => {
       const result = prefix(list2, list1);
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the first list has an element that differs from the corresponding element in the second list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(3)]),
+        list3,
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the first argument is an improper list that has no common prefix with the second proper list", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2)]),
+        Type.list([Type.integer(3), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the first argument is an improper list that shares a shorter prefix with the second proper list", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        Type.list([Type.integer(1), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the second argument is an improper list that has no common prefix with the first proper list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(2)]),
+        Type.improperList([Type.integer(3), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the second argument is an improper list that shares a shorter prefix with the first proper list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(4)]),
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if both lists are improper with no common prefix", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2)]),
+        Type.improperList([Type.integer(3), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if both lists are improper with a common shorter prefix", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        Type.improperList([Type.integer(1), Type.integer(4), Type.integer(3)]),
+      );
+
       assertBoxedFalse(result);
     });
 
@@ -2186,54 +2256,6 @@ describe("Erlang_Lists", () => {
           Type.atom("a"),
         ]),
       );
-    });
-
-    it("returns false if the first argument is an improper list that has no common prefix with the second proper list", () => {
-      const result = prefix(
-        Type.improperList([Type.integer(1), Type.integer(2)]),
-        Type.list([Type.integer(3), Type.integer(4)]),
-      );
-      assertBoxedFalse(result);
-    });
-
-    it("returns false if the first argument is an improper list that shares a shorter prefix with the second proper list", () => {
-      const result = prefix(
-        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
-        Type.list([Type.integer(1), Type.integer(4)]),
-      );
-      assertBoxedFalse(result);
-    });
-
-    it("returns false if the second argument is an improper list that has no common prefix with the first proper list", () => {
-      const result = prefix(
-        Type.list([Type.integer(1), Type.integer(2)]),
-        Type.improperList([Type.integer(3), Type.integer(4)]),
-      );
-      assertBoxedFalse(result);
-    });
-
-    it("returns false if the second argument is an improper list that shares a shorter prefix with the first proper list", () => {
-      const result = prefix(
-        Type.list([Type.integer(1), Type.integer(4)]),
-        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
-      );
-      assertBoxedFalse(result);
-    });
-
-    it("returns false if both lists are improper with no common prefix", () => {
-      const result = prefix(
-        Type.improperList([Type.integer(1), Type.integer(2)]),
-        Type.improperList([Type.integer(3), Type.integer(4)]),
-      );
-      assertBoxedFalse(result);
-    });
-
-    it("returns false if both lists are improper with a common shorter prefix", () => {
-      const result = prefix(
-        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
-        Type.improperList([Type.integer(1), Type.integer(4), Type.integer(3)]),
-      );
-      assertBoxedFalse(result);
     });
 
     it("raises FunctionClauseError if the first argument is an improper list where everything but the last element is a prefix of the second proper list", () => {
