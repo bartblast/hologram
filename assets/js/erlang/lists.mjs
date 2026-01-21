@@ -81,6 +81,41 @@ const Erlang_Lists = {
   // End filter/2
   // Deps: []
 
+  // Start flatmap/2
+  "flatmap/2": (fun, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap/2", [
+          fun,
+          list,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2", [
+          fun,
+          list,
+        ]),
+      );
+    }
+
+    const result = list.data.reduce((acc, elem) => {
+      const mapped = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (!Type.isProperList(mapped)) {
+        Interpreter.raiseArgumentError("argument error");
+      }
+
+      return acc.concat(mapped.data);
+    }, []);
+
+    return Type.list(result);
+  },
+  // End flatmap/2
+  // Deps: []
+
   // Start flatten/1
   "flatten/1": (list) => {
     if (!Type.isList(list)) {

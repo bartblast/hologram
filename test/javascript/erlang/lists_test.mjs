@@ -405,6 +405,171 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("flatmap/2", () => {
+    const flatmap = Erlang_Lists["flatmap/2"];
+
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("x")],
+          guards: [],
+          body: (context) => {
+            return Type.list([
+              context.vars.x,
+              Erlang["*/2"](context.vars.x, Type.integer(10)),
+            ]);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("maps and flattens one level", () => {
+      const list = Type.list([integer1, integer2, integer3]);
+      const result = flatmap(fun, list);
+
+      const expected = Type.list([
+        integer1,
+        Type.integer(10),
+        integer2,
+        Type.integer(20),
+        integer3,
+        Type.integer(30),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list", () => {
+      const result = flatmap(fun, emptyList);
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("mapper returns empty lists", () => {
+      const emptyFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("_")],
+            guards: [],
+            body: (_context) => {
+              return emptyList;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([integer1, integer2, integer3]);
+      const result = flatmap(emptyFun, list);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("only single-level flatten", () => {
+      const nestedFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return Type.list([Type.list([context.vars.x])]);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([integer1, integer2]);
+      const result = flatmap(nestedFun, list);
+
+      const expected = Type.list([
+        Type.list([integer1]),
+        Type.list([integer2]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if first arg is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap/2",
+        [atomAbc, emptyList],
+      );
+
+      assertBoxedError(
+        () => flatmap(atomAbc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if first arg has arity != 1", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap/2",
+        [funArity2, emptyList],
+      );
+
+      assertBoxedError(
+        () => flatmap(funArity2, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if second arg is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap_1/2",
+        [fun, atomAbc],
+      );
+
+      assertBoxedError(
+        () => flatmap(fun, atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if second arg is an improper list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap_1/2",
+        [fun, improperList],
+      );
+
+      assertBoxedError(
+        () => flatmap(fun, improperList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError if mapper does not return a proper list", () => {
+      const badFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return Erlang["*/2"](context.vars.x, Type.integer(10));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([integer1, integer2, integer3]);
+
+      assertBoxedError(
+        () => flatmap(badFun, list),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+  });
+
   describe("flatten/1", () => {
     const flatten = Erlang_Lists["flatten/1"];
 
