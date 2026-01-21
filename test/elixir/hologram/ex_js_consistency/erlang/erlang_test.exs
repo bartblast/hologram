@@ -1283,9 +1283,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     setup do
       [
         fun_no_args: fn -> 42 end,
-        fun_one_arg: fn x -> x + 10 end,
-        fun_three_args: fn a, b, c -> a + b + c end,
-        fun_two_args: fn a, b -> a + b end
+        fun_single_arg: fn x -> x + 10 end,
+        fun_multiple_args: fn a, b -> a + b end
       ]
     end
 
@@ -1293,41 +1292,43 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.apply(fun, []) == 42
     end
 
-    test "calls anonymous function with one argument", %{fun_one_arg: fun} do
+    test "calls anonymous function with a single argument", %{fun_single_arg: fun} do
       assert :erlang.apply(fun, [5]) == 15
     end
 
-    test "calls anonymous function with multiple arguments", %{fun_three_args: fun} do
-      assert :erlang.apply(fun, [1, 2, 3]) == 6
+    test "calls anonymous function with multiple arguments", %{fun_multiple_args: fun} do
+      assert :erlang.apply(fun, [1, 2]) == 3
     end
 
     test "raises BadFunctionError if the first argument is not a function" do
-      arg = prevent_term_typing_violation(:not_a_function)
+      fun = prevent_term_typing_violation(:not_a_function)
 
       assert_error BadFunctionError,
-                   "expected a function, got: :not_a_function",
-                   fn -> :erlang.apply(arg, []) end
+                   build_bad_function_error_msg(:not_a_function),
+                   fn -> :erlang.apply(fun, []) end
     end
 
     test "raises ArgumentError if the second argument is not a list", %{fun_no_args: fun} do
-      arg = prevent_term_typing_violation(:not_a_list)
+      args = prevent_term_typing_violation(:not_a_list)
 
       assert_error ArgumentError,
                    "argument error",
-                   fn -> :erlang.apply(fun, arg) end
+                   fn -> :erlang.apply(fun, args) end
     end
 
-    test "raises ArgumentError if the second argument is not a proper list", %{fun_two_args: fun} do
-      improper_list = prevent_term_typing_violation([1 | 2])
+    test "raises ArgumentError if the second argument is not a proper list", %{
+      fun_multiple_args: fun
+    } do
+      args = prevent_term_typing_violation([1 | 2])
 
       assert_error ArgumentError,
                    "argument error",
-                   fn -> :erlang.apply(fun, improper_list) end
+                   fn -> :erlang.apply(fun, args) end
     end
 
-    test "raises BadArityError if arity doesn't match", %{fun_two_args: fun} do
+    test "raises BadArityError if arity doesn't match", %{fun_multiple_args: fun} do
       expected_msg =
-        ~r'(#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ErlangTest\.__ex_unit_setup_[0-9]+_0/1>|anonymous function) with arity 2 called with 1 argument \(1\)'
+        ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ErlangTest\.__ex_unit_setup_[0-9_]+/1> with arity 2 called with 1 argument \(1\)'
 
       assert_error BadArityError, expected_msg, fn -> :erlang.apply(fun, [1]) end
     end

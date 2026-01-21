@@ -1489,19 +1489,19 @@ describe("Erlang", () => {
       contextFixture(),
     );
 
-    const funOneArg = Type.anonymousFunction(
+    const funSingleArg = Type.anonymousFunction(
       1,
       [
         {
-          params: (_context) => [Type.variablePattern("arg")],
+          params: (_context) => [Type.variablePattern("x")],
           guards: [],
-          body: (context) => Erlang["+/2"](context.vars.arg, Type.integer(10)),
+          body: (context) => Erlang["+/2"](context.vars.x, Type.integer(10)),
         },
       ],
       contextFixture(),
     );
 
-    const funTwoArgs = Type.anonymousFunction(
+    const funMultipleArgs = Type.anonymousFunction(
       2,
       [
         {
@@ -1516,57 +1516,34 @@ describe("Erlang", () => {
       contextFixture(),
     );
 
-    const funThreeArgs = Type.anonymousFunction(
-      3,
-      [
-        {
-          params: (_context) => [
-            Type.variablePattern("a"),
-            Type.variablePattern("b"),
-            Type.variablePattern("c"),
-          ],
-          guards: [],
-          body: (context) =>
-            Erlang["+/2"](
-              Erlang["+/2"](context.vars.a, context.vars.b),
-              context.vars.c,
-            ),
-        },
-      ],
-      contextFixture(),
-    );
-
     it("calls anonymous function with no arguments", () => {
-      const args = Type.list([]);
+      const args = Type.list();
       const result = apply(funNoArgs, args);
 
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
-    it("calls anonymous function with one argument", () => {
+    it("calls anonymous function with a single argument", () => {
       const args = Type.list([Type.integer(5)]);
-      const result = apply(funOneArg, args);
+      const result = apply(funSingleArg, args);
 
       assert.deepStrictEqual(result, Type.integer(15));
     });
 
     it("calls anonymous function with multiple arguments", () => {
-      const args = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = apply(funMultipleArgs, args);
 
-      const result = apply(funThreeArgs, args);
-
-      assert.deepStrictEqual(result, Type.integer(6));
+      assert.deepStrictEqual(result, Type.integer(3));
     });
 
     it("raises BadFunctionError if the first argument is not a function", () => {
+      const fun = Type.atom("not_a_function");
+
       assertBoxedError(
-        () => apply(Type.atom("not_a_function"), Type.list([])),
+        () => apply(fun, Type.list()),
         "BadFunctionError",
-        "expected a function, got: :not_a_function",
+        Interpreter.buildBadFunctionErrorMsg(fun),
       );
     });
 
@@ -1579,13 +1556,10 @@ describe("Erlang", () => {
     });
 
     it("raises ArgumentError if the second argument is not a proper list", () => {
-      const improperList = Type.improperList([
-        Type.integer(1),
-        Type.integer(2),
-      ]);
+      const args = Type.improperList([Type.integer(1), Type.integer(2)]);
 
       assertBoxedError(
-        () => apply(funTwoArgs, improperList),
+        () => apply(funMultipleArgs, args),
         "ArgumentError",
         "argument error",
       );
@@ -1595,7 +1569,7 @@ describe("Erlang", () => {
       const args = Type.list([Type.integer(1)]);
 
       assertBoxedError(
-        () => apply(funTwoArgs, args),
+        () => apply(funMultipleArgs, args),
         "BadArityError",
         "anonymous function with arity 2 called with 1 argument (1)",
       );
