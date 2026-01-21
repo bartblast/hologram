@@ -54,7 +54,7 @@ jobs:
           # - "19.9.0"
           # Node.js only tests the build step. Actual JS runs in browsers.
           # Use latest LTS version only.
-          # Must match .tool-versions for dev/CI parity.
+          # Must match .tool-versions for dev/prod/CI parity.
           - "24.13.0"
         exclude:
           - elixir: "1.15.8"
@@ -249,7 +249,7 @@ jobs:
           - "27.2"
         node:
           # Run feature tests on latest LTS version only.
-          # Must match .tool-versions for dev/CI parity.
+          # Must match .tool-versions for dev/prod/CI parity.
           - "24.13.0"
     env:
       IS_HIGHEST_MATRIX_COMBINATION: "true"
