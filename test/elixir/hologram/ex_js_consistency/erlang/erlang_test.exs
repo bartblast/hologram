@@ -1977,9 +1977,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == -1_000_000_000_000
     end
 
+    test "decodes large positive integer (LARGE_BIG_EXT)" do
+      binary = :erlang.term_to_binary(1_000_000_000_000)
+      assert :erlang.binary_to_term(binary) == 1_000_000_000_000
+    end
+
+    test "decodes atom UTF-8 (ATOM_UTF8_EXT)" do
+      name = "élixir"
+      binary = <<131, 118, byte_size(name)::16, name::binary>>
+      assert :erlang.binary_to_term(binary) == String.to_atom(name)
+    end
+
     test "decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)" do
       binary = :erlang.term_to_binary(:test)
       assert :erlang.binary_to_term(binary) == :test
+    end
+
+    test "decodes atom (ATOM_EXT)" do
+      name = "elixir"
+      binary = <<131, 100, byte_size(name)::16, name::binary>>
+      assert :erlang.binary_to_term(binary) == :elixir
+    end
+
+    test "decodes small atom (SMALL_ATOM_EXT)" do
+      name = "elixir"
+      binary = <<131, 115, byte_size(name)::8, name::binary>>
+      assert :erlang.binary_to_term(binary) == :elixir
     end
 
     test "decodes longer atom" do
@@ -2012,6 +2035,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == {1, 2, 3}
     end
 
+    test "decodes large tuple (LARGE_TUPLE_EXT)" do
+      arity = 300
+      elements = for i <- 1..arity, do: <<97, i::8>>, into: <<>>
+      binary = <<131, 105, arity::32>> <> elements
+      result = :erlang.binary_to_term(binary)
+
+      assert is_tuple(result)
+      assert tuple_size(result) == arity
+      assert elem(result, 0) == 1
+    end
+
     test "decodes empty tuple" do
       binary = :erlang.term_to_binary({})
       assert :erlang.binary_to_term(binary) == {}
@@ -2035,6 +2069,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "decodes proper list (LIST_EXT)" do
       binary = :erlang.term_to_binary([100, 200, 300])
       assert :erlang.binary_to_term(binary) == [100, 200, 300]
+    end
+
+    test "decodes improper list (LIST_EXT)" do
+      binary = :erlang.term_to_binary([1 | [2 | [3 | 4]]])
+      assert :erlang.binary_to_term(binary) == [1 | [2 | [3 | 4]]]
     end
 
     test "decodes empty map" do

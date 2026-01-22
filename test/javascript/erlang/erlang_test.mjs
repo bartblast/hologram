@@ -10,7 +10,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import { defineModule1Fixture as defineErlangModule1Fixture } from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -18,7 +18,7 @@ import ERTS from "../../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
-import {describe} from "node:test";
+import { describe } from "node:test";
 
 defineGlobalErlangAndElixirModules();
 defineErlangModule1Fixture();
@@ -1419,7 +1419,7 @@ describe("Erlang", () => {
 
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1433,7 +1433,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1459,7 +1459,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(
@@ -2807,9 +2807,33 @@ describe("Erlang", () => {
         const result = binary_to_term(binary);
         assert.deepStrictEqual(result, Type.integer(-1000000000000n));
       });
+
+      it("decodes large positive integer (LARGE_BIG_EXT)", () => {
+        // :erlang.term_to_binary(1000000000000) but manually crafted with LARGE_BIG_EXT tag
+        // Note: In practice, Erlang might use SMALL_BIG_EXT for this, but we test LARGE_BIG_EXT support
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 110, 5, 0, 0, 16, 165, 212, 232]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.integer(1000000000000n));
+      });
     });
 
     describe("atoms", () => {
+      it("decodes atom UTF-8 (ATOM_UTF8_EXT)", () => {
+        // élixir as UTF-8 atom using ATOM_UTF8_EXT (tag 118)
+        const name = "élixir";
+        const nameBytes = new TextEncoder().encode(name);
+        // ATOM_UTF8_EXT uses 16-bit big-endian length
+        const lengthHigh = (nameBytes.length >> 8) & 0xff;
+        const lengthLow = nameBytes.length & 0xff;
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 118, lengthHigh, lengthLow, ...nameBytes]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.atom(name));
+      });
+
       it("decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)", () => {
         // :erlang.term_to_binary(:test) = <<131, 119, 4, 116, 101, 115, 116>>
         const binary = Bitstring.fromBytes(
@@ -2817,6 +2841,31 @@ describe("Erlang", () => {
         );
         const result = binary_to_term(binary);
         assert.deepStrictEqual(result, Type.atom("test"));
+      });
+
+      it("decodes atom (ATOM_EXT)", () => {
+        // elixir as Latin-1 atom using ATOM_EXT (tag 100)
+        const name = "elixir";
+        const nameBytes = new TextEncoder().encode(name);
+        // ATOM_EXT uses 16-bit big-endian length
+        const lengthHigh = (nameBytes.length >> 8) & 0xff;
+        const lengthLow = nameBytes.length & 0xff;
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 100, lengthHigh, lengthLow, ...nameBytes]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.atom(name));
+      });
+
+      it("decodes small atom (SMALL_ATOM_EXT)", () => {
+        // elixir as Latin-1 atom using SMALL_ATOM_EXT (tag 115)
+        const name = "elixir";
+        const nameBytes = new TextEncoder().encode(name);
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 115, nameBytes.length, ...nameBytes]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.atom(name));
       });
 
       it("decodes longer atom", () => {
@@ -2880,6 +2929,35 @@ describe("Erlang", () => {
         );
       });
 
+      it("decodes large tuple (LARGE_TUPLE_EXT)", () => {
+        // Create a tuple with 300 elements using LARGE_TUPLE_EXT (tag 105)
+        const arity = 300;
+        // Header: version (131) + LARGE_TUPLE_EXT tag (105) + arity as 32-bit big-endian
+        const arityBytes = [
+          (arity >> 24) & 0xff,
+          (arity >> 16) & 0xff,
+          (arity >> 8) & 0xff,
+          arity & 0xff,
+        ];
+        const header = new Uint8Array([131, 105, ...arityBytes]);
+
+        // Create element bytes: each element is SMALL_INTEGER_EXT (tag 97) + value
+        // Values 1 to 300, but modulo 256 for values > 255
+        const elementBytes = [];
+        for (let i = 1; i <= arity; i++) {
+          elementBytes.push(97, i & 0xff); // SMALL_INTEGER_EXT + value (wraps at 256)
+        }
+
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([...header, ...elementBytes]),
+        );
+        const result = binary_to_term(binary);
+
+        assert.strictEqual(Type.isTuple(result), true);
+        assert.strictEqual(result.data.length, arity);
+        assert.deepStrictEqual(result.data[0], Type.integer(1));
+      });
+
       it("decodes empty tuple", () => {
         // :erlang.term_to_binary({}) = <<131, 104, 0>>
         const binary = Bitstring.fromBytes(new Uint8Array([131, 104, 0]));
@@ -2935,6 +3013,24 @@ describe("Erlang", () => {
         assert.deepStrictEqual(
           result,
           Type.list([Type.integer(100), Type.integer(200), Type.integer(300)]),
+        );
+      });
+
+      it("decodes improper list (LIST_EXT)", () => {
+        // :erlang.term_to_binary([1 | [2 | [3 | 4]]]) - improper list
+        // The tail is 4 instead of empty list (NIL_EXT)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 108, 0, 0, 0, 3, 97, 1, 97, 2, 97, 3, 97, 4]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([
+            Type.integer(1),
+            Type.integer(2),
+            Type.integer(3),
+            Type.integer(4),
+          ]),
         );
       });
     });
@@ -6704,7 +6800,7 @@ describe("Erlang", () => {
 
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -6718,7 +6814,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -6744,7 +6840,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(

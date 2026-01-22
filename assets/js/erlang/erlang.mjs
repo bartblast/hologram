@@ -769,7 +769,7 @@ const Erlang = {
 
     const decodeSmallAtom = (dataView, bytes, offset, isUtf8) => {
       const length = dataView.getUint8(offset);
-      if (offset + 2 + length > bytes.length) {
+      if (offset + 1 + length > bytes.length) {
         Interpreter.raiseArgumentError(
           `atom length exceeds available bytes: ${length}`,
         );
