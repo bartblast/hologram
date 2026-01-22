@@ -3063,6 +3063,236 @@ describe("Erlang", () => {
       });
     });
 
+    describe("floats", () => {
+      it("decodes NEW_FLOAT_EXT (IEEE 754 double)", () => {
+        // :erlang.term_to_binary(3.14159) with NEW_FLOAT_EXT tag
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 70, 64, 9, 33, 249, 240, 27, 134, 110]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.float(3.14159));
+      });
+
+      it("decodes NEW_FLOAT_EXT for negative float", () => {
+        // :erlang.term_to_binary(-2.5)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 70, 192, 4, 0, 0, 0, 0, 0, 0]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.float(-2.5));
+      });
+
+      it("decodes NEW_FLOAT_EXT for zero", () => {
+        // :erlang.term_to_binary(0.0)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 70, 0, 0, 0, 0, 0, 0, 0, 0]),
+        );
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.float(0.0));
+      });
+    });
+
+    describe("bitstrings", () => {
+      it("decodes BIT_BINARY_EXT with partial byte", () => {
+        // Bitstring with 5 bits: <<1::5>>
+        // 131 - VERSION_NUMBER
+        // 77 - BIT_BINARY_EXT
+        // 0, 0, 0, 1 - length (1 byte)
+        // 5 - bits in last byte
+        // 0b00001000 (8) - the byte with 5 bits set
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 77, 0, 0, 0, 1, 5, 8]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(Bitstring.calculateBitCount(result), 5);
+      });
+
+      it("decodes BIT_BINARY_EXT with full bytes", () => {
+        // Bitstring with 16 bits (2 full bytes): <<255, 0>>
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 77, 0, 0, 0, 2, 0, 255, 0]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(Bitstring.calculateBitCount(result), 16);
+      });
+    });
+
+    describe("references", () => {
+      it("decodes NEW_REFERENCE_EXT", () => {
+        // NEW_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT node
+        // 131 - VERSION_NUMBER
+        // 114 - NEW_REFERENCE_EXT
+        // 0, 3 - number of ID words (3)
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // 0 - creation (1 byte)
+        // ID words: 1, 2, 3 (each 4 bytes)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 114, 0, 3, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
+            104, 111, 115, 116, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 0);
+        assert.deepStrictEqual(result.idWords, [1, 2, 3]);
+      });
+
+      it("decodes NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT", () => {
+        // NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT node
+        // 131 - VERSION_NUMBER
+        // 90 - NEWER_REFERENCE_EXT
+        // 0, 3 - number of ID words (3)
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // 0, 0, 0, 0 - creation (4 bytes)
+        // ID words: 1, 2, 3 (each 4 bytes)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 90, 0, 3, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
+            104, 111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 0);
+        assert.deepStrictEqual(result.idWords, [1, 2, 3]);
+      });
+
+      it("decodes NEWER_REFERENCE_EXT with ATOM_EXT", () => {
+        // NEWER_REFERENCE_EXT with ATOM_EXT node
+        // 131 - VERSION_NUMBER
+        // 90 - NEWER_REFERENCE_EXT
+        // 0, 3 - number of ID words (3)
+        // 100 - ATOM_EXT
+        // 0, 13 - node name length (2 bytes)
+        // "nonode@nohost" - node name
+        // 0, 0, 0, 0 - creation (4 bytes)
+        // ID words: 1, 2, 3 (each 4 bytes)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 90, 0, 3, 100, 0, 13, 110, 111, 110, 111, 100, 101, 64, 110,
+            111, 104, 111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0,
+            0, 3,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 0);
+        assert.deepStrictEqual(result.idWords, [1, 2, 3]);
+      });
+    });
+
+    describe("pids", () => {
+      it("decodes PID_EXT", () => {
+        // PID_EXT format
+        // 131 - VERSION_NUMBER
+        // 103 - PID_EXT
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // ID (4 bytes), Serial (4 bytes), Creation (1 byte)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 103, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 0, 100, 0, 0, 0, 50, 0,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "pid");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.deepStrictEqual(result.segments, [100, 50, 0]);
+      });
+
+      it("decodes NEW_PID_EXT", () => {
+        // NEW_PID_EXT format
+        // 131 - VERSION_NUMBER
+        // 88 - NEW_PID_EXT
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // ID (4 bytes), Serial (4 bytes), Creation (4 bytes)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 88, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 0, 100, 0, 0, 0, 50, 0, 0, 0, 0,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "pid");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.deepStrictEqual(result.segments, [100, 50, 0]);
+      });
+    });
+
+    describe("ports", () => {
+      it("decodes PORT_EXT", () => {
+        // PORT_EXT format
+        // 131 - VERSION_NUMBER
+        // 102 - PORT_EXT
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // ID (4 bytes), Creation (1 byte)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 102, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 0, 5, 0,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "port");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.deepStrictEqual(result.segments, [5, 0]);
+      });
+
+      it("decodes NEW_PORT_EXT", () => {
+        // NEW_PORT_EXT format
+        // 131 - VERSION_NUMBER
+        // 89 - NEW_PORT_EXT
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // ID (4 bytes), Creation (4 bytes)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 89, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 0, 5, 0, 0, 0, 0,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "port");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.deepStrictEqual(result.segments, [5, 0]);
+      });
+
+      it("decodes V4_PORT_EXT", () => {
+        // V4_PORT_EXT format (64-bit port ID)
+        // 131 - VERSION_NUMBER
+        // 120 - V4_PORT_EXT
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // ID (8 bytes as BigUint64), Creation (4 bytes)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 120, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        assert.strictEqual(result.type, "port");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.deepStrictEqual(result.segments, [5n, 0]);
+      });
+    });
+
     describe("complex nested structures", () => {
       it("decodes Code.fetch_docs/1 style tuple", () => {
         // :erlang.term_to_binary({:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []})

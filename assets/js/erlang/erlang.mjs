@@ -608,9 +608,17 @@ const Erlang = {
     }
 
     // ETF tag constants
+    const NEW_FLOAT_EXT = 70;
+    const BIT_BINARY_EXT = 77;
+    const NEW_PID_EXT = 88;
+    const NEW_PORT_EXT = 89;
+    const NEWER_REFERENCE_EXT = 90;
     const SMALL_INTEGER_EXT = 97;
     const INTEGER_EXT = 98;
+    const FLOAT_EXT = 99;
     const ATOM_EXT = 100;
+    const PORT_EXT = 102;
+    const PID_EXT = 103;
     const SMALL_TUPLE_EXT = 104;
     const LARGE_TUPLE_EXT = 105;
     const NIL_EXT = 106;
@@ -619,10 +627,12 @@ const Erlang = {
     const BINARY_EXT = 109;
     const SMALL_BIG_EXT = 110;
     const LARGE_BIG_EXT = 111;
+    const NEW_REFERENCE_EXT = 114;
     const SMALL_ATOM_EXT = 115;
     const MAP_EXT = 116;
     const ATOM_UTF8_EXT = 118;
     const SMALL_ATOM_UTF8_EXT = 119;
+    const V4_PORT_EXT = 120;
 
     const decodeTerm = (dataView, bytes, offset) => {
       if (offset >= bytes.length) {
@@ -681,6 +691,36 @@ const Erlang = {
 
         case MAP_EXT:
           return decodeMap(dataView, bytes, offset + 1);
+
+        case NEW_FLOAT_EXT:
+          return decodeNewFloat(dataView, offset + 1);
+
+        case FLOAT_EXT:
+          return decodeFloatExt(dataView, bytes, offset + 1);
+
+        case BIT_BINARY_EXT:
+          return decodeBitBinary(dataView, bytes, offset + 1);
+
+        case NEW_REFERENCE_EXT:
+          return decodeNewReference(dataView, bytes, offset + 1);
+
+        case NEWER_REFERENCE_EXT:
+          return decodeNewerReference(dataView, bytes, offset + 1);
+
+        case PID_EXT:
+          return decodePid(dataView, bytes, offset + 1);
+
+        case NEW_PID_EXT:
+          return decodeNewPid(dataView, bytes, offset + 1);
+
+        case PORT_EXT:
+          return decodePort(dataView, bytes, offset + 1);
+
+        case NEW_PORT_EXT:
+          return decodeNewPort(dataView, bytes, offset + 1);
+
+        case V4_PORT_EXT:
+          return decodeV4Port(dataView, bytes, offset + 1);
 
         default:
           Interpreter.raiseArgumentError(
@@ -908,6 +948,219 @@ const Erlang = {
 
       return {
         term: Type.map(entries),
+        newOffset: currentOffset,
+      };
+    };
+
+    // Float decoders
+
+    const decodeNewFloat = (dataView, offset) => {
+      const value = dataView.getFloat64(offset);
+      return {
+        term: Type.float(value),
+        newOffset: offset + 8,
+      };
+    };
+
+    const decodeFloatExt = (dataView, bytes, offset) => {
+      // FLOAT_EXT: 31-byte null-terminated string (deprecated format)
+      if (offset + 31 > bytes.length) {
+        Interpreter.raiseArgumentError("float string exceeds available bytes");
+      }
+      const floatBytes = bytes.slice(offset, offset + 31);
+      const decoder = new TextDecoder("latin1");
+      const floatString = decoder.decode(floatBytes).replace(/\0.*$/, "");
+      const value = parseFloat(floatString);
+
+      return {
+        term: Type.float(value),
+        newOffset: offset + 31,
+      };
+    };
+
+    // Bitstring decoder
+
+    const decodeBitBinary = (dataView, bytes, offset) => {
+      const length = dataView.getUint32(offset);
+      const bits = dataView.getUint8(offset + 4);
+
+      if (offset + 5 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          `bit binary length exceeds available bytes: ${length}`,
+        );
+      }
+
+      const binaryBytes = bytes.slice(offset + 5, offset + 5 + length);
+      const bitstring = Bitstring.fromBytes(new Uint8Array(binaryBytes));
+
+      // Adjust leftoverBitCount based on the bits field
+      // If bits is 0, all bytes are full (leftoverBitCount = 0)
+      // If bits is 1-7, the last byte is partial (leftoverBitCount = bits)
+      if (bits > 0 && bits < 8) {
+        bitstring.leftoverBitCount = bits;
+      }
+      // If bits is 0 or 8, leftoverBitCount is already 0 (all full bytes)
+
+      return {
+        term: bitstring,
+        newOffset: offset + 5 + length,
+      };
+    };
+
+    // Reference decoders
+
+    const decodeNewReference = (dataView, bytes, offset) => {
+      const len = dataView.getUint16(offset);
+      let currentOffset = offset + 2;
+
+      // Decode node name (atom)
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      const creation = dataView.getUint8(currentOffset);
+      currentOffset += 1;
+
+      const idWords = [];
+      for (let i = 0; i < len; i++) {
+        idWords.push(dataView.getUint32(currentOffset));
+        currentOffset += 4;
+      }
+
+      return {
+        term: Type.reference(nodeResult.term, creation, idWords),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewerReference = (dataView, bytes, offset) => {
+      const len = dataView.getUint16(offset);
+      let currentOffset = offset + 2;
+
+      // Decode node name (atom)
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const idWords = [];
+      for (let i = 0; i < len; i++) {
+        idWords.push(dataView.getUint32(currentOffset));
+        currentOffset += 4;
+      }
+
+      return {
+        term: Type.reference(nodeResult.term, creation, idWords),
+        newOffset: currentOffset,
+      };
+    };
+
+    // PID decoders
+
+    const decodePid = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Serial (4 bytes), Creation (1 byte)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const serial = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint8(currentOffset);
+      currentOffset += 1;
+
+      return {
+        term: Type.pid(nodeResult.term, [id, serial, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewPid = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Serial (4 bytes), Creation (4 bytes)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const serial = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.pid(nodeResult.term, [id, serial, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    // Port decoders
+
+    const decodePort = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Creation (1 byte)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint8(currentOffset);
+      currentOffset += 1;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewPort = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Creation (4 bytes)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeV4Port = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (8 bytes as BigUint64), Creation (4 bytes)
+      const id = dataView.getBigUint64(currentOffset);
+      currentOffset += 8;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
         newOffset: currentOffset,
       };
     };

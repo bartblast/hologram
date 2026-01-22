@@ -2086,6 +2086,107 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == %{a: 1, b: 2}
     end
 
+    test "decodes NEW_FLOAT_EXT (IEEE 754 double)" do
+      binary = :erlang.term_to_binary(3.14159)
+      assert :erlang.binary_to_term(binary) == 3.14159
+    end
+
+    test "decodes NEW_FLOAT_EXT for negative float" do
+      binary = :erlang.term_to_binary(-2.5)
+      assert :erlang.binary_to_term(binary) == -2.5
+    end
+
+    test "decodes NEW_FLOAT_EXT for zero" do
+      binary = :erlang.term_to_binary(0.0)
+      assert :erlang.binary_to_term(binary) == 0.0
+    end
+
+    test "decodes BIT_BINARY_EXT with partial byte" do
+      # Bitstring with 5 bits
+      bitstring = <<1::5>>
+      binary = :erlang.term_to_binary(bitstring)
+      assert :erlang.binary_to_term(binary) == bitstring
+    end
+
+    test "decodes BIT_BINARY_EXT with full bytes" do
+      # Bitstring with 16 bits (2 full bytes)
+      bitstring = <<255, 0>>
+      binary = :erlang.term_to_binary(bitstring)
+      assert :erlang.binary_to_term(binary) == bitstring
+    end
+
+    test "decodes NEW_REFERENCE_EXT" do
+      # Create a reference and encode/decode it
+      ref = make_ref()
+      binary = :erlang.term_to_binary(ref)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT" do
+      # Manually construct NEWER_REFERENCE_EXT binary
+      binary =
+        <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
+          3>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes NEWER_REFERENCE_EXT with ATOM_EXT" do
+      # Manually construct NEWER_REFERENCE_EXT binary with ATOM_EXT node
+      binary =
+        <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
+          3>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes PID_EXT" do
+      # Manually construct PID_EXT binary
+      # 131 - VERSION, 103 - PID_EXT, then node atom, ID, Serial, Creation
+      binary =
+        <<131, 103, 119, 13, "nonode@nohost", 0, 0, 0, 100, 0, 0, 0, 50, 0>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_pid(decoded)
+    end
+
+    test "decodes NEW_PID_EXT" do
+      # Create a PID and encode/decode it
+      pid = self()
+      binary = :erlang.term_to_binary(pid)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_pid(decoded)
+    end
+
+    test "decodes PORT_EXT" do
+      # Manually construct PORT_EXT binary
+      # 131 - VERSION, 102 - PORT_EXT, then node atom, ID, Creation
+      binary = <<131, 102, 119, 13, "nonode@nohost", 0, 0, 0, 5, 0>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_port(decoded)
+    end
+
+    test "decodes NEW_PORT_EXT" do
+      # Manually construct NEW_PORT_EXT binary
+      # 131 - VERSION, 89 - NEW_PORT_EXT, then node atom, ID (4 bytes), Creation (4 bytes)
+      binary = <<131, 89, 119, 13, "nonode@nohost", 0, 0, 0, 5, 0, 0, 0, 0>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_port(decoded)
+    end
+
+    test "decodes V4_PORT_EXT" do
+      # Create a port and encode/decode it (modern Erlang uses V4_PORT_EXT)
+      port = hd(Port.list())
+      binary = :erlang.term_to_binary(port)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_port(decoded)
+    end
+
     test "decodes Code.fetch_docs/1 style tuple" do
       term = {:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []}
       binary = :erlang.term_to_binary(term)
