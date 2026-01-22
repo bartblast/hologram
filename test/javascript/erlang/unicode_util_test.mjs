@@ -826,4 +826,126 @@ describe("Erlang_UnicodeUtil", () => {
       });
     });
   });
+
+  describe("gc/1", () => {
+    const gc = Erlang_UnicodeUtil["gc/1"];
+
+    describe("with binary input", () => {
+      it("returns empty list for empty binary", () => {
+        const result = gc(Type.bitstring(""));
+
+        assert.deepStrictEqual(result, Type.list());
+      });
+
+      it("extracts first grapheme from ascii string", () => {
+        const result = gc(Type.bitstring("ab"));
+
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([Type.integer(97), Type.bitstring("b")]),
+        );
+      });
+
+      it("handles grapheme with combining mark", () => {
+        const result = gc(Type.bitstring("e̊x"));
+
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([
+            Type.list([Type.integer(101), Type.integer(778)]),
+            Type.bitstring("x"),
+          ]),
+        );
+      });
+
+      it("returns error tuple for invalid UTF-8", () => {
+        const invalid = Bitstring.fromBytes([255, 255]);
+        const result = gc(invalid);
+
+        assert.deepStrictEqual(
+          result,
+          Type.tuple([Type.atom("error"), invalid]),
+        );
+      });
+    });
+
+    describe("with list input", () => {
+      it("returns empty list for empty list", () => {
+        const result = gc(Type.list());
+
+        assert.deepStrictEqual(result, Type.list());
+      });
+
+      it("handles list of integers", () => {
+        const result = gc(Type.list([Type.integer(97), Type.integer(98)]));
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Type.integer(97), Type.integer(98)]),
+        );
+      });
+
+      it("groups combining marks across integers", () => {
+        const result = gc(
+          Type.list([Type.integer(97), Type.integer(778), Type.integer(120)]),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.list([Type.integer(97), Type.integer(778)]),
+            Type.integer(120),
+          ]),
+        );
+      });
+
+      it("handles list starting with binary", () => {
+        const result = gc(Type.list([Type.bitstring("ab"), Type.integer(98)]));
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Type.integer(97), Type.bitstring("b"), Type.integer(98)]),
+        );
+      });
+
+      it("handles binary with combining marks inside list", () => {
+        const result = gc(Type.list([Type.bitstring("e̊"), Type.integer(120)]));
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.list([Type.integer(101), Type.integer(778)]),
+            Type.bitstring(""),
+            Type.integer(120),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for non-byte-aligned bitstring", () => {
+        const bitstring = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () => gc(bitstring),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            bitstring,
+          ]),
+        );
+      });
+    });
+
+    describe("error handling", () => {
+      it("raises FunctionClauseError for integer input", () => {
+        const input = Type.integer(42);
+
+        assertBoxedError(
+          () => gc(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            input,
+          ]),
+        );
+      });
+    });
+  });
 });
