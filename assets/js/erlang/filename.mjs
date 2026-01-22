@@ -275,6 +275,217 @@ const Erlang_Filename = {
   // End flatten/1
   // Deps: [:filename._do_flatten/2]
 
+  // Start join/1
+  "join/1": (components) => {
+    if (!Type.isList(components) || components.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
+          components,
+        ]),
+      );
+    }
+
+    // Single component: normalize via join/2 with empty second arg to handle
+    // trailing slashes and ensure consistent path format (e.g., "foo/" becomes "foo")
+    if (components.data.length === 1) {
+      return Erlang_Filename["join/2"](components.data[0], Type.bitstring(""));
+    }
+
+    // Join multiple components using fold/reduce via join/2
+    const joinedResult = components.data
+      .slice(1)
+      .reduce(
+        (acc, component) => Erlang_Filename["join/2"](acc, component),
+        components.data[0],
+      );
+
+    return joinedResult;
+  },
+  // End join/1
+  // Deps: [:filename.join/2]
+
+  // Start join/2
+  "join/2": (name1, name2) => {
+    const DIR_SEPARATOR_BYTE = 47;
+
+    // Validate and type-check inputs first before calling flatten
+    const isValidInput = (value) =>
+      Type.isBinary(value) || Type.isList(value) || Type.isAtom(value);
+
+    if (!isValidInput(name1) || !isValidInput(name2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
+          name1,
+          name2,
+        ]),
+      );
+    }
+
+    // Helper functions
+
+    // Converts byte array to Bitstring and validates UTF-8 encoding
+    const convertBytesToBinary = (bytes) => {
+      const resultBinary = Bitstring.fromBytes(bytes);
+      Bitstring.maybeSetTextFromBytes(resultBinary);
+      return resultBinary;
+    };
+
+    // Converts flattened input to binary (iolist → binary if needed)
+    const getBinaryFromFlattened = (flattened, wasOriginallyBinary) => {
+      return wasOriginallyBinary
+        ? flattened
+        : Erlang["iolist_to_binary/1"](flattened);
+    };
+
+    const isAtom = (value) => Type.isAtom(value);
+
+    const isBinary = (value) => Type.isBinary(value);
+
+    const isList = (value) => Type.isList(value);
+
+    // Joins two byte arrays with a separator between them
+    const joinPathBytes = (trimmed1, bytes2) => {
+      if (trimmed1.length === 0 && bytes2.length === 0) {
+        return [];
+      }
+      if (trimmed1.length === 0) {
+        return [DIR_SEPARATOR_BYTE, ...bytes2];
+      }
+      return [...trimmed1, DIR_SEPARATOR_BYTE, ...bytes2];
+    };
+
+    const reconstructPath = (partsData, isAbsolute) => {
+      const {parts, currentPart} = partsData;
+      const allParts = currentPart.length > 0 ? [...parts, currentPart] : parts;
+
+      // Filter out single-dot components (current directory references),
+      // but preserve the first dot in relative paths (e.g., "./foo")
+      const DOT_BYTE = 46; // ASCII code for "."
+      const isSingleDot = (part) => part.length === 1 && part[0] === DOT_BYTE;
+
+      const filteredParts = allParts.filter((part, index) => {
+        // Keep the first part even if it's a single dot (for relative paths)
+        if (index === 0) return true;
+
+        // Filter out non-first single-dot components
+        return !isSingleDot(part);
+      });
+
+      if (filteredParts.length === 0) {
+        return isAbsolute ? [DIR_SEPARATOR_BYTE] : [];
+      }
+
+      // Build result using reduce with internal mutation for O(n) complexity
+      return filteredParts.reduce(
+        (acc, part, index) => {
+          if (index > 0) {
+            acc.push(DIR_SEPARATOR_BYTE);
+          }
+          acc.push(...part);
+          return acc;
+        },
+        isAbsolute ? [DIR_SEPARATOR_BYTE] : [],
+      );
+    };
+
+    const resultToOutput = (normalizedBytes, returnAsCodepoints) => {
+      const resultBinary = convertBytesToBinary(normalizedBytes);
+
+      // Handle invalid UTF-8: preserve raw bytes
+      if (resultBinary.text === false) {
+        return returnAsCodepoints
+          ? Type.list([...normalizedBytes].map((byte) => Type.integer(byte)))
+          : resultBinary;
+      }
+
+      // Valid UTF-8: return as bitstring or charlist
+      const result = Type.bitstring(resultBinary.text);
+      return returnAsCodepoints ? Bitstring.toCodepoints(result) : result;
+    };
+
+    const splitPathBytes = (bytes) => {
+      // Use reduce with internal accumulator mutation for O(n) complexity
+      const result = bytes.reduce(
+        (acc, byte, index) => {
+          if (byte !== DIR_SEPARATOR_BYTE) {
+            acc.currentPart.push(byte);
+            return acc;
+          }
+
+          // Handle separator: push current part if valid
+          if (index > 0 && acc.currentPart.length > 0) {
+            acc.parts.push(acc.currentPart);
+            acc.currentPart = [];
+          }
+
+          return acc;
+        },
+        {parts: [], currentPart: []},
+      );
+
+      return result;
+    };
+
+    const trimTrailingSeparators = (bytes) => {
+      if (bytes.length === 0) return [];
+
+      // Count trailing separators by finding last non-separator from the end
+      const reversedIndex = [...bytes]
+        .reverse()
+        .findIndex((byte) => byte !== DIR_SEPARATOR_BYTE);
+
+      if (reversedIndex === -1) return [];
+
+      return bytes.slice(0, bytes.length - reversedIndex);
+    };
+
+    // Main logic
+
+    const flattened1 = Erlang_Filename["flatten/1"](name1);
+    const flattened2 = Erlang_Filename["flatten/1"](name2);
+
+    // Determine return type: charlist (codepoints) only if BOTH inputs are list/atom,
+    // otherwise return bitstring (matches Erlang behavior)
+    const returnAsCodepoints =
+      (isList(name1) || isAtom(name1)) && (isList(name2) || isAtom(name2));
+
+    const binary1 = getBinaryFromFlattened(flattened1, isBinary(name1));
+    const binary2 = getBinaryFromFlattened(flattened2, isBinary(name2));
+
+    // Ensure bitstrings have byte representations for manipulation
+    Bitstring.maybeSetBytesFromText(binary1);
+    Bitstring.maybeSetBytesFromText(binary2);
+
+    const bytes1 = binary1.bytes;
+    const bytes2 = binary2.bytes;
+
+    // Check if name2 is absolute (starts with /)
+    const isName2Absolute =
+      bytes2.length > 0 && bytes2[0] === DIR_SEPARATOR_BYTE;
+
+    // Determine result bytes based on path type:
+    // - Absolute name2: use name2 only (e.g., "/usr" + "/local" = "/local")
+    // - Empty name2: return name1 unchanged (e.g., "/" + "" = "/")
+    // - Relative name2: join paths with separator after trimming trailing slashes
+    const resultBytes = (() => {
+      if (isName2Absolute) return bytes2;
+      if (bytes2.length === 0) return bytes1;
+      return joinPathBytes(trimTrailingSeparators(bytes1), bytes2);
+    })();
+
+    // Normalize path: split by separators, filter out "." components, reconstruct
+    // This handles cases like "./foo/bar/./baz" becomes "./foo/bar/baz"
+    const isResultAbsolute =
+      resultBytes.length > 0 && resultBytes[0] === DIR_SEPARATOR_BYTE;
+    const partsData = splitPathBytes(resultBytes);
+    const normalizedBytes = reconstructPath(partsData, isResultAbsolute);
+
+    // Convert back to appropriate output format
+    return resultToOutput(normalizedBytes, returnAsCodepoints);
+  },
+  // End join/2
+  // Deps: [:filename.flatten/1, :erlang.iolist_to_binary/1]
+
   // Start split/1
   "split/1": (filename) => {
     const DIR_SEPARATOR_BYTE = 47;
