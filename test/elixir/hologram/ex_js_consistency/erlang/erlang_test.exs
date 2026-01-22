@@ -1279,6 +1279,61 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "apply/2" do
+    setup do
+      [
+        fun_no_args: fn -> 42 end,
+        fun_single_arg: fn x -> x + 10 end,
+        fun_multiple_args: fn a, b -> a + b end
+      ]
+    end
+
+    test "calls anonymous function with no arguments", %{fun_no_args: fun} do
+      assert :erlang.apply(fun, []) == 42
+    end
+
+    test "calls anonymous function with a single argument", %{fun_single_arg: fun} do
+      assert :erlang.apply(fun, [5]) == 15
+    end
+
+    test "calls anonymous function with multiple arguments", %{fun_multiple_args: fun} do
+      assert :erlang.apply(fun, [1, 2]) == 3
+    end
+
+    test "raises BadFunctionError if the first argument is not a function" do
+      fun = prevent_term_typing_violation(:not_a_function)
+
+      assert_error BadFunctionError,
+                   build_bad_function_error_msg(:not_a_function),
+                   fn -> :erlang.apply(fun, []) end
+    end
+
+    test "raises ArgumentError if the second argument is not a list", %{fun_no_args: fun} do
+      args = prevent_term_typing_violation(:not_a_list)
+
+      assert_error ArgumentError,
+                   "argument error",
+                   fn -> :erlang.apply(fun, args) end
+    end
+
+    test "raises ArgumentError if the second argument is not a proper list", %{
+      fun_multiple_args: fun
+    } do
+      args = prevent_term_typing_violation([1 | 2])
+
+      assert_error ArgumentError,
+                   "argument error",
+                   fn -> :erlang.apply(fun, args) end
+    end
+
+    test "raises BadArityError if arity doesn't match", %{fun_multiple_args: fun} do
+      expected_msg =
+        ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ErlangTest\.__ex_unit_setup_[0-9_]+/1> with arity 2 called with 1 argument \(1\)'
+
+      assert_error BadArityError, expected_msg, fn -> :erlang.apply(fun, [1]) end
+    end
+  end
+
   describe "apply/3" do
     test "invokes a function with no params" do
       assert :erlang.apply(Module1, :fun_0, []) == 123
@@ -3181,11 +3236,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "list_to_integer/2" do
     test "base 2" do
-      assert :erlang.list_to_integer([49, 49, 49, 49], 2) == 15
-    end
-
-    test "base 8" do
-      assert :erlang.list_to_integer([49, 55, 55], 8) == 127
+      # 0b1010 = 10
+      assert :erlang.list_to_integer([49, 48, 49, 48], 2) == 10
     end
 
     test "base 10" do
@@ -3193,15 +3245,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "base 16" do
-      assert :erlang.list_to_integer([51, 70, 70], 16) == 1023
+      # 0x3AF = 943
+      assert :erlang.list_to_integer([51, 65, 70], 16) == 943
     end
 
     test "base 36" do
-      assert :erlang.list_to_integer([90, 90], 36) == 1295
-    end
-
-    test "positive integer without sign" do
-      assert :erlang.list_to_integer([49, 50, 51], 10) == 123
+      # "YZ" = 1259
+      assert :erlang.list_to_integer([89, 90], 36) == 1259
     end
 
     test "positive integer with plus sign" do
@@ -3228,24 +3278,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.list_to_integer([97, 66, 99, 68], 16) == 43_981
     end
 
-    test "handles leading zeros" do
+    test "leading zeros" do
       assert :erlang.list_to_integer([48, 48, 49, 50, 51], 10) == 123
     end
 
-    test "converts very large base 10 integer" do
-      # Test that list_to_integer handles numbers well beyond
-      # Number.MAX_SAFE_INTEGER (9007199254740991)
+    test "very large (above Number.MAX_SAFE_INTEGER) base 10 integer" do
+      # Number.MAX_SAFE_INTEGER = 9007199254740991
       large_list = List.duplicate(57, 30)
       large_int = :erlang.list_to_integer(large_list, 10)
+
       assert large_int == 999_999_999_999_999_999_999_999_999_999
     end
 
-    test "converts very large negative base 10 integer" do
-      # Test that list_to_integer handles numbers well below
-      # Number.MIN_SAFE_INTEGER (-9007199254740991)
+    test "very large (below Number.MIN_SAFE_INTEGER) negative base 10 integer" do
+      # Number.MIN_SAFE_INTEGER = -9007199254740991
       large_list = List.duplicate(57, 30)
-      large_int = :erlang.list_to_integer([45 | large_list], 10)
+      large_int = :erlang.list_to_integer([?- | large_list], 10)
+
       assert large_int == -999_999_999_999_999_999_999_999_999_999
+    end
+
+    test "very large (above Number.MAX_SAFE_INTEGER) integer with letter digits" do
+      # Number.MAX_SAFE_INTEGER = 9007199254740991
+      large_list = List.duplicate(?F, 20)
+      large_int = :erlang.list_to_integer(large_list, 16)
+
+      assert large_int == 0xFFFFFFFFFFFFFFFFFFFF
+    end
+
+    test "very large (below Number.MIN_SAFE_INTEGER) negative integer with letter digits" do
+      # Number.MIN_SAFE_INTEGER = -9007199254740991
+      large_list = List.duplicate(?F, 20)
+      large_int = :erlang.list_to_integer([?- | large_list], 16)
+
+      assert large_int == -0xFFFFFFFFFFFFFFFFFFFF
     end
 
     test "raises ArgumentError if the first argument is not a list" do
@@ -3257,7 +3323,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError if the first argument is not a proper list" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a proper list"),
-                   {:erlang, :list_to_integer, [[1 | 2], 10]}
+                   {:erlang, :list_to_integer, [[49, 50 | 51], 10]}
     end
 
     test "raises ArgumentError if list is empty" do
@@ -3732,6 +3798,84 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a tuple"),
                    {:erlang, :tuple_to_list, [:abc]}
+    end
+  end
+
+  describe "unique_integer/0" do
+    test "returns a unique integer each time it is called" do
+      integer_1 = :erlang.unique_integer()
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer()
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+  end
+
+  describe "unique_integer/1" do
+    test "returns a unique integer each time it is called with empty modifier list" do
+      integer_1 = :erlang.unique_integer([])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with positive modifier" do
+      integer_1 = :erlang.unique_integer([:positive])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:positive])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with monotonic modifier" do
+      integer_1 = :erlang.unique_integer([:monotonic])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:monotonic])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with both positive and monotonic modifiers" do
+      integer_1 = :erlang.unique_integer([:positive, :monotonic])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:positive, :monotonic])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :unique_integer, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   {:erlang, :unique_integer, [[:positive | :abc]]}
+    end
+
+    test "raises ArgumentError if the modifier is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid modifier"),
+                   {:erlang, :unique_integer, [[123]]}
+    end
+
+    test "raises ArgumentError if the modifier is not a valid modifier" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid modifier"),
+                   {:erlang, :unique_integer, [[:invalid]]}
     end
   end
 

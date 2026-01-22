@@ -1474,6 +1474,108 @@ describe("Erlang", () => {
     });
   });
 
+  describe("apply/2", () => {
+    const apply = Erlang["apply/2"];
+
+    const funNoArgs = Type.anonymousFunction(
+      0,
+      [
+        {
+          params: (_context) => [],
+          guards: [],
+          body: (_context) => Type.integer(42),
+        },
+      ],
+      contextFixture(),
+    );
+
+    const funSingleArg = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("x")],
+          guards: [],
+          body: (context) => Erlang["+/2"](context.vars.x, Type.integer(10)),
+        },
+      ],
+      contextFixture(),
+    );
+
+    const funMultipleArgs = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("a"),
+            Type.variablePattern("b"),
+          ],
+          guards: [],
+          body: (context) => Erlang["+/2"](context.vars.a, context.vars.b),
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("calls anonymous function with no arguments", () => {
+      const args = Type.list();
+      const result = apply(funNoArgs, args);
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("calls anonymous function with a single argument", () => {
+      const args = Type.list([Type.integer(5)]);
+      const result = apply(funSingleArg, args);
+
+      assert.deepStrictEqual(result, Type.integer(15));
+    });
+
+    it("calls anonymous function with multiple arguments", () => {
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = apply(funMultipleArgs, args);
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("raises BadFunctionError if the first argument is not a function", () => {
+      const fun = Type.atom("not_a_function");
+
+      assertBoxedError(
+        () => apply(fun, Type.list()),
+        "BadFunctionError",
+        Interpreter.buildBadFunctionErrorMsg(fun),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a list", () => {
+      assertBoxedError(
+        () => apply(funNoArgs, Type.atom("not_a_list")),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a proper list", () => {
+      const args = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => apply(funMultipleArgs, args),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises BadArityError if arity doesn't match", () => {
+      const args = Type.list([Type.integer(1)]);
+
+      assertBoxedError(
+        () => apply(funMultipleArgs, args),
+        "BadArityError",
+        "anonymous function with arity 2 called with 1 argument (1)",
+      );
+    });
+  });
+
   describe("apply/3", () => {
     const apply = Erlang["apply/3"];
 
@@ -4807,6 +4909,7 @@ describe("Erlang", () => {
         Type.integer(50),
         Type.integer(51),
       ]);
+
       const result = list_to_integer(list);
       const expected = Erlang["list_to_integer/2"](list, Type.integer(10));
 
@@ -4818,26 +4921,18 @@ describe("Erlang", () => {
     const list_to_integer = Erlang["list_to_integer/2"];
 
     it("base 2", () => {
+      // 0b1010 = 10
       const result = list_to_integer(
         Type.list([
           Type.integer(49),
+          Type.integer(48),
           Type.integer(49),
-          Type.integer(49),
-          Type.integer(49),
+          Type.integer(48),
         ]),
         Type.integer(2),
       );
-      const expected = Type.integer(15);
 
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("base 8", () => {
-      const result = list_to_integer(
-        Type.list([Type.integer(49), Type.integer(55), Type.integer(55)]),
-        Type.integer(8),
-      );
-      const expected = Type.integer(127);
+      const expected = Type.integer(10);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -4847,37 +4942,32 @@ describe("Erlang", () => {
         Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
         Type.integer(10),
       );
+
       const expected = Type.integer(123);
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("base 16", () => {
+      // 0x3AF = 943
       const result = list_to_integer(
-        Type.list([Type.integer(51), Type.integer(70), Type.integer(70)]),
+        Type.list([Type.integer(51), Type.integer(65), Type.integer(70)]),
         Type.integer(16),
       );
-      const expected = Type.integer(1023);
+
+      const expected = Type.integer(943);
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("base 36", () => {
+      // "YZ" = 1259
       const result = list_to_integer(
-        Type.list([Type.integer(90), Type.integer(90)]),
+        Type.list([Type.integer(89), Type.integer(90)]),
         Type.integer(36),
       );
-      const expected = Type.integer(1295);
 
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("positive integer without sign", () => {
-      const result = list_to_integer(
-        Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
-        Type.integer(10),
-      );
-      const expected = Type.integer(123);
+      const expected = Type.integer(1259);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -4892,6 +4982,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(10),
       );
+
       const expected = Type.integer(123);
 
       assert.deepStrictEqual(result, expected);
@@ -4907,6 +4998,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(10),
       );
+
       const expected = Type.integer(-123);
 
       assert.deepStrictEqual(result, expected);
@@ -4917,6 +5009,7 @@ describe("Erlang", () => {
         Type.list([Type.integer(48)]),
         Type.integer(10),
       );
+
       const expected = Type.integer(0);
 
       assert.deepStrictEqual(result, expected);
@@ -4932,6 +5025,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(16),
       );
+
       const expected = Type.integer(43981);
 
       assert.deepStrictEqual(result, expected);
@@ -4947,6 +5041,7 @@ describe("Erlang", () => {
         ]),
         Type.integer(16),
       );
+
       const expected = Type.integer(43981);
 
       assert.deepStrictEqual(result, expected);
@@ -4962,12 +5057,13 @@ describe("Erlang", () => {
         ]),
         Type.integer(16),
       );
+
       const expected = Type.integer(43981);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("handles leading zeros", () => {
+    it("leading zeros", () => {
       const result = list_to_integer(
         Type.list([
           Type.integer(48),
@@ -4978,31 +5074,56 @@ describe("Erlang", () => {
         ]),
         Type.integer(10),
       );
+
       const expected = Type.integer(123);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts very large base 10 integer", () => {
-      // Test that list_to_integer handles numbers well beyond
-      // Number.MAX_SAFE_INTEGER (9007199254740991) using BigInt
+    it("very large (above Number.MAX_SAFE_INTEGER) base 10 integer", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
       const codes = "999999999999999999999999999999"
         .split("")
         .map((c) => Type.integer(c.charCodeAt(0)));
+
       const result = list_to_integer(Type.list(codes), Type.integer(10));
       const expected = Type.integer(BigInt("999999999999999999999999999999"));
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts very large negative base 10 integer", () => {
-      // Test that list_to_integer handles numbers well below
-      // Number.MIN_SAFE_INTEGER (-9007199254740991) using BigInt
+    it("very large (below Number.MIN_SAFE_INTEGER) negative base 10 integer", () => {
+      // Number.MIN_SAFE_INTEGER = -9007199254740991
       const codes = "-999999999999999999999999999999"
         .split("")
         .map((c) => Type.integer(c.charCodeAt(0)));
+
       const result = list_to_integer(Type.list(codes), Type.integer(10));
       const expected = Type.integer(BigInt("-999999999999999999999999999999"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("very large (above Number.MAX_SAFE_INTEGER) integer with letter digits", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      const codes = "FFFFFFFFFFFFFFFFFFFF"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(16));
+      const expected = Type.integer(BigInt("0xFFFFFFFFFFFFFFFFFFFF"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("very large (below Number.MIN_SAFE_INTEGER) negative integer with letter digits", () => {
+      // Number.MIN_SAFE_INTEGER = -9007199254740991
+      const codes = "-FFFFFFFFFFFFFFFFFFFF"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(16));
+      const expected = Type.integer(-BigInt("0xFFFFFFFFFFFFFFFFFFFF"));
 
       assert.deepStrictEqual(result, expected);
     });
@@ -6010,6 +6131,104 @@ describe("Erlang", () => {
         () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
+  describe("unique_integer/0", () => {
+    const unique_integer = Erlang["unique_integer/0"];
+
+    it("returns a unique integer each time it is called", () => {
+      const integer1 = unique_integer();
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer();
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+  });
+
+  // Simplified: always returns monotonic, positive integers regardless of modifiers.
+  describe("unique_integer/1", () => {
+    const unique_integer = Erlang["unique_integer/1"];
+
+    it("returns a unique integer each time it is called with empty modifier list", () => {
+      const integer1 = unique_integer(Type.list([]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with positive modifier", () => {
+      const integer1 = unique_integer(Type.list([Type.atom("positive")]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([Type.atom("positive")]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with monotonic modifier", () => {
+      const integer1 = unique_integer(Type.list([Type.atom("monotonic")]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([Type.atom("monotonic")]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with both positive and monotonic modifiers", () => {
+      const integer1 = unique_integer(
+        Type.list([Type.atom("positive"), Type.atom("monotonic")]),
+      );
+
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(
+        Type.list([Type.atom("positive"), Type.atom("monotonic")]),
+      );
+
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => unique_integer(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a proper list", () => {
+      assertBoxedError(
+        () =>
+          unique_integer(Type.improperList([Type.atom("positive"), atomAbc])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if the modifier is not an atom", () => {
+      assertBoxedError(
+        () => unique_integer(Type.list([Type.integer(123)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+      );
+    });
+
+    it("raises ArgumentError if the modifier is not a valid modifier", () => {
+      assertBoxedError(
+        () => unique_integer(Type.list([Type.atom("invalid")])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
       );
     });
   });

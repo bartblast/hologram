@@ -24,12 +24,14 @@ const emptyList = freeze(Type.list());
 const integer1 = freeze(Type.integer(1));
 const integer2 = freeze(Type.integer(2));
 const integer3 = freeze(Type.integer(3));
+const float1 = freeze(Type.float(1.0));
 const float2 = freeze(Type.float(2.0));
-const opts = freeze(Type.keywordList([[Type.atom("version"), integer2]]));
 
-const set123 = Erlang_Sets["from_list/2"](
-  Type.list([integer1, integer2, integer3]),
-  opts,
+const opts = freeze(Type.keywordList([[Type.atom("version"), integer2]]));
+const emptySet = freeze(Erlang_Sets["from_list/2"](Type.list(), opts));
+
+const set123 = freeze(
+  Erlang_Sets["from_list/2"](Type.list([integer1, integer2, integer3]), opts),
 );
 
 // IMPORTANT!
@@ -547,6 +549,82 @@ describe("Erlang_Sets", () => {
           elem,
           notASet,
         ]),
+      );
+    });
+  });
+
+  describe("is_subset/2", () => {
+    const is_subset = Erlang_Sets["is_subset/2"];
+
+    it("returns true if all elements in first set are in second set", () => {
+      const set12 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(2)]),
+        opts,
+      );
+
+      const result = is_subset(set12, set123);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both sets are the same", () => {
+      const result = is_subset(set123, set123);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both sets are empty", () => {
+      const result = is_subset(emptySet, emptySet);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if first set is empty and second set isn't", () => {
+      const result = is_subset(emptySet, set123);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns false if not all elements in first set are in second set", () => {
+      const set14 = Erlang_Sets["from_list/2"](
+        Type.list([Type.integer(1), Type.integer(4)]),
+        opts,
+      );
+
+      const result = is_subset(set14, set123);
+
+      assertBoxedFalse(result);
+    });
+
+    it("uses strict matching (integer vs float)", () => {
+      const firstSet = Erlang_Sets["from_list/2"](Type.list([integer1]), opts);
+      const secondSet = Erlang_Sets["from_list/2"](Type.list([float1]), opts);
+      const result = is_subset(firstSet, secondSet);
+
+      assertBoxedFalse(result);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a set", () => {
+      const expectedMessage =
+        Interpreter.buildFunctionClauseErrorMsg(":sets.fold/3");
+
+      assertBoxedError(
+        () => is_subset(atomAbc, set123),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.is_element/2",
+        [Type.integer(1), atomAbc],
+      );
+
+      assertBoxedError(
+        () => is_subset(set123, atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
       );
     });
   });

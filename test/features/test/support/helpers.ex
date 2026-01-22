@@ -6,6 +6,8 @@ defmodule HologramFeatureTests.Helpers do
   alias Wallaby.Browser
   alias Wallaby.Element
   alias Wallaby.Query
+  alias Wallaby.Query.ErrorMessage
+  alias Wallaby.StaleReferenceError
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
@@ -168,6 +170,37 @@ defmodule HologramFeatureTests.Helpers do
     |> Enum.sort_by(& &1["name"], :asc)
   end
 
+  @doc """
+  Executes a query for refute_has with optimized retry behavior.
+
+  - Returns immediately if element is NOT found (fast path for refute_has)
+  - Retries if element IS found, waiting for it to disappear
+  """
+  def execute_refute_query(parent, query, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    case do_execute_query_once(parent, query) do
+      {:ok, _query} = found ->
+        # Element found - retry until it disappears or timeout
+        if timed_out?(start_time) do
+          found
+        else
+          execute_refute_query(parent, query, start_time)
+        end
+
+      {:error, :stale_reference} ->
+        # Retry on stale reference
+        execute_refute_query(parent, query, start_time)
+
+      {:error, :invalid_selector} = error ->
+        error
+
+      {:error, _not_found} = error ->
+        # Element not found - return immediately (fast path)
+        error
+    end
+  end
+
   def go_back(session) do
     Browser.execute_script(session, "history.back();")
   end
@@ -206,6 +239,32 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, script, [], &IO.inspect/1)
   end
 
+  @doc """
+  Custom refute_has/2 that returns immediately when element is not found.
+
+  Unlike Wallaby.Browser.refute_has/2 which always waits for max_wait_time,
+  this version:
+  - Returns immediately if the element is NOT present (fast path)
+  - Waits/retries if the element IS present, giving it time to disappear
+  """
+  defmacro refute_has(parent, query) do
+    quote do
+      parent = unquote(parent)
+      query = unquote(query)
+
+      case execute_refute_query(parent, query) do
+        {:error, :invalid_selector} ->
+          raise Wallaby.QueryError, ErrorMessage.message(query, :invalid_selector)
+
+        {:error, _not_found} ->
+          parent
+
+        {:ok, query} ->
+          raise Wallaby.ExpectationNotMetError, ErrorMessage.message(query, :found)
+      end
+    end
+  end
+
   def reload(session) do
     Browser.execute_script(session, "document.location.reload();")
   end
@@ -232,6 +291,61 @@ defmodule HologramFeatureTests.Helpers do
     |> wait_for_server_connection()
   end
 
+  defp apply_at(query, elements) do
+    case {Query.at_number(query), length(elements)} do
+      {:all, _count} -> {:ok, elements}
+      {n, count} when n < count -> {:ok, [Enum.at(elements, n)]}
+      {_n, _count} -> {:error, {:not_found, elements}}
+    end
+  end
+
+  defp current_time do
+    :erlang.monotonic_time(:milli_seconds)
+  end
+
+  # credo:disable-for-lines:15 Credo.Check.Refactor.ABCSize
+  defp do_execute_query_once(%{driver: driver} = parent, query) do
+    with {:ok, query} <- Query.validate(query),
+         compiled_query <- Query.compile(query),
+         {:ok, elements} <- driver.find_elements(parent, compiled_query),
+         {:ok, elements} <- filter_by_visibility(query, elements),
+         {:ok, elements} <- filter_by_text(query, elements),
+         {:ok, elements} <- filter_by_selected(query, elements),
+         {:ok, elements} <- validate_count(query, elements),
+         {:ok, elements} <- apply_at(query, elements) do
+      {:ok, %Query{query | result: elements}}
+    end
+  rescue
+    StaleReferenceError ->
+      {:error, :stale_reference}
+  end
+
+  defp filter_by_selected(query, elements) do
+    case Query.selected?(query) do
+      :any -> {:ok, elements}
+      true -> {:ok, Enum.filter(elements, &Element.selected?(&1))}
+      false -> {:ok, Enum.reject(elements, &Element.selected?(&1))}
+    end
+  end
+
+  defp filter_by_text(query, elements) do
+    text = Query.inner_text(query)
+
+    if text do
+      {:ok, Enum.filter(elements, &text_matches?(&1, text))}
+    else
+      {:ok, elements}
+    end
+  end
+
+  defp filter_by_visibility(query, elements) do
+    case Query.visible?(query) do
+      :any -> {:ok, elements}
+      true -> {:ok, Enum.filter(elements, &Element.visible?(&1))}
+      false -> {:ok, Enum.reject(elements, &Element.visible?(&1))}
+    end
+  end
+
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
   defp maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page) do
     if opts[:debug] do
@@ -243,16 +357,33 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  defp text_matches?(%Element{driver: driver} = element, text) do
+    case driver.text(element) do
+      {:ok, element_text} -> element_text =~ ~r/#{Regex.escape(text)}/
+      {:error, _reason} -> false
+    end
+  end
+
   defp timed_out?(start_time) do
-    DateTime.diff(DateTime.utc_now(), start_time, :millisecond) > @max_wait_time
+    current_time() - start_time > @max_wait_time
+  end
+
+  defp validate_count(query, elements) do
+    if Query.matches_count?(query, Enum.count(elements)) do
+      {:ok, elements}
+    else
+      {:error, {:not_found, elements}}
+    end
   end
 
   defp wait_for_page_mounting(
          session,
          expected_page,
          opts \\ [],
-         start_time \\ DateTime.utc_now()
+         start_time \\ nil
        ) do
+    start_time = start_time || current_time()
+
     callback = fn mounted_page ->
       if mounted_page != inspect(expected_page) && !timed_out?(start_time) do
         maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
@@ -266,7 +397,9 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, script, [], callback)
   end
 
-  defp wait_for_path(session, path, start_time \\ DateTime.utc_now()) do
+  defp wait_for_path(session, path, start_time \\ nil) do
+    start_time = start_time || current_time()
+
     if Browser.current_path(session) != path && !timed_out?(start_time) do
       :timer.sleep(100)
       wait_for_path(session, path, start_time)
@@ -275,7 +408,9 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
-  defp wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do
+  defp wait_for_server_connection(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
     callback = fn connected? ->
       if !connected? && !timed_out?(start_time) do
         :timer.sleep(100)
@@ -288,7 +423,9 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, script, [], callback)
   end
 
-  defp wait_for_js_error(session, start_time \\ DateTime.utc_now()) do
+  defp wait_for_js_error(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
     Browser.execute_script(session, "1 + 1")
 
     if !timed_out?(start_time) do
