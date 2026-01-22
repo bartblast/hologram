@@ -10,6 +10,71 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_String = {
+  // Start join/2
+  "join/2": function (list, separator) {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseErlangError(
+        Interpreter.buildErlangErrorMsg(
+          `{:bad_generator, ${Interpreter.inspect(list.data.at(-1))}}`,
+        ),
+      );
+    }
+
+    if (list.data.length === 0) {
+      if (!Type.isProperList(separator)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
+        );
+      }
+
+      return Type.list();
+    }
+
+    // Single element case - return element as-is (separator not used, no validation needed)
+    if (list.data.length === 1) {
+      const element = list.data[0];
+
+      if (!Type.isList(element)) {
+        Interpreter.raiseArgumentError("argument error");
+      }
+
+      return element;
+    }
+
+    // Multiple elements - validate separator is a list (for concatenation)
+    if (!Type.isList(separator)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    // Join the strings with separator
+    const result = [];
+
+    for (let i = 0; i < list.data.length; i++) {
+      const element = list.data[i];
+
+      // Each element must be a list (for concatenation)
+      if (!Type.isList(element)) {
+        Interpreter.raiseArgumentError("argument error");
+      }
+
+      if (i > 0) {
+        result.push(...separator.data);
+      }
+
+      result.push(...element.data);
+    }
+
+    return Type.list(result);
+  },
+  // End join/2
+  // Deps: []
+
   // Start titlecase/1
   "titlecase/1": (subject) => {
     // Custom uppercase mapping where Erlang differs from JavaScript's toUpperCase()

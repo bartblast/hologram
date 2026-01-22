@@ -1279,6 +1279,61 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "apply/2" do
+    setup do
+      [
+        fun_no_args: fn -> 42 end,
+        fun_single_arg: fn x -> x + 10 end,
+        fun_multiple_args: fn a, b -> a + b end
+      ]
+    end
+
+    test "calls anonymous function with no arguments", %{fun_no_args: fun} do
+      assert :erlang.apply(fun, []) == 42
+    end
+
+    test "calls anonymous function with a single argument", %{fun_single_arg: fun} do
+      assert :erlang.apply(fun, [5]) == 15
+    end
+
+    test "calls anonymous function with multiple arguments", %{fun_multiple_args: fun} do
+      assert :erlang.apply(fun, [1, 2]) == 3
+    end
+
+    test "raises BadFunctionError if the first argument is not a function" do
+      fun = prevent_term_typing_violation(:not_a_function)
+
+      assert_error BadFunctionError,
+                   build_bad_function_error_msg(:not_a_function),
+                   fn -> :erlang.apply(fun, []) end
+    end
+
+    test "raises ArgumentError if the second argument is not a list", %{fun_no_args: fun} do
+      args = prevent_term_typing_violation(:not_a_list)
+
+      assert_error ArgumentError,
+                   "argument error",
+                   fn -> :erlang.apply(fun, args) end
+    end
+
+    test "raises ArgumentError if the second argument is not a proper list", %{
+      fun_multiple_args: fun
+    } do
+      args = prevent_term_typing_violation([1 | 2])
+
+      assert_error ArgumentError,
+                   "argument error",
+                   fn -> :erlang.apply(fun, args) end
+    end
+
+    test "raises BadArityError if arity doesn't match", %{fun_multiple_args: fun} do
+      expected_msg =
+        ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ErlangTest\.__ex_unit_setup_[0-9_]+/1> with arity 2 called with 1 argument \(1\)'
+
+      assert_error BadArityError, expected_msg, fn -> :erlang.apply(fun, [1]) end
+    end
+  end
+
   describe "apply/3" do
     test "invokes a function with no params" do
       assert :erlang.apply(Module1, :fun_0, []) == 123
@@ -3755,6 +3810,72 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert is_integer(integer_2)
 
       assert integer_1 != integer_2
+    end
+  end
+
+  describe "unique_integer/1" do
+    test "returns a unique integer each time it is called with empty modifier list" do
+      integer_1 = :erlang.unique_integer([])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with positive modifier" do
+      integer_1 = :erlang.unique_integer([:positive])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:positive])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with monotonic modifier" do
+      integer_1 = :erlang.unique_integer([:monotonic])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:monotonic])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "returns a unique integer with both positive and monotonic modifiers" do
+      integer_1 = :erlang.unique_integer([:positive, :monotonic])
+      assert is_integer(integer_1)
+
+      integer_2 = :erlang.unique_integer([:positive, :monotonic])
+      assert is_integer(integer_2)
+
+      assert integer_1 != integer_2
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :unique_integer, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   {:erlang, :unique_integer, [[:positive | :abc]]}
+    end
+
+    test "raises ArgumentError if the modifier is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid modifier"),
+                   {:erlang, :unique_integer, [[123]]}
+    end
+
+    test "raises ArgumentError if the modifier is not a valid modifier" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid modifier"),
+                   {:erlang, :unique_integer, [[:invalid]]}
     end
   end
 

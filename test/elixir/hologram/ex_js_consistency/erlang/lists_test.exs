@@ -126,6 +126,86 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "flatmap/2" do
+    setup do
+      [fun: fn x -> [x, x * 10] end]
+    end
+
+    test "returns empty list when given empty list", %{fun: fun} do
+      assert :lists.flatmap(fun, []) == []
+    end
+
+    test "works with single element list", %{fun: fun} do
+      assert :lists.flatmap(fun, [1]) == [1, 10]
+    end
+
+    test "works with multiple element list", %{fun: fun} do
+      assert :lists.flatmap(fun, [1, 2, 3]) == [1, 10, 2, 20, 3, 30]
+    end
+
+    test "returns empty list when mapper returns empty lists" do
+      assert :lists.flatmap(fn _x -> [] end, [1, 2, 3]) == []
+    end
+
+    test "flattens only one level" do
+      assert :lists.flatmap(fn x -> [[[x]]] end, [1, 2]) == [[[1]], [[2]]]
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.flatmap/2", [:abc, []])
+
+      assert_error FunctionClauseError, expected_msg, fn -> :lists.flatmap(:abc, []) end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 1" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.flatmap/2
+
+      The following arguments were given to :lists\.flatmap/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test flatmap/2 raises FunctionClauseError if the first argument is an anonymous function with arity different than 1"/1>
+
+          # 2
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatmap(fn x, y -> x + y end, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.flatmap_1/2
+
+      The following arguments were given to :lists\.flatmap_1/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatmap(fun, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list", %{fun: fun} do
+      expected_msg = build_function_clause_error_msg(":lists.flatmap_1/2", [fun, 3])
+
+      assert_error FunctionClauseError, expected_msg, fn -> :lists.flatmap(fun, [1, 2 | 3]) end
+    end
+
+    test "raises ArgumentError if the mapper does not return a proper list" do
+      assert_error ArgumentError, "argument error", fn ->
+        :lists.flatmap(fn x -> x * 10 end, [1, 2, 3])
+      end
+    end
+  end
+
   describe "flatten/1" do
     test "works with empty list" do
       assert :lists.flatten([]) == []
@@ -690,6 +770,102 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keytake/3" do
+    test "returns false if tuples list is empty" do
+      assert :lists.keytake(:c, 1, []) == false
+    end
+
+    test "single tuple, no match" do
+      assert :lists.keytake(:c, 1, [{:a, 2, 3.0}]) == false
+    end
+
+    test "single tuple, match at first index" do
+      assert :lists.keytake(:a, 1, [{:a, 2, 3.0}]) == {:value, {:a, 2, 3.0}, []}
+    end
+
+    test "single tuple, match at middle index" do
+      assert :lists.keytake(:b, 2, [{1, :b, 3.0}]) == {:value, {1, :b, 3.0}, []}
+    end
+
+    test "single tuple, match at last index" do
+      assert :lists.keytake(:c, 3, [{1, 2.0, :c}]) == {:value, {1, 2.0, :c}, []}
+    end
+
+    test "multiple tuples, no match" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keytake(:c, 1, tuples) == false
+    end
+
+    test "multiple tuples, match first tuple" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
+    end
+
+    test "multiple tuples, match middle tuple" do
+      tuples = [{:d, :e, :f}, {:a, 2, 3.0}, {:g, :h, :i}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
+    end
+
+    test "multiple tuples, match last tuple" do
+      tuples = [{:d, :e, :f}, {:g, :h, :i}, {:a, 2, 3.0}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 2, 3.0}, [{:d, :e, :f}, {:g, :h, :i}]}
+    end
+
+    test "skips tuple when its size is smaller than the index" do
+      tuples = [{:a}, {:b, :a, :c}]
+
+      assert :lists.keytake(:a, 2, tuples) == {:value, {:b, :a, :c}, [{:a}]}
+    end
+
+    test "returns only the first matching tuple" do
+      tuples = [{:a, 1}, {:a, 2}]
+
+      assert :lists.keytake(:a, 1, tuples) == {:value, {:a, 1}, [{:a, 2}]}
+    end
+
+    test "applies non-strict comparison" do
+      assert :lists.keytake(2, 1, [{2.0}]) == {:value, {2.0}, []}
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.keytake/3", [:a, 2.0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 2.0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
+      expected_msg = build_function_clause_error_msg(":lists.keytake/3", [:a, 0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.keytake/4", [:a, 1, {{:b}, {:c}}, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 1, {{:b}, {:c}})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.keytake/4", [:a, 1, {:d}, [{:c}, {:b}]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keytake(:a, 1, [{:b}, {:c} | {:d}])
+      end
+    end
+  end
+
   describe "map/2" do
     setup do
       [fun: fn elem -> elem * 10 end]
@@ -834,6 +1010,62 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "max/1" do
+    test "returns the element from a list of length 1" do
+      assert :lists.max([3]) == 3
+    end
+
+    test "returns the larger element from a list of size 2 with second being largest" do
+      assert :lists.max([1, 3]) == 3
+    end
+
+    test "returns the larger element from a list of size 2 with first being largest" do
+      assert :lists.max([3, 1]) == 3
+    end
+
+    test "returns the element from a list of size 2 when both are the same" do
+      assert :lists.max([3, 3]) == 3
+    end
+
+    test "applies structural comparison" do
+      list = Enum.shuffle([:a, 2.0, 3, "d", pid("0.1.2"), {0, 1}])
+
+      assert :lists.max(list) == "d"
+    end
+
+    test "returns the largest element from a large list with many duplicates" do
+      list = Enum.shuffle([1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5])
+
+      assert :lists.max(list) == 5
+    end
+
+    test "raises FunctionClauseError if the argument is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.max/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.max(:abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an improper list" do
+      # Notice that the error message says :lists.max/2 (not :lists.max/1)
+      # :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
+      expected_msg = build_function_clause_error_msg(":lists.max/2")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.max([1, 2 | 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an empty list" do
+      expected_msg = build_function_clause_error_msg(":lists.max/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.max([])
+      end
+    end
+  end
+
   describe "member/2" do
     test "is a member of a proper list" do
       assert :lists.member(2, [1, 2, 3]) == true
@@ -925,6 +1157,100 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_raise FunctionClauseError, expected_msg, fn ->
         :lists.min([])
       end
+    end
+  end
+
+  describe "prefix/2" do
+    test "returns true if the first one-element list is a prefix of the second list" do
+      assert :lists.prefix([1], [1, 2])
+    end
+
+    test "returns true if the first multiple-element list is a prefix of the second list" do
+      assert :lists.prefix([1, 2], [1, 2, 3])
+    end
+
+    test "returns true if the lists are the same" do
+      assert :lists.prefix([1, 2], [1, 2])
+    end
+
+    test "returns true if both lists contain the same single element" do
+      assert :lists.prefix([1], [1])
+    end
+
+    test "returns true if both lists are empty" do
+      assert :lists.prefix([], [])
+    end
+
+    test "returns true when the first list is empty" do
+      assert :lists.prefix([], [1, 2])
+    end
+
+    test "returns false if the first list is not a prefix of the second list" do
+      refute :lists.prefix([1, 2], [1])
+    end
+
+    test "returns false if the first list has an element that differs from the corresponding element in the second list" do
+      refute :lists.prefix([1, 3], [1, 2, 3])
+    end
+
+    test "returns false if the first argument is an improper list that has no common prefix with the second proper list" do
+      refute :lists.prefix([1 | 2], [3, 4])
+    end
+
+    test "returns false if the first argument is an improper list that shares a shorter prefix with the second proper list" do
+      refute :lists.prefix([1, 2 | 3], [1, 4])
+    end
+
+    test "returns false if the second argument is an improper list that has no common prefix with the first proper list" do
+      refute :lists.prefix([1, 2], [3 | 4])
+    end
+
+    test "returns false if the second argument is an improper list that shares a shorter prefix with the first proper list" do
+      refute :lists.prefix([1, 4], [1, 2 | 3])
+    end
+
+    test "returns false if both lists are improper with no common prefix" do
+      refute :lists.prefix([1 | 2], [3 | 4])
+    end
+
+    test "returns false if both lists are improper with a common shorter prefix" do
+      refute :lists.prefix([1, 2 | 3], [1, 4 | 3])
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [:a, [1, 2]]),
+                   {:lists, :prefix, [:a, [1, 2]]}
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [[1, 2], :a]),
+                   {:lists, :prefix, [[1, 2], :a]}
+    end
+
+    test "raises FunctionClauseError if the first argument is an improper list where everything but the last element is a prefix of the second proper list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, []]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2]]}
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list where everything but the last element is a prefix of the first proper list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [[], 3]),
+                   {:lists, :prefix, [[1, 2], [1, 2 | 3]]}
+    end
+
+    test "raises FunctionClauseError if both lists are improper and have a common prefix made of everything but the last element" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, 4]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2 | 4]]}
+    end
+
+    test "raises FunctionClauseError if the first improper list would be a prefix of the second improper list had the first list been proper" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, [3 | 4]]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2, 3 | 4]]}
     end
   end
 

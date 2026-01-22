@@ -47,6 +47,10 @@ export default class Interpreter {
     return `errors were found at the given arguments:\n\n  * ${ordinal} argument: ${message}\n`;
   }
 
+  static buildBadFunctionErrorMsg(term) {
+    return "expected a function, got: " + $.inspect(term);
+  }
+
   static buildContext(data = {}) {
     const {module, vars} = data;
     const context = {module: null, vars: {}};
@@ -790,6 +794,10 @@ export default class Interpreter {
       "BadArityError",
       `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`,
     );
+  }
+
+  static raiseBadFunctionError(term) {
+    $.raiseError("BadFunctionError", $.buildBadFunctionErrorMsg(term));
   }
 
   static raiseBadMapError(arg) {

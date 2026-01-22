@@ -259,6 +259,16 @@ export default class Type {
     );
   }
 
+  static isCharlist(term) {
+    if (!Type.isProperList(term)) {
+      return false;
+    }
+
+    return term.data.every(
+      (elem) => Type.isInteger(elem) && Bitstring.validateCodePoint(elem.value),
+    );
+  }
+
   static isCompiledPattern(term) {
     if (!Type.isTuple(term)) return false;
 

@@ -267,6 +267,78 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "is_subset/2" do
+    setup do
+      empty_set = :sets.new(version: 2)
+      set_123 = :sets.from_list([1, 2, 3], version: 2)
+
+      [empty_set: empty_set, set_123: set_123]
+    end
+
+    test "returns true if all elements in first set are in second set", %{set_123: set_123} do
+      set_12 = :sets.from_list([1, 2], version: 2)
+
+      assert :sets.is_subset(set_12, set_123) == true
+    end
+
+    test "returns true if both sets are the same", %{set_123: set_123} do
+      assert :sets.is_subset(set_123, set_123) == true
+    end
+
+    test "returns true if both sets are empty", %{empty_set: empty_set} do
+      assert :sets.is_subset(empty_set, empty_set) == true
+    end
+
+    test "returns true if first set is empty and second set isn't", %{
+      empty_set: empty_set,
+      set_123: set_123
+    } do
+      assert :sets.is_subset(empty_set, set_123) == true
+    end
+
+    test "returns false if not all elements in first set are in second set", %{set_123: set_123} do
+      set_14 = :sets.from_list([1, 4], version: 2)
+
+      assert :sets.is_subset(set_14, set_123) == false
+    end
+
+    test "uses strict matching (integer vs float)" do
+      first_set = :sets.from_list([1], version: 2)
+      second_set = :sets.from_list([1.0], version: 2)
+
+      assert :sets.is_subset(first_set, second_set) == false
+    end
+
+    test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
+      expected_msg = ~r"""
+      no function clause matching in :sets\.fold/3
+
+      The following arguments were given to :sets\.fold/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in :sets\.is_subset/2>
+
+          # 2
+          true
+
+          # 3
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(:abc, set_123)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
+      expected_msg = build_function_clause_error_msg(":sets.is_element/2", [1, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(set_123, :abc)
+      end
+    end
+  end
+
   describe "new/1" do
     setup do
       [opts: [{:version, 2}]]
