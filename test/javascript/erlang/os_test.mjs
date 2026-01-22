@@ -18,7 +18,7 @@ describe("Erlang_Os", () => {
   describe("type/0", () => {
     const type = Erlang_Os["type/0"];
 
-    it("returns unix family and web name", () => {
+    it("returns OS family and OS name", () => {
       const result = type();
 
       assert.deepStrictEqual(
