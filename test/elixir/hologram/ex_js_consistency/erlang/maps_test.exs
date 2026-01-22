@@ -445,6 +445,41 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "take/2" do
+    test "key exists in map" do
+      map = %{a: 1, b: 2, c: 3}
+
+      assert :maps.take(:b, map) == {2, %{a: 1, c: 3}}
+    end
+
+    test "key does not exist in map" do
+      map = %{a: 1, c: 3}
+
+      assert :maps.take(:b, map) == :error
+    end
+
+    test "empty map" do
+      assert :maps.take(:a, %{}) == :error
+    end
+
+    test "key exists and value is nil" do
+      assert :maps.take(:a, %{a: nil, b: 2}) == {nil, %{b: 2}}
+    end
+
+    test "doesn't mutate the original map" do
+      map = %{a: 1, b: 2}
+      :maps.take(:a, map)
+
+      assert map == %{a: 1, b: 2}
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_error BadMapError, "expected a map, got: 123", fn ->
+        :maps.take(:a, 123)
+      end
+    end
+  end
+
   describe "to_list/1" do
     test "returns an empty list if given an empty map" do
       assert :maps.to_list(%{}) == []
@@ -501,41 +536,6 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "not a map" do
       assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.values(:abc)
-      end
-    end
-  end
-
-  describe "take/2" do
-    test "key exists in map" do
-      map = %{a: 1, b: 2, c: 3}
-
-      assert :maps.take(:b, map) == {2, %{a: 1, c: 3}}
-    end
-
-    test "key does not exist in map" do
-      map = %{a: 1, c: 3}
-
-      assert :maps.take(:b, map) == :error
-    end
-
-    test "empty map" do
-      assert :maps.take(:a, %{}) == :error
-    end
-
-    test "key exists and value is nil" do
-      assert :maps.take(:a, %{a: nil, b: 2}) == {nil, %{b: 2}}
-    end
-
-    test "doesn't mutate the original map" do
-      map = %{a: 1, b: 2}
-      :maps.take(:a, map)
-
-      assert map == %{a: 1, b: 2}
-    end
-
-    test "raises BadMapError if the second argument is not a map" do
-      assert_error BadMapError, "expected a map, got: 123", fn ->
-        :maps.take(:a, 123)
       end
     end
   end
