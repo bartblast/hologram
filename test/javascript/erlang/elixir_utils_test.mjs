@@ -9,7 +9,6 @@ import {
 import Erlang_Elixir_Utils from "../../../assets/js/erlang/elixir_utils.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
-import { it } from "node:test";
 
 defineGlobalErlangAndElixirModules();
 
