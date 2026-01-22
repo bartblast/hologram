@@ -3,7 +3,6 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
-  sinon,
 } from "../support/helpers.mjs";
 
 import Erlang_Os from "../../../assets/js/erlang/os.mjs";
