@@ -337,12 +337,6 @@ const Erlang_Filename = {
         : Erlang["iolist_to_binary/1"](flattened);
     };
 
-    const isAtom = (value) => Type.isAtom(value);
-
-    const isBinary = (value) => Type.isBinary(value);
-
-    const isList = (value) => Type.isList(value);
-
     // Joins two byte arrays with a separator between them
     const joinPathBytes = (trimmed1, bytes2) => {
       if (trimmed1.length === 0 && bytes2.length === 0) {
@@ -412,7 +406,9 @@ const Erlang_Filename = {
             return acc;
           }
 
-          // Handle separator: push current part if valid
+          // Handle separator: push current part if non-empty.
+          // Leading separators (index === 0) are skipped here since they indicate
+          // an absolute path, which is tracked separately via isResultAbsolute.
           if (index > 0 && acc.currentPart.length > 0) {
             acc.parts.push(acc.currentPart);
             acc.currentPart = [];
@@ -447,10 +443,11 @@ const Erlang_Filename = {
     // Determine return type: charlist (codepoints) only if BOTH inputs are list/atom,
     // otherwise return bitstring (matches Erlang behavior)
     const returnAsCodepoints =
-      (isList(name1) || isAtom(name1)) && (isList(name2) || isAtom(name2));
+      (Type.isList(name1) || Type.isAtom(name1)) &&
+      (Type.isList(name2) || Type.isAtom(name2));
 
-    const binary1 = getBinaryFromFlattened(flattened1, isBinary(name1));
-    const binary2 = getBinaryFromFlattened(flattened2, isBinary(name2));
+    const binary1 = getBinaryFromFlattened(flattened1, Type.isBinary(name1));
+    const binary2 = getBinaryFromFlattened(flattened2, Type.isBinary(name2));
 
     // Ensure bitstrings have byte representations for manipulation
     Bitstring.maybeSetBytesFromText(binary1);
@@ -484,7 +481,7 @@ const Erlang_Filename = {
     return resultToOutput(normalizedBytes, returnAsCodepoints);
   },
   // End join/2
-  // Deps: [:filename.flatten/1, :erlang.iolist_to_binary/1]
+  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1]
 
   // Start split/1
   "split/1": (filename) => {

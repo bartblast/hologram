@@ -632,6 +632,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("local"),
         Type.bitstring("bin"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("usr/local/bin");
 
@@ -644,6 +645,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("local"),
         Type.bitstring("bin"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("/usr/local/bin");
 
@@ -672,6 +674,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("/local"),
         Type.bitstring("bin"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("/local/bin");
 
@@ -684,6 +687,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("b"),
         Type.bitstring("c"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("a/b/c");
 
@@ -696,6 +700,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring(""),
         Type.bitstring(""),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("");
 
@@ -707,6 +712,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("."),
         Type.bitstring("local"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("./local");
 
@@ -718,6 +724,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring(".."),
         Type.bitstring("usr"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("../usr");
 
@@ -737,6 +744,7 @@ describe("Erlang_Filename", () => {
         Type.list([Type.bitstring("a"), Type.bitstring("b")]),
         Type.bitstring("c"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("ab/c");
 
@@ -752,6 +760,7 @@ describe("Erlang_Filename", () => {
         ]),
         Type.bitstring("local"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("usr/local");
 
@@ -764,6 +773,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("usr"),
         Type.bitstring("local"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("/usr/local");
 
@@ -775,6 +785,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("//usr"),
         Type.bitstring("local"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("/usr/local");
 
@@ -790,11 +801,13 @@ describe("Erlang_Filename", () => {
         invalid,
         Type.bitstring("bin"),
       ]);
+
       const result = join(components);
 
       const expected = Bitstring.fromBytes([
         117, 115, 114, 47, 0xc3, 0x28, 47, 98, 105, 110,
       ]);
+
       Bitstring.maybeSetTextFromBytes(expected);
 
       assert.deepStrictEqual(result, expected);
@@ -808,6 +821,26 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("handles single root component", () => {
+      const components = Type.list([Type.bitstring("/")]);
+      const result = join(components);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles deeply nested iolist components", () => {
+      const components = Type.list([
+        Type.list([Type.list([Type.bitstring("a")])]),
+        Type.bitstring("b"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("a/b");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("handles mixed types with absolute path override", () => {
       const components = Type.list([
         Type.bitstring("usr"),
@@ -815,6 +848,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("/tmp"),
         Type.bitstring("file"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("/tmp/file");
 
@@ -827,6 +861,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("user"),
         Type.atom("documents"),
       ]);
+
       const result = join(components);
       const expected = Type.bitstring("home/user/documents");
 
@@ -920,7 +955,7 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("handles leading slash in second component (non-absolute)", () => {
+    it("handles absolute second component with trailing slash in first", () => {
       const name1 = Type.bitstring("usr/");
       const name2 = Type.bitstring("/local");
       const result = join(name1, name2);
@@ -953,6 +988,7 @@ describe("Erlang_Filename", () => {
         Type.integer(115),
         Type.integer(114),
       ]); // 'usr'
+
       const name2 = Type.bitstring("local");
       const result = join(name1, name2);
       const expected = Type.bitstring("usr/local");
@@ -969,6 +1005,7 @@ describe("Erlang_Filename", () => {
         Type.integer(97),
         Type.integer(108),
       ]); // 'local'
+
       const result = join(name1, name2);
       const expected = Type.bitstring("usr/local");
 
@@ -979,6 +1016,7 @@ describe("Erlang_Filename", () => {
       const name1 = Type.list([
         Type.list([Type.integer(117), Type.integer(115), Type.integer(114)]),
       ]); // [[?u, ?s, ?r]]
+
       const name2 = Type.list([
         Type.list([
           Type.integer(108),
@@ -988,6 +1026,7 @@ describe("Erlang_Filename", () => {
           Type.integer(108),
         ]),
       ]); // [[?l, ?o, ?c, ?a, ?l]]
+
       const result = join(name1, name2);
       const expected = Type.charlist("usr/local");
 
@@ -1024,6 +1063,7 @@ describe("Erlang_Filename", () => {
     it("preserves invalid UTF-8 bytes in binary inputs", () => {
       const invalidBytes = [0xc3, 0x28]; // invalid 2-byte UTF-8 sequence
       const name1 = Type.bitstring("usr");
+
       const name2 = Bitstring.fromBytes(invalidBytes);
       Bitstring.maybeSetTextFromBytes(name2);
 
@@ -1036,6 +1076,7 @@ describe("Erlang_Filename", () => {
         47,
         ...invalidBytes,
       ]);
+
       Bitstring.maybeSetTextFromBytes(expected);
 
       assert.deepStrictEqual(result, expected);

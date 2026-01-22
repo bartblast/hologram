@@ -352,6 +352,14 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.join(["/usr/local/bin"]) == "/usr/local/bin"
     end
 
+    test "handles single root component" do
+      assert :filename.join(["/"]) == "/"
+    end
+
+    test "handles deeply nested iolist components" do
+      assert :filename.join([[["a"]], "b"]) == "a/b"
+    end
+
     test "handles mixed types with absolute path override" do
       assert :filename.join(["usr", "local", "/tmp", "file"]) == "/tmp/file"
     end
@@ -402,7 +410,7 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.join("usr/", "local") == "usr/local"
     end
 
-    test "handles leading slash in second component (non-absolute)" do
+    test "handles absolute second component with trailing slash in first" do
       assert :filename.join("usr/", "/local") == "/local"
     end
 
