@@ -506,21 +506,34 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
   end
 
   describe "take/2" do
-    test "returns {value, map2} when key exists in map1" do
+    test "key exists in map" do
       map = %{a: 1, b: 2, c: 3}
+
       assert :maps.take(:b, map) == {2, %{a: 1, c: 3}}
     end
 
-    test "returns :error when key does not exist in map1" do
-      map1 = %{a: 1, c: 3}
-      assert :maps.take(:b, map1) == :error
+    test "key does not exist in map" do
+      map = %{a: 1, c: 3}
+
+      assert :maps.take(:b, map) == :error
     end
 
-    test "returns :error when taking from empty map1" do
+    test "empty map" do
       assert :maps.take(:a, %{}) == :error
     end
 
-    test "raises BadMapError if the map1 is not a map" do
+    test "key exists and value is nil" do
+      assert :maps.take(:a, %{a: nil, b: 2}) == {nil, %{b: 2}}
+    end
+
+    test "doesn't mutate the original map" do
+      map = %{a: 1, b: 2}
+      :maps.take(:a, map)
+
+      assert map == %{a: 1, b: 2}
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
       assert_error BadMapError, "expected a map, got: 123", fn ->
         :maps.take(:a, 123)
       end

@@ -1036,43 +1036,76 @@ describe("Erlang_Maps", () => {
   describe("take/2", () => {
     const take = Erlang_Maps["take/2"];
 
-    it("returns {value, map2} when key exists in map1", () => {
-      const map1 = Type.map([
+    it("key exists in map", () => {
+      const map = Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("b"), Type.integer(2)],
         [Type.atom("c"), Type.integer(3)],
       ]);
 
-      const result = take(Type.atom("b"), map1);
+      const result = take(Type.atom("b"), map);
 
-      const map2 = Type.map([
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("c"), Type.integer(3)],
+      const expected = Type.tuple([
+        Type.integer(2),
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("c"), Type.integer(3)],
+        ]),
       ]);
-
-      const expected = Type.tuple([Type.integer(2), map2]);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns :error when key does not exist in map1", () => {
-      const map1 = Type.map([
+    it("key does not exist in map", () => {
+      const map = Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("c"), Type.integer(3)],
       ]);
 
-      const result = take(Type.atom("b"), map1);
+      const result = take(Type.atom("b"), map);
 
       assert.deepStrictEqual(result, Type.atom("error"));
     });
 
-    it("returns :error when taking from empty map1", () => {
+    it("empty map", () => {
       const result = take(Type.atom("a"), Type.map());
 
       assert.deepStrictEqual(result, Type.atom("error"));
     });
 
-    it("raises BadMapError if the map1 is not a map", () => {
+    it("key exists and value is nil", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.atom("nil")],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const result = take(Type.atom("a"), map);
+
+      const expected = Type.tuple([
+        Type.atom("nil"),
+        Type.map([[Type.atom("b"), Type.integer(2)]]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("doesn't mutate the original map", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      take(Type.atom("a"), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assert.deepStrictEqual(map, expected);
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
       assertBoxedError(
         () => take(Type.atom("a"), Type.integer(123)),
         "BadMapError",
