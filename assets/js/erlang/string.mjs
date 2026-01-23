@@ -162,28 +162,42 @@ const Erlang_String = {
 
   // Start split/3
   "split/3": (string, pattern, direction) => {
-    if (!Type.isBinary(string)) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    function convertToBinary(input) {
+      try {
+        return Erlang_Unicode["characters_to_binary/1"](input);
+      } catch (error) {
+        switch (input) {
+          case string:
+            Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+            return;
+
+          case pattern:
+            Interpreter.raiseArgumentError(
+              Interpreter.buildArgumentErrorMsg(
+                1,
+                "not valid character data (an iodata term)",
+              ),
+            );
+            return;
+
+          default:
+            throw error;
+        }
+      }
     }
 
-    if (!Type.isBinary(pattern)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
-    }
+    const stringBinary = convertToBinary(string);
+    const patternBinary = convertToBinary(pattern);
 
     if (!Type.isAtom(direction)) {
       Interpreter.raiseCaseClauseError(direction);
     }
 
-    const stringText = Bitstring.toText(string);
-    const patternText = Bitstring.toText(pattern);
+    const stringText = Bitstring.toText(stringBinary);
+    const patternText = Bitstring.toText(patternBinary);
 
-    if (Bitstring.isEmpty(pattern) || !stringText.includes(patternText)) {
-      return Type.list([string]);
+    if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
+      return Type.list([stringText]);
     }
 
     let splittedStringList, index;
@@ -321,7 +335,7 @@ const Erlang_String = {
       const codepointNum = Number(firstCodepoint.value);
       const rest = cpResult.data.slice(1);
 
-      return { codepointNum, rest };
+      return {codepointNum, rest};
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -351,7 +365,7 @@ const Erlang_String = {
         return Type.bitstring("");
       }
 
-      const { codepointNum, rest } = extraction;
+      const {codepointNum, rest} = extraction;
       const restBinary = rest[0]; // Tail of the improper list
       const restText = Bitstring.toText(restBinary);
 
@@ -369,7 +383,7 @@ const Erlang_String = {
         return Type.list();
       }
 
-      const { codepointNum, rest } = extraction;
+      const {codepointNum, rest} = extraction;
       const uppercasedCodepoints = uppercaseCodepoint(codepointNum).map((cp) =>
         Type.integer(cp),
       );
