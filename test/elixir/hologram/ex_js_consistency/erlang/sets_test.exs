@@ -143,8 +143,27 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       assert :sets.is_disjoint(empty_set, empty_set) == true
     end
 
+    test "returns true if first set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_disjoint(empty_set, set_123) == true
+    end
+
+    test "returns true if second set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_disjoint(set_123, empty_set) == true
+    end
+
+    test "returns false if sets are identical", %{set_123: set_123} do
+      assert :sets.is_disjoint(set_123, set_123) == false
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set_int = :sets.from_list([1], version: 2)
+      set_float = :sets.from_list([1.0], version: 2)
+
+      assert :sets.is_disjoint(set_int, set_float) == true
+    end
+
     test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
-      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+      expected_msg = build_function_clause_error_msg(":sets.is_disjoint/2", [:abc, set_123])
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.is_disjoint(:abc, set_123)
@@ -152,7 +171,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
-      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+      expected_msg = build_function_clause_error_msg(":sets.is_disjoint/2", [set_123, :abc])
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.is_disjoint(set_123, :abc)
