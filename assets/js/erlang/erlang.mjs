@@ -311,7 +311,7 @@ const Erlang = {
       );
     }
 
-    const context = Interpreter.buildContext({ module: Type.nil() });
+    const context = Interpreter.buildContext({module: Type.nil()});
 
     return Interpreter.callNamedFunction(module, fun, args, context);
   },
@@ -1350,7 +1350,7 @@ const Erlang = {
     }
 
     const segments = codePoints.data.map((codePoint) =>
-      Type.bitstringSegment(codePoint, { type: "utf8" }),
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
     );
 
     const regex = /^<([0-9]+)\.([0-9]+)\.([0-9]+)>$/;
@@ -1396,7 +1396,7 @@ const Erlang = {
     }
 
     const segments = codePoints.data.map((codePoint) =>
-      Type.bitstringSegment(codePoint, { type: "utf8" }),
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
     );
 
     const regex = /^#Ref<([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)>$/;

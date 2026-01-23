@@ -10,7 +10,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import { defineModule1Fixture as defineErlangModule1Fixture } from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -1418,7 +1418,7 @@ describe("Erlang", () => {
 
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(false), right: Type.atom("abc") },
+        vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
       const result = andalso(
@@ -1432,7 +1432,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is true", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(true), right: Type.atom("abc") },
+        vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
       const result = andalso(
@@ -1458,7 +1458,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: { left: Type.nil(), right: Type.boolean(true) },
+        vars: {left: Type.nil(), right: Type.boolean(true)},
       });
 
       assertBoxedError(
@@ -3564,7 +3564,7 @@ describe("Erlang", () => {
 
         const expected = Type.bitstring(
           "0.033333333333333332870740406406184774823486804962158203125" +
-          "0".repeat(196),
+            "0".repeat(196),
         );
 
         assert.deepStrictEqual(result, expected);
@@ -3792,8 +3792,8 @@ describe("Erlang", () => {
 
         const expected = Type.bitstring(
           "3.333333333333333481363069950020872056484222412109375" +
-          "0".repeat(198) +
-          "e+00",
+            "0".repeat(198) +
+            "e+00",
         );
 
         assert.deepStrictEqual(result, expected);
@@ -5681,7 +5681,7 @@ describe("Erlang", () => {
 
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(true), right: Type.atom("abc") },
+        vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
       const result = orelse(
@@ -5695,7 +5695,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is false", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(false), right: Type.atom("abc") },
+        vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
       const result = orelse(
@@ -5721,7 +5721,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: { left: Type.nil(), right: Type.boolean(true) },
+        vars: {left: Type.nil(), right: Type.boolean(true)},
       });
 
       assertBoxedError(
