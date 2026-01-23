@@ -201,13 +201,15 @@ const Erlang_String = {
         break;
 
       case "leading":
-      default:
         index = stringText.indexOf(patternText);
         splittedStringList = [
           stringText.slice(0, index),
           stringText.slice(index + patternText.length),
         ];
         break;
+
+      default:
+        Interpreter.raiseCaseClauseError(direction);
     }
 
     return Type.list(splittedStringList);
@@ -319,7 +321,7 @@ const Erlang_String = {
       const codepointNum = Number(firstCodepoint.value);
       const rest = cpResult.data.slice(1);
 
-      return {codepointNum, rest};
+      return { codepointNum, rest };
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -349,7 +351,7 @@ const Erlang_String = {
         return Type.bitstring("");
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const restBinary = rest[0]; // Tail of the improper list
       const restText = Bitstring.toText(restBinary);
 
@@ -367,7 +369,7 @@ const Erlang_String = {
         return Type.list();
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const uppercasedCodepoints = uppercaseCodepoint(codepointNum).map((cp) =>
         Type.integer(cp),
       );
