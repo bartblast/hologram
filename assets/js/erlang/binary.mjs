@@ -246,7 +246,7 @@ const Erlang_Binary = {
           }
           node = node.children.get(byte);
         });
-        node.output.push(pattern);
+        node.output.push(pattern.text);
       });
 
       // Add failures
@@ -295,32 +295,30 @@ const Erlang_Binary = {
     const maxIndex = Math.max(length, subject.text.length);
 
     const rootNode = compiledPatternData.rootNode;
-    let currentNode = rootNode;
+    let candidateNode = rootNode;
 
     for (let index = startIndex; index < maxIndex; index++) {
-      const char = subject.bytes[index];
+      const byte = subject.bytes[index];
 
-      // console.log("index:", index);
-      // console.log("char:", char);
-      // console.log(
-      //   "currentNode.children.get(char):",
-      //   currentNode.children.get(char),
-      // );
-
-      while (currentNode !== null && !currentNode.children.get(char)) {
-        currentNode = currentNode.failure;
+      while (candidateNode !== null && !candidateNode.children.has(byte)) {
+        candidateNode = candidateNode.failure;
       }
 
-      currentNode = currentNode
-        ? currentNode.children[char] || this.root
-        : this.root;
+      // next node, or back to root
+      candidateNode = candidateNode
+        ? candidateNode.children.get(byte) || rootNode
+        : rootNode;
 
-      // console.log("output:", currentNode.output);
-
-      const resultLength = currentNode.output.length;
-      const foundIndex = index - resultLength + 1;
-      return Type.tuple([Type.integer(foundIndex), Type.integer(resultLength)]);
+      if (candidateNode.output.length > 0) {
+        const resultLength = candidateNode.output[0].length;
+        const foundIndex = index - resultLength + 1;
+        return Type.tuple([
+          Type.integer(foundIndex),
+          Type.integer(resultLength),
+        ]);
+      }
     }
+
     return false;
   },
   // End _aho_corasick_search/3

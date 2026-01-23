@@ -465,15 +465,18 @@ describe("Erlang_Binary", () => {
     Erlang_Binary["compile_pattern/1"](patternList);
 
     describe("with default options (empty list)", () => {
-      it.only("finds first pattern in subject", () => {
+      it("finds first pattern in subject", () => {
         const result = search(subject, patternList, emptyList);
-        assert.equal(result, Type.tuple([Type.integer(0), Type.integer(3)]));
+        assert.deepEqual(
+          result,
+          Type.tuple([Type.integer(0), Type.integer(3)]),
+        );
       });
 
       it("returns false when no patterns are found", () => {
         const invalidSubject = Bitstring.fromText("hello world");
         const result = search(invalidSubject, patternList, emptyList);
-        assert.equal(result, false);
+        assert.deepEqual(result, false);
       });
     });
 
@@ -488,7 +491,10 @@ describe("Erlang_Binary", () => {
 
         const result = search(subject, patternList, options);
 
-        assert.equal(result, Type.tuple([Type.integer(3), Type.integer(7)]));
+        assert.deepEqual(
+          result,
+          Type.tuple([Type.integer(10), Type.integer(3)]),
+        );
       });
     });
   });
