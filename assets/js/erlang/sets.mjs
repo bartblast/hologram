@@ -90,6 +90,26 @@ const Erlang_Sets = {
   // End del_element/2
   // Deps: [:maps.remove/2]
 
+  // Start is_disjoint/2
+  "is_disjoint/2": (set1, set2) => {
+    [set1, set2].forEach((set) => {
+      if (!Type.isMap(set)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":sets.is_disjoint/2", [
+            set1,
+            set2,
+          ]),
+        );
+      }
+    });
+
+    const encodedKeys1 = new Set(Object.keys(set1.data));
+    const encodedKeys2 = new Set(Object.keys(set2.data));
+    return Type.boolean(encodedKeys1.isDisjointFrom(encodedKeys2));
+  },
+  // End is_disjoint/2
+  // Deps: []
+
   // Start filter/2
   "filter/2": (fun, set) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1 || !Type.isMap(set)) {
