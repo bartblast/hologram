@@ -1980,9 +1980,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "decodes large positive integer (LARGE_BIG_EXT)" do
       # LARGE_BIG_EXT requires integers with >255 bytes +
       # 2^2048 requires 257 bytes, triggering LARGE_BIG_EXT encoding
-      large_int =
-        Integer.pow(2, 2048)
-        |> trunc()
+      large_int = trunc(Integer.pow(2, 2048))
 
       binary = :erlang.term_to_binary(large_int)
       assert :erlang.binary_to_term(binary) == large_int
@@ -1991,7 +1989,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "decodes atom UTF-8 (ATOM_UTF8_EXT)" do
       name = "élixir"
       binary = <<131, 118, byte_size(name)::16, name::binary>>
-      assert :erlang.binary_to_term(binary) == String.to_atom(name)
+      assert :erlang.binary_to_term(binary) == String.to_existing_atom(name)
     end
 
     test "decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)" do
@@ -2043,7 +2041,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes large tuple (LARGE_TUPLE_EXT)" do
       arity = 300
-      tuple = 1..arity |> Enum.to_list() |> List.to_tuple()
+
+      tuple =
+        1..arity
+        |> Enum.to_list()
+        |> List.to_tuple()
+
       binary = :erlang.term_to_binary(tuple)
       result = :erlang.binary_to_term(binary)
 

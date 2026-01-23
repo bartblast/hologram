@@ -2878,20 +2878,22 @@ describe("Erlang", () => {
         assert.deepStrictEqual(result, Type.atom("test_atom"));
       });
 
-      it("decodes boolean atoms", () => {
+      it("decodes true atom", () => {
         // :erlang.term_to_binary(true) = <<131, 119, 4, 116, 114, 117, 101>>
-        const trueBinary = Bitstring.fromBytes(
+        const binary = Bitstring.fromBytes(
           new Uint8Array([131, 119, 4, 116, 114, 117, 101]),
         );
-        const trueResult = binary_to_term(trueBinary);
-        assert.deepStrictEqual(trueResult, Type.atom("true"));
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.atom("true"));
+      });
 
+      it("decodes false atom", () => {
         // :erlang.term_to_binary(false) = <<131, 119, 5, 102, 97, 108, 115, 101>>
-        const falseBinary = Bitstring.fromBytes(
+        const binary = Bitstring.fromBytes(
           new Uint8Array([131, 119, 5, 102, 97, 108, 115, 101]),
         );
-        const falseResult = binary_to_term(falseBinary);
-        assert.deepStrictEqual(falseResult, Type.atom("false"));
+        const result = binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.atom("false"));
       });
     });
 

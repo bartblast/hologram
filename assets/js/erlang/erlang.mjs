@@ -728,7 +728,10 @@ const Erlang = {
 
         default:
           Interpreter.raiseArgumentError(
-            `unsupported external term format tag: ${tag}`,
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
           );
       }
     };
@@ -802,8 +805,9 @@ const Erlang = {
       }
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
 
-      const decoder = new TextDecoder(isUtf8 ? "utf-8" : "latin1");
-      const atomString = decoder.decode(atomBytes);
+      const atomString = isUtf8
+        ? new TextDecoder("utf-8").decode(atomBytes)
+        : String.fromCharCode(...atomBytes);
 
       return {
         term: Type.atom(atomString),
