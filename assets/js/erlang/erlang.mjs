@@ -833,9 +833,9 @@ const Erlang = {
 
     const decodeBinary = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
-      if (offset + 2 + length > bytes.length) {
+      if (offset + 4 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          `atom length exceeds available bytes: ${length}`,
+          `binary length exceeds available bytes: ${length}`,
         );
       }
       const binaryBytes = bytes.slice(offset + 4, offset + 4 + length);

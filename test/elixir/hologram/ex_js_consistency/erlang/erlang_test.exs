@@ -2043,8 +2043,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes large tuple (LARGE_TUPLE_EXT)" do
       arity = 300
-      elements = for i <- 1..arity, do: <<97, i::8>>, into: <<>>
-      binary = <<131, 105, arity::32>> <> elements
+      tuple = 1..arity |> Enum.to_list() |> List.to_tuple()
+      binary = :erlang.term_to_binary(tuple)
       result = :erlang.binary_to_term(binary)
 
       assert is_tuple(result)
