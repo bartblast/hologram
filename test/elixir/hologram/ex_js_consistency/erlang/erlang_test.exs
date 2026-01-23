@@ -3469,7 +3469,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.list_to_tuple([1, 2, 3]) == {1, 2, 3}
     end
 
-    test "raises ArgumentError if the argument is empty list" do
+    test "empty list" do
       assert :erlang.list_to_tuple([]) == {}
     end
 
@@ -3481,7 +3481,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is an improper list" do
       assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a list"),
+                   build_argument_error_msg(1, "not a proper list"),
                    {:erlang, :list_to_tuple, [[1, 2 | 3]]}
     end
   end

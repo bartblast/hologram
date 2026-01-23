@@ -5585,7 +5585,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => list_to_tuple(list),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
   });
