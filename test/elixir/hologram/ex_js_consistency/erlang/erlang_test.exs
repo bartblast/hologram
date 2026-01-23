@@ -2193,6 +2193,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert is_port(decoded)
     end
 
+    test "decodes EXPORT_EXT (function capture)" do
+      # Create a function capture and encode/decode it
+      fun = &Enum.map/2
+      binary = :erlang.term_to_binary(fun)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_function(decoded, 2)
+    end
+
     test "decodes Code.fetch_docs/1 style tuple" do
       term = {:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []}
       binary = :erlang.term_to_binary(term)

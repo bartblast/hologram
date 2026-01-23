@@ -3292,6 +3292,27 @@ describe("Erlang", () => {
       });
     });
 
+    describe("exports (function captures)", () => {
+      it("decodes EXPORT_EXT (function capture)", () => {
+        // &Enum.map/2
+        // :erlang.term_to_binary(&Enum.map/2) =
+        // <<131, 113, 119, 11, 69, 108, 105, 120, 105, 114, 46, 69, 110, 117, 109, 119, 3, 109, 97, 112, 97, 2>>
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 113, 119, 11, 69, 108, 105, 120, 105, 114, 46, 69, 110, 117,
+            109, 119, 3, 109, 97, 112, 97, 2,
+          ]),
+        );
+        const result = binary_to_term(binary);
+
+        assert.strictEqual(result.type, "anonymous_function");
+        assert.strictEqual(result.capturedModule, "Elixir.Enum");
+        assert.strictEqual(result.capturedFunction, "map");
+        assert.strictEqual(result.arity, 2);
+        assert.deepStrictEqual(result.clauses, []);
+      });
+    });
+
     describe("complex nested structures", () => {
       it("decodes Code.fetch_docs/1 style tuple", () => {
         // :erlang.term_to_binary({:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []})

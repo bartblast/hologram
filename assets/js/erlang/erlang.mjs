@@ -627,6 +627,7 @@ const Erlang = {
     const BINARY_EXT = 109;
     const SMALL_BIG_EXT = 110;
     const LARGE_BIG_EXT = 111;
+    const EXPORT_EXT = 113;
     const NEW_REFERENCE_EXT = 114;
     const SMALL_ATOM_EXT = 115;
     const MAP_EXT = 116;
@@ -721,6 +722,9 @@ const Erlang = {
 
         case V4_PORT_EXT:
           return decodeV4Port(dataView, bytes, offset + 1);
+
+        case EXPORT_EXT:
+          return decodeExport(dataView, bytes, offset + 1);
 
         default:
           Interpreter.raiseArgumentError(
@@ -1161,6 +1165,39 @@ const Erlang = {
 
       return {
         term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    // EXPORT_EXT decoder (function capture)
+    const decodeExport = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode module (atom)
+      const moduleResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = moduleResult.newOffset;
+
+      // Decode function (atom)
+      const functionResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = functionResult.newOffset;
+
+      // Decode arity (small integer)
+      const arityResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = arityResult.newOffset;
+
+      const context = Interpreter.buildContext();
+
+      // Convert arity from BigInt to Number
+      const arity = Number(arityResult.term.value);
+
+      return {
+        term: Type.functionCapture(
+          moduleResult.term.value,
+          functionResult.term.value,
+          arity,
+          [],
+          context,
+        ),
         newOffset: currentOffset,
       };
     };
