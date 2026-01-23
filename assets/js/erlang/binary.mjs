@@ -176,7 +176,7 @@ const Erlang_Binary = {
   // Boyer-Moore matcher implementation for single patterns
   // Start _boyer_moore_pattern_matcher/1
   "_boyer_moore_pattern_matcher/1": (pattern) => {
-    Bitstring.maybeSetBytesFromText(pattern);
+    Bitstring.maybeSetTextFromBytes(pattern);
 
     if (pattern.bytes.length == 0) {
       Interpreter.raiseArgumentError("is not a valid pattern");
