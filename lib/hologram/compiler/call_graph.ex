@@ -22,6 +22,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:binary, :_boyer_moore_search, 3}, {:binary, :_parse_search_opts, 1}},
     {{:binary, :_parse_search_opts, 1}, {:lists, :keyfind, 3}},
     {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
+    {{:binary, :part, 2}, {:binary, :part, 3}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},

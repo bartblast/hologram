@@ -664,4 +664,290 @@ describe("Erlang_Binary", () => {
   //     });
   //   });
   // });
+
+  describe("part/2", () => {
+    const part2 = Erlang_Binary["part/2"];
+
+    it("returns part of binary with tuple {start, length}", () => {
+      const result = part2(
+        Type.bitstring("hello world"),
+        Type.tuple([Type.integer(0), Type.integer(5)]),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("hello"));
+    });
+
+    it("returns middle part with tuple", () => {
+      const result = part2(
+        Type.bitstring("hello world"),
+        Type.tuple([Type.integer(6), Type.integer(5)]),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("world"));
+    });
+
+    it("returns empty binary when length is 0", () => {
+      const result = part2(
+        Type.bitstring("hello"),
+        Type.tuple([Type.integer(0), Type.integer(0)]),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText(""));
+    });
+
+    it("returns last character", () => {
+      const result = part2(
+        Type.bitstring("hello"),
+        Type.tuple([Type.integer(4), Type.integer(1)]),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("o"));
+    });
+
+    it("handles bytes-based binary", () => {
+      const binary = Bitstring.fromBytes([72, 101, 108, 108, 111]);
+      const result = part2(
+        binary,
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("ell"));
+    });
+
+    it("handles invalid UTF-8 bytes", () => {
+      const binary = Bitstring.fromBytes([0xc3, 0x28, 0x41]);
+      const result = part2(
+        binary,
+        Type.tuple([Type.integer(0), Type.integer(3)]),
+      );
+      assertBoxedStrictEqual(result, binary);
+    });
+
+    it("raises ArgumentError when subject is not a binary", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.atom("notabinary"),
+            Type.tuple([Type.integer(0), Type.integer(1)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when subject is a non-binary bitstring", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.bitstring([1, 0, 1]),
+            Type.tuple([Type.integer(0), Type.integer(1)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when posLen is not a tuple", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.bitstring("hello"),
+            Type.list([Type.integer(0), Type.integer(1)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when tuple has wrong length", () => {
+      assertBoxedError(
+        () => part2(Type.bitstring("hello"), Type.tuple([Type.integer(0)])),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when start is not an integer", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.bitstring("hello"),
+            Type.tuple([Type.atom("invalid"), Type.integer(1)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when length is not an integer", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.bitstring("hello"),
+            Type.tuple([Type.integer(0), Type.atom("invalid")]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when start is negative", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.bitstring("hello"),
+            Type.tuple([Type.integer(-1), Type.integer(2)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("extracts backwards with negative length", () => {
+      const result = part2(
+        Type.bitstring("hello"),
+        Type.tuple([Type.integer(5), Type.integer(-3)]),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("llo"));
+    });
+
+    it("raises ArgumentError when part extends past end", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.bitstring("hello"),
+            Type.tuple([Type.integer(2), Type.integer(10)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when negative length goes before start", () => {
+      assertBoxedError(
+        () =>
+          part2(
+            Type.bitstring("hello"),
+            Type.tuple([Type.integer(2), Type.integer(-3)]),
+          ),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+  });
+
+  describe("part/3", () => {
+    const part3 = Erlang_Binary["part/3"];
+
+    it("returns part of binary starting at position with given length", () => {
+      const result = part3(
+        Type.bitstring("hello world"),
+        Type.integer(0),
+        Type.integer(5),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("hello"));
+    });
+
+    it("returns middle part of binary", () => {
+      const result = part3(
+        Type.bitstring("hello world"),
+        Type.integer(6),
+        Type.integer(5),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("world"));
+    });
+
+    it("returns empty binary when length is 0", () => {
+      const result = part3(
+        Type.bitstring("hello"),
+        Type.integer(0),
+        Type.integer(0),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText(""));
+    });
+
+    it("returns last character", () => {
+      const result = part3(
+        Type.bitstring("hello"),
+        Type.integer(4),
+        Type.integer(1),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("o"));
+    });
+
+    it("handles bytes-based binary", () => {
+      const binary = Bitstring.fromBytes([72, 101, 108, 108, 111]);
+      const result = part3(binary, Type.integer(1), Type.integer(3));
+      assertBoxedStrictEqual(result, Bitstring.fromText("ell"));
+    });
+
+    it("handles invalid UTF-8 bytes", () => {
+      const binary = Bitstring.fromBytes([0xc3, 0x28, 0x41]);
+      const result = part3(binary, Type.integer(0), Type.integer(3));
+      assertBoxedStrictEqual(result, binary);
+    });
+
+    it("raises ArgumentError when subject is not a binary", () => {
+      assertBoxedError(
+        () => part3(Type.atom("notabinary"), Type.integer(0), Type.integer(1)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when subject is a non-binary bitstring", () => {
+      assertBoxedError(
+        () =>
+          part3(Type.bitstring([1, 0, 1]), Type.integer(0), Type.integer(1)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when start is not an integer", () => {
+      assertBoxedError(
+        () =>
+          part3(Type.bitstring("hello"), Type.atom("invalid"), Type.integer(1)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when length is not an integer", () => {
+      assertBoxedError(
+        () =>
+          part3(Type.bitstring("hello"), Type.integer(0), Type.atom("invalid")),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when start is negative", () => {
+      assertBoxedError(
+        () => part3(Type.bitstring("hello"), Type.integer(-1), Type.integer(2)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("extracts backwards with negative length", () => {
+      const result = part3(
+        Type.bitstring("hello"),
+        Type.integer(5),
+        Type.integer(-3),
+      );
+      assertBoxedStrictEqual(result, Bitstring.fromText("llo"));
+    });
+
+    it("raises ArgumentError when part extends past end", () => {
+      assertBoxedError(
+        () => part3(Type.bitstring("hello"), Type.integer(2), Type.integer(10)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError when negative length goes before start", () => {
+      assertBoxedError(
+        () => part3(Type.bitstring("hello"), Type.integer(2), Type.integer(-3)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+  });
 });

@@ -271,4 +271,174 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    {:binary, :last, [""]}
     end
   end
+
+  describe "part/2" do
+    test "returns part of binary with tuple {start, length}" do
+      result = :binary.part("hello world", {0, 5})
+      assert result == "hello"
+    end
+
+    test "returns middle part with tuple" do
+      result = :binary.part("hello world", {6, 5})
+      assert result == "world"
+    end
+
+    test "returns empty binary when length is 0" do
+      result = :binary.part("hello", {0, 0})
+      assert result == ""
+    end
+
+    test "returns last character" do
+      result = :binary.part("hello", {4, 1})
+      assert result == "o"
+    end
+
+    test "handles bytes-based binary" do
+      result = :binary.part(<<72, 101, 108, 108, 111>>, {1, 3})
+      assert result == "ell"
+    end
+
+    test "handles invalid UTF-8 bytes" do
+      result = :binary.part(<<0xC3, 0x28, 0x41>>, {0, 3})
+      assert result == <<0xC3, 0x28, 0x41>>
+    end
+
+    test "raises ArgumentError when subject is not a binary" do
+      assert_raise ArgumentError, fn ->
+        :binary.part(:notabinary, {0, 1})
+      end
+    end
+
+    test "raises ArgumentError when subject is a non-binary bitstring" do
+      assert_raise ArgumentError, fn ->
+        :binary.part(<<1::1, 0::1, 1::1>>, {0, 1})
+      end
+    end
+
+    test "raises ArgumentError when posLen is not a tuple" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", [0, 1])
+      end
+    end
+
+    test "raises ArgumentError when tuple has wrong length" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", {0})
+      end
+    end
+
+    test "raises ArgumentError when start is not an integer" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", {:invalid, 1})
+      end
+    end
+
+    test "raises ArgumentError when length is not an integer" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", {0, :invalid})
+      end
+    end
+
+    test "raises ArgumentError when start is negative" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", {-1, 2})
+      end
+    end
+
+    test "extracts backwards with negative length" do
+      result = :binary.part("hello", {5, -3})
+      assert result == "llo"
+    end
+
+    test "raises ArgumentError when part extends past end" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", {2, 10})
+      end
+    end
+
+    test "raises ArgumentError when negative length goes before start" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", {2, -3})
+      end
+    end
+  end
+
+  describe "part/3" do
+    test "returns part of binary starting at position with given length" do
+      result = :binary.part("hello world", 0, 5)
+      assert result == "hello"
+    end
+
+    test "returns middle part of binary" do
+      result = :binary.part("hello world", 6, 5)
+      assert result == "world"
+    end
+
+    test "returns empty binary when length is 0" do
+      result = :binary.part("hello", 0, 0)
+      assert result == ""
+    end
+
+    test "returns last character" do
+      result = :binary.part("hello", 4, 1)
+      assert result == "o"
+    end
+
+    test "handles bytes-based binary" do
+      result = :binary.part(<<72, 101, 108, 108, 111>>, 1, 3)
+      assert result == "ell"
+    end
+
+    test "handles invalid UTF-8 bytes" do
+      result = :binary.part(<<0xC3, 0x28, 0x41>>, 0, 3)
+      assert result == <<0xC3, 0x28, 0x41>>
+    end
+
+    test "raises ArgumentError when subject is not a binary" do
+      assert_raise ArgumentError, fn ->
+        :binary.part(:notabinary, 0, 1)
+      end
+    end
+
+    test "raises ArgumentError when subject is a non-binary bitstring" do
+      assert_raise ArgumentError, fn ->
+        :binary.part(<<1::1, 0::1, 1::1>>, 0, 1)
+      end
+    end
+
+    test "raises ArgumentError when start is not an integer" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", :invalid, 1)
+      end
+    end
+
+    test "raises ArgumentError when length is not an integer" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", 0, :invalid)
+      end
+    end
+
+    test "raises ArgumentError when start is negative" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", -1, 2)
+      end
+    end
+
+    test "extracts backwards with negative length" do
+      result = :binary.part("hello", 5, -3)
+      assert result == "llo"
+    end
+
+    test "raises ArgumentError when part extends past end" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", 2, 10)
+      end
+    end
+
+    test "raises ArgumentError when negative length goes before start" do
+      assert_raise ArgumentError, fn ->
+        :binary.part("hello", 2, -3)
+      end
+    end
+  end
 end

@@ -268,6 +268,74 @@ const Erlang_Binary = {
   // End last/1
   // Deps: []
 
+  // Start part/2
+  "part/2": (subject, posLen) => {
+    if (
+      !Type.isBinary(subject) ||
+      !Type.isTuple(posLen) ||
+      posLen.data.length !== 2
+    ) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const start = posLen.data[0];
+    const length = posLen.data[1];
+
+    if (!Type.isInteger(start) || !Type.isInteger(length)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    // Reuse part/3 implementation
+    return Erlang_Binary["part/3"](subject, start, length);
+  },
+  // End part/2
+  // Deps: [:binary.part/3]
+
+  // Start part/3
+  "part/3": (subject, start, length) => {
+    if (
+      !Type.isBinary(subject) ||
+      !Type.isInteger(start) ||
+      !Type.isInteger(length)
+    ) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const totalBytes = Bitstring.calculateBitCount(subject) / 8;
+
+    if (start.value < 0n || start.value > totalBytes) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const isReverse = length.value < 0n;
+
+    const outOfRangeForward =
+      !isReverse && start.value + length.value > totalBytes;
+
+    const outOfRangeReverse = isReverse && start.value + length.value < 0n;
+
+    if (outOfRangeForward || outOfRangeReverse) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const actualStart = isReverse ? start.value + length.value : start.value;
+    const actualLength = isReverse ? -length.value : length.value;
+
+    Bitstring.maybeSetBytesFromText(subject);
+
+    const startNum = Number(actualStart);
+    const lengthNum = Number(actualLength);
+
+    if (lengthNum === 0) return Bitstring.fromText("");
+
+    const resultBytes = subject.bytes.slice(startNum, startNum + lengthNum);
+    const result = Bitstring.fromBytes(resultBytes);
+    Bitstring.maybeSetTextFromBytes(result);
+    return result;
+  },
+  // End part/3
+  // Deps: []
+
   // TODO: consider
   // // Start _aho_corasick_search/3
   // "_aho_corasick_search/3": (subject, patterns, options) => {
