@@ -16,7 +16,14 @@ defmodule HologramFeatureTests.TestCase do
       import HologramFeatureTests.Helpers
 
       import Wallaby.Browser,
-        except: [assert_text: 2, assert_text: 3, cookies: 1, has_text?: 2, visit: 2]
+        except: [
+          assert_text: 2,
+          assert_text: 3,
+          cookies: 1,
+          has_text?: 2,
+          refute_has: 2,
+          visit: 2
+        ]
 
       import Wallaby.Feature
       import Wallaby.Query

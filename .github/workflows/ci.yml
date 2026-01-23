@@ -52,9 +52,10 @@ jobs:
           # - "18.20.4"
           # A few JS libs used by Hologram require Node 20+.
           # - "19.9.0"
-          - "20.16.0"
-          - "21.7.3"
-          - "22.9.0"
+          # Node.js only tests the build step. Actual JS runs in browsers.
+          # Use latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
         exclude:
           - elixir: "1.15.8"
             otp: "27.2"
@@ -65,7 +66,7 @@ jobs:
           - elixir: "1.18.2"
             otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '24.13.0') }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
@@ -241,42 +242,17 @@ jobs:
       # and running the workflow steps.
       matrix:
         elixir:
-          # Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0
-          # - "1.13.4"
-          # - "1.14.5"
-          - "1.15.8"
-          - "1.16.3"
-          - "1.17.3"
+          # Run feature tests on latest pinned stable Elixir version only
           - "1.18.2"
         otp:
-          # See: https://hexdocs.pm/elixir/compatibility-and-deprecations.html#between-elixir-and-erlang-otp
-          # cowlib 2.14+ requires Erlang/OTP 23+.
-          # - "22.3"
-          # Elixir 1.15+ requires Erlang/OTP 24+.
-          # - "23.3"
-          - "24.3"
-          - "25.3"
-          - "26.2"
+          # Run feature tests on latest pinned stable OTP version only
           - "27.2"
         node:
-          #  Web Crypto API requires Node 19+.
-          # - "18.20.4"
-          # A few JS libs used by Hologram require Node 20+.
-          # - "19.9.0"
-          - "20.16.0"
-          - "21.7.3"
-          - "22.9.0"
-        exclude:
-          - elixir: "1.15.8"
-            otp: "27.2"
-          - elixir: "1.16.3"
-            otp: "27.2"
-          - elixir: "1.17.3"
-            otp: "24.3"
-          - elixir: "1.18.2"
-            otp: "24.3"
+          # Run feature tests on latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: "true"
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir

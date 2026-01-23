@@ -93,7 +93,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   describe "call named function" do
     test "remote private function call" do
       expected_msg =
-        build_undefined_function_error({Module1, :my_private_fun, 2}, [
+        build_undefined_function_error_msg({Module1, :my_private_fun, 2}, [
           {:my_public_fun, 1},
           {:my_public_fun, 2}
         ])
@@ -107,7 +107,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     end
 
     test "module is available, but function is undefined" do
-      expected_msg = build_undefined_function_error({Module1, :undefined_function, 2})
+      expected_msg = build_undefined_function_error_msg({Module1, :undefined_function, 2})
 
       assert_error UndefinedFunctionError,
                    expected_msg,
@@ -118,7 +118,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     end
 
     test "module is not available" do
-      expected_msg = build_undefined_function_error({MyModule, :my_fun, 2}, [], false)
+      expected_msg = build_undefined_function_error_msg({MyModule, :my_fun, 2}, [], false)
 
       assert_error UndefinedFunctionError,
                    expected_msg,
@@ -130,7 +130,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
 
     test "function with the same name and different arity is defined" do
       expected_msg =
-        build_undefined_function_error({Module1, :my_public_fun, 3}, [
+        build_undefined_function_error_msg({Module1, :my_public_fun, 3}, [
           {:my_public_fun, 1},
           {:my_public_fun, 2}
         ])

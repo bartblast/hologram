@@ -15,6 +15,11 @@ defmodule Hologram.Commons.TestUtilsTest do
     assert result == expected
   end
 
+  test "build_bad_function_error_msg/1" do
+    assert build_bad_function_error_msg(%{b: 2, a: 1}) ==
+             "expected a function, got: %{a: 1, b: 2}"
+  end
+
   describe "build_function_clause_error_msg/3" do
     # no args / no attempted clauses
     test "basic case" do
@@ -119,15 +124,22 @@ defmodule Hologram.Commons.TestUtilsTest do
     end
   end
 
-  describe "build_undefined_function_error/3" do
+  test "build_match_error_msg/1" do
+    result = build_match_error_msg(%{b: 2, a: 1})
+    expected = "no match of right hand side value: %{a: 1, b: 2}"
+
+    assert result == expected
+  end
+
+  describe "build_undefined_function_error_msg/3" do
     # no similar functions / module is available
     test "basic case" do
-      assert build_undefined_function_error({MyModule, :my_fun, 2}) ==
+      assert build_undefined_function_error_msg({MyModule, :my_fun, 2}) ==
                "function MyModule.my_fun/2 is undefined or private"
     end
 
     test "single similar function" do
-      result = build_undefined_function_error({MyModule, :my_fun, 2}, [{:my_other_fun, 3}])
+      result = build_undefined_function_error_msg({MyModule, :my_fun, 2}, [{:my_other_fun, 3}])
 
       expected =
         normalize_newlines("""
@@ -141,7 +153,7 @@ defmodule Hologram.Commons.TestUtilsTest do
 
     test "multiple similar functions" do
       result =
-        build_undefined_function_error({MyModule, :my_fun, 2}, [
+        build_undefined_function_error_msg({MyModule, :my_fun, 2}, [
           {:my_other_fun_1, 3},
           {:my_other_fun_2, 4}
         ])
@@ -165,7 +177,7 @@ defmodule Hologram.Commons.TestUtilsTest do
           "function MyModule.my_fun/2 is undefined (module MyModule is not available)"
         end
 
-      assert build_undefined_function_error({MyModule, :my_fun, 2}, [], false) == expected
+      assert build_undefined_function_error_msg({MyModule, :my_fun, 2}, [], false) == expected
     end
   end
 

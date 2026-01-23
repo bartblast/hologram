@@ -2,7 +2,6 @@
 
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
-import Utils from "../utils.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
@@ -186,6 +185,42 @@ const Erlang_Maps = {
   // End merge/2
   // Deps: []
 
+  // Start merge_with/3
+  "merge_with/3": (combiner, map1, map2) => {
+    if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = Type.cloneMap(map1);
+
+    Object.entries(map2.data).forEach(([encodedKey, [key, value2]]) => {
+      const value1 = result.data[encodedKey]?.[1];
+
+      const newValue = value1
+        ? Interpreter.callAnonymousFunction(combiner, [key, value1, value2])
+        : value2;
+
+      result.data[encodedKey] = [key, newValue];
+    });
+
+    return result;
+  },
+  // End merge_with/3
+  // Deps: []
+
   // Start next/1
   "next/1": (iterator) => {
     if (!Type.isIterator(iterator)) {
@@ -218,7 +253,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.shallowCloneObject(map);
+    const newMap = Type.cloneMap(map);
     newMap.data[Type.encodeMapKey(key)] = [key, value];
 
     return newMap;
@@ -232,7 +267,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.shallowCloneObject(map);
+    const newMap = Type.cloneMap(map);
     delete newMap.data[Type.encodeMapKey(key)];
 
     return newMap;
