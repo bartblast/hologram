@@ -240,23 +240,48 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
   describe "add_element/2" do
     test "adds a new element to the set" do
       set = :sets.from_list([1, 3], [{:version, 2}])
-      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
       result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
       assert result == expected
     end
 
     test "returns the same set if element is already present" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
-      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
       result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
       assert result == expected
     end
 
     test "adds element to empty set" do
       set = :sets.from_list([], [{:version, 2}])
-      expected = :sets.from_list([1], [{:version, 2}])
+
       result = :sets.add_element(1, set)
+      expected = :sets.from_list([1], [{:version, 2}])
+
       assert result == expected
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set = :sets.from_list([1.0], [{:version, 2}])
+
+      result = :sets.add_element(1, set)
+      expected = :sets.from_list([1, 1.0], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "doesn't mutate the original set" do
+      set = :sets.from_list([1, 2], [{:version, 2}])
+
+      :sets.add_element(3, set)
+
+      expected = :sets.from_list([1, 2], [{:version, 2}])
+
+      assert set == expected
     end
 
     test "raises FunctionClauseError if argument is not a set" do

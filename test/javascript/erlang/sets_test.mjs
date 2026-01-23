@@ -527,11 +527,30 @@ describe("Erlang_Sets", () => {
 
     it("adds element to empty set", () => {
       const emptySet = from_list_2(Type.list(), opts);
-      const result = add_element_2(integer1, emptySet);
 
+      const result = add_element_2(integer1, emptySet);
       const expected = from_list_2(Type.list([integer1]), opts);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("uses strict matching (integer vs float)", () => {
+      const set = from_list_2(Type.list([float1]), opts);
+
+      const result = add_element_2(integer1, set);
+      const expected = from_list_2(Type.list([float1, integer1]), opts);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("doesn't mutate the original set", () => {
+      const set = from_list_2(Type.list([integer1, integer2]), opts);
+
+      add_element_2(integer3, set);
+
+      const expected = from_list_2(Type.list([integer1, integer2]), opts);
+
+      assert.deepStrictEqual(set, expected);
     });
 
     it("raises FunctionClauseError if argument is not a set", () => {
