@@ -118,7 +118,9 @@ describe("Erlang_Binary", () => {
       });
 
       it("stores the badShift in the binaryPattern registry", () => {
-        const saved = ERTS.binaryPatternRegistry.get(pattern);
+        const ref = result.data[1];
+        const saved = ERTS.binaryPatternRegistry.get(ref);
+
         // Spot check characters
         assert.equal(saved.badShift["71"], -1);
         assert.equal(saved.badShift["72"], 4);
@@ -137,7 +139,9 @@ describe("Erlang_Binary", () => {
       });
 
       it("stores the rootNode in the binaryPattern registry", () => {
-        const saved = ERTS.binaryPatternRegistry.get(patternList);
+        const ref = result.data[1];
+        const saved = ERTS.binaryPatternRegistry.get(ref);
+
         assert.deepEqual(Array.from(saved.rootNode.children.keys()), [72, 108]);
       });
 
