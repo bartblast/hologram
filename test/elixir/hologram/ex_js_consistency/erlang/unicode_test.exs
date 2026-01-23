@@ -399,6 +399,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       end
     end
 
+    test "returns error tuple for truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+      input = ["a", incomplete_binary]
+      expected = {:error, "a", incomplete_binary}
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
     test "handles multiple combining marks" do
       input = [<<"o">>, 0x0308, 0x0304]
       # NFD preserves combining marks in canonical order
