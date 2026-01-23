@@ -57,6 +57,101 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
   end
 
+  describe "compile_pattern/1" do
+    test "single binary pattern returns Boyer-Moore compiled pattern tuple" do
+      compiled_pattern = :binary.compile_pattern("hello")
+      assert is_tuple(compiled_pattern)
+      assert elem(compiled_pattern, 0) == :bm
+      assert is_reference(elem(compiled_pattern, 1))
+    end
+
+    test "with a list of binary patterns returns Aho-Corasick compiled pattern tuple" do
+      compiled_pattern = :binary.compile_pattern(["hello", "world"])
+      assert is_tuple(compiled_pattern)
+      assert elem(compiled_pattern, 0) == :ac
+      assert is_reference(elem(compiled_pattern, 1))
+    end
+
+    test "A list with only one element returns Boyer-Moore compiled pattern tuple" do
+      compiled_pattern = :binary.compile_pattern(["hello"])
+      assert is_tuple(compiled_pattern)
+      assert elem(compiled_pattern, 0) == :bm
+      assert is_reference(elem(compiled_pattern, 1))
+    end
+
+    test "raises ArgumentError when pattern is empty binary" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern("")
+      end
+    end
+
+    test "raises ArgumentError when pattern is a list containing empty binary" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(["hello", ""])
+      end
+    end
+
+    test "raises ArgumentError when pattern is empty list" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern([])
+      end
+    end
+
+    test "raises ArgumentError when pattern is a list containing empty list" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(["hello", []])
+      end
+    end
+
+    test "raises ArgumentError when pattern is integer" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(1)
+      end
+    end
+
+    test "raises ArgumentError when pattern is a list containing integer" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(["hello", 1])
+      end
+    end
+
+    test "raises ArgumentError when pattern is atom" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(:hello)
+      end
+    end
+
+    test "raises ArgumentError when pattern is a list containing atom" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(["hello", :hello])
+      end
+    end
+
+    test "raises ArgumentError when pattern is tuple" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern({"ab", "cd"})
+      end
+    end
+
+    test "raises ArgumentError when pattern is a list containing tuple" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(["hello", {"ab", "cd"}])
+      end
+    end
+
+    test "raises ArgumentError when pattern is non-binary bitstring" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(<<1::1, 0::1, 1::1>>)
+      end
+    end
+
+    test "raises ArgumentError when pattern is a list containing non-binary bitstring" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(["hello", <<1::1, 0::1, 1::1>>])
+      end
+    end
+  end
+
   describe "copy/2" do
     test "text-based, empty binary, zero times" do
       assert :binary.copy("", 0) == ""

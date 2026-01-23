@@ -275,6 +275,21 @@ const Erlang_Maps = {
   // End remove/2
   // Deps: []
 
+  // Start take/2
+  "take/2": (key, map) => {
+    const value = Erlang_Maps["get/3"](key, map, null);
+
+    if (value === null) {
+      return Type.atom("error");
+    }
+
+    const newMap = Erlang_Maps["remove/2"](key, map);
+
+    return Type.tuple([value, newMap]);
+  },
+  // End take/2
+  // Deps: [:maps.get/3, :maps.remove/2]
+
   // TODO: implement iterators
   // Start to_list/1
   "to_list/1": (mapOrIterator) => {

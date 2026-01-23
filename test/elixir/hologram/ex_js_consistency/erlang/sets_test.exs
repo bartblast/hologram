@@ -9,6 +9,62 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   @moduletag :consistency
 
+  describe "add_element/2" do
+    test "adds a new element to the set" do
+      set = :sets.from_list([1, 3], [{:version, 2}])
+
+      result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "returns the same set if element is already present" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "adds element to empty set" do
+      set = :sets.from_list([], [{:version, 2}])
+
+      result = :sets.add_element(1, set)
+      expected = :sets.from_list([1], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set = :sets.from_list([1.0], [{:version, 2}])
+
+      result = :sets.add_element(1, set)
+      expected = :sets.from_list([1, 1.0], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "doesn't mutate the original set" do
+      set = :sets.from_list([1, 2], [{:version, 2}])
+
+      :sets.add_element(3, set)
+
+      expected = :sets.from_list([1, 2], [{:version, 2}])
+
+      assert set == expected
+    end
+
+    test "raises FunctionClauseError if argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.add_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.add_element(:elem, :not_a_set)
+      end
+    end
+  end
+
   describe "del_element/2" do
     test "removes an existing element from the set" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
