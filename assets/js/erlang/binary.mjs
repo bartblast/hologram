@@ -312,10 +312,7 @@ const Erlang_Binary = {
       if (candidateNode.output.length > 0) {
         const resultLength = candidateNode.output[0].length;
         const foundIndex = index - resultLength + 1;
-        return Type.tuple([
-          Type.integer(foundIndex),
-          Type.integer(resultLength),
-        ]);
+        return {index: foundIndex, length: resultLength};
       }
     }
 

@@ -467,10 +467,7 @@ describe("Erlang_Binary", () => {
     describe("with default options (empty list)", () => {
       it("finds first pattern in subject", () => {
         const result = search(subject, patternList, emptyList);
-        assert.deepEqual(
-          result,
-          Type.tuple([Type.integer(0), Type.integer(3)]),
-        );
+        assert.deepEqual(result, { index: 0, length: 3 });
       });
 
       it("returns false when no patterns are found", () => {
@@ -491,10 +488,7 @@ describe("Erlang_Binary", () => {
 
         const result = search(subject, patternList, options);
 
-        assert.deepEqual(
-          result,
-          Type.tuple([Type.integer(10), Type.integer(3)]),
-        );
+        assert.deepEqual(result, { index: 10, length: 3 });
       });
     });
   });
