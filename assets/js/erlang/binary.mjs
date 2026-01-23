@@ -145,37 +145,6 @@ const Erlang_Binary = {
   // End first/1
   // Deps: []
 
-  // Start match/3
-  match: (subject, pattern, options) => {
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
-    }
-
-    const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
-
-    if (compiledPattern.type == "bm") {
-      return Erlang_Binary["_boyer_moore_search/3"](
-        subject,
-        compiledPattern,
-        options,
-      );
-    } else if (compiledPattern.type == "ac") {
-      return Erlang_Binary["_aho_corasick_search/3"](
-        subject,
-        compiledPattern,
-        options,
-      );
-    }
-
-    return Type.atom("nomatch");
-  },
-  // End match/3
-  // Deps: [:binary.compile_pattern/1, :binary._boyer_moore_search/3, :binary._aho_corasick_search/3, :binary._parse_search_options/1]
-
   // Boyer-Moore matcher implementation for single patterns
   // Start _boyer_moore_pattern_matcher/1
   _boyer_moore_pattern_matcher: (pattern) => {

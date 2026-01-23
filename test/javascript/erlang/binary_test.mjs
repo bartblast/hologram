@@ -396,16 +396,18 @@ describe("Erlang_Binary", () => {
   });
 
   describe("_boyer_moore_search/3", () => {
-    const subjectFunc = Erlang_Binary["_boyer_moore_search/3"];
+    const search = Erlang_Binary["_boyer_moore_search/3"];
+
+    const compilePatternFunction = Erlang_Binary["compile_pattern/1"];
 
     describe("with default options (empty list)", () => {
       it("finds pattern at the beginning of subject", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("hello");
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const compiledPattern = compilePatternFunction(pattern);
         const options = Type.list([]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert.deepStrictEqual(result.index, 0);
         assert.deepStrictEqual(result.length, 5);
@@ -414,10 +416,10 @@ describe("Erlang_Binary", () => {
       it("finds pattern in the middle of subject", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const compiledPattern = compilePatternFunction(pattern);
         const options = Type.list([]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert.deepStrictEqual(result.index, 6);
         assert.deepStrictEqual(result.length, 5);
@@ -426,10 +428,10 @@ describe("Erlang_Binary", () => {
       it("returns false when pattern is not found", () => {
         const subject = Bitstring.fromText("hello");
         const pattern = Bitstring.fromText("xyz");
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const compiledPattern = compilePatternFunction(pattern);
         const options = Type.list([]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert.strictEqual(result, false);
       });
@@ -439,7 +441,7 @@ describe("Erlang_Binary", () => {
       it("finds pattern starting at specified index", () => {
         const subject = Bitstring.fromText("abcdefg");
         const pattern = Bitstring.fromText("def");
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const compiledPattern = compilePatternFunction(pattern);
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -447,7 +449,7 @@ describe("Erlang_Binary", () => {
           ]),
         ]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert.deepStrictEqual(result.index, 3);
       });
@@ -455,7 +457,7 @@ describe("Erlang_Binary", () => {
       it("returns false when pattern is before scope start", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("hello");
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const compiledPattern = compilePatternFunction(pattern);
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -463,7 +465,7 @@ describe("Erlang_Binary", () => {
           ]),
         ]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert.strictEqual(result, false);
       });
@@ -482,7 +484,9 @@ describe("Erlang_Binary", () => {
   });
 
   describe("_aho_corasick_search/3", () => {
-    const subjectFunc = Erlang_Binary["_aho_corasick_search/3"];
+    const search = Erlang_Binary["_aho_corasick_search/3"];
+    const compilePatternFunction =
+      Erlang_Binary["_aho_corasick_pattern_matcher/1"];
 
     describe("with default options (empty list)", () => {
       it("finds first pattern in subject", () => {
@@ -490,10 +494,10 @@ describe("Erlang_Binary", () => {
         const pattern1 = Bitstring.fromText("she");
         const pattern2 = Bitstring.fromText("shells");
         const patternList = Type.list([pattern1, pattern2]);
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](patternList);
+        const compiledPattern = compilePatternFunction(patternList);
         const options = Type.list([]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert(result && result.foundIndex >= 0);
       });
@@ -503,10 +507,10 @@ describe("Erlang_Binary", () => {
         const pattern1 = Bitstring.fromText("xyz");
         const pattern2 = Bitstring.fromText("abc");
         const patternList = Type.list([pattern1, pattern2]);
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](patternList);
+        const compiledPattern = compilePatternFunction(patternList);
         const options = Type.list([]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert.strictEqual(result, false);
       });
@@ -518,7 +522,7 @@ describe("Erlang_Binary", () => {
         const pattern1 = Bitstring.fromText("she");
         const pattern2 = Bitstring.fromText("sells");
         const patternList = Type.list([pattern1, pattern2]);
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](patternList);
+        const compiledPattern = compilePatternFunction(patternList);
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -526,7 +530,7 @@ describe("Erlang_Binary", () => {
           ]),
         ]);
 
-        const result = subjectFunc(subject, compiledPattern, options);
+        const result = search(subject, compiledPattern, options);
 
         assert(result && result.foundIndex >= 0);
       });
@@ -534,12 +538,12 @@ describe("Erlang_Binary", () => {
   });
 
   describe("_parse_search_opts/1", () => {
-    const parseFun = Erlang_Binary["_parse_search_opts/1"];
+    const parseFunction = Erlang_Binary["_parse_search_opts/1"];
 
     describe("with empty list (default options)", () => {
       it("returns default start and length values", () => {
         const options = Type.list([]);
-        const result = parseFun(options);
+        const result = parseFunction(options);
 
         assert.strictEqual(result.start, 0);
         assert.strictEqual(result.length, -1);
@@ -554,7 +558,7 @@ describe("Erlang_Binary", () => {
             Type.tuple([Type.integer(5), Type.integer(10)]),
           ]),
         ]);
-        const result = parseFun(options);
+        const result = parseFunction(options);
 
         assert.deepStrictEqual(result.start, Type.integer(5));
         assert.deepStrictEqual(result.length, Type.integer(10));
@@ -567,7 +571,7 @@ describe("Erlang_Binary", () => {
             Type.tuple([Type.integer(-5), Type.integer(10)]),
           ]),
         ]);
-        const result = parseFun(options);
+        const result = parseFunction(options);
 
         assert.deepStrictEqual(result.start, Type.integer(-5));
         assert.deepStrictEqual(result.length, Type.integer(10));
@@ -579,7 +583,7 @@ describe("Erlang_Binary", () => {
         const options = Type.atom("invalid");
 
         assertBoxedError(
-          () => parseFun(options),
+          () => parseFunction(options),
           "FunctionClauseError",
           /invalid options/,
         );
@@ -592,7 +596,7 @@ describe("Erlang_Binary", () => {
         );
 
         assertBoxedError(
-          () => parseFun(options),
+          () => parseFunction(options),
           "FunctionClauseError",
           /invalid options/,
         );
@@ -607,7 +611,7 @@ describe("Erlang_Binary", () => {
         ]);
 
         assertBoxedError(
-          () => parseFun(options),
+          () => parseFunction(options),
           "FunctionClauseError",
           /invalid options/,
         );
