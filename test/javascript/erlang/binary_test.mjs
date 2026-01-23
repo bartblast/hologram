@@ -459,14 +459,14 @@ describe("Erlang_Binary", () => {
     describe("with default options (empty list)", () => {
       it("finds pattern at the beginning of subject", () => {
         const result = search(subject, pattern, emptyList);
-        assert.deepEqual(result, { index: 0, length: 5 });
+        assert.deepEqual(result, {index: 0, length: 5});
       });
 
       it("finds pattern in the middle of subject", () => {
         const altPattern = Bitstring.fromText("world");
         Erlang_Binary["compile_pattern/1"](altPattern);
         const result = search(subject, altPattern, emptyList);
-        assert.deepEqual(result, { index: 6, length: 5 });
+        assert.deepEqual(result, {index: 6, length: 5});
       });
 
       it("returns false when pattern is not found", () => {
@@ -488,7 +488,7 @@ describe("Erlang_Binary", () => {
         ]);
 
         const result = search(subject, altPattern, options);
-        assert.deepEqual(result, { index: 6, length: 5 });
+        assert.deepEqual(result, {index: 6, length: 5});
       });
 
       it("returns false when pattern is before scope start", () => {
@@ -527,7 +527,7 @@ describe("Erlang_Binary", () => {
     describe("with default options (empty list)", () => {
       it("finds first pattern in subject", () => {
         const result = search(subject, patternList, emptyList);
-        assert.deepEqual(result, { index: 0, length: 3 });
+        assert.deepEqual(result, {index: 0, length: 3});
       });
 
       it("returns false when no patterns are found", () => {
@@ -548,7 +548,7 @@ describe("Erlang_Binary", () => {
 
         const result = search(subject, patternList, options);
 
-        assert.deepEqual(result, { index: 10, length: 3 });
+        assert.deepEqual(result, {index: 10, length: 3});
       });
     });
   });
@@ -559,7 +559,7 @@ describe("Erlang_Binary", () => {
     describe("with empty list (default options)", () => {
       it("returns default start and length values", () => {
         const result = parseSearchOpts(emptyList);
-        assert.deepEqual(result, { start: 0, length: -1 });
+        assert.deepEqual(result, {start: 0, length: -1});
       });
     });
 
@@ -573,7 +573,7 @@ describe("Erlang_Binary", () => {
         ]);
         const result = parseSearchOpts(options);
 
-        assert.deepEqual(result, { start: 5, length: 10 });
+        assert.deepEqual(result, {start: 5, length: 10});
       });
 
       it("returns zero start when scope start is negative", () => {
@@ -585,7 +585,7 @@ describe("Erlang_Binary", () => {
         ]);
         const result = parseSearchOpts(options);
 
-        assert.deepEqual(result, { start: 5, length: 10 });
+        assert.deepEqual(result, {start: 5, length: 10});
       });
     });
 
