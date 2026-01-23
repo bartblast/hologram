@@ -163,7 +163,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
-      expected_msg = build_function_clause_error_msg(":sets.is_disjoint/2", [:abc, set_123])
+      expected_msg = ~r/no function clause matching in :sets\.(is_disjoint\/2|size\/1).*:abc/s
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.is_disjoint(:abc, set_123)
@@ -171,7 +171,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
-      expected_msg = build_function_clause_error_msg(":sets.is_disjoint/2", [set_123, :abc])
+      expected_msg = ~r/no function clause matching in :sets\.(is_disjoint\/2|size\/1).*:abc/s
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.is_disjoint(set_123, :abc)
