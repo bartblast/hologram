@@ -1,6 +1,5 @@
 "use strict";
 
-import Bitstring from "../bitstring.mjs";
 import Type from "../type.mjs";
 
 export default class BinaryPatternRegistry {
