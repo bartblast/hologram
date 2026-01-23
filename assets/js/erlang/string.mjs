@@ -100,7 +100,6 @@ const Erlang_String = {
         switch (input) {
           case string:
             Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
-            break;
 
           case pattern:
             Interpreter.raiseArgumentError(
@@ -109,16 +108,14 @@ const Erlang_String = {
                 "not valid character data (an iodata term)",
               ),
             );
-            break;
 
           case replacement:
             throw new HologramInterpreterError(
               "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
             );
-            break;
 
           default:
-            break;
+            throw error
         }
       }
     }
@@ -280,7 +277,7 @@ const Erlang_String = {
       const codepointNum = Number(firstCodepoint.value);
       const rest = cpResult.data.slice(1);
 
-      return {codepointNum, rest};
+      return { codepointNum, rest };
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -310,7 +307,7 @@ const Erlang_String = {
         return Type.bitstring("");
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const restBinary = rest[0]; // Tail of the improper list
       const restText = Bitstring.toText(restBinary);
 
@@ -328,7 +325,7 @@ const Erlang_String = {
         return Type.list();
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const uppercasedCodepoints = uppercaseCodepoint(codepointNum).map((cp) =>
         Type.integer(cp),
       );
