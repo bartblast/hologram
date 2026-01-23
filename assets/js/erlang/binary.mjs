@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang from "./erlang.mjs";
 import Erlang_Lists from "./lists.mjs";
 import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -232,7 +233,7 @@ const Erlang_Binary = {
         patternIndex++;
       }
 
-      const current = subject[index + patternMaxIndex];
+      const current = subject.bytes[index + patternMaxIndex];
       if (badShift[current]) {
         index += badShift[current];
       } else {
