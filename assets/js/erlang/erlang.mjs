@@ -1739,6 +1739,85 @@ const Erlang = {
   // End unique_integer/1
   // Deps: [:erlang.unique_integer/0]
 
+  // Start system_time/0
+  "system_time/0": () => {
+    // Returns current system time in native time unit (nanoseconds)
+    // In Erlang, system_time/0 returns a large integer representing nanoseconds since epoch
+    // TODO: Once PR #590 (monotonic_time) is merged, consider using:
+    //       monotonic_time() + time_offset() as per Erlang spec
+    const timeNs = BigInt(Date.now()) * BigInt(1000000);
+    return Type.integer(timeNs);
+  },
+  // End system_time/0
+  // Deps: []
+
+  // Start system_time/1
+  "system_time/1": (unit) => {
+    // Get current time - use a large timestamp in nanoseconds since 1970-01-01
+    // Similar to Erlang's system_time which returns a large integer
+    // TODO: Once PR #590 (monotonic_time) is merged, consider using:
+    //       monotonic_time() + time_offset() as per Erlang spec
+    const timeNs = BigInt(Date.now()) * BigInt(1000000);
+
+    // TODO: Once PR #603 (convert_time_unit/3) is merged, consider using it for
+    //       time unit conversions instead of manual calculation below
+    // Convert unit parameter to a numeric value (parts per second)
+    let unitPps;
+
+    if (Type.isAtom(unit)) {
+      switch (unit.value) {
+        case "second":
+          unitPps = BigInt(1);
+          break;
+        case "millisecond":
+          unitPps = BigInt(1000);
+          break;
+        case "microsecond":
+          unitPps = BigInt(1000000);
+          break;
+        case "nanosecond":
+          unitPps = BigInt(1000000000);
+          break;
+        case "native":
+          unitPps = BigInt(1000000000); // Native unit is nanoseconds in both Erlang and here
+          break;
+        case "perf_counter":
+          // For perf_counter, we use high-resolution time if available
+          if (typeof performance !== "undefined" && performance.now) {
+            return Type.integer(BigInt(Math.floor(performance.now())));
+          }
+          // Fallback to nanoseconds
+          unitPps = BigInt(1000000000);
+          break;
+        default:
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+          );
+      }
+    } else if (Type.isInteger(unit)) {
+      // Validate that integer time unit is positive (parts-per-second must be >= 1)
+      if (unit.value < 1) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        );
+      }
+      unitPps = BigInt(unit.value);
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    }
+
+    // Convert from nanoseconds to the requested unit
+    // timeNs is in nanoseconds, which is 1000000000 pps
+    // To convert to target unit: (timeNs / 1000000000) * unitPps
+    const convertedTime = (timeNs * unitPps) / BigInt(1000000000);
+
+    return Type.integer(convertedTime);
+  },
+  // End system_time/1
+  // Deps: []
+
   // Start xor/2
   "xor/2": (left, right) => {
     if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
