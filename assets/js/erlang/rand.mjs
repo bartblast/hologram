@@ -9,6 +9,14 @@ import Type from "../type.mjs";
 
 const Erlang_Rand = {
   // TODO: Erlang docs say that "state in the process dictionary" is used
+  // Start uniform/0
+  "uniform/0": () => {
+    return Type.float(Math.random());
+  },
+  // End uniform/0
+  // Deps: []
+
+  // TODO: Erlang docs say that "state in the process dictionary" is used
   // Start uniform/1
   "uniform/1": (integer) => {
     if (
