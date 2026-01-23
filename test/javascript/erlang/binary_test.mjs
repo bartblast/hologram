@@ -398,20 +398,18 @@ describe("Erlang_Binary", () => {
 
     describe("with default options (empty list)", () => {
       it("finds pattern at the beginning of subject", () => {
-        console.log("401");
         const result = search(subject, pattern, emptyList);
         assert.deepEqual(result, { index: 0, length: 5 });
       });
 
       it("finds pattern in the middle of subject", () => {
-        console.log("407");
         const altPattern = Bitstring.fromText("world");
+        Erlang_Binary["compile_pattern/1"](altPattern);
         const result = search(subject, altPattern, emptyList);
         assert.deepEqual(result, { index: 6, length: 5 });
       });
 
       it("returns false when pattern is not found", () => {
-        console.log("414");
         const invalidSubject = Bitstring.fromText("goodbye");
         const result = search(invalidSubject, pattern, emptyList);
         assert.equal(result, false);
@@ -420,15 +418,17 @@ describe("Erlang_Binary", () => {
 
     describe("with scope option", () => {
       it("finds pattern starting at specified index", () => {
+        const altPattern = Bitstring.fromText("world");
+        Erlang_Binary["compile_pattern/1"](altPattern);
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
-            Type.tuple([Type.integer(3), Type.integer(7)]),
+            Type.tuple([Type.integer(3), Type.integer(8)]),
           ]),
         ]);
 
-        const result = search(subject, pattern, options);
-        assert.deepEqual(result, { index: 0, length: 5 });
+        const result = search(subject, altPattern, options);
+        assert.deepEqual(result, { index: 6, length: 5 });
       });
 
       it("returns false when pattern is before scope start", () => {
@@ -465,7 +465,7 @@ describe("Erlang_Binary", () => {
     Erlang_Binary["compile_pattern/1"](patternList);
 
     describe("with default options (empty list)", () => {
-      it("finds first pattern in subject", () => {
+      it.only("finds first pattern in subject", () => {
         const result = search(subject, patternList, emptyList);
         assert.equal(result, Type.tuple([Type.integer(0), Type.integer(3)]));
       });

@@ -188,34 +188,30 @@ const Erlang_Binary = {
 
     Bitstring.maybeSetTextFromBytes(subject);
     Bitstring.maybeSetTextFromBytes(pattern);
-    const patternLastIndex = pattern.text.length - 1;
-    let index = Math.max(start, 0);
-    const maxIndex = Math.max(
-      length,
-      subject.text.length - pattern.text.length,
-    );
 
-    console.log("subject:", subject.text);
-    console.log("pattern:", pattern.text);
-    console.log("index:", index);
-    console.log("maxIndex:", maxIndex);
+    const patternMaxIndex = pattern.text.length - 1;
+    let index = Math.max(start, 0);
+    const maxIndex = Math.max(length, subject.text.length);
 
     while (index <= maxIndex) {
       let patternIndex = 0;
-      while (pattern[patternIndex] === subject[patternIndex + index]) {
-        if (patternIndex === patternLastIndex) {
-          return {index, length: pattern.length};
+      while (
+        pattern.text[patternIndex] === subject.text[patternIndex + index]
+      ) {
+        if (patternIndex === patternMaxIndex) {
+          return {index, length: pattern.text.length};
         }
         patternIndex++;
       }
 
-      const current = subject[index + patternLastIndex];
+      const current = subject[index + patternMaxIndex];
       if (badShift[current]) {
         index += badShift[current];
       } else {
         index++;
       }
     }
+
     return false;
   },
   // End _boyer_moore_search/3
@@ -295,32 +291,35 @@ const Erlang_Binary = {
     const compiledPatternData = ERTS.binaryPatternRegistry.get(patterns);
 
     Bitstring.maybeSetBytesFromText(subject);
-    const index = Math.max(start, 0);
+    const startIndex = Math.max(start, 0);
     const maxIndex = Math.max(length, subject.text.length);
-
-    console.log("subject:", subject.text);
-    console.log("index:", index);
-    console.log("maxIndex:", maxIndex);
 
     const rootNode = compiledPatternData.rootNode;
     let currentNode = rootNode;
 
-    for (let i = index; i < maxIndex; i++) {
-      const char = subject[i];
+    for (let index = startIndex; index < maxIndex; index++) {
+      const char = subject.bytes[index];
 
-      while (currentNode !== null && !currentNode.children[char]) {
+      // console.log("index:", index);
+      // console.log("char:", char);
+      // console.log(
+      //   "currentNode.children.get(char):",
+      //   currentNode.children.get(char),
+      // );
+
+      while (currentNode !== null && !currentNode.children.get(char)) {
         currentNode = currentNode.failure;
       }
 
-      if (currentNode) {
-        currentNode.children[char] || rootNode;
-      } else {
-        rootNode;
-      }
+      currentNode = currentNode
+        ? currentNode.children[char] || this.root
+        : this.root;
+
+      // console.log("output:", currentNode.output);
 
       const resultLength = currentNode.output.length;
-      const foundIndex = i - resultLength + 1;
-      return {foundIndex, resultLength};
+      const foundIndex = index - resultLength + 1;
+      return Type.tuple([Type.integer(foundIndex), Type.integer(resultLength)]);
     }
     return false;
   },
