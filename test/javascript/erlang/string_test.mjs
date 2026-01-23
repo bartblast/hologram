@@ -564,16 +564,22 @@ describe("Erlang_String", () => {
       );
     });
 
-    it("returns inchanged string inside a list if the pattern is empty", () => {
+    it("returns unchanged string inside a list if the pattern is empty", () => {
       const result = split(string_test, Type.bitstring(""), Type.atom("all"));
 
-      assert.deepStrictEqual(result, Type.list([string_test]));
+      assert.deepStrictEqual(
+        result,
+        Type.list([Bitstring.toText(string_test)]),
+      );
     });
 
-    it("returns inchanged string inside a list if the pattern is not present inside the string", () => {
+    it("returns unchanged string inside a list if the pattern is not present inside the string", () => {
       const result = split(string_test, Type.bitstring("."), Type.atom("all"));
 
-      assert.deepStrictEqual(result, Type.list([string_test]));
+      assert.deepStrictEqual(
+        result,
+        Type.list([Bitstring.toText(string_test)]),
+      );
     });
 
     it("returns a list which length is equal to the number of words inside the string with the direction set to :all", () => {
@@ -600,6 +606,42 @@ describe("Erlang_String", () => {
       );
 
       assert.deepStrictEqual(result, Type.list(["Hello World", "!"]));
+    });
+
+    it("returns a list when patterns is at the start of the string", () => {
+      const result = split(
+        string_test,
+        Type.bitstring("H"),
+        Type.atom("leading"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["", "ello World !"]));
+    });
+
+    it("returns a list when patterns is at the end of the string", () => {
+      const result = split(
+        string_test,
+        Type.bitstring("!"),
+        Type.atom("trailing"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello World ", ""]));
+    });
+
+    it("returns a list when pattern is consecutive inside replacements", () => {
+      const result = split(string_test, Type.bitstring("l"), Type.atom("all"));
+
+      assert.deepStrictEqual(result, Type.list(["He", "", "o Wor", "d !"]));
+    });
+
+    it("correctly split unicode patterns (emoji)", () => {
+      const result = split(
+        Type.bitstring("Hello 👋 World"),
+        Type.bitstring("👋"),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello ", " World"]));
     });
   });
 
