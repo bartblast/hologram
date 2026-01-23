@@ -244,7 +244,7 @@ const Erlang_Binary = {
     return false;
   },
   // End _boyer_moore_search/3
-  // Deps: []
+  // Deps: [:binary._parse_search_opts/1]
 
   // Aho-Corasick matcher implementation for multiple patterns
   // Start _aho_corasick_pattern_matcher/1
@@ -348,7 +348,7 @@ const Erlang_Binary = {
     return false;
   },
   // End _aho_corasick_search/3
-  // Deps: []
+  // Deps: [:binary._parse_search_opts/1]
 
   // Start _parse_search_opts/1
   "_parse_search_opts/1": (opts) => {
