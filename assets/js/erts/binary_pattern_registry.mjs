@@ -10,14 +10,14 @@ export default class BinaryPatternRegistry {
     $.patterns = new Map();
   }
 
-  static get(pattern) {
-    const key = Type.encodeMapKey(pattern);
+  static get(ref) {
+    const key = Type.encodeMapKey(ref);
     return $.patterns.get(key) || null;
   }
 
-  static put(pattern, data) {
-    const key = Type.encodeMapKey(pattern);
-    $.patterns.set(key, data);
+  static put(ref, pattern) {
+    const key = Type.encodeMapKey(ref);
+    $.patterns.set(key, pattern);
   }
 }
 
