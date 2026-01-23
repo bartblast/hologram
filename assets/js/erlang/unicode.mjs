@@ -157,13 +157,9 @@ const Erlang_Unicode = {
         if (start + length > bytes.length) return false;
 
         // Verify all continuation bytes have correct pattern (10xxxxxx)
-        // Uses functional approach: creates array of indices, tests each with .every()
-        const allContinuationsValid = Array.from(
-          {length: length - 1},
-          (_, i) => i + 1,
-        ).every((offset) => isValidContinuation(bytes[start + offset]));
-
-        if (!allContinuationsValid) return false;
+        for (let i = 1; i < length; i++) {
+          if (!isValidContinuation(bytes[start + i])) return false;
+        }
 
         // Decode and validate the code point value
         const codePoint = decodeCodePoint(start, length);
