@@ -176,7 +176,7 @@ const Erlang_Binary = {
   // Boyer-Moore matcher implementation for single patterns
   // Start _boyer_moore_pattern_matcher/1
   "_boyer_moore_pattern_matcher/1": (pattern) => {
-    Bitstring.maybeSetTextFromBytes(pattern);
+    Bitstring.maybeSetBytesFromText(pattern);
 
     if (pattern.bytes.length == 0) {
       Interpreter.raiseArgumentError("is not a valid pattern");
@@ -214,20 +214,20 @@ const Erlang_Binary = {
     const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
     const badShift = compiledPatternData.badShift;
 
-    Bitstring.maybeSetTextFromBytes(subject);
-    Bitstring.maybeSetTextFromBytes(pattern);
+    Bitstring.maybeSetBytesFromText(subject);
+    Bitstring.maybeSetBytesFromText(pattern);
 
-    const patternMaxIndex = pattern.text.length - 1;
+    const patternMaxIndex = pattern.bytes.length - 1;
     let index = Math.max(start, 0);
-    const maxIndex = Math.max(length, subject.text.length);
+    const maxIndex = Math.max(start + length, subject.bytes.length);
 
     while (index <= maxIndex) {
       let patternIndex = 0;
       while (
-        pattern.text[patternIndex] === subject.text[patternIndex + index]
+        pattern.bytes[patternIndex] === subject.bytes[patternIndex + index]
       ) {
         if (patternIndex === patternMaxIndex) {
-          return {index, length: pattern.text.length};
+          return {index, length: pattern.bytes.length};
         }
         patternIndex++;
       }
@@ -274,7 +274,7 @@ const Erlang_Binary = {
           }
           node = node.children.get(byte);
         });
-        node.output.push(pattern.text);
+        node.output.push(pattern.bytes);
       });
 
       // Add failures
@@ -320,7 +320,7 @@ const Erlang_Binary = {
 
     Bitstring.maybeSetBytesFromText(subject);
     const startIndex = Math.max(start, 0);
-    const maxIndex = Math.max(length, subject.text.length);
+    const maxIndex = Math.max(start + length, subject.bytes.length);
 
     const rootNode = compiledPatternData.rootNode;
     let candidateNode = rootNode;
