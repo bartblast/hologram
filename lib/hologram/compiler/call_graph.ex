@@ -18,6 +18,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
+    {{:binary, :compile_pattern, 1}, {:binary, :_aho_corasick_pattern_matcher, 1}},
+    {{:binary, :compile_pattern, 1}, {:binary, :_boyer_moore_pattern_matcher, 1}},
+    {{:binary, :_boyer_moore_pattern_matcher, 1}, {:erlang, :make_ref, 0}},
+    {{:binary, :_boyer_moore_search, 3}, {:binary, :_parse_search_opts, 1}},
+    {{:binary, :_aho_corasick_pattern_matcher, 1}, {:erlang, :make_ref, 0}},
+    {{:binary, :_aho_corasick_search, 3}, {:binary, :_parse_search_opts, 1}},
+    {{:binary, :_parse_search_opts, 1}, {:lists, :keyfind, 3}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
