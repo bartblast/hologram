@@ -1446,7 +1446,7 @@ const Erlang = {
 
     if (!Type.isProperList(list)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a proper ist"),
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
       );
     }
 
