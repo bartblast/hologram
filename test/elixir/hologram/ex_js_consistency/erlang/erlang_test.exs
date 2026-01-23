@@ -1978,8 +1978,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "decodes large positive integer (LARGE_BIG_EXT)" do
-      binary = :erlang.term_to_binary(1_000_000_000_000)
-      assert :erlang.binary_to_term(binary) == 1_000_000_000_000
+      # LARGE_BIG_EXT requires integers with >255 bytes +
+      # 2^2048 requires 257 bytes, triggering LARGE_BIG_EXT encoding
+      large_int =
+        Integer.pow(2, 2048)
+        |> trunc()
+
+      binary = :erlang.term_to_binary(large_int)
+      assert :erlang.binary_to_term(binary) == large_int
     end
 
     test "decodes atom UTF-8 (ATOM_UTF8_EXT)" do

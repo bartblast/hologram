@@ -18,7 +18,6 @@ import ERTS from "../../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
-import { describe } from "node:test";
 
 defineGlobalErlangAndElixirModules();
 defineErlangModule1Fixture();
