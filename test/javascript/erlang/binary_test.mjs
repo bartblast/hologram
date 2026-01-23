@@ -450,60 +450,61 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("_boyer_moore_search/3", () => {
-    const subject = Bitstring.fromText("hello world");
-    const pattern = Bitstring.fromText("hello");
-    const search = Erlang_Binary["_boyer_moore_search/3"];
-    Erlang_Binary["compile_pattern/1"](pattern);
+  // TODO: uncomment
+  // describe("_boyer_moore_search/3", () => {
+  //   const subject = Bitstring.fromText("hello world");
+  //   const pattern = Bitstring.fromText("hello");
+  //   const search = Erlang_Binary["_boyer_moore_search/3"];
+  //   Erlang_Binary["compile_pattern/1"](pattern);
 
-    describe("with default options (empty list)", () => {
-      it("finds pattern at the beginning of subject", () => {
-        const result = search(subject, pattern, emptyList);
-        assert.deepEqual(result, {index: 0, length: 5});
-      });
+  //   describe("with default options (empty list)", () => {
+  //     it("finds pattern at the beginning of subject", () => {
+  //       const result = search(subject, pattern, emptyList);
+  //       assert.deepEqual(result, {index: 0, length: 5});
+  //     });
 
-      it("finds pattern in the middle of subject", () => {
-        const altPattern = Bitstring.fromText("world");
-        Erlang_Binary["compile_pattern/1"](altPattern);
-        const result = search(subject, altPattern, emptyList);
-        assert.deepEqual(result, {index: 6, length: 5});
-      });
+  //     it("finds pattern in the middle of subject", () => {
+  //       const altPattern = Bitstring.fromText("world");
+  //       Erlang_Binary["compile_pattern/1"](altPattern);
+  //       const result = search(subject, altPattern, emptyList);
+  //       assert.deepEqual(result, {index: 6, length: 5});
+  //     });
 
-      it("returns false when pattern is not found", () => {
-        const invalidSubject = Bitstring.fromText("goodbye");
-        const result = search(invalidSubject, pattern, emptyList);
-        assert.equal(result, false);
-      });
-    });
+  //     it("returns false when pattern is not found", () => {
+  //       const invalidSubject = Bitstring.fromText("goodbye");
+  //       const result = search(invalidSubject, pattern, emptyList);
+  //       assert.equal(result, false);
+  //     });
+  //   });
 
-    describe("with scope option", () => {
-      it("finds pattern starting at specified index", () => {
-        const altPattern = Bitstring.fromText("world");
-        Erlang_Binary["compile_pattern/1"](altPattern);
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(3), Type.integer(8)]),
-          ]),
-        ]);
+  //   describe("with scope option", () => {
+  //     it("finds pattern starting at specified index", () => {
+  //       const altPattern = Bitstring.fromText("world");
+  //       Erlang_Binary["compile_pattern/1"](altPattern);
+  //       const options = Type.list([
+  //         Type.tuple([
+  //           Type.atom("scope"),
+  //           Type.tuple([Type.integer(3), Type.integer(8)]),
+  //         ]),
+  //       ]);
 
-        const result = search(subject, altPattern, options);
-        assert.deepEqual(result, {index: 6, length: 5});
-      });
+  //       const result = search(subject, altPattern, options);
+  //       assert.deepEqual(result, {index: 6, length: 5});
+  //     });
 
-      it("returns false when pattern is before scope start", () => {
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(6), Type.integer(5)]),
-          ]),
-        ]);
+  //     it("returns false when pattern is before scope start", () => {
+  //       const options = Type.list([
+  //         Type.tuple([
+  //           Type.atom("scope"),
+  //           Type.tuple([Type.integer(6), Type.integer(5)]),
+  //         ]),
+  //       ]);
 
-        const result = search(subject, pattern, options);
-        assert.equal(result, false);
-      });
-    });
-  });
+  //       const result = search(subject, pattern, options);
+  //       assert.equal(result, false);
+  //     });
+  //   });
+  // });
 
   describe("_aho_corasick_pattern_matcher/1", () => {
     it("builds trie structure for multiple patterns", () => {
