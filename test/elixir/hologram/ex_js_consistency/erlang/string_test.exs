@@ -224,13 +224,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       end
     end
 
-    test "returns inchanged string inside a list if the pattern is empty" do
+    test "returns unchanged string inside a list if the pattern is empty" do
       result = :string.split("Hello World !", "", :all)
 
       assert result == ["Hello World !"]
     end
 
-    test "returns inchanged string inside a list if the pattern is not present inside the string" do
+    test "returns unchanged string inside a list if the pattern is not present inside the string" do
       result = :string.split("Hello World !", ".", :all)
 
       assert result == ["Hello World !"]
@@ -252,6 +252,30 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       result = :string.split("Hello World !", " ", :trailing)
 
       assert result == ["Hello World", "!"]
+    end
+
+    test "when pattern is at the start of the string" do
+      result = :string.split("Hello World !", "H", :leading)
+
+      assert result == ["", "ello World !"]
+    end
+
+    test "when pattern is at the end of the string" do
+      result = :string.split("Hello World !", "!", :trailing)
+
+      assert result == ["Hello World ", ""]
+    end
+
+    test "with consecutive pattern" do
+      result = :string.split("Hello World !", "l", :all)
+
+      assert result == ["He", "", "o Wor", "d !"]
+    end
+
+    test "with unicode pattern" do
+      result = :string.split("Hello 👋 World", "👋", :all)
+
+      assert result == ["Hello ", " World"]
     end
   end
 
