@@ -105,7 +105,19 @@ const Erlang_Sets = {
 
     const encodedKeys1 = new Set(Object.keys(set1.data));
     const encodedKeys2 = new Set(Object.keys(set2.data));
-    return Type.boolean(encodedKeys1.isDisjointFrom(encodedKeys2));
+
+    const [smaller, larger] =
+      encodedKeys1.size <= encodedKeys2.size
+        ? [encodedKeys1, encodedKeys2]
+        : [encodedKeys2, encodedKeys1];
+
+    for (const key of smaller) {
+      if (larger.has(key)) {
+        return Type.boolean(false);
+      }
+    }
+
+    return Type.boolean(true);
   },
   // End is_disjoint/2
   // Deps: []
