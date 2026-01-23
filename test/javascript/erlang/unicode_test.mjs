@@ -437,6 +437,22 @@ describe("Erlang_Unicode", () => {
       );
     });
 
+    it("returns error tuple for truncated UTF-8 sequence", () => {
+      // First two bytes of a 3-byte sequence (incomplete)
+      const incompleteBinary = Bitstring.fromBytes([0xe4, 0xb8]);
+      const input = Type.list([Type.bitstring("a"), incompleteBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        incompleteBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("handles multiple combining marks", () => {
       const input = Type.list([
         Type.bitstring("o"),
