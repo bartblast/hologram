@@ -145,6 +145,34 @@ const Erlang_Binary = {
   // End first/1
   // Deps: []
 
+  // Start last/1
+  "last/1": (subject) => {
+    if (!Type.isBinary(subject)) {
+      const message = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, message),
+      );
+    }
+
+    if (Bitstring.isEmpty(subject)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "a zero-sized binary is not allowed",
+        ),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(subject);
+
+    return Type.integer(subject.bytes[subject.bytes.length - 1]);
+  },
+  // End last/1
+  // Deps: []
+
   // Boyer-Moore matcher implementation for single patterns
   // Start _boyer_moore_pattern_matcher/1
   "_boyer_moore_pattern_matcher/1": (pattern) => {

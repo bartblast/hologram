@@ -9,6 +9,100 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   @moduletag :consistency
 
+  describe "add_element/2" do
+    test "adds a new element to the set" do
+      set = :sets.from_list([1, 3], [{:version, 2}])
+
+      result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "returns the same set if element is already present" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "adds element to empty set" do
+      set = :sets.from_list([], [{:version, 2}])
+
+      result = :sets.add_element(1, set)
+      expected = :sets.from_list([1], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set = :sets.from_list([1.0], [{:version, 2}])
+
+      result = :sets.add_element(1, set)
+      expected = :sets.from_list([1, 1.0], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "doesn't mutate the original set" do
+      set = :sets.from_list([1, 2], [{:version, 2}])
+
+      :sets.add_element(3, set)
+
+      expected = :sets.from_list([1, 2], [{:version, 2}])
+
+      assert set == expected
+    end
+
+    test "raises FunctionClauseError if argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.add_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.add_element(:elem, :not_a_set)
+      end
+    end
+  end
+
+  describe "del_element/2" do
+    test "removes an existing element from the set" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      result = :sets.del_element(2, set)
+      expected = :sets.from_list([1, 3], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "returns the same set if element is not present" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      result = :sets.del_element(42, set)
+
+      assert result == set
+    end
+
+    test "returns empty set when removing from empty set" do
+      set = :sets.from_list([], [{:version, 2}])
+      result = :sets.del_element(:any, set)
+
+      assert result == set
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set = :sets.from_list([2], [{:version, 2}])
+
+      assert :sets.del_element(2.0, set) == set
+    end
+
+    test "raises FunctionClauseError if argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.del_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.del_element(:elem, :not_a_set)
+      end
+    end
+  end
+
   describe "filter/2" do
     setup do
       [
@@ -73,6 +167,64 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     test "raises ErlangError if the predicate does not return a boolean", %{set: set} do
       assert_error ErlangError, build_erlang_error_msg("{:bad_filter, :not_a_boolean}"), fn ->
         :sets.filter(fn _elem -> :not_a_boolean end, set)
+      end
+    end
+  end
+
+  describe "fold/3" do
+    setup do
+      [opts: [{:version, 2}]]
+    end
+
+    test "folds over an empty set and returns the initial accumulator", %{opts: opts} do
+      set = :sets.new(opts)
+      fun = fn _elem, acc -> acc end
+      result = :sets.fold(fun, 1, set)
+
+      assert result == 1
+    end
+
+    test "folds over a set with a single element", %{opts: opts} do
+      set = :sets.from_list([2], opts)
+      fun = fn elem, acc -> [elem | acc] end
+      result = :sets.fold(fun, [], set)
+
+      assert result == [2]
+    end
+
+    test "folds over a set with multiple elements", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      fun = fn elem, acc -> acc + elem end
+      result = :sets.fold(fun, 0, set)
+
+      assert result == 6
+    end
+
+    test "raises FunctionClauseError if the first argument is not a function", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [:abc, 0, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(:abc, 0, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the function has wrong arity", %{opts: opts} do
+      set = :sets.from_list([1, 2, 3], opts)
+      fun = fn elem -> elem end
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [fun, 0, set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(fun, 0, set)
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is not a set" do
+      fun = fn _elem, acc -> acc end
+      expected_msg = build_function_clause_error_msg(":sets.fold/3", [fun, 0, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.fold(fun, 0, :abc)
       end
     end
   end
@@ -167,6 +319,78 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.is_element(:elem, :not_a_set)
+      end
+    end
+  end
+
+  describe "is_subset/2" do
+    setup do
+      empty_set = :sets.new(version: 2)
+      set_123 = :sets.from_list([1, 2, 3], version: 2)
+
+      [empty_set: empty_set, set_123: set_123]
+    end
+
+    test "returns true if all elements in first set are in second set", %{set_123: set_123} do
+      set_12 = :sets.from_list([1, 2], version: 2)
+
+      assert :sets.is_subset(set_12, set_123) == true
+    end
+
+    test "returns true if both sets are the same", %{set_123: set_123} do
+      assert :sets.is_subset(set_123, set_123) == true
+    end
+
+    test "returns true if both sets are empty", %{empty_set: empty_set} do
+      assert :sets.is_subset(empty_set, empty_set) == true
+    end
+
+    test "returns true if first set is empty and second set isn't", %{
+      empty_set: empty_set,
+      set_123: set_123
+    } do
+      assert :sets.is_subset(empty_set, set_123) == true
+    end
+
+    test "returns false if not all elements in first set are in second set", %{set_123: set_123} do
+      set_14 = :sets.from_list([1, 4], version: 2)
+
+      assert :sets.is_subset(set_14, set_123) == false
+    end
+
+    test "uses strict matching (integer vs float)" do
+      first_set = :sets.from_list([1], version: 2)
+      second_set = :sets.from_list([1.0], version: 2)
+
+      assert :sets.is_subset(first_set, second_set) == false
+    end
+
+    test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
+      expected_msg = ~r"""
+      no function clause matching in :sets\.fold/3
+
+      The following arguments were given to :sets\.fold/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in :sets\.is_subset/2>
+
+          # 2
+          true
+
+          # 3
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(:abc, set_123)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
+      expected_msg = build_function_clause_error_msg(":sets.is_element/2", [1, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_subset(set_123, :abc)
       end
     end
   end

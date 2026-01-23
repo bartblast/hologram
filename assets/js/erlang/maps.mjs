@@ -185,6 +185,42 @@ const Erlang_Maps = {
   // End merge/2
   // Deps: []
 
+  // Start merge_with/3
+  "merge_with/3": (combiner, map1, map2) => {
+    if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = Type.cloneMap(map1);
+
+    Object.entries(map2.data).forEach(([encodedKey, [key, value2]]) => {
+      const value1 = result.data[encodedKey]?.[1];
+
+      const newValue = value1
+        ? Interpreter.callAnonymousFunction(combiner, [key, value1, value2])
+        : value2;
+
+      result.data[encodedKey] = [key, newValue];
+    });
+
+    return result;
+  },
+  // End merge_with/3
+  // Deps: []
+
   // Start next/1
   "next/1": (iterator) => {
     if (!Type.isIterator(iterator)) {
@@ -238,6 +274,21 @@ const Erlang_Maps = {
   },
   // End remove/2
   // Deps: []
+
+  // Start take/2
+  "take/2": (key, map) => {
+    const value = Erlang_Maps["get/3"](key, map, null);
+
+    if (value === null) {
+      return Type.atom("error");
+    }
+
+    const newMap = Erlang_Maps["remove/2"](key, map);
+
+    return Type.tuple([value, newMap]);
+  },
+  // End take/2
+  // Deps: [:maps.get/3, :maps.remove/2]
 
   // TODO: implement iterators
   // Start to_list/1

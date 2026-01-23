@@ -268,6 +268,21 @@ const Erlang = {
   // End andalso/2
   // Deps: []
 
+  // Start apply/2
+  "apply/2": (fun, args) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseBadFunctionError(fun);
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Interpreter.callAnonymousFunction(fun, args.data);
+  },
+  // End apply/2
+  // Deps: []
+
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
   // Start apply/3
@@ -735,6 +750,15 @@ const Erlang = {
   // End float/1
   // Deps: []
 
+  // Start float_to_list/2
+  "float_to_list/2": (float, opts) => {
+    const binary = Erlang["float_to_binary/2"](float, opts);
+
+    return Bitstring.toCodepoints(binary);
+  },
+  // End float_to_list/2
+  // Deps: [:erlang.float_to_binary/2]
+
   // Start float_to_binary/2
   "float_to_binary/2": (float, opts) => {
     if (!Type.isFloat(float)) {
@@ -1198,6 +1222,112 @@ const Erlang = {
   // End length/1
   // Deps: []
 
+  // Start list_to_integer/1
+  "list_to_integer/1": (list) => {
+    return Erlang["list_to_integer/2"](list, Type.integer(10n));
+  },
+  // End list_to_integer/1
+  // Deps: [:erlang.list_to_integer/2]
+
+  // Start list_to_integer/2
+  "list_to_integer/2": (list, base) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    if (list.data.length === 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    }
+
+    const codes = [];
+
+    // TODO: consider - use isCharlist() helper instead when it's implemented
+    for (const code of list.data) {
+      if (!Type.isInteger(code)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not a textual representation of an integer",
+          ),
+        );
+      }
+
+      codes.push(Number(code.value));
+    }
+
+    const str = String.fromCharCode(...codes);
+    const baseNum = Number(base.value);
+    const strLower = str.toLowerCase();
+    let validPattern;
+
+    if (baseNum <= 10) {
+      const maxDigit = baseNum - 1;
+      validPattern = new RegExp(`^[+-]?[0-${maxDigit}]+$`);
+    } else {
+      const maxLetter = String.fromCharCode(97 + baseNum - 11);
+      validPattern = new RegExp(`^[+-]?[0-9a-${maxLetter}]+$`);
+    }
+
+    if (!validPattern.test(strLower)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    }
+
+    // Parse the string to BigInt manually to avoid precision loss with parseInt
+    const bigBase = BigInt(baseNum);
+    let result = 0n;
+    let sign = 1n;
+    let startIndex = 0;
+
+    if (strLower[0] === "-") {
+      sign = -1n;
+      startIndex = 1;
+    } else if (strLower[0] === "+") {
+      startIndex = 1;
+    }
+
+    for (let i = startIndex; i < strLower.length; i++) {
+      const char = strLower[i];
+
+      const digitValue =
+        char >= "0" && char <= "9"
+          ? BigInt(char.charCodeAt(0) - 48) // '0' is 48, so '0' becomes 0
+          : BigInt(char.charCodeAt(0) - 87); // 'a' is 97, so 'a' becomes 10
+
+      result = result * bigBase + digitValue;
+    }
+
+    return Type.integer(sign * result);
+  },
+  // End list_to_integer/2
+  // Deps: []
+
   // Start list_to_pid/1
   "list_to_pid/1": (codePoints) => {
     if (!Type.isList(codePoints)) {
@@ -1571,6 +1701,43 @@ const Erlang = {
   },
   // End tuple_to_list/1
   // Deps: []
+
+  // Start unique_integer/0
+  "unique_integer/0": () => {
+    return Type.integer(ERTS.uniqueIntegerSequence.next());
+  },
+  // End unique_integer/0
+  // Deps: []
+
+  // Start unique_integer/1
+  // Simplified: always returns monotonic, positive integers regardless of modifiers.
+  "unique_integer/1": (modifierList) => {
+    if (!Type.isList(modifierList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(modifierList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    const validModifiers = ["monotonic", "positive"];
+
+    for (const modifier of modifierList.data) {
+      if (!Type.isAtom(modifier) || !validModifiers.includes(modifier.value)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+        );
+      }
+    }
+
+    return Erlang["unique_integer/0"]();
+  },
+  // End unique_integer/1
+  // Deps: [:erlang.unique_integer/0]
 
   // Start xor/2
   "xor/2": (left, right) => {

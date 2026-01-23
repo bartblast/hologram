@@ -558,6 +558,184 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("merge_with/3", () => {
+    const merge_with = Erlang_Maps["merge_with/3"];
+    let combiner;
+
+    beforeEach(() => {
+      combiner = Type.anonymousFunction(
+        3,
+        [
+          {
+            params: (_context) => [
+              Type.matchPlaceholder(),
+              Type.variablePattern("v1"),
+              Type.variablePattern("v2"),
+            ],
+            guards: [],
+            body: (context) => Erlang["+/2"](context.vars.v1, context.vars.v2),
+          },
+        ],
+        contextFixture(),
+      );
+    });
+
+    it("combines overlapping keys with combiner", () => {
+      const map1 = mapA1B2;
+
+      const map2 = Type.map([
+        [atomB, Type.integer(3)],
+        [atomC, Type.integer(4)],
+      ]);
+
+      const result = merge_with(combiner, map1, map2);
+
+      const expected = Type.map([
+        [atomA, integer1],
+        [atomB, Type.integer(5)],
+        [atomC, Type.integer(4)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("when all keys overlap", () => {
+      const map1 = mapA1B2;
+
+      const map2 = Type.map([
+        [atomA, Type.integer(10)],
+        [atomB, Type.integer(20)],
+      ]);
+
+      const result = merge_with(combiner, map1, map2);
+
+      const expected = Type.map([
+        [atomA, Type.integer(11)],
+        [atomB, Type.integer(22)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("when no keys overlap", () => {
+      const map1 = Type.map([[atomA, integer1]]);
+      const map2 = Type.map([[atomB, integer2]]);
+
+      const result = merge_with(combiner, map1, map2);
+      const expected = mapA1B2;
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("when first map is empty", () => {
+      const map1 = Type.map();
+      const map2 = mapA1B2;
+
+      const result = merge_with(combiner, map1, map2);
+      const expected = mapA1B2;
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("when second map is empty", () => {
+      const map1 = mapA1B2;
+      const map2 = Type.map();
+
+      const result = merge_with(combiner, map1, map2);
+      const expected = mapA1B2;
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("when both maps are empty", () => {
+      const result = merge_with(combiner, Type.map(), Type.map());
+      const expected = Type.map();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("doesn't mutate its arguments", () => {
+      const map1 = freeze(
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]),
+      );
+
+      const map2 = freeze(
+        Type.map([
+          [Type.atom("b"), Type.integer(3)],
+          [Type.atom("c"), Type.integer(4)],
+        ]),
+      );
+
+      merge_with(combiner, map1, map2);
+    });
+
+    it("raises ArgumentError if the first argument is not an anonymous function", () => {
+      const map1 = Type.map([[atomA, integer1]]);
+      const map2 = Type.map([[atomB, integer2]]);
+
+      assertBoxedError(
+        () => merge_with(Type.atom("not_a_function"), map1, map2),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is an anonymous function with arity different than 3", () => {
+      const wrongArityFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("x"),
+              Type.variablePattern("y"),
+            ],
+            guards: [],
+            body: (context) => Erlang["+/2"](context.vars.x, context.vars.y),
+          },
+        ],
+        contextFixture(),
+      );
+
+      const map1 = Type.map([[atomA, integer1]]);
+      const map2 = Type.map([[atomB, integer2]]);
+
+      assertBoxedError(
+        () => merge_with(wrongArityFun, map1, map2),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      const map = Type.map([[atomA, integer1]]);
+
+      assertBoxedError(
+        () => merge_with(combiner, Type.integer(123), map),
+        "BadMapError",
+        "expected a map, got: 123",
+      );
+    });
+
+    it("raises BadMapError if the third argument is not a map", () => {
+      const map = Type.map([[atomA, integer1]]);
+
+      assertBoxedError(
+        () => merge_with(combiner, map, Type.integer(123)),
+        "BadMapError",
+        "expected a map, got: 123",
+      );
+    });
+  });
+
   describe("next/1", () => {
     const iterator = Erlang_Maps["iterator/1"];
     const next = Erlang_Maps["next/1"];
@@ -729,6 +907,87 @@ describe("Erlang_Maps", () => {
       ]);
 
       assert.deepStrictEqual(map, expected);
+    });
+  });
+
+  describe("take/2", () => {
+    const take = Erlang_Maps["take/2"];
+
+    it("key exists in map", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      const result = take(Type.atom("b"), map);
+
+      const expected = Type.tuple([
+        Type.integer(2),
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("c"), Type.integer(3)],
+        ]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("key does not exist in map", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      const result = take(Type.atom("b"), map);
+
+      assert.deepStrictEqual(result, Type.atom("error"));
+    });
+
+    it("empty map", () => {
+      const result = take(Type.atom("a"), Type.map());
+
+      assert.deepStrictEqual(result, Type.atom("error"));
+    });
+
+    it("key exists and value is nil", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.atom("nil")],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const result = take(Type.atom("a"), map);
+
+      const expected = Type.tuple([
+        Type.atom("nil"),
+        Type.map([[Type.atom("b"), Type.integer(2)]]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("doesn't mutate the original map", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      take(Type.atom("a"), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assert.deepStrictEqual(map, expected);
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      assertBoxedError(
+        () => take(Type.atom("a"), Type.integer(123)),
+        "BadMapError",
+        "expected a map, got: 123",
+      );
     });
   });
 

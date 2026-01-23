@@ -9,6 +9,16 @@ defmodule Hologram.ExJsConsistency.Erlang.RandTest do
 
   @moduletag :consistency
 
+  describe "uniform/0" do
+    test "returns a float in range [0.0, 1.0)" do
+      result = :rand.uniform()
+
+      assert is_float(result)
+      assert result >= 0.0
+      assert result < 1.0
+    end
+  end
+
   describe "uniform/1" do
     @expected_err_msg ~r'no function clause matching in :rand.uniform_s/2'
 

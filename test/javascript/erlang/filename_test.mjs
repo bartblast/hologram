@@ -97,6 +97,20 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("binary with invalid UTF-8 bytes", () => {
+      // <<0xFF, 0xFE>> is invalid UTF-8
+      const filename = Bitstring.fromBytes([
+        112, 97, 116, 104, 47, 116, 111, 47, 0xff, 0xfe, 46, 116, 120, 116,
+      ]);
+
+      const result = basename(filename);
+
+      // Should preserve raw bytes for the invalid UTF-8
+      const expected = Bitstring.fromBytes([0xff, 0xfe, 46, 116, 120, 116]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("atom input", () => {
       const filename = Type.atom("path/to/file.txt");
       const result = basename(filename);
@@ -128,6 +142,54 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("iolist with invalid UTF-8 bytes", () => {
+      // Pure charlist: [112, 97, 116, 104, 47, 116, 111, 47, 0xFF, 0xFE, 46, 116, 120, 116]
+      // "path/to/" + [0xFF, 0xFE] + ".txt"
+      const filename = Type.list([
+        Type.integer(112), // 'p'
+        Type.integer(97), // 'a'
+        Type.integer(116), // 't'
+        Type.integer(104), // 'h'
+        Type.integer(47), // '/'
+        Type.integer(116), // 't'
+        Type.integer(111), // 'o'
+        Type.integer(47), // '/'
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(46), // '.'
+        Type.integer(116), // 't'
+        Type.integer(120), // 'x'
+        Type.integer(116), // 't'
+      ]);
+
+      const result = basename(filename);
+
+      // Should return raw bytes as integers: [0xFF, 0xFE, ?., ?t, ?x, ?t]
+      const expected = Type.list([
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(46), // '.'
+        Type.integer(116), // 't'
+        Type.integer(120), // 'x'
+        Type.integer(116), // 't'
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("charlist with only slashes", () => {
+      const filename = Type.list([
+        Type.integer(47), // '/'
+        Type.integer(47), // '/'
+        Type.integer(47), // '/'
+      ]);
+
+      const result = basename(filename);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
       const arg = Type.integer(123);
 
@@ -146,6 +208,235 @@ describe("Erlang_Filename", () => {
 
       assertBoxedError(
         () => basename(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+  });
+
+  describe("extension/1", () => {
+    const extension = Erlang_Filename["extension/1"];
+
+    it("file with extension", () => {
+      const filename = Type.bitstring("foo.erl");
+      const result = extension(filename);
+      const expected = Type.bitstring(".erl");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file without extension", () => {
+      const filename = Type.bitstring("foo");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with path and extension", () => {
+      const filename = Type.bitstring("path/to/file.txt");
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with multiple dots in filename", () => {
+      const filename = Type.bitstring("archive.tar.gz");
+      const result = extension(filename);
+      const expected = Type.bitstring(".gz");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file starting with dot", () => {
+      const filename = Type.bitstring(".hidden");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("directory path without extension", () => {
+      const filename = Type.bitstring("beam.src/kalle");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("absolute path with extension", () => {
+      const filename = Type.bitstring("/usr/local/foo.txt");
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty string", () => {
+      const filename = Type.bitstring("");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with trailing slash", () => {
+      const filename = Type.bitstring("path/to/dir/");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with dot in directory name", () => {
+      const filename = Type.bitstring("path.dir/file");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("file with multiple dots including in directory", () => {
+      const filename = Type.bitstring("path.dir/file.tar.gz");
+      const result = extension(filename);
+      const expected = Type.bitstring(".gz");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input with extension", () => {
+      const filename = Type.atom("file.txt");
+      const result = extension(filename);
+      const expected = Type.charlist(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input without extension", () => {
+      const filename = Type.atom("file");
+      const result = extension(filename);
+      const expected = Type.charlist("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list input", () => {
+      const emptyList = Type.list();
+      const result = extension(emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("iolist input with extension", () => {
+      const filename = Type.list([
+        Type.charlist("path/to/"),
+        Type.integer(102), // 'f'
+        Type.integer(105), // 'i'
+        Type.integer(108), // 'l'
+        Type.integer(101), // 'e'
+        Type.charlist(".txt"),
+      ]);
+
+      const result = extension(filename);
+      const expected = Type.charlist(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("bitstring input", () => {
+      // "file.txt"
+      const filename = Bitstring.fromBytes([
+        102, 105, 108, 101, 46, 116, 120, 116,
+      ]);
+
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles invalid UTF-8 binary", () => {
+      const filename = Bitstring.fromBytes(new Uint8Array([255, 46, 254]));
+      const result = extension(filename);
+
+      assert.deepStrictEqual(result.bytes, new Uint8Array([46, 254]));
+    });
+
+    it("handles invalid UTF-8 iolist", () => {
+      const filename = Type.list([
+        Type.integer(255),
+        Type.integer(46),
+        Type.integer(254),
+      ]);
+
+      const result = extension(filename);
+      const expected = Type.list([Type.integer(46), Type.integer(254)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("trailing dot is a valid extension", () => {
+      const filename = Type.bitstring("file.");
+      const result = extension(filename);
+      const expected = Type.bitstring(".");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("hidden file with extension", () => {
+      const filename = Type.bitstring(".hidden.txt");
+      const result = extension(filename);
+      const expected = Type.bitstring(".txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("double dot", () => {
+      const filename = Type.bitstring("..");
+      const result = extension(filename);
+      const expected = Type.bitstring(".");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("root path", () => {
+      const filename = Type.bitstring("/");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("current directory", () => {
+      const filename = Type.bitstring(".");
+      const result = extension(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
+      const arg = Type.integer(123);
+
+      assertBoxedError(
+        () => extension(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => extension(arg),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
@@ -323,6 +614,838 @@ describe("Erlang_Filename", () => {
 
       assertBoxedError(
         () => flatten(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+  });
+
+  describe("join/1", () => {
+    const join = Erlang_Filename["join/1"];
+
+    it("joins multiple path components", () => {
+      const components = Type.list([
+        Type.bitstring("usr"),
+        Type.bitstring("local"),
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("usr/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("joins components with leading slash", () => {
+      const components = Type.list([
+        Type.bitstring("/usr"),
+        Type.bitstring("local"),
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("normalizes path with redundant slashes", () => {
+      const components = Type.list([Type.bitstring("a/b///c/")]);
+      const result = join(components);
+      const expected = Type.bitstring("a/b/c");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles single component", () => {
+      const components = Type.list([Type.bitstring("foo")]);
+      const result = join(components);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute path in middle component", () => {
+      const components = Type.list([
+        Type.bitstring("usr"),
+        Type.bitstring("/local"),
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles trailing slashes", () => {
+      const components = Type.list([
+        Type.bitstring("a/"),
+        Type.bitstring("b"),
+        Type.bitstring("c"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("a/b/c");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty string components", () => {
+      const components = Type.list([
+        Type.bitstring(""),
+        Type.bitstring(""),
+        Type.bitstring(""),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles dot components", () => {
+      const components = Type.list([
+        Type.bitstring("."),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("./local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles parent directory references", () => {
+      const components = Type.list([
+        Type.bitstring(".."),
+        Type.bitstring("usr"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("../usr");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles atom components", () => {
+      const components = Type.list([Type.atom("foo"), Type.atom("bar")]);
+      const result = join(components);
+      const expected = Type.charlist("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles nested list components", () => {
+      const components = Type.list([
+        Type.list([Type.bitstring("a"), Type.bitstring("b")]),
+        Type.bitstring("c"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("ab/c");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles iolist components", () => {
+      const components = Type.list([
+        Type.list([
+          Type.integer(117), // 'u'
+          Type.integer(115), // 's'
+          Type.integer(114), // 'r'
+        ]),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles root with additional components", () => {
+      const components = Type.list([
+        Type.bitstring("/"),
+        Type.bitstring("usr"),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple consecutive slashes", () => {
+      const components = Type.list([
+        Type.bitstring("//usr"),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("preserves invalid UTF-8 bytes in binary components", () => {
+      const invalid = Bitstring.fromBytes([0xc3, 0x28]); // invalid 2-byte sequence
+      Bitstring.maybeSetTextFromBytes(invalid);
+
+      const components = Type.list([
+        Type.bitstring("usr"),
+        invalid,
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+
+      const expected = Bitstring.fromBytes([
+        117, 115, 114, 47, 0xc3, 0x28, 47, 98, 105, 110,
+      ]);
+
+      Bitstring.maybeSetTextFromBytes(expected);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles single absolute component", () => {
+      const components = Type.list([Type.bitstring("/usr/local/bin")]);
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles single root component", () => {
+      const components = Type.list([Type.bitstring("/")]);
+      const result = join(components);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles deeply nested iolist components", () => {
+      const components = Type.list([
+        Type.list([Type.list([Type.bitstring("a")])]),
+        Type.bitstring("b"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("a/b");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles mixed types with absolute path override", () => {
+      const components = Type.list([
+        Type.bitstring("usr"),
+        Type.bitstring("local"),
+        Type.bitstring("/tmp"),
+        Type.bitstring("file"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/tmp/file");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple atoms and binaries", () => {
+      const components = Type.list([
+        Type.atom("home"),
+        Type.bitstring("user"),
+        Type.atom("documents"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("home/user/documents");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      const arg = Type.bitstring("not-a-list");
+
+      assertBoxedError(
+        () => join(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is empty", () => {
+      const arg = Type.list([]);
+
+      assertBoxedError(
+        () => join(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+      );
+    });
+  });
+
+  describe("join/2", () => {
+    const join = Erlang_Filename["join/2"];
+
+    it("joins two path components", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute first component", () => {
+      const name1 = Type.bitstring("/usr");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute second component", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("/local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty first component", () => {
+      const name1 = Type.bitstring("");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty second component", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles both empty components", () => {
+      const name1 = Type.bitstring("");
+      const name2 = Type.bitstring("");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles trailing slash in first component", () => {
+      const name1 = Type.bitstring("usr/");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute second component with trailing slash in first", () => {
+      const name1 = Type.bitstring("usr/");
+      const name2 = Type.bitstring("/local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles atom inputs", () => {
+      const name1 = Type.atom("foo");
+      const name2 = Type.atom("bar");
+      const result = join(name1, name2);
+      const expected = Type.charlist("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles mixed atom and binary inputs", () => {
+      const name1 = Type.atom("foo");
+      const name2 = Type.bitstring("bar");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles list input for first component", () => {
+      const name1 = Type.list([
+        Type.integer(117),
+        Type.integer(115),
+        Type.integer(114),
+      ]); // 'usr'
+
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles list input for second component", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.list([
+        Type.integer(108),
+        Type.integer(111),
+        Type.integer(99),
+        Type.integer(97),
+        Type.integer(108),
+      ]); // 'local'
+
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles iolist inputs", () => {
+      const name1 = Type.list([
+        Type.list([Type.integer(117), Type.integer(115), Type.integer(114)]),
+      ]); // [[?u, ?s, ?r]]
+
+      const name2 = Type.list([
+        Type.list([
+          Type.integer(108),
+          Type.integer(111),
+          Type.integer(99),
+          Type.integer(97),
+          Type.integer(108),
+        ]),
+      ]); // [[?l, ?o, ?c, ?a, ?l]]
+
+      const result = join(name1, name2);
+      const expected = Type.charlist("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("normalizes redundant slashes", () => {
+      const name1 = Type.bitstring("usr//");
+      const name2 = Type.bitstring("//local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles dot in paths", () => {
+      const name1 = Type.bitstring(".");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("./local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles parent directory reference", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("../local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/../local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("preserves invalid UTF-8 bytes in binary inputs", () => {
+      const invalidBytes = [0xc3, 0x28]; // invalid 2-byte UTF-8 sequence
+      const name1 = Type.bitstring("usr");
+
+      const name2 = Bitstring.fromBytes(invalidBytes);
+      Bitstring.maybeSetTextFromBytes(name2);
+
+      const result = join(name1, name2);
+
+      const expected = Bitstring.fromBytes([
+        117,
+        115,
+        114,
+        47,
+        ...invalidBytes,
+      ]);
+
+      Bitstring.maybeSetTextFromBytes(expected);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles both components as slash", () => {
+      const name1 = Type.bitstring("/");
+      const name2 = Type.bitstring("/");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles slash with empty", () => {
+      const name1 = Type.bitstring("/");
+      const name2 = Type.bitstring("");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty with slash", () => {
+      const name1 = Type.bitstring("");
+      const name2 = Type.bitstring("/");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple absolute path components", () => {
+      const name1 = Type.bitstring("/usr");
+      const name2 = Type.bitstring("/local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles complex path with dots", () => {
+      const name1 = Type.bitstring("./foo");
+      const name2 = Type.bitstring("bar/./baz");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("./foo/bar/baz");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if first argument is invalid", () => {
+      const arg1 = Type.integer(123);
+      const arg2 = Type.bitstring("local");
+
+      assertBoxedError(
+        () => join(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
+          arg1,
+          arg2,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is invalid", () => {
+      const arg1 = Type.bitstring("usr");
+      const arg2 = Type.integer(123);
+
+      assertBoxedError(
+        () => join(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
+          arg1,
+          arg2,
+        ]),
+      );
+    });
+  });
+
+  describe("split/1", () => {
+    const split = Erlang_Filename["split/1"];
+
+    it("absolute Unix path", () => {
+      const filename = Type.bitstring("/usr/local/bin");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("/"),
+        Type.bitstring("usr"),
+        Type.bitstring("local"),
+        Type.bitstring("bin"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("relative Unix path", () => {
+      const filename = Type.bitstring("foo/bar");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("foo"),
+        Type.bitstring("bar"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single component", () => {
+      const filename = Type.bitstring("foo");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring("foo")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("root path", () => {
+      const filename = Type.bitstring("/");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring("/")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty string", () => {
+      const filename = Type.bitstring("");
+      const result = split(filename);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple consecutive slashes", () => {
+      const filename = Type.bitstring("//");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring("/")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("dot component", () => {
+      const filename = Type.bitstring(".");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring(".")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("double dot component", () => {
+      const filename = Type.bitstring("..");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring("..")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with dot in middle", () => {
+      const filename = Type.bitstring("/./");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring("/"), Type.bitstring(".")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with double dot in middle", () => {
+      const filename = Type.bitstring("/../");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring("/"), Type.bitstring("..")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("relative path with dot prefix", () => {
+      const filename = Type.bitstring("./foo");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring("."), Type.bitstring("foo")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("relative path with double dot prefix", () => {
+      const filename = Type.bitstring("../foo");
+      const result = split(filename);
+      const expected = Type.list([Type.bitstring(".."), Type.bitstring("foo")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with dot in middle components", () => {
+      const filename = Type.bitstring("foo/./bar");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("foo"),
+        Type.bitstring("."),
+        Type.bitstring("bar"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with double dot in middle components", () => {
+      const filename = Type.bitstring("foo/../bar");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("foo"),
+        Type.bitstring(".."),
+        Type.bitstring("bar"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with trailing slash", () => {
+      const filename = Type.bitstring("foo/bar/");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("foo"),
+        Type.bitstring("bar"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("absolute path with trailing slash", () => {
+      const filename = Type.bitstring("/foo/bar/");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("/"),
+        Type.bitstring("foo"),
+        Type.bitstring("bar"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with multiple consecutive slashes in middle", () => {
+      const filename = Type.bitstring("foo//bar");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("foo"),
+        Type.bitstring("bar"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("drive letter with colon and forward slash", () => {
+      const filename = Type.bitstring("a:/msdev/include");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.bitstring("a:"),
+        Type.bitstring("msdev"),
+        Type.bitstring("include"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("charlist input", () => {
+      const filename = Type.charlist("foo/bar");
+      const result = split(filename);
+      const expected = Type.list([Type.charlist("foo"), Type.charlist("bar")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("charlist input with absolute path", () => {
+      const filename = Type.charlist("/usr/local/bin");
+      const result = split(filename);
+
+      const expected = Type.list([
+        Type.charlist("/"),
+        Type.charlist("usr"),
+        Type.charlist("local"),
+        Type.charlist("bin"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input", () => {
+      const filename = Type.atom("foo/bar");
+      const result = split(filename);
+      const expected = Type.list([Type.charlist("foo"), Type.charlist("bar")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list input", () => {
+      const filename = Type.list();
+      const result = split(filename);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("iolist input", () => {
+      const filename = Type.list([
+        Type.charlist("foo"),
+        Type.integer(47), // '/'
+        Type.charlist("bar"),
+      ]);
+
+      const result = split(filename);
+      const expected = Type.list([Type.charlist("foo"), Type.charlist("bar")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("binary with invalid UTF-8 bytes", () => {
+      // "usr/" + <<0xFF, 0xFE>> (invalid UTF-8) + "/bin"
+      const filename = Bitstring.fromBytes([
+        117, 115, 114, 47, 0xff, 0xfe, 47, 98, 105, 110,
+      ]);
+
+      const result = split(filename);
+
+      const invalidUtf8Part = Bitstring.fromBytes([0xff, 0xfe]);
+      Bitstring.maybeSetTextFromBytes(invalidUtf8Part);
+
+      // Should preserve invalid UTF-8 bytes
+      const expected = Type.list([
+        Type.bitstring("usr"),
+        invalidUtf8Part,
+        Type.bitstring("bin"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("iolist with invalid UTF-8 bytes", () => {
+      // Pure charlist: [117, 115, 114, 47, 0xFF, 0xFE, 47, 98, 105, 110]
+      // "usr/" + [0xFF, 0xFE] + "/bin"
+      const filename = Type.list([
+        Type.integer(117), // 'u'
+        Type.integer(115), // 's'
+        Type.integer(114), // 'r'
+        Type.integer(47), // '/'
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(47), // '/'
+        Type.integer(98), // 'b'
+        Type.integer(105), // 'i'
+        Type.integer(110), // 'n'
+      ]);
+
+      const result = split(filename);
+
+      // Should return raw bytes as integers: [[117, 115, 114], [0xFF, 0xFE], [98, 105, 110]]
+      const expected = Type.list([
+        Type.charlist("usr"),
+        Type.list([Type.integer(0xff), Type.integer(0xfe)]),
+        Type.charlist("bin"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the argument is not a valid filename type", () => {
+      const arg = Type.integer(123);
+
+      assertBoxedError(
+        () => split(arg),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg,
