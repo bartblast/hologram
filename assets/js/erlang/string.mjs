@@ -93,31 +93,39 @@ const Erlang_String = {
   "replace/4": (string, pattern, replacement, direction) => {
     // The first three arguments of Erlang :string.replace are actually of type unicode:chardata,
     // we need to convert them to binaries in order to make validation and to convert them to text
-    const stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
+    function convertToBinary(input) {
+      try {
+        return Erlang_Unicode["characters_to_binary/1"](input);
+      } catch (error) {
+        switch (input) {
+          case string:
+            Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+            break;
 
-    if (!Type.isBinary(stringBinary)) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+          case pattern:
+            Interpreter.raiseArgumentError(
+              Interpreter.buildArgumentErrorMsg(
+                1,
+                "not valid character data (an iodata term)",
+              ),
+            );
+            break;
+
+          case replacement:
+            throw new HologramInterpreterError(
+              "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
+            );
+            break;
+
+          default:
+            break;
+        }
+      }
     }
 
-    const patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
-
-    if (!Type.isBinary(patternBinary)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
-    }
-
-    const replacementBinary =
-      Erlang_Unicode["characters_to_binary/1"](replacement);
-
-    if (!Type.isBinary(replacementBinary)) {
-      throw new HologramInterpreterError(
-        "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
-      );
-    }
+    const stringBinary = convertToBinary(string);
+    const patternBinary = convertToBinary(pattern);
+    const replacementBinary = convertToBinary(replacement);
 
     if (!Type.isAtom(direction)) {
       Interpreter.raiseCaseClauseError(direction);
