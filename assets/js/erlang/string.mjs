@@ -100,6 +100,7 @@ const Erlang_String = {
         switch (input) {
           case string:
             Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+            return;
 
           case pattern:
             Interpreter.raiseArgumentError(
@@ -108,6 +109,7 @@ const Erlang_String = {
                 "not valid character data (an iodata term)",
               ),
             );
+            return;
 
           case replacement:
             throw new HologramInterpreterError(
