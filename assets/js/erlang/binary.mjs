@@ -147,7 +147,7 @@ const Erlang_Binary = {
 
   // Boyer-Moore matcher implementation for single patterns
   // Start _boyer_moore_pattern_matcher/1
-  _boyer_moore_pattern_matcher: (pattern) => {
+  "_boyer_moore_pattern_matcher/1": (pattern) => {
     Bitstring.maybeSetBytesFromText(pattern);
 
     if (pattern.bytes.length == 0) {
@@ -155,10 +155,7 @@ const Erlang_Binary = {
     }
 
     let badShift;
-    let compiledPattern = ERTS.binaryPatternRegistry.get(pattern);
-    if (compiledPattern) {
-      badShift = compiledPattern.badShift;
-    } else {
+    if (!ERTS.binaryPatternRegistry.get(pattern)) {
       badShift = {};
 
       const length = pattern.bytes.length - 1;
@@ -173,25 +170,24 @@ const Erlang_Binary = {
         badShift[byte] = length - index;
       });
 
-      compiledPattern = {type: "bm", ref, badShift};
+      const compiledPatternData = {type: "bm", badShift};
+      ERTS.binaryPatternRegistry.put(pattern, compiledPatternData);
     }
 
     const ref = Erlang["make_ref/0"]();
-    ERTS.binaryPatternRegistry.put(pattern, compiledPattern);
-
     return Type.tuple([Type.atom("bm"), ref]);
   },
   // End _boyer_moore_pattern_matcher/1
   // Deps: [:erlang.make_ref/0]
 
   // Start _boyer_moore_search/3
-  _boyer_moore_search: (subject, compiledPattern, options) => {
+  "_boyer_moore_search/3": (subject, pattern, options) => {
     const searchOptions = Erlang_Binary["_parse_search_opts/1"](options);
+    const patternLastIndex = pattern.length - 1;
+    const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
+    const badShift = compiledPatternData.badShift;
 
     let index = Math.floor(searchOptions.start < 0 ? 0 : searchOptions.start);
-    const pattern = compiledPattern.pattern;
-    const patternLastIndex = pattern.length - 1;
-    const badShift = compiledPattern.badShift;
 
     const maxIndex =
       searchOptions.length > 0
@@ -221,13 +217,9 @@ const Erlang_Binary = {
 
   // Aho-Corasick matcher implementation for multiple patterns
   // Start _aho_corasick_pattern_matcher/1
-  _aho_corasick_pattern_matcher: (patterns) => {
-    let rootNode;
-    let compiledPattern = ERTS.binaryPatternRegistry.get(patterns);
-    if (compiledPattern) {
-      rootNode = compiledPattern.rootNode;
-    } else {
-      rootNode = {
+  "_aho_corasick_pattern_matcher/1": (patterns) => {
+    if (!ERTS.binaryPatternRegistry.get(patterns)) {
+      const rootNode = {
         children: new Map(),
         output: [],
         failure: null,
@@ -280,26 +272,28 @@ const Erlang_Binary = {
           childNode.output = childNode.output.concat(childNode.failure.output);
         }
       }
-      compiledPattern = {type: "ac", ref, rootNode};
+
+      const compiledPatternData = {type: "ac", rootNode};
+      ERTS.binaryPatternRegistry.put(patterns, compiledPatternData);
     }
 
     const ref = Erlang["make_ref/0"]();
-    ERTS.binaryPatternRegistry.put(patterns, compiledPattern);
-
     return Type.tuple([Type.atom("ac"), ref]);
   },
   // End _aho_corasick_pattern_matcher/1
   // Deps: [:erlang.make_ref/0]
 
   // Start _aho_corasick_search/3
-  _aho_corasick_search: (subject, compiledPattern, options) => {
+  "_aho_corasick_search/3": (subject, patterns, options) => {
     const searchOptions = Erlang_Binary["_parse_search_opts/1"](options);
     const index = Math.floor(searchOptions.start < 0 ? 0 : searchOptions.start);
     const maxIndex = Math.floor(
       searchOptions.length > 0 ? searchOptions.length : subject.length,
     );
+    const compiledPatternData = ERTS.binaryPatternRegistry.get(patterns);
+    const rootNode = compiledPatternData.rootNode;
 
-    let currentNode = compiledPattern.rootNode;
+    let currentNode = rootNode;
 
     for (let i = index; i < maxIndex; i++) {
       const char = subject[i];
@@ -309,9 +303,9 @@ const Erlang_Binary = {
       }
 
       if (currentNode) {
-        currentNode.children[char] || compiledPattern.rootNode;
+        currentNode.children[char] || rootNode;
       } else {
-        compiledPattern.rootNode;
+        rootNode;
       }
 
       const resultLength = currentNode.output.length;
@@ -343,12 +337,12 @@ const Erlang_Binary = {
       opts,
     );
 
-    if (scopeTuple) {
-      const innerTuple = scopeTuple.data[1];
-      const start = innerTuple.data[0];
-      const length = innerTuple.data[1];
+    if (scopeTuple && scopeTuple.data && scopeTuple.data.length == 2) {
+      const innerData = scopeTuple.data[1];
+      const start = innerData.data[0];
+      const length = innerData.data[1];
       if (Type.isInteger(start) && Type.isInteger(length)) {
-        return {start, length};
+        return {start: start, length: length};
       } else {
         Interpreter.raiseFunctionClauseError(
           Interpreter.buildFunctionClauseErrorMsg("invalid options"),
