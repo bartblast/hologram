@@ -26,7 +26,8 @@ const bytesBasedBinary = Bitstring.fromBytes([5, 19, 72, 33]);
 const bytesBasedEmptyBinary = Bitstring.fromBytes([]);
 const textBasedEmptyBinary = Bitstring.fromText("");
 
-const emptyList = Type.list([]);
+// TODO: consider
+// const emptyList = Type.list([]);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/ex_js_consistency/erlang/binary_test.exs
@@ -450,7 +451,7 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  // TODO: uncomment
+  // TODO: consider
   // describe("_boyer_moore_search/3", () => {
   //   const subject = Bitstring.fromText("hello world");
   //   const pattern = Bitstring.fromText("hello");
@@ -517,117 +518,119 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("_aho_corasick_search/3", () => {
-    const search = Erlang_Binary["_aho_corasick_search/3"];
-    const subject = Bitstring.fromText("she sells shells");
-    const pattern1 = Bitstring.fromText("she");
-    const pattern2 = Bitstring.fromText("shells");
-    const patternList = Type.list([pattern1, pattern2]);
-    Erlang_Binary["compile_pattern/1"](patternList);
+  // TODO: consider
+  // describe("_aho_corasick_search/3", () => {
+  //   const search = Erlang_Binary["_aho_corasick_search/3"];
+  //   const subject = Bitstring.fromText("she sells shells");
+  //   const pattern1 = Bitstring.fromText("she");
+  //   const pattern2 = Bitstring.fromText("shells");
+  //   const patternList = Type.list([pattern1, pattern2]);
+  //   Erlang_Binary["compile_pattern/1"](patternList);
 
-    describe("with default options (empty list)", () => {
-      it("finds first pattern in subject", () => {
-        const result = search(subject, patternList, emptyList);
-        assert.deepEqual(result, {index: 0, length: 3});
-      });
+  //   describe("with default options (empty list)", () => {
+  //     it("finds first pattern in subject", () => {
+  //       const result = search(subject, patternList, emptyList);
+  //       assert.deepEqual(result, {index: 0, length: 3});
+  //     });
 
-      it("returns false when no patterns are found", () => {
-        const invalidSubject = Bitstring.fromText("hello world");
-        const result = search(invalidSubject, patternList, emptyList);
-        assert.deepEqual(result, false);
-      });
-    });
+  //     it("returns false when no patterns are found", () => {
+  //       const invalidSubject = Bitstring.fromText("hello world");
+  //       const result = search(invalidSubject, patternList, emptyList);
+  //       assert.deepEqual(result, false);
+  //     });
+  //   });
 
-    describe("with scope option", () => {
-      it("searches within specified scope", () => {
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(3), Type.integer(10)]),
-          ]),
-        ]);
+  //   describe("with scope option", () => {
+  //     it("searches within specified scope", () => {
+  //       const options = Type.list([
+  //         Type.tuple([
+  //           Type.atom("scope"),
+  //           Type.tuple([Type.integer(3), Type.integer(10)]),
+  //         ]),
+  //       ]);
 
-        const result = search(subject, patternList, options);
+  //       const result = search(subject, patternList, options);
 
-        assert.deepEqual(result, {index: 10, length: 3});
-      });
-    });
-  });
+  //       assert.deepEqual(result, {index: 10, length: 3});
+  //     });
+  //   });
+  // });
 
-  describe("_parse_search_opts/1", () => {
-    const parseSearchOpts = Erlang_Binary["_parse_search_opts/1"];
+  // TODO: consider
+  // describe("_parse_search_opts/1", () => {
+  //   const parseSearchOpts = Erlang_Binary["_parse_search_opts/1"];
 
-    describe("with empty list (default options)", () => {
-      it("returns default start and length values", () => {
-        const result = parseSearchOpts(emptyList);
-        assert.deepEqual(result, {start: 0, length: -1});
-      });
-    });
+  //   describe("with empty list (default options)", () => {
+  //     it("returns default start and length values", () => {
+  //       const result = parseSearchOpts(emptyList);
+  //       assert.deepEqual(result, {start: 0, length: -1});
+  //     });
+  //   });
 
-    describe("with scope option", () => {
-      it("parses scope tuple with valid integers", () => {
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(5), Type.integer(10)]),
-          ]),
-        ]);
-        const result = parseSearchOpts(options);
+  //   describe("with scope option", () => {
+  //     it("parses scope tuple with valid integers", () => {
+  //       const options = Type.list([
+  //         Type.tuple([
+  //           Type.atom("scope"),
+  //           Type.tuple([Type.integer(5), Type.integer(10)]),
+  //         ]),
+  //       ]);
+  //       const result = parseSearchOpts(options);
 
-        assert.deepEqual(result, {start: 5, length: 10});
-      });
+  //       assert.deepEqual(result, {start: 5, length: 10});
+  //     });
 
-      it("returns zero start when scope start is negative", () => {
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(5), Type.integer(10)]),
-          ]),
-        ]);
-        const result = parseSearchOpts(options);
+  //     it("returns zero start when scope start is negative", () => {
+  //       const options = Type.list([
+  //         Type.tuple([
+  //           Type.atom("scope"),
+  //           Type.tuple([Type.integer(5), Type.integer(10)]),
+  //         ]),
+  //       ]);
+  //       const result = parseSearchOpts(options);
 
-        assert.deepEqual(result, {start: 5, length: 10});
-      });
-    });
+  //       assert.deepEqual(result, {start: 5, length: 10});
+  //     });
+  //   });
 
-    describe("error cases", () => {
-      it("raises FunctionClauseError when options is not a list", () => {
-        const options = Type.atom("invalid");
+  //   describe("error cases", () => {
+  //     it("raises FunctionClauseError when options is not a list", () => {
+  //       const options = Type.atom("invalid");
 
-        assertBoxedError(
-          () => parseSearchOpts(options),
-          "FunctionClauseError",
-          /invalid options/,
-        );
-      });
+  //       assertBoxedError(
+  //         () => parseSearchOpts(options),
+  //         "FunctionClauseError",
+  //         /invalid options/,
+  //       );
+  //     });
 
-      it("raises FunctionClauseError when options is an improper list", () => {
-        const options = Type.improperList([
-          Type.atom("test"),
-          Type.atom("tail"),
-        ]);
+  //     it("raises FunctionClauseError when options is an improper list", () => {
+  //       const options = Type.improperList([
+  //         Type.atom("test"),
+  //         Type.atom("tail"),
+  //       ]);
 
-        assertBoxedError(
-          () => parseSearchOpts(options),
-          "FunctionClauseError",
-          /invalid options/,
-        );
-      });
+  //       assertBoxedError(
+  //         () => parseSearchOpts(options),
+  //         "FunctionClauseError",
+  //         /invalid options/,
+  //       );
+  //     });
 
-      it("raises FunctionClauseError when scope contains non-integers", () => {
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.atom("invalid"), Type.integer(10)]),
-          ]),
-        ]);
+  //     it("raises FunctionClauseError when scope contains non-integers", () => {
+  //       const options = Type.list([
+  //         Type.tuple([
+  //           Type.atom("scope"),
+  //           Type.tuple([Type.atom("invalid"), Type.integer(10)]),
+  //         ]),
+  //       ]);
 
-        assertBoxedError(
-          () => parseSearchOpts(options),
-          "FunctionClauseError",
-          /invalid options/,
-        );
-      });
-    });
-  });
+  //       assertBoxedError(
+  //         () => parseSearchOpts(options),
+  //         "FunctionClauseError",
+  //         /invalid options/,
+  //       );
+  //     });
+  //   });
+  // });
 });

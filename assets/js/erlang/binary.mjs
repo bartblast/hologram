@@ -2,7 +2,8 @@
 
 import Bitstring from "../bitstring.mjs";
 import Erlang from "./erlang.mjs";
-import Erlang_Lists from "./lists.mjs";
+// TODO: consider
+// import Erlang_Lists from "./lists.mjs";
 import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -242,41 +243,42 @@ const Erlang_Binary = {
   // End _aho_corasick_pattern_matcher/1
   // Deps: [:erlang.make_ref/0]
 
-  // Start _aho_corasick_search/3
-  "_aho_corasick_search/3": (subject, patterns, options) => {
-    const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
-    const compiledPatternData = ERTS.binaryPatternRegistry.get(patterns);
+  // TODO: consider
+  // // Start _aho_corasick_search/3
+  // "_aho_corasick_search/3": (subject, patterns, options) => {
+  //   const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
+  //   const compiledPatternData = ERTS.binaryPatternRegistry.get(patterns);
 
-    Bitstring.maybeSetBytesFromText(subject);
-    const startIndex = Math.max(start, 0);
-    const maxIndex = Math.max(start + length, subject.bytes.length);
+  //   Bitstring.maybeSetBytesFromText(subject);
+  //   const startIndex = Math.max(start, 0);
+  //   const maxIndex = Math.max(start + length, subject.bytes.length);
 
-    const rootNode = compiledPatternData.rootNode;
-    let candidateNode = rootNode;
+  //   const rootNode = compiledPatternData.rootNode;
+  //   let candidateNode = rootNode;
 
-    for (let index = startIndex; index < maxIndex; index++) {
-      const byte = subject.bytes[index];
+  //   for (let index = startIndex; index < maxIndex; index++) {
+  //     const byte = subject.bytes[index];
 
-      while (candidateNode !== null && !candidateNode.children.has(byte)) {
-        candidateNode = candidateNode.failure;
-      }
+  //     while (candidateNode !== null && !candidateNode.children.has(byte)) {
+  //       candidateNode = candidateNode.failure;
+  //     }
 
-      // next node, or back to root
-      candidateNode = candidateNode
-        ? candidateNode.children.get(byte) || rootNode
-        : rootNode;
+  //     // next node, or back to root
+  //     candidateNode = candidateNode
+  //       ? candidateNode.children.get(byte) || rootNode
+  //       : rootNode;
 
-      if (candidateNode.output.length > 0) {
-        const resultLength = candidateNode.output[0].length;
-        const foundIndex = index - resultLength + 1;
-        return {index: foundIndex, length: resultLength};
-      }
-    }
+  //     if (candidateNode.output.length > 0) {
+  //       const resultLength = candidateNode.output[0].length;
+  //       const foundIndex = index - resultLength + 1;
+  //       return {index: foundIndex, length: resultLength};
+  //     }
+  //   }
 
-    return false;
-  },
-  // End _aho_corasick_search/3
-  // Deps: [:binary._parse_search_opts/1]
+  //   return false;
+  // },
+  // // End _aho_corasick_search/3
+  // // Deps: [:binary._parse_search_opts/1]
 
   // Boyer-Moore matcher implementation for single patterns
   // Start _boyer_moore_pattern_matcher/1
@@ -313,80 +315,82 @@ const Erlang_Binary = {
   // End _boyer_moore_pattern_matcher/1
   // Deps: [:erlang.make_ref/0]
 
-  // Start _boyer_moore_search/3
-  "_boyer_moore_search/3": (subject, pattern, options) => {
-    const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
-    const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
-    const badShift = compiledPatternData.badShift;
+  // TODO: consider
+  // // Start _boyer_moore_search/3
+  // "_boyer_moore_search/3": (subject, pattern, options) => {
+  //   const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
+  //   const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
+  //   const badShift = compiledPatternData.badShift;
 
-    Bitstring.maybeSetBytesFromText(subject);
-    Bitstring.maybeSetBytesFromText(pattern);
+  //   Bitstring.maybeSetBytesFromText(subject);
+  //   Bitstring.maybeSetBytesFromText(pattern);
 
-    const patternMaxIndex = pattern.bytes.length - 1;
-    let index = Math.max(start, 0);
-    const maxIndex = Math.max(start + length, subject.bytes.length);
+  //   const patternMaxIndex = pattern.bytes.length - 1;
+  //   let index = Math.max(start, 0);
+  //   const maxIndex = Math.max(start + length, subject.bytes.length);
 
-    while (index <= maxIndex) {
-      let patternIndex = 0;
-      while (
-        pattern.bytes[patternIndex] === subject.bytes[patternIndex + index]
-      ) {
-        if (patternIndex === patternMaxIndex) {
-          return {index, length: pattern.bytes.length};
-        }
-        patternIndex++;
-      }
+  //   while (index <= maxIndex) {
+  //     let patternIndex = 0;
+  //     while (
+  //       pattern.bytes[patternIndex] === subject.bytes[patternIndex + index]
+  //     ) {
+  //       if (patternIndex === patternMaxIndex) {
+  //         return {index, length: pattern.bytes.length};
+  //       }
+  //       patternIndex++;
+  //     }
 
-      const current = subject.bytes[index + patternMaxIndex];
-      if (badShift[current]) {
-        index += badShift[current];
-      } else {
-        index++;
-      }
-    }
+  //     const current = subject.bytes[index + patternMaxIndex];
+  //     if (badShift[current]) {
+  //       index += badShift[current];
+  //     } else {
+  //       index++;
+  //     }
+  //   }
 
-    return false;
-  },
-  // End _boyer_moore_search/3
-  // Deps: [:binary._parse_search_opts/1]
+  //   return false;
+  // },
+  // // End _boyer_moore_search/3
+  // // Deps: [:binary._parse_search_opts/1]
 
-  // Start _parse_search_opts/1
-  "_parse_search_opts/1": (opts) => {
-    if (!Type.isList(opts)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg("invalid options"),
-      );
-    }
+  // TODO: consider
+  // // Start _parse_search_opts/1
+  // "_parse_search_opts/1": (opts) => {
+  //   if (!Type.isList(opts)) {
+  //     Interpreter.raiseFunctionClauseError(
+  //       Interpreter.buildFunctionClauseErrorMsg("invalid options"),
+  //     );
+  //   }
 
-    if (Type.isImproperList(opts)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg("invalid options"),
-      );
-    }
+  //   if (Type.isImproperList(opts)) {
+  //     Interpreter.raiseFunctionClauseError(
+  //       Interpreter.buildFunctionClauseErrorMsg("invalid options"),
+  //     );
+  //   }
 
-    const scopeTuple = Erlang_Lists["keyfind/3"](
-      Type.atom("scope"),
-      Type.integer(1),
-      opts,
-    );
+  //   const scopeTuple = Erlang_Lists["keyfind/3"](
+  //     Type.atom("scope"),
+  //     Type.integer(1),
+  //     opts,
+  //   );
 
-    if (scopeTuple && scopeTuple.data && scopeTuple.data.length == 2) {
-      const innerData = scopeTuple.data[1];
-      const start = innerData.data[0];
-      const length = innerData.data[1];
-      if (Type.isInteger(start) && Type.isInteger(length)) {
-        return {start: Number(start.value), length: Number(length.value)};
-      } else {
-        Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg("invalid options"),
-        );
-      }
-    } else {
-      return {start: 0, length: -1};
-    }
-  },
-  // End _parse_search_opts/1
-  // Deps: [:lists.keyfind/3]
+  //   if (scopeTuple && scopeTuple.data && scopeTuple.data.length == 2) {
+  //     const innerData = scopeTuple.data[1];
+  //     const start = innerData.data[0];
+  //     const length = innerData.data[1];
+  //     if (Type.isInteger(start) && Type.isInteger(length)) {
+  //       return {start: Number(start.value), length: Number(length.value)};
+  //     } else {
+  //       Interpreter.raiseFunctionClauseError(
+  //         Interpreter.buildFunctionClauseErrorMsg("invalid options"),
+  //       );
+  //     }
+  //   } else {
+  //     return {start: 0, length: -1};
+  //   }
+  // },
+  // // End _parse_search_opts/1
+  // // Deps: [:lists.keyfind/3]
 };
 
 export default Erlang_Binary;
