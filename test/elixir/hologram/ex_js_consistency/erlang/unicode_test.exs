@@ -646,5 +646,13 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       expected = {:error, "pre", invalid_binary}
       assert :unicode.characters_to_nfkc_binary(input) == expected
     end
+
+    test "returns error tuple for truncated UTF-8 sequence" do
+      # Truncated UTF-8: start of a 2-byte sequence without continuation
+      truncated_binary = <<0xC3>>
+      input = ["test", truncated_binary]
+      expected = {:error, "test", truncated_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
   end
 end
