@@ -237,6 +237,37 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "add_element/2" do
+    test "adds a new element to the set" do
+      set = :sets.from_list([1, 3], [{:version, 2}])
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+      result = :sets.add_element(2, set)
+      assert result == expected
+    end
+
+    test "returns the same set if element is already present" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+      result = :sets.add_element(2, set)
+      assert result == expected
+    end
+
+    test "adds element to empty set" do
+      set = :sets.from_list([], [{:version, 2}])
+      expected = :sets.from_list([1], [{:version, 2}])
+      result = :sets.add_element(1, set)
+      assert result == expected
+    end
+
+    test "raises FunctionClauseError if argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.add_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.add_element(:elem, :not_a_set)
+      end
+    end
+  end
+
   describe "is_element/2" do
     test "returns true if element is in the set" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
