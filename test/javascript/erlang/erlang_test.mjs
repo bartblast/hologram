@@ -3346,6 +3346,217 @@ describe("Erlang", () => {
           "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
         );
       });
+
+      it("raises ArgumentError for unsupported ETF tag (tag 50)", () => {
+        // Tag 50 is not a valid ETF tag
+        const binary = Bitstring.fromBytes(new Uint8Array([131, 50]));
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "unsupported external term format tag: 50",
+        );
+      });
+
+      it("raises ArgumentError for unsupported ETF tag (tag 255)", () => {
+        // Tag 255 is not a valid ETF tag
+        const binary = Bitstring.fromBytes(new Uint8Array([131, 255]));
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "unsupported external term format tag: 255",
+        );
+      });
+
+      it("raises ArgumentError for unsupported ETF tag (tag 1)", () => {
+        // Tag 1 is not a valid ETF tag
+        const binary = Bitstring.fromBytes(new Uint8Array([131, 1]));
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "unsupported external term format tag: 1",
+        );
+      });
+
+      it("raises ArgumentError for malformed BINARY_EXT with length exceeding data", () => {
+        // BINARY_EXT (109) with length 10 but only 2 bytes of data
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 109, 0, 0, 0, 10, 65, 66]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "atom length exceeds available bytes: 10",
+        );
+      });
+
+      it("raises ArgumentError for malformed STRING_EXT with length exceeding data", () => {
+        // STRING_EXT (107) with length 100 but only 2 bytes of data
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 107, 0, 100, 65, 66]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "string length exceeds available bytes: 100",
+        );
+      });
+
+      it("raises ArgumentError for malformed SMALL_TUPLE_EXT with arity exceeding available data", () => {
+        // SMALL_TUPLE_EXT (104) with arity 5 but only 1 element
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 104, 5, 97, 1]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for malformed LIST_EXT with length exceeding data", () => {
+        // LIST_EXT (108) with length 10 but no elements
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 108, 0, 0, 0, 10]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for malformed MAP_EXT with arity exceeding data", () => {
+        // MAP_EXT (116) with arity 10 but no key-value pairs
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 116, 0, 0, 0, 10]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for malformed ATOM_EXT with length exceeding data", () => {
+        // ATOM_EXT (100) with length 100 but only 2 bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 100, 0, 100, 65, 66]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "atom length exceeds available bytes: 100",
+        );
+      });
+
+      it("raises ArgumentError for malformed SMALL_ATOM_UTF8_EXT with length exceeding data", () => {
+        // SMALL_ATOM_UTF8_EXT (119) with length 50 but only 2 bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 119, 50, 65, 66]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "atom length exceeds available bytes: 50",
+        );
+      });
+
+      it("raises ArgumentError for malformed SMALL_BIG_EXT with n exceeding data", () => {
+        // SMALL_BIG_EXT (110) with n=100 but insufficient bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 110, 100, 0, 1, 2, 3]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for malformed LARGE_BIG_EXT with n exceeding data", () => {
+        // LARGE_BIG_EXT (111) with large n but insufficient bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 111, 0, 0, 1, 0, 0, 1, 2, 3]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for malformed BIT_BINARY_EXT with length exceeding data", () => {
+        // BIT_BINARY_EXT (77) with length 100 but only 2 bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 77, 0, 0, 0, 100, 5, 65, 66]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "bit binary length exceeds available bytes: 100",
+        );
+      });
+
+      it("raises ArgumentError for malformed NEW_REFERENCE_EXT with len exceeding data", () => {
+        // NEW_REFERENCE_EXT (114) with len=10 but insufficient id bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 114, 0, 10, 119, 4, 110, 111, 100, 101, 0, 0, 0, 1,
+          ]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for INTEGER_EXT boundary - value truncated", () => {
+        // INTEGER_EXT (98) but only 2 bytes instead of 4
+        const binary = Bitstring.fromBytes(new Uint8Array([131, 98, 0, 0]));
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for NEW_FLOAT_EXT truncated", () => {
+        // NEW_FLOAT_EXT (70) but only 4 bytes instead of 8
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 70, 0, 0, 0, 0]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for nested term truncation", () => {
+        // SMALL_TUPLE_EXT with 2 elements, but second element is truncated
+        // [131, 104, 2, 97, 1, 97] - missing last byte
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 104, 2, 97, 1, 97]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for LARGE_TUPLE_EXT with zero arity but missing NIL_EXT", () => {
+        // LARGE_TUPLE_EXT (105) with arity 0 - should work, but let's test malformed version
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 105, 0, 0, 0, 1]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
     });
   });
 
