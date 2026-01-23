@@ -219,11 +219,7 @@ const Erlang_Unicode = {
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
 
-      // Guard against validText being false (if validPrefix is somehow invalid UTF-8)
-      const normalizedPrefix =
-        validText === false
-          ? Type.bitstring("")
-          : Type.bitstring(validText.normalize("NFD"));
+      const normalizedPrefix = Type.bitstring(validText.normalize("NFD"));
 
       return Type.tuple([Type.atom("error"), normalizedPrefix, invalidRest]);
     };
