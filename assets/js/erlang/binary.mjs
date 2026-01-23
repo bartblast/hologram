@@ -48,22 +48,115 @@ const Erlang_Binary = {
 
   // Start compile_pattern/1
   "compile_pattern/1": (pattern) => {
+    const compileBoyerMoorePattern = (singlePattern) => {
+      Bitstring.maybeSetBytesFromText(singlePattern);
+
+      if (singlePattern.bytes.length == 0) {
+        Interpreter.raiseArgumentError("is not a valid pattern");
+      }
+
+      const badShift = {};
+      const length = singlePattern.bytes.length - 1;
+
+      // Seed the badShift object with an initial value of -1 for each byte
+      for (let i = 0; i < 256; i++) {
+        badShift[i] = -1;
+      }
+
+      // Overwrite with the actual value for each byte in the pattern
+      singlePattern.bytes.forEach((byte, index) => {
+        badShift[byte] = length - index;
+      });
+
+      const ref = Erlang["make_ref/0"]();
+      const compiledPatternData = {type: "bm", badShift};
+      ERTS.binaryPatternRegistry.put(ref, compiledPatternData);
+
+      return Type.tuple([Type.atom("bm"), ref]);
+    };
+
+    const compileAhoCorasickPattern = (patterns) => {
+      const rootNode = {
+        children: new Map(),
+        output: [],
+        failure: null,
+      };
+
+      // Build tries for each pattern
+      patterns.data.forEach((p) => {
+        Bitstring.maybeSetBytesFromText(p);
+
+        if (p.bytes.length === 0) {
+          Interpreter.raiseArgumentError("is not a valid pattern");
+        }
+
+        let node = rootNode;
+
+        p.bytes.forEach((byte) => {
+          if (!node.children.has(byte)) {
+            node.children.set(byte, {
+              children: new Map(),
+              output: [],
+              failure: null,
+            });
+          }
+
+          node = node.children.get(byte);
+        });
+
+        node.output.push(p.bytes);
+      });
+
+      // Build failure links (where to fall back when a match fails)
+      const queue = [];
+
+      for (const [_byte, childNode] of rootNode.children) {
+        childNode.failure = rootNode;
+        queue.push(childNode);
+      }
+
+      while (queue.length > 0) {
+        const node = queue.shift();
+
+        for (const [byte, childNode] of node.children) {
+          queue.push(childNode);
+
+          let failureNode = node.failure;
+
+          while (failureNode !== null && !failureNode.children.has(byte)) {
+            failureNode = failureNode.failure;
+          }
+
+          childNode.failure =
+            failureNode === null ? rootNode : failureNode.children.get(byte);
+
+          childNode.output = childNode.output.concat(childNode.failure.output);
+        }
+      }
+
+      const ref = Erlang["make_ref/0"]();
+      const compiledPatternData = {type: "ac", rootNode};
+      ERTS.binaryPatternRegistry.put(ref, compiledPatternData);
+
+      return Type.tuple([Type.atom("ac"), ref]);
+    };
+
     if (Type.isBinary(pattern)) {
-      return Erlang_Binary["_boyer_moore_pattern_matcher/1"](pattern);
+      return compileBoyerMoorePattern(pattern);
     } else if (
       Type.isList(pattern) &&
       pattern.data.length > 0 &&
       pattern.data.every((i) => Type.isBinary(i))
     ) {
       return pattern.data.length == 1
-        ? Erlang_Binary["_boyer_moore_pattern_matcher/1"](pattern.data[0])
-        : Erlang_Binary["_aho_corasick_pattern_matcher/1"](pattern);
+        ? compileBoyerMoorePattern(pattern.data[0])
+        : compileAhoCorasickPattern(pattern);
     }
 
     Interpreter.raiseArgumentError("is not a valid pattern");
   },
   // End compile_pattern/1
-  // Deps: [:binary._aho_corasick_pattern_matcher/1, :binary._boyer_moore_pattern_matcher/1]
+  // Deps: [:erlang.make_ref/0]
 
   // Start copy/2
   "copy/2": (subject, count) => {
@@ -175,72 +268,6 @@ const Erlang_Binary = {
   // End last/1
   // Deps: []
 
-  // Aho-Corasick matcher implementation for multiple patterns
-  // Start _aho_corasick_pattern_matcher/1
-  "_aho_corasick_pattern_matcher/1": (patterns) => {
-    const rootNode = {
-      children: new Map(),
-      output: [],
-      failure: null,
-    };
-
-    // Build tries for each pattern
-    patterns.data.forEach((pattern) => {
-      Bitstring.maybeSetBytesFromText(pattern);
-
-      if (pattern.bytes.length === 0) {
-        Interpreter.raiseArgumentError("is not a valid pattern");
-      }
-
-      let node = rootNode;
-      pattern.bytes.forEach((byte) => {
-        if (!node.children.has(byte)) {
-          node.children.set(byte, {
-            children: new Map(),
-            output: [],
-            failure: null,
-          });
-        }
-        node = node.children.get(byte);
-      });
-      node.output.push(pattern.bytes);
-    });
-
-    // Add failures
-    const queue = [];
-
-    for (const [_byte, childNode] of rootNode.children) {
-      childNode.failure = rootNode;
-      queue.push(childNode);
-    }
-
-    while (queue.length > 0) {
-      const node = queue.shift();
-
-      for (const [byte, childNode] of node.children) {
-        queue.push(childNode);
-
-        let failureNode = node.failure;
-        while (failureNode !== null && !failureNode.children.has(byte)) {
-          failureNode = failureNode.failure;
-        }
-
-        childNode.failure =
-          failureNode === null ? rootNode : failureNode.children.get(byte);
-
-        childNode.output = childNode.output.concat(childNode.failure.output);
-      }
-    }
-
-    const ref = Erlang["make_ref/0"]();
-    const compiledPatternData = {type: "ac", rootNode};
-    ERTS.binaryPatternRegistry.put(ref, compiledPatternData);
-
-    return Type.tuple([Type.atom("ac"), ref]);
-  },
-  // End _aho_corasick_pattern_matcher/1
-  // Deps: [:erlang.make_ref/0]
-
   // TODO: consider
   // // Start _aho_corasick_search/3
   // "_aho_corasick_search/3": (subject, patterns, options) => {
@@ -277,37 +304,6 @@ const Erlang_Binary = {
   // },
   // // End _aho_corasick_search/3
   // // Deps: [:binary._parse_search_opts/1]
-
-  // Boyer-Moore matcher implementation for single patterns
-  // Start _boyer_moore_pattern_matcher/1
-  "_boyer_moore_pattern_matcher/1": (pattern) => {
-    Bitstring.maybeSetBytesFromText(pattern);
-
-    if (pattern.bytes.length == 0) {
-      Interpreter.raiseArgumentError("is not a valid pattern");
-    }
-
-    const badShift = {};
-    const length = pattern.bytes.length - 1;
-
-    // Seed the badShift object with an initial value of -1 for each byte
-    for (let i = 0; i < 256; i++) {
-      badShift[i] = -1;
-    }
-
-    // Overwrite with the actual value for each byte in the pattern
-    pattern.bytes.forEach((byte, index) => {
-      badShift[byte] = length - index;
-    });
-
-    const ref = Erlang["make_ref/0"]();
-    const compiledPatternData = {type: "bm", badShift};
-    ERTS.binaryPatternRegistry.put(ref, compiledPatternData);
-
-    return Type.tuple([Type.atom("bm"), ref]);
-  },
-  // End _boyer_moore_pattern_matcher/1
-  // Deps: [:erlang.make_ref/0]
 
   // TODO: consider
   // // Start _boyer_moore_search/3

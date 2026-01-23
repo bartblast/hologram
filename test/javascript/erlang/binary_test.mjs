@@ -447,14 +447,6 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("_boyer_moore_pattern_matcher/1", () => {
-    it("computes bad shift table correctly", () => {
-      const pattern = Bitstring.fromBytes([104, 101, 108, 108, 111]);
-      const result = Erlang_Binary["_boyer_moore_pattern_matcher/1"](pattern);
-      assert.ok(Type.isCompiledPattern(result));
-    });
-  });
-
   // TODO: consider
   // describe("_boyer_moore_search/3", () => {
   //   const subject = Bitstring.fromText("hello world");
@@ -510,17 +502,6 @@ describe("Erlang_Binary", () => {
   //     });
   //   });
   // });
-
-  describe("_aho_corasick_pattern_matcher/1", () => {
-    it("builds trie structure for multiple patterns", () => {
-      const pattern1 = Bitstring.fromBytes([104, 101]); // "he"
-      const pattern2 = Bitstring.fromBytes([115, 104, 101]); // "she"
-      const patternList = Type.list([pattern1, pattern2]);
-      const result =
-        Erlang_Binary["_aho_corasick_pattern_matcher/1"](patternList);
-      assert.ok(Type.isCompiledPattern(result));
-    });
-  });
 
   // TODO: consider
   // describe("_aho_corasick_search/3", () => {
