@@ -174,78 +174,6 @@ const Erlang_Binary = {
   // End last/1
   // Deps: []
 
-  // Boyer-Moore matcher implementation for single patterns
-  // Start _boyer_moore_pattern_matcher/1
-  "_boyer_moore_pattern_matcher/1": (pattern) => {
-    Bitstring.maybeSetBytesFromText(pattern);
-
-    if (pattern.bytes.length == 0) {
-      Interpreter.raiseArgumentError("is not a valid pattern");
-    }
-
-    let badShift;
-    if (!ERTS.binaryPatternRegistry.get(pattern)) {
-      badShift = {};
-
-      const length = pattern.bytes.length - 1;
-
-      // Seed the badShift object with an initial value of -1 for each byte
-      for (let i = 0; i < 256; i++) {
-        badShift[i] = -1;
-      }
-
-      // Overwrite with the actual value for each byte in the pattern
-      pattern.bytes.forEach((byte, index) => {
-        badShift[byte] = length - index;
-      });
-
-      const compiledPatternData = {type: "bm", badShift};
-      ERTS.binaryPatternRegistry.put(pattern, compiledPatternData);
-    }
-
-    const ref = Erlang["make_ref/0"]();
-    return Type.tuple([Type.atom("bm"), ref]);
-  },
-  // End _boyer_moore_pattern_matcher/1
-  // Deps: [:erlang.make_ref/0]
-
-  // Start _boyer_moore_search/3
-  "_boyer_moore_search/3": (subject, pattern, options) => {
-    const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
-    const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
-    const badShift = compiledPatternData.badShift;
-
-    Bitstring.maybeSetBytesFromText(subject);
-    Bitstring.maybeSetBytesFromText(pattern);
-
-    const patternMaxIndex = pattern.bytes.length - 1;
-    let index = Math.max(start, 0);
-    const maxIndex = Math.max(start + length, subject.bytes.length);
-
-    while (index <= maxIndex) {
-      let patternIndex = 0;
-      while (
-        pattern.bytes[patternIndex] === subject.bytes[patternIndex + index]
-      ) {
-        if (patternIndex === patternMaxIndex) {
-          return {index, length: pattern.bytes.length};
-        }
-        patternIndex++;
-      }
-
-      const current = subject.bytes[index + patternMaxIndex];
-      if (badShift[current]) {
-        index += badShift[current];
-      } else {
-        index++;
-      }
-    }
-
-    return false;
-  },
-  // End _boyer_moore_search/3
-  // Deps: [:binary._parse_search_opts/1]
-
   // Aho-Corasick matcher implementation for multiple patterns
   // Start _aho_corasick_pattern_matcher/1
   "_aho_corasick_pattern_matcher/1": (patterns) => {
@@ -348,6 +276,78 @@ const Erlang_Binary = {
     return false;
   },
   // End _aho_corasick_search/3
+  // Deps: [:binary._parse_search_opts/1]
+
+  // Boyer-Moore matcher implementation for single patterns
+  // Start _boyer_moore_pattern_matcher/1
+  "_boyer_moore_pattern_matcher/1": (pattern) => {
+    Bitstring.maybeSetBytesFromText(pattern);
+
+    if (pattern.bytes.length == 0) {
+      Interpreter.raiseArgumentError("is not a valid pattern");
+    }
+
+    let badShift;
+    if (!ERTS.binaryPatternRegistry.get(pattern)) {
+      badShift = {};
+
+      const length = pattern.bytes.length - 1;
+
+      // Seed the badShift object with an initial value of -1 for each byte
+      for (let i = 0; i < 256; i++) {
+        badShift[i] = -1;
+      }
+
+      // Overwrite with the actual value for each byte in the pattern
+      pattern.bytes.forEach((byte, index) => {
+        badShift[byte] = length - index;
+      });
+
+      const compiledPatternData = {type: "bm", badShift};
+      ERTS.binaryPatternRegistry.put(pattern, compiledPatternData);
+    }
+
+    const ref = Erlang["make_ref/0"]();
+    return Type.tuple([Type.atom("bm"), ref]);
+  },
+  // End _boyer_moore_pattern_matcher/1
+  // Deps: [:erlang.make_ref/0]
+
+  // Start _boyer_moore_search/3
+  "_boyer_moore_search/3": (subject, pattern, options) => {
+    const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
+    const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
+    const badShift = compiledPatternData.badShift;
+
+    Bitstring.maybeSetBytesFromText(subject);
+    Bitstring.maybeSetBytesFromText(pattern);
+
+    const patternMaxIndex = pattern.bytes.length - 1;
+    let index = Math.max(start, 0);
+    const maxIndex = Math.max(start + length, subject.bytes.length);
+
+    while (index <= maxIndex) {
+      let patternIndex = 0;
+      while (
+        pattern.bytes[patternIndex] === subject.bytes[patternIndex + index]
+      ) {
+        if (patternIndex === patternMaxIndex) {
+          return {index, length: pattern.bytes.length};
+        }
+        patternIndex++;
+      }
+
+      const current = subject.bytes[index + patternMaxIndex];
+      if (badShift[current]) {
+        index += badShift[current];
+      } else {
+        index++;
+      }
+    }
+
+    return false;
+  },
+  // End _boyer_moore_search/3
   // Deps: [:binary._parse_search_opts/1]
 
   // Start _parse_search_opts/1
