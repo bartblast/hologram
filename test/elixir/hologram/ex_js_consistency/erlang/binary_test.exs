@@ -58,97 +58,68 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
   end
 
   describe "compile_pattern/1" do
+    # With valid input
+
     test "single binary pattern returns Boyer-Moore compiled pattern tuple" do
-      compiled_pattern = :binary.compile_pattern("hello")
-      assert is_tuple(compiled_pattern)
-      assert elem(compiled_pattern, 0) == :bm
-      assert is_reference(elem(compiled_pattern, 1))
+      result = :binary.compile_pattern("Hello")
+
+      assert is_tuple(result)
+      assert elem(result, 0) == :bm
+      assert is_reference(elem(result, 1))
     end
 
-    test "with a list of binary patterns returns Aho-Corasick compiled pattern tuple" do
-      compiled_pattern = :binary.compile_pattern(["hello", "world"])
-      assert is_tuple(compiled_pattern)
-      assert elem(compiled_pattern, 0) == :ac
-      assert is_reference(elem(compiled_pattern, 1))
+    test "list of binary patterns returns Aho-Corasick compiled pattern tuple" do
+      result = :binary.compile_pattern(["He", "llo"])
+
+      assert is_tuple(result)
+      assert elem(result, 0) == :ac
+      assert is_reference(elem(result, 1))
     end
 
-    test "A list with only one element returns Boyer-Moore compiled pattern tuple" do
-      compiled_pattern = :binary.compile_pattern(["hello"])
-      assert is_tuple(compiled_pattern)
-      assert elem(compiled_pattern, 0) == :bm
-      assert is_reference(elem(compiled_pattern, 1))
+    test "list with single element returns Boyer-Moore compiled pattern tuple" do
+      result = :binary.compile_pattern(["Hello"])
+
+      assert is_tuple(result)
+      assert elem(result, 0) == :bm
+      assert is_reference(elem(result, 1))
     end
 
-    test "raises ArgumentError when pattern is empty binary" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern("")
-      end
-    end
+    # Errors with direct pattern
 
-    test "raises ArgumentError when pattern is a list containing empty binary" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(["hello", ""])
-      end
-    end
-
-    test "raises ArgumentError when pattern is empty list" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern([])
-      end
-    end
-
-    test "raises ArgumentError when pattern is a list containing empty list" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(["hello", []])
-      end
-    end
-
-    test "raises ArgumentError when pattern is integer" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(1)
-      end
-    end
-
-    test "raises ArgumentError when pattern is a list containing integer" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(["hello", 1])
-      end
-    end
-
-    test "raises ArgumentError when pattern is atom" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(:hello)
-      end
-    end
-
-    test "raises ArgumentError when pattern is a list containing atom" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(["hello", :hello])
-      end
-    end
-
-    test "raises ArgumentError when pattern is tuple" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern({"ab", "cd"})
-      end
-    end
-
-    test "raises ArgumentError when pattern is a list containing tuple" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(["hello", {"ab", "cd"}])
-      end
+    test "raises ArgumentError when pattern is not bitstring" do
+      assert_raise ArgumentError, fn -> :binary.compile_pattern(1) end
     end
 
     test "raises ArgumentError when pattern is non-binary bitstring" do
+      assert_raise ArgumentError, fn -> :binary.compile_pattern(<<1::1, 0::1, 1::1>>) end
+    end
+
+    test "raises ArgumentError when pattern is empty binary" do
+      assert_raise ArgumentError, fn -> :binary.compile_pattern("") end
+    end
+
+    test "raises ArgumentError when pattern is empty list" do
+      assert_raise ArgumentError, fn -> :binary.compile_pattern([]) end
+    end
+
+    # Errors with list containing invalid item
+
+    test "raises ArgumentError when pattern is list containing non-bitstring" do
+      assert_raise ArgumentError, fn -> :binary.compile_pattern(["Hello", 1]) end
+    end
+
+    test "raises ArgumentError when pattern is list containing non-binary bitstring" do
       assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(<<1::1, 0::1, 1::1>>)
+        :binary.compile_pattern(["Hello", <<1::1, 0::1, 1::1>>])
       end
     end
 
-    test "raises ArgumentError when pattern is a list containing non-binary bitstring" do
-      assert_raise ArgumentError, fn ->
-        :binary.compile_pattern(["hello", <<1::1, 0::1, 1::1>>])
-      end
+    test "raises ArgumentError when pattern is list containing empty binary" do
+      assert_raise ArgumentError, fn -> :binary.compile_pattern(["Hello", ""]) end
+    end
+
+    test "raises ArgumentError when pattern is list containing empty list" do
+      assert_raise ArgumentError, fn -> :binary.compile_pattern(["Hello", []]) end
     end
   end
 

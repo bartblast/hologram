@@ -108,81 +108,127 @@ describe("Erlang_Binary", () => {
 
   describe("compile_pattern/1", () => {
     const compilePattern = Erlang_Binary["compile_pattern/1"];
-    describe("with single binary pattern", () => {
-      const pattern = Bitstring.fromBytes([72, 101, 108, 108, 111]); // "Hello"
-      const result = compilePattern(pattern);
 
-      it("returns Boyer-Moore compiled pattern tuple", () => {
-        assert.ok(Type.isCompiledPattern(result));
+    const patternHello = Type.bitstring("Hello"); // [72, 101, 108, 108, 111]
+    const patternHe = Type.bitstring("He"); // [72, 101]
+    const patternLlo = Type.bitstring("llo"); // [108, 108, 111]
+
+    describe("with valid input", () => {
+      it("single binary pattern returns Boyer-Moore compiled pattern tuple", () => {
+        const result = compilePattern(patternHello);
+
+        assert.isTrue(Type.isCompiledPattern(result));
         assert.equal(result.data[0].value, "bm");
       });
 
-      it("stores the badShift in the binaryPattern registry", () => {
-        const ref = result.data[1];
-        const saved = ERTS.binaryPatternRegistry.get(ref);
+      it("list of binary patterns returns Aho-Corasick compiled pattern tuple", () => {
+        const patternList = Type.list([patternHe, patternLlo]);
+        const result = compilePattern(patternList);
 
-        // Spot check characters
-        assert.equal(saved.badShift["71"], -1);
-        assert.equal(saved.badShift["72"], 4);
-      });
-    });
-
-    describe("with list of binary patterns", () => {
-      const pattern1 = Bitstring.fromBytes([72, 101]); // "He"
-      const pattern2 = Bitstring.fromBytes([108, 108, 111]); // "llo"
-      const patternList = Type.list([pattern1, pattern2]);
-      const result = Erlang_Binary["compile_pattern/1"](patternList);
-
-      it("returns Aho-Corasick compiled pattern tuple", () => {
-        assert.ok(Type.isCompiledPattern(result));
+        assert.isTrue(Type.isCompiledPattern(result));
         assert.equal(result.data[0].value, "ac");
       });
 
-      it("stores the rootNode in the binaryPattern registry", () => {
-        const ref = result.data[1];
-        const saved = ERTS.binaryPatternRegistry.get(ref);
-
-        assert.deepEqual(Array.from(saved.rootNode.children.keys()), [72, 108]);
-      });
-
-      it("accepts a list with only one element", () => {
-        const oneItemList = Type.list([pattern1]);
+      it("list with single element returns Boyer-Moore compiled pattern tuple", () => {
+        const oneItemList = Type.list([patternHello]);
         const result = compilePattern(oneItemList);
-        assert.ok(Type.isCompiledPattern(result));
+
+        assert.isTrue(Type.isCompiledPattern(result));
+        assert.equal(result.data[0].value, "bm");
       });
     });
 
-    describe("Raises for invalid pattern types", () => {
-      const invalidPatternTypes = {
-        "nonbinary bitstring": Type.bitstring([1, 0, 1]),
-        "empty binary": Bitstring.fromText(""),
-        "empty list": Type.list([]),
-        integer: Type.integer(1),
-        atom: Type.atom("hello"),
-        tuple: Type.tuple(["ab", "cd"]),
-      };
+    describe("errors with direct pattern", () => {
+      it("raises ArgumentError when pattern is not bitstring", () => {
+        assertBoxedError(
+          () => compilePattern(Type.integer(1)),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
 
-      for (const name in invalidPatternTypes) {
-        it(`raises ArgumentError when pattern is ${name}`, () => {
-          assertBoxedError(
-            () => compilePattern(invalidPatternTypes[name]),
-            "ArgumentError",
-            "is not a valid pattern",
-          );
-        });
+      it("raises ArgumentError when pattern is non-binary bitstring", () => {
+        assertBoxedError(
+          () => compilePattern(Type.bitstring([1, 0, 1])),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
 
-        it(`raises ArgumentError when pattern is a list containing ${name}`, () => {
-          const patternList = [
-            Bitstring.fromText("Hello"),
-            invalidPatternTypes[name],
-          ];
-          assertBoxedError(
-            () => compilePattern(patternList),
-            "ArgumentError",
-            "is not a valid pattern",
-          );
-        });
-      }
+      it("raises ArgumentError when pattern is empty binary", () => {
+        assertBoxedError(
+          () => compilePattern(Type.bitstring("")),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
+
+      it("raises ArgumentError when pattern is empty list", () => {
+        assertBoxedError(
+          () => compilePattern(Type.list()),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
+    });
+
+    describe("errors with list containing invalid item", () => {
+      it("raises ArgumentError when pattern is list containing non-bitstring", () => {
+        assertBoxedError(
+          () => compilePattern(Type.list([patternHello, Type.integer(1)])),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
+
+      it("raises ArgumentError when pattern is list containing non-binary bitstring", () => {
+        assertBoxedError(
+          () =>
+            compilePattern(
+              Type.list([patternHello, Type.bitstring([1, 0, 1])]),
+            ),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
+
+      it("raises ArgumentError when pattern is list containing empty binary", () => {
+        assertBoxedError(
+          () => compilePattern(Type.list([patternHello, Type.bitstring("")])),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
+
+      it("raises ArgumentError when pattern is list containing empty list", () => {
+        assertBoxedError(
+          () => compilePattern(Type.list([patternHello, Type.list()])),
+          "ArgumentError",
+          "is not a valid pattern",
+        );
+      });
+    });
+
+    describe("client-only behaviour", () => {
+      it("stores badShift in binaryPatternRegistry for BM pattern", () => {
+        const result = compilePattern(patternHello);
+        const ref = result.data[1];
+        const saved = ERTS.binaryPatternRegistry.get(ref);
+
+        // Spot check: 'G' (71) not in pattern, 'H' (72) is at index 0 of 5-char pattern
+        assert.equal(saved.badShift["71"], -1);
+        assert.equal(saved.badShift["72"], 4);
+      });
+
+      it("stores rootNode in binaryPatternRegistry for AC pattern", () => {
+        const patternList = Type.list([patternHe, patternLlo]);
+        const result = compilePattern(patternList);
+        const ref = result.data[1];
+        const saved = ERTS.binaryPatternRegistry.get(ref);
+
+        // Root has children for 'H' (72) and 'l' (108)
+        assert.deepEqual(Array.from(saved.rootNode.children.keys()), [72, 108]);
+      });
     });
   });
 
