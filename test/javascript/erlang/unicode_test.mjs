@@ -1391,5 +1391,21 @@ describe("Erlang_Unicode", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("returns error tuple for truncated UTF-8 sequence", () => {
+      // Truncated UTF-8: start of a 2-byte sequence without continuation
+      const truncatedBinary = Bitstring.fromBytes([0xc3]);
+      const input = Type.list([Type.bitstring("test"), truncatedBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("test"),
+        truncatedBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 });
