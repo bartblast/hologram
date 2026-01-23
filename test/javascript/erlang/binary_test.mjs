@@ -112,8 +112,8 @@ describe("Erlang_Binary", () => {
       const result = compilePattern(pattern);
 
       it("returns Boyer-Moore compiled pattern tuple", () => {
-        assert(Type.isCompiledPattern(result));
-        assert(result.data[0].value, "bm");
+        assert.ok(Type.isCompiledPattern(result));
+        assert.equal(result.data[0].value, "bm");
       });
 
       it("stores the badShift in the binaryPattern registry", () => {
@@ -131,8 +131,8 @@ describe("Erlang_Binary", () => {
       const result = Erlang_Binary["compile_pattern/1"](patternList);
 
       it("returns Aho-Corasick compiled pattern tuple", () => {
-        assert(Type.isCompiledPattern(result));
-        assert(result.data[0].value, "ac");
+        assert.ok(Type.isCompiledPattern(result));
+        assert.equal(result.data[0].value, "ac");
       });
 
       it("stores the rootNode in the binaryPattern registry", () => {
@@ -143,7 +143,7 @@ describe("Erlang_Binary", () => {
       it("accepts a list with only one element", () => {
         const oneItemList = Type.list([pattern1]);
         const result = compilePattern(oneItemList);
-        assert(Type.isCompiledPattern(result));
+        assert.ok(Type.isCompiledPattern(result));
       });
     });
 
@@ -446,7 +446,7 @@ describe("Erlang_Binary", () => {
     it("computes bad shift table correctly", () => {
       const pattern = Bitstring.fromBytes([104, 101, 108, 108, 111]);
       const result = Erlang_Binary["_boyer_moore_pattern_matcher/1"](pattern);
-      assert(Type.isCompiledPattern(result));
+      assert.ok(Type.isCompiledPattern(result));
     });
   });
 
@@ -512,7 +512,7 @@ describe("Erlang_Binary", () => {
       const patternList = Type.list([pattern1, pattern2]);
       const result =
         Erlang_Binary["_aho_corasick_pattern_matcher/1"](patternList);
-      assert(Type.isCompiledPattern(result));
+      assert.ok(Type.isCompiledPattern(result));
     });
   });
 
