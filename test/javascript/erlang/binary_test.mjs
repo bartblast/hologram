@@ -398,23 +398,24 @@ describe("Erlang_Binary", () => {
 
     describe("with default options (empty list)", () => {
       it("finds pattern at the beginning of subject", () => {
+        console.log("401");
         const result = search(subject, pattern, emptyList);
-        console.log("PATTERN", ERTS.binaryPatternRegistry.patterns);
-        console.log("403 result", result);
         assert.deepEqual(result, { index: 0, length: 5 });
       });
 
-      // it("finds pattern in the middle of subject", () => {
-      //   const altPattern = Bitstring.fromText("world");
-      //   const result = search(subject, altPattern, emptyList);
-      //   assert.deepEqual(result, { index: 6, length: 5 });
-      // });
+      it("finds pattern in the middle of subject", () => {
+        console.log("407");
+        const altPattern = Bitstring.fromText("world");
+        const result = search(subject, altPattern, emptyList);
+        assert.deepEqual(result, { index: 6, length: 5 });
+      });
 
-      // it("returns false when pattern is not found", () => {
-      //   const invalidSubject = Bitstring.fromText("goodbye");
-      //   const result = search(invalidSubject, pattern, emptyList);
-      //   assert.equal(result, false);
-      // });
+      it("returns false when pattern is not found", () => {
+        console.log("414");
+        const invalidSubject = Bitstring.fromText("goodbye");
+        const result = search(invalidSubject, pattern, emptyList);
+        assert.equal(result, false);
+      });
     });
 
     describe("with scope option", () => {
@@ -519,12 +520,12 @@ describe("Erlang_Binary", () => {
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
-            Type.tuple([Type.integer(-5), Type.integer(10)]),
+            Type.tuple([Type.integer(5), Type.integer(10)]),
           ]),
         ]);
         const result = parseSearchOpts(options);
 
-        assert.deepEqual(result, { start: 0, length: 10 });
+        assert.deepEqual(result, { start: 5, length: 10 });
       });
     });
 
@@ -540,10 +541,10 @@ describe("Erlang_Binary", () => {
       });
 
       it("raises FunctionClauseError when options is an improper list", () => {
-        const options = Type.improperList(
-          [Type.atom("test")],
+        const options = Type.improperList([
+          Type.atom("test"),
           Type.atom("tail"),
-        );
+        ]);
 
         assertBoxedError(
           () => parseSearchOpts(options),

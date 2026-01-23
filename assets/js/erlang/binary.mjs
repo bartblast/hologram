@@ -182,17 +182,23 @@ const Erlang_Binary = {
 
   // Start _boyer_moore_search/3
   "_boyer_moore_search/3": (subject, pattern, options) => {
-    const searchOptions = Erlang_Binary["_parse_search_opts/1"](options);
-    const patternLastIndex = pattern.length - 1;
+    const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
     const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
     const badShift = compiledPatternData.badShift;
 
-    let index = Math.floor(searchOptions.start < 0 ? 0 : searchOptions.start);
+    Bitstring.maybeSetTextFromBytes(subject);
+    Bitstring.maybeSetTextFromBytes(pattern);
+    const patternLastIndex = pattern.text.length - 1;
+    let index = Math.max(start, 0);
+    const maxIndex = Math.max(
+      length,
+      subject.text.length - pattern.text.length,
+    );
 
-    const maxIndex =
-      searchOptions.length > 0
-        ? searchOptions.length
-        : subject.length - pattern.length;
+    console.log("subject:", subject.text);
+    console.log("pattern:", pattern.text);
+    console.log("index:", index);
+    console.log("maxIndex:", maxIndex);
 
     while (index <= maxIndex) {
       let patternIndex = 0;
@@ -285,14 +291,18 @@ const Erlang_Binary = {
 
   // Start _aho_corasick_search/3
   "_aho_corasick_search/3": (subject, patterns, options) => {
-    const searchOptions = Erlang_Binary["_parse_search_opts/1"](options);
-    const index = Math.floor(searchOptions.start < 0 ? 0 : searchOptions.start);
-    const maxIndex = Math.floor(
-      searchOptions.length > 0 ? searchOptions.length : subject.length,
-    );
+    const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
     const compiledPatternData = ERTS.binaryPatternRegistry.get(patterns);
-    const rootNode = compiledPatternData.rootNode;
 
+    Bitstring.maybeSetBytesFromText(subject);
+    const index = Math.max(start, 0);
+    const maxIndex = Math.max(length, subject.text.length);
+
+    console.log("subject:", subject.text);
+    console.log("index:", index);
+    console.log("maxIndex:", maxIndex);
+
+    const rootNode = compiledPatternData.rootNode;
     let currentNode = rootNode;
 
     for (let i = index; i < maxIndex; i++) {
@@ -342,7 +352,7 @@ const Erlang_Binary = {
       const start = innerData.data[0];
       const length = innerData.data[1];
       if (Type.isInteger(start) && Type.isInteger(length)) {
-        return {start: start, length: length};
+        return {start: Number(start.value), length: Number(length.value)};
       } else {
         Interpreter.raiseFunctionClauseError(
           Interpreter.buildFunctionClauseErrorMsg("invalid options"),

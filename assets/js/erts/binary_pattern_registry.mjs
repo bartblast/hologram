@@ -12,28 +12,13 @@ export default class BinaryPatternRegistry {
   }
 
   static get(pattern) {
-    const key = $.normalizeKey(pattern);
+    const key = Type.encodeMapKey(pattern);
     return $.patterns.get(key) || null;
   }
 
   static put(pattern, data) {
-    const key = $.normalizeKey(pattern);
+    const key = Type.encodeMapKey(pattern);
     $.patterns.set(key, data);
-  }
-
-  static normalizeKey(pattern) {
-    if (Type.isBinary(pattern)) {
-      Bitstring.maybeSetTextFromBytes(pattern);
-      return pattern.text;
-    } else if (Type.isList(pattern)) {
-      const keys = pattern.data.map((item) => {
-        Bitstring.maybeSetTextFromBytes(item);
-        return item.text;
-      });
-      return JSON.stringify(keys);
-    } else {
-      return pattern;
-    }
   }
 }
 
