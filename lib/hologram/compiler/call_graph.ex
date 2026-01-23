@@ -74,6 +74,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:string, :replace, 3}, {:string, :replace, 4}},
     {{:string, :replace, 4}, {:unicode, :characters_to_binary, 1}},
     {{:string, :split, 2}, {:string, :split, 3}},
+    {{:string, :split, 3}, {:unicode, :characters_to_binary, 1}},
     {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
     {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},

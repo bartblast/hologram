@@ -229,7 +229,7 @@ const Erlang_String = {
     return Type.list(splittedStringList);
   },
   // End split/3
-  // Deps: []
+  // Deps: [:unicode.characters_to_binary/1]
 
   // Start titlecase/1
   "titlecase/1": (subject) => {
