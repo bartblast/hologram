@@ -3745,6 +3745,55 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "time_offset/0" do
+    test "delegates to time_offset/1 with :native" do
+      assert :erlang.time_offset() == :erlang.time_offset(:native)
+    end
+  end
+
+  describe "time_offset/1" do
+    @units [:native, :second, :millisecond, :microsecond, :nanosecond]
+
+    test "all allowed units return integer" do
+      for u <- @units, do: assert(is_integer(:erlang.time_offset(u)))
+    end
+
+    test "unit ratios relative to nanosecond" do
+      nano = :erlang.time_offset(:nanosecond)
+      micro = :erlang.time_offset(:microsecond)
+      milli = :erlang.time_offset(:millisecond)
+      sec = :erlang.time_offset(:second)
+
+      assert_in_delta nano, micro * 1_000, 1_000
+      assert_in_delta nano, milli * 1_000_000, 1_000_000
+      assert_in_delta nano, sec * 1_000_000_000, 1_000_000_000
+    end
+
+    test "drifts slowly between two calls" do
+      t1 = :erlang.time_offset(:nanosecond)
+      :timer.sleep(100)
+      t2 = :erlang.time_offset(:nanosecond)
+      drift = abs(t2 - t1)
+      assert drift <= 1_000_000
+    end
+
+    test "with positive integer unit" do
+      assert is_integer(:erlang.time_offset(1000))
+    end
+
+    test "raises ArgumentError when unit is less than 1" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [0]}
+    end
+
+    test "raises ArgumentError when unit is not a valid time unit atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [:invalid]}
+    end
+  end
+
   describe "trunc/1" do
     test "drops fractional part of positive float" do
       assert :erlang.trunc(1.23) == 1
