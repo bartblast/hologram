@@ -1719,10 +1719,7 @@ const Erlang = {
     const offsetNs = systemTimeNs - monoTimeNs;
 
     const quotient = offsetNs / unitValue;
-    const remainder = offsetNs % unitValue;
-    const rounded = remainder * 2n >= unitValue ? quotient + 1n : quotient;
-
-    return Type.integer(rounded);
+    return Type.integer(quotient);
   },
   // End time_offset/1
   // Deps: []
