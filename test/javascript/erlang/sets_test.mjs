@@ -146,91 +146,7 @@ describe("Erlang_Sets", () => {
     });
   });
 
-  describe("is_disjoint/2", () => {
-    const is_disjoint_2 = Erlang_Sets["is_disjoint/2"];
-    const from_list_2 = Erlang_Sets["from_list/2"];
 
-    it("returns true if two sets have no common elements (primitives)", () => {
-      const set1 = from_list_2(Type.list([integer1, integer2]), opts);
-      const set2 = from_list_2(Type.list([integer3]), opts);
-
-      assertBoxedTrue(is_disjoint_2(set1, set2));
-    });
-
-    it("returns true if two sets have no common elements (objects)", () => {
-      const tuple12 = Type.tuple([integer1, integer2]);
-      const tuple34 = Type.tuple([integer3, Type.integer(4)]);
-      const tuple56 = Type.tuple([Type.integer(5), Type.integer(6)]);
-
-      const set1 = from_list_2(Type.list([tuple12, tuple34]), opts);
-      const set2 = from_list_2(Type.list([tuple56]), opts);
-
-      assertBoxedTrue(is_disjoint_2(set1, set2));
-    });
-
-    it("returns false if two sets have common elements (primitives)", () => {
-      const set1 = from_list_2(Type.list([integer1, integer2]), opts);
-      const set2 = from_list_2(Type.list([integer2, integer3]), opts);
-
-      assertBoxedFalse(is_disjoint_2(set1, set2));
-    });
-
-    it("returns false if two sets have common elements (objects)", () => {
-      const tuple12 = Type.tuple([integer1, integer2]);
-      const tuple34 = Type.tuple([integer3, Type.integer(4)]);
-      const tuple56 = Type.tuple([Type.integer(5), Type.integer(6)]);
-
-      const set1 = from_list_2(Type.list([tuple12, tuple34]), opts);
-      const set2 = from_list_2(Type.list([tuple34, tuple56]), opts);
-
-      assertBoxedFalse(is_disjoint_2(set1, set2));
-    });
-
-    it("returns true if both sets are empty", () => {
-      assertBoxedTrue(is_disjoint_2(emptySet, emptySet));
-    });
-
-    it("returns true if first set is empty", () => {
-      assertBoxedTrue(is_disjoint_2(emptySet, set123));
-    });
-
-    it("returns true if second set is empty", () => {
-      assertBoxedTrue(is_disjoint_2(set123, emptySet));
-    });
-
-    it("returns false if sets are identical", () => {
-      assertBoxedFalse(is_disjoint_2(set123, set123));
-    });
-
-    it("uses strict matching (integer vs float)", () => {
-      const setInt = from_list_2(Type.list([integer1]), opts);
-      const setFloat = from_list_2(Type.list([float1]), opts);
-
-      assertBoxedTrue(is_disjoint_2(setInt, setFloat));
-    });
-
-    it("raises FunctionClauseError if the first argument is not a set", () => {
-      assertBoxedError(
-        () => is_disjoint_2(atomAbc, set123),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_disjoint/2", [
-          atomAbc,
-          set123,
-        ]),
-      );
-    });
-
-    it("raises FunctionClauseError if the second argument is not a set", () => {
-      assertBoxedError(
-        () => is_disjoint_2(set123, atomAbc),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":sets.is_disjoint/2", [
-          set123,
-          atomAbc,
-        ]),
-      );
-    });
-  });
 
   describe("filter/2", () => {
     const filter_2 = Erlang_Sets["filter/2"];
@@ -651,6 +567,86 @@ describe("Erlang_Sets", () => {
           "Hologram requires to specify :sets version explicitely",
         );
       });
+    });
+  });
+
+  describe("is_disjoint/2", () => {
+    const is_disjoint_2 = Erlang_Sets["is_disjoint/2"];
+    const from_list_2 = Erlang_Sets["from_list/2"];
+
+    it("returns true if two sets have no common elements (primitives)", () => {
+      const set1 = from_list_2(Type.list([integer1, integer2]), opts);
+      const set2 = from_list_2(Type.list([integer3]), opts);
+
+      assertBoxedTrue(is_disjoint_2(set1, set2));
+    });
+
+    it("returns true if two sets have no common elements (objects)", () => {
+      const tuple12 = Type.tuple([integer1, integer2]);
+      const tuple34 = Type.tuple([integer3, Type.integer(4)]);
+      const tuple56 = Type.tuple([Type.integer(5), Type.integer(6)]);
+
+      const set1 = from_list_2(Type.list([tuple12, tuple34]), opts);
+      const set2 = from_list_2(Type.list([tuple56]), opts);
+
+      assertBoxedTrue(is_disjoint_2(set1, set2));
+    });
+
+    it("returns false if two sets have common elements (primitives)", () => {
+      const set1 = from_list_2(Type.list([integer1, integer2]), opts);
+      const set2 = from_list_2(Type.list([integer2, integer3]), opts);
+
+      assertBoxedFalse(is_disjoint_2(set1, set2));
+    });
+
+    it("returns false if two sets have common elements (objects)", () => {
+      const tuple12 = Type.tuple([integer1, integer2]);
+      const tuple34 = Type.tuple([integer3, Type.integer(4)]);
+      const tuple56 = Type.tuple([Type.integer(5), Type.integer(6)]);
+
+      const set1 = from_list_2(Type.list([tuple12, tuple34]), opts);
+      const set2 = from_list_2(Type.list([tuple34, tuple56]), opts);
+
+      assertBoxedFalse(is_disjoint_2(set1, set2));
+    });
+
+    it("returns true if both sets are empty", () => {
+      assertBoxedTrue(is_disjoint_2(emptySet, emptySet));
+    });
+
+    it("returns true if first set is empty", () => {
+      assertBoxedTrue(is_disjoint_2(emptySet, set123));
+    });
+
+    it("returns true if second set is empty", () => {
+      assertBoxedTrue(is_disjoint_2(set123, emptySet));
+    });
+
+    it("returns false if sets are identical", () => {
+      assertBoxedFalse(is_disjoint_2(set123, set123));
+    });
+
+    it("uses strict matching (integer vs float)", () => {
+      const setInt = from_list_2(Type.list([integer1]), opts);
+      const setFloat = from_list_2(Type.list([float1]), opts);
+
+      assertBoxedTrue(is_disjoint_2(setInt, setFloat));
+    });
+
+    it("raises FunctionClauseError if the first argument is not a set", () => {
+      assertBoxedError(
+        () => is_disjoint_2(atomAbc, set123),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      assertBoxedError(
+        () => is_disjoint_2(set123, atomAbc),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+      );
     });
   });
 
