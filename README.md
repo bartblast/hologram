@@ -56,6 +56,7 @@ Website: https://hologram.page
 * Juozas Norkus, [@jozuas](https://github.com/jozuas)
 * Thomas, [@thomaswhyyou](https://github.com/thomaswhyyou)
 * Max, [@Makesesama](https://github.com/Makesesama)
+* Dawid Danieluk, [@nxy7](https://github.com/nxy7)
 
 Thank you to **all other** sponsors for supporting the project!
 
