@@ -350,7 +350,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert Enum.at(result, 2) == <<66>>
     end
 
-    # Without :global option (default, split once)
+    # Without :global option
 
     test "splits only on first occurrence without :global" do
       assert :binary.split("hello-world-test", "-", []) == ["hello", "world-test"]
@@ -367,14 +367,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
              ]
     end
 
-    test "raises ArgumentError when compiled pattern data is missing" do
-      invalid_pattern = {:bm, make_ref()}
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("hello", invalid_pattern, []) end
-    end
-
     test "splits using compiled Aho-Corasick pattern" do
       compiled_pattern = :binary.compile_pattern(["-", "o"])
 
@@ -386,7 +378,16 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
              ]
     end
 
+    test "raises ArgumentError when compiled pattern data is missing" do
+      invalid_pattern = {:bm, make_ref()}
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("hello", invalid_pattern, []) end
+    end
+
     # Options: :trim and :trim_all
+
     test "applies :trim to remove trailing empties only" do
       assert :binary.split("-a-", "-", [:global, :trim]) == ["", "a"]
     end
@@ -400,6 +401,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     # Options: scope
+
     test "respects scope option when a match exists in the range" do
       assert :binary.split("abc", "b", scope: {1, 1}) == ["a", "c"]
     end
@@ -434,11 +436,13 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     # Overlapping patterns
+
     test "with overlapping patterns, matches first found" do
       assert :binary.split("abcabc", ["ab", "abc"], [:global]) == ["", "", ""]
     end
 
     # Error cases
+
     test "raises ArgumentError when subject is not a binary" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),
