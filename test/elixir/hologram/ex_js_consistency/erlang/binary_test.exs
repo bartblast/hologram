@@ -337,6 +337,22 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.split("hello-world-test", "-", []) == ["hello", "world-test"]
     end
 
+    test "splits with multi-byte pattern" do
+      assert :binary.split("aaabbbccc", "bb", []) == ["aaa", "bccc"]
+    end
+
+    test "returns list with original binary when pattern not found" do
+      assert :binary.split("test", "x", []) == ["test"]
+    end
+
+    test "splits with multiple patterns" do
+      assert :binary.split("hello-world_test", ["-", "_"], []) == ["hello", "world_test"]
+    end
+
+    test "handles empty subject" do
+      assert :binary.split("", "x", []) == [""]
+    end
+
     # Compiled pattern behavior
 
     test "splits using compiled Boyer-Moore pattern" do
@@ -424,25 +440,31 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     # Error cases
 
-    test "raises ArgumentError when subject is not a binary" do
+    test "raises ArgumentError when subject is not bitstring" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),
                    fn -> :binary.split(:test, " ", []) end
     end
 
-    test "raises ArgumentError when subject is an integer" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a binary"),
-                   fn -> :binary.split(123, " ", []) end
-    end
-
-    test "raises ArgumentError when subject is a non-binary bitstring" do
+    test "raises ArgumentError when subject is non-binary bitstring" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "is a bitstring (expected a binary)"),
                    fn -> :binary.split(<<1::1, 0::1, 1::1>>, " ", []) end
     end
 
-    test "raises ArgumentError when pattern is empty" do
+    test "raises ArgumentError when pattern is not bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", 123, []) end
+    end
+
+    test "raises ArgumentError when pattern is non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", <<1::1, 0::1, 1::1>>, []) end
+    end
+
+    test "raises ArgumentError when pattern is empty string" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a valid pattern"),
                    fn -> :binary.split("test", "", []) end
@@ -454,34 +476,22 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    fn -> :binary.split("test", [], []) end
     end
 
-    test "raises ArgumentError when pattern is list with empty string" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", ["a", ""], []) end
-    end
-
-    test "raises ArgumentError when pattern is an atom" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", :x, []) end
-    end
-
-    test "raises ArgumentError when pattern is an integer" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", 123, []) end
-    end
-
-    test "raises ArgumentError when pattern is list with non-binary" do
+    test "raises ArgumentError when pattern is list with non-bitstring" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a valid pattern"),
                    fn -> :binary.split("test", ["a", :b], []) end
     end
 
-    test "raises ArgumentError when pattern is list with bitstring" do
+    test "raises ArgumentError when pattern is list with non-binary bitstring" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a valid pattern"),
                    fn -> :binary.split("test", ["a", <<1::1, 0::1, 1::1>>], []) end
+    end
+
+    test "raises ArgumentError when pattern is list with empty string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", ["a", ""], []) end
     end
 
     test "raises ArgumentError when options is not a list" do
