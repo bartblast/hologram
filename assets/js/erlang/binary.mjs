@@ -13,6 +13,143 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Binary = {
+  // Start _parse_search_opts/1
+  "_parse_search_opts/1": (opts) => {
+    if (!Type.isList(opts) || Type.isImproperList(opts)) {
+      Interpreter.raiseArgumentError("invalid options");
+    }
+
+    let global = false;
+    let trim = false;
+    let trimAll = false;
+    let scopeStart = 0;
+    let scopeLength = -1; // -1 means "until end"
+
+    opts.data.forEach((option) => {
+      if (Type.isAtom(option)) {
+        if (option.value === "global") {
+          global = true;
+          return;
+        }
+
+        if (option.value === "trim") {
+          trim = true;
+          return;
+        }
+
+        if (option.value === "trim_all") {
+          trimAll = true;
+          return;
+        }
+
+        Interpreter.raiseArgumentError("invalid options");
+      }
+
+      const isScopeTuple =
+        Type.isTuple(option) &&
+        option.data.length === 2 &&
+        Type.isAtom(option.data[0]) &&
+        option.data[0].value === "scope";
+
+      if (!isScopeTuple) {
+        Interpreter.raiseArgumentError("invalid options");
+      }
+
+      const scopeData = option.data[1];
+      const isValidScope =
+        Type.isTuple(scopeData) &&
+        scopeData.data.length === 2 &&
+        Type.isInteger(scopeData.data[0]) &&
+        Type.isInteger(scopeData.data[1]);
+
+      if (!isValidScope) {
+        Interpreter.raiseArgumentError("invalid options");
+      }
+
+      const startValue = scopeData.data[0].value;
+      const lengthValue = scopeData.data[1].value;
+
+      if (startValue < 0n || lengthValue < 0n) {
+        Interpreter.raiseArgumentError("invalid options");
+      }
+
+      scopeStart = Number(startValue);
+      scopeLength = Number(lengthValue);
+    });
+
+    return {global, trim, trimAll, scopeStart, scopeLength};
+  },
+  // End _parse_search_opts/1
+  // Deps: []
+
+  // Start _aho_corasick_search/3
+  "_aho_corasick_search/3": (subject, rootNode, startIndex) => {
+    Bitstring.maybeSetBytesFromText(subject);
+    let candidateNode = rootNode;
+
+    for (let index = startIndex; index < subject.bytes.length; index++) {
+      const byte = subject.bytes[index];
+
+      // Follow failure links until we find a matching transition
+      while (candidateNode !== null && !candidateNode.children.has(byte)) {
+        candidateNode = candidateNode.failure;
+      }
+
+      // Transition to next state or reset to root
+      candidateNode = candidateNode
+        ? candidateNode.children.get(byte) || rootNode
+        : rootNode;
+
+      // Check if current state has any pattern matches
+      if (candidateNode.output.length > 0) {
+        const matchedPatternLength = candidateNode.output[0].length;
+        const matchIndex = index - matchedPatternLength + 1;
+        return {index: matchIndex, length: matchedPatternLength};
+      }
+    }
+
+    return null;
+  },
+  // End _aho_corasick_search/3
+  // Deps: []
+
+  // Start _boyer_moore_search/4
+  "_boyer_moore_search/4": (subject, patternBytes, badShift, startIndex) => {
+    Bitstring.maybeSetBytesFromText(subject);
+
+    const patternLength = patternBytes.length;
+    const patternMaxIndex = patternLength - 1;
+    const searchLimit = subject.bytes.length - patternLength;
+
+    for (let index = startIndex; index <= searchLimit; index++) {
+      // Compare pattern from right to left
+      let patternIndex = patternMaxIndex;
+      while (
+        patternIndex >= 0 &&
+        patternBytes[patternIndex] === subject.bytes[index + patternIndex]
+      ) {
+        // Full match found
+        if (patternIndex === 0) {
+          return {index, length: patternLength};
+        }
+        patternIndex--;
+      }
+
+      // No match - use bad character shift to skip ahead
+      const currentByte = subject.bytes[index + patternMaxIndex];
+      const shiftValue = badShift[currentByte];
+      const shift = shiftValue >= 0 ? shiftValue : patternLength;
+
+      if (shift > 0) {
+        index += shift - 1; // -1 because loop will increment
+      }
+    }
+
+    return null;
+  },
+  // End _boyer_moore_search/4
+  // Deps: []
+
   // Start at/2
   "at/2": (subject, pos) => {
     if (!Type.isBinary(subject)) {
@@ -57,6 +194,7 @@ const Erlang_Binary = {
 
       const badShift = {};
       const length = singlePattern.bytes.length - 1;
+      const patternBytes = singlePattern.bytes;
 
       // Seed the badShift object with an initial value of -1 for each byte
       for (let i = 0; i < 256; i++) {
@@ -69,7 +207,7 @@ const Erlang_Binary = {
       });
 
       const ref = Erlang["make_ref/0"]();
-      const compiledPatternData = {type: "bm", badShift};
+      const compiledPatternData = {type: "bm", badShift, patternBytes};
       ERTS.binaryPatternRegistry.put(ref, compiledPatternData);
 
       return Type.tuple([Type.atom("bm"), ref]);
@@ -268,119 +406,180 @@ const Erlang_Binary = {
   // End last/1
   // Deps: []
 
-  // TODO: consider
-  // // Start _aho_corasick_search/3
-  // "_aho_corasick_search/3": (subject, patterns, options) => {
-  //   const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
-  //   const compiledPatternData = ERTS.binaryPatternRegistry.get(patterns);
+  // Start split/2
+  "split/2": (subject, pattern) => {
+    return Erlang_Binary["split/3"](subject, pattern, Type.list([]));
+  },
+  // End split/2
+  // Deps: [:binary.split/3]
 
-  //   Bitstring.maybeSetBytesFromText(subject);
-  //   const startIndex = Math.max(start, 0);
-  //   const maxIndex = Math.max(start + length, subject.bytes.length);
+  // Start split/3
+  "split/3": (subject, pattern, options) => {
+    // Helper: Convert byte slice to bitstring (text-based if valid UTF-8)
+    const bytesToBitstring = (bytes) => {
+      try {
+        const decoder = new TextDecoder("utf-8", {fatal: true});
+        const text = decoder.decode(bytes);
+        return Bitstring.fromText(text);
+      } catch {
+        return Bitstring.fromBytes(bytes);
+      }
+    };
 
-  //   const rootNode = compiledPatternData.rootNode;
-  //   let candidateNode = rootNode;
+    // Helper: Apply trimming options to the split parts
+    const applyTrim = (parts) => {
+      if (parts.length === 0) {
+        return parts;
+      }
 
-  //   for (let index = startIndex; index < maxIndex; index++) {
-  //     const byte = subject.bytes[index];
+      if (trimAll) {
+        return parts.filter((part) => !Bitstring.isEmpty(part));
+      }
 
-  //     while (candidateNode !== null && !candidateNode.children.has(byte)) {
-  //       candidateNode = candidateNode.failure;
-  //     }
+      if (!trim) {
+        return parts;
+      }
 
-  //     // next node, or back to root
-  //     candidateNode = candidateNode
-  //       ? candidateNode.children.get(byte) || rootNode
-  //       : rootNode;
+      let end = parts.length;
+      while (end > 0 && Bitstring.isEmpty(parts[end - 1])) {
+        end--;
+      }
 
-  //     if (candidateNode.output.length > 0) {
-  //       const resultLength = candidateNode.output[0].length;
-  //       const foundIndex = index - resultLength + 1;
-  //       return {index: foundIndex, length: resultLength};
-  //     }
-  //   }
+      return parts.slice(0, end);
+    };
 
-  //   return false;
-  // },
-  // // End _aho_corasick_search/3
-  // // Deps: [:binary._parse_search_opts/1]
+    // Validate subject is a binary
+    if (!Type.isBinary(subject)) {
+      const msg = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    }
 
-  // TODO: consider
-  // // Start _boyer_moore_search/3
-  // "_boyer_moore_search/3": (subject, pattern, options) => {
-  //   const {start, length} = Erlang_Binary["_parse_search_opts/1"](options);
-  //   const compiledPatternData = ERTS.binaryPatternRegistry.get(pattern);
-  //   const badShift = compiledPatternData.badShift;
+    // Ensure subject bytes are available after validation
+    Bitstring.maybeSetBytesFromText(subject);
 
-  //   Bitstring.maybeSetBytesFromText(subject);
-  //   Bitstring.maybeSetBytesFromText(pattern);
+    const {global, trim, trimAll, scopeStart, scopeLength} =
+      Erlang_Binary["_parse_search_opts/1"](options);
 
-  //   const patternMaxIndex = pattern.bytes.length - 1;
-  //   let index = Math.max(start, 0);
-  //   const maxIndex = Math.max(start + length, subject.bytes.length);
+    // Validate scope start is within subject bounds
+    if (scopeStart > subject.bytes.length) {
+      Interpreter.raiseArgumentError("invalid options");
+    }
 
-  //   while (index <= maxIndex) {
-  //     let patternIndex = 0;
-  //     while (
-  //       pattern.bytes[patternIndex] === subject.bytes[patternIndex + index]
-  //     ) {
-  //       if (patternIndex === patternMaxIndex) {
-  //         return {index, length: pattern.bytes.length};
-  //       }
-  //       patternIndex++;
-  //     }
+    // Check if pattern is already compiled (structural check)
+    const isCompiledPattern =
+      Type.isTuple(pattern) &&
+      pattern.data.length === 2 &&
+      Type.isAtom(pattern.data[0]) &&
+      (pattern.data[0].value === "bm" || pattern.data[0].value === "ac");
 
-  //     const current = subject.bytes[index + patternMaxIndex];
-  //     if (badShift[current]) {
-  //       index += badShift[current];
-  //     } else {
-  //       index++;
-  //     }
-  //   }
+    const compiledPattern = isCompiledPattern
+      ? pattern
+      : Erlang_Binary["compile_pattern/1"](pattern);
 
-  //   return false;
-  // },
-  // // End _boyer_moore_search/3
-  // // Deps: [:binary._parse_search_opts/1]
+    const patternType = compiledPattern.data[0].value;
+    const patternRef = compiledPattern.data[1];
+    const compiledData = ERTS.binaryPatternRegistry.get(patternRef);
+    if (!compiledData || compiledData.type !== patternType) {
+      Interpreter.raiseArgumentError("is not a valid pattern");
+    }
 
-  // TODO: consider
-  // // Start _parse_search_opts/1
-  // "_parse_search_opts/1": (opts) => {
-  //   if (!Type.isList(opts)) {
-  //     Interpreter.raiseFunctionClauseError(
-  //       Interpreter.buildFunctionClauseErrorMsg("invalid options"),
-  //     );
-  //   }
+    const effectiveLength =
+      scopeLength === -1 ? subject.bytes.length - scopeStart : scopeLength;
 
-  //   if (Type.isImproperList(opts)) {
-  //     Interpreter.raiseFunctionClauseError(
-  //       Interpreter.buildFunctionClauseErrorMsg("invalid options"),
-  //     );
-  //   }
+    // Validate scope doesn't extend beyond subject
+    if (scopeStart + effectiveLength > subject.bytes.length) {
+      Interpreter.raiseArgumentError("invalid options");
+    }
 
-  //   const scopeTuple = Erlang_Lists["keyfind/3"](
-  //     Type.atom("scope"),
-  //     Type.integer(1),
-  //     opts,
-  //   );
+    const scopeEnd = scopeStart + effectiveLength;
 
-  //   if (scopeTuple && scopeTuple.data && scopeTuple.data.length == 2) {
-  //     const innerData = scopeTuple.data[1];
-  //     const start = innerData.data[0];
-  //     const length = innerData.data[1];
-  //     if (Type.isInteger(start) && Type.isInteger(length)) {
-  //       return {start: Number(start.value), length: Number(length.value)};
-  //     } else {
-  //       Interpreter.raiseFunctionClauseError(
-  //         Interpreter.buildFunctionClauseErrorMsg("invalid options"),
-  //       );
-  //     }
-  //   } else {
-  //     return {start: 0, length: -1};
-  //   }
-  // },
-  // // End _parse_search_opts/1
-  // // Deps: [:lists.keyfind/3]
+    // No search range available
+    if (scopeStart >= subject.bytes.length || scopeLength === 0) {
+      const parts = [bytesToBitstring(subject.bytes)];
+      return Type.list(applyTrim(parts));
+    }
+
+    const scopedBytes = subject.bytes.slice(scopeStart, scopeEnd);
+    const scopedSubject = Bitstring.fromBytes(scopedBytes);
+
+    // Helper: Find next pattern match based on algorithm type inside scoped subject
+    const findNextMatch = (startIndex) => {
+      if (patternType === "bm") {
+        const patternBytes = compiledData.patternBytes;
+        if (!patternBytes) {
+          Interpreter.raiseArgumentError("is not a valid pattern");
+        }
+
+        return Erlang_Binary["_boyer_moore_search/4"](
+          scopedSubject,
+          patternBytes,
+          compiledData.badShift,
+          startIndex,
+        );
+      }
+
+      return Erlang_Binary["_aho_corasick_search/3"](
+        scopedSubject,
+        compiledData.rootNode,
+        startIndex,
+      );
+    };
+
+    // Main split logic
+    const results = [];
+    let cursor = 0; // position in full subject where next segment starts
+    let searchStart = 0; // position inside scopedSubject
+    let foundMatch = true; // track if loop exited naturally vs via break
+
+    while (searchStart < scopedSubject.bytes.length) {
+      const match = findNextMatch(searchStart);
+
+      if (match === null) {
+        const remaining = bytesToBitstring(subject.bytes.slice(cursor));
+        results.push(remaining);
+        foundMatch = false; // mark that we broke due to no match
+        break;
+      }
+
+      const absoluteMatchIndex = scopeStart + match.index;
+
+      const beforeMatch = bytesToBitstring(
+        subject.bytes.slice(cursor, absoluteMatchIndex),
+      );
+      results.push(beforeMatch);
+
+      cursor = absoluteMatchIndex + match.length;
+      searchStart = cursor - scopeStart;
+
+      if (!global) {
+        const remaining = bytesToBitstring(subject.bytes.slice(cursor));
+        results.push(remaining);
+        break;
+      }
+    }
+
+    // Collect any remaining bytes after the last match (for global splits that exited naturally)
+    if (global && foundMatch && cursor < subject.bytes.length) {
+      const remaining = bytesToBitstring(subject.bytes.slice(cursor));
+      results.push(remaining);
+    }
+
+    // Add trailing empty when global split ends at subject boundary
+    if (global && cursor === subject.bytes.length && results.length > 0) {
+      results.push(Bitstring.fromText(""));
+    }
+
+    if (results.length === 0) {
+      results.push(bytesToBitstring(subject.bytes));
+    }
+
+    const trimmedResults = applyTrim(results);
+    return Type.list(trimmedResults);
+  },
+  // End split/3
+  // Deps: [:binary._parse_search_opts/1, :binary._aho_corasick_search/3, :binary._boyer_moore_search/4, :binary.compile_pattern/1]
 };
 
 export default Erlang_Binary;
