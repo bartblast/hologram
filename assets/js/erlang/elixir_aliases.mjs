@@ -77,7 +77,7 @@ const Erlang_Elixir_Aliases = {
     return result;
   },
   // End safe_concat/1
-  // Deps: [:elixir_aliases.concat/1, :erlang.binary_to_existing_atom/1]
+  // Deps: [:elixir_aliases.concat/1, :erlang.atom_to_binary/1, :erlang.binary_to_existing_atom/1]
 };
 
 export default Erlang_Elixir_Aliases;

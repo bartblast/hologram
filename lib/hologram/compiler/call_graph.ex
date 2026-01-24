@@ -25,6 +25,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:binary, :split, 3}, {:binary, :_parse_search_opts, 2}},
     {{:binary, :split, 3}, {:binary, :compile_pattern, 1}},
     {{:elixir_aliases, :safe_concat, 1}, {:elixir_aliases, :concat, 1}},
+    {{:elixir_aliases, :safe_concat, 1}, {:erlang, :atom_to_binary, 1}},
     {{:elixir_aliases, :safe_concat, 1}, {:erlang, :binary_to_existing_atom, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
