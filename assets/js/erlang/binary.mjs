@@ -587,17 +587,6 @@ const Erlang_Binary = {
 
   // Start split/3
   "split/3": (subject, pattern, options) => {
-    // Helper: Convert byte slice to bitstring (text-based if valid UTF-8)
-    const bytesToBitstring = (bytes) => {
-      try {
-        const decoder = new TextDecoder("utf-8", {fatal: true});
-        const text = decoder.decode(bytes);
-        return Bitstring.fromText(text);
-      } catch {
-        return Bitstring.fromBytes(bytes);
-      }
-    };
-
     // Helper: Apply trimming options to the split parts
     const applyTrim = (parts) => {
       if (parts.length === 0) {
@@ -618,6 +607,17 @@ const Erlang_Binary = {
       }
 
       return parts.slice(0, end);
+    };
+
+    // Helper: Convert byte slice to bitstring (text-based if valid UTF-8)
+    const bytesToBitstring = (bytes) => {
+      try {
+        const decoder = new TextDecoder("utf-8", {fatal: true});
+        const text = decoder.decode(bytes);
+        return Bitstring.fromText(text);
+      } catch {
+        return Bitstring.fromBytes(bytes);
+      }
     };
 
     // Validate subject is a binary
@@ -690,19 +690,10 @@ const Erlang_Binary = {
       }
     }
 
+    // Pre-compile pattern once before loop to avoid recompilation on each match
     const compiledPattern = isCompiledPattern
       ? pattern
       : Erlang_Binary["compile_pattern/1"](pattern);
-
-    const patternType = compiledPattern.data[0].value;
-    const patternRef = compiledPattern.data[1];
-    const compiledData = ERTS.binaryPatternRegistry.get(patternRef);
-
-    if (!compiledData || compiledData.type !== patternType) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-      );
-    }
 
     const effectiveLength =
       scopeLength === null ? subject.bytes.length - scopeStart : scopeLength;
@@ -720,71 +711,74 @@ const Erlang_Binary = {
     const actualStart = Math.min(scopeStart, scopeEnd);
     const actualEnd = Math.max(scopeStart, scopeEnd);
 
-    // No search range available
-    if (scopeStart >= subject.bytes.length || scopeLength === 0) {
+    // No search range available - return unsplit subject
+    if (actualStart >= subject.bytes.length) {
       const parts = [bytesToBitstring(subject.bytes)];
       return Type.list(applyTrim(parts));
     }
 
-    const scopedBytes = subject.bytes.slice(actualStart, actualEnd);
-    const scopedSubject = Bitstring.fromBytes(scopedBytes);
-
-    // Helper: Find next pattern match based on algorithm type inside scoped subject
-    const findNextMatch = (startIndex) => {
-      if (patternType === "bm") {
-        const patternBytes = compiledData.patternBytes;
-
-        if (!patternBytes) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(2, "is not a valid pattern"),
-          );
-        }
-
-        return Erlang_Binary["_boyer_moore_search/4"](
-          scopedSubject,
-          patternBytes,
-          compiledData.badShift,
-          startIndex,
-        );
-      }
-
-      return Erlang_Binary["_aho_corasick_search/3"](
-        scopedSubject,
-        compiledData.rootNode,
-        startIndex,
-      );
-    };
-
-    // Main split logic
-
+    // Main split logic using match/3
     const results = [];
     let cursor = 0; // position in full subject where next segment starts
-    let searchStart = 0; // position inside scopedSubject
+    let searchPos = actualStart; // current search position
     let foundMatch = true; // track if loop exited naturally vs via break
 
-    while (searchStart < scopedSubject.bytes.length) {
-      const match = findNextMatch(searchStart);
+    while (searchPos < actualEnd) {
+      const remainingLength = actualEnd - searchPos;
+      const matchOptions = Type.list([
+        Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(searchPos), Type.integer(remainingLength)]),
+        ]),
+      ]);
 
-      if (match === null) {
-        const remaining = bytesToBitstring(subject.bytes.slice(cursor));
+      // Use match/3 to find next occurrence with pre-compiled pattern
+      const matchResult = Erlang_Binary["match/3"](
+        subject,
+        compiledPattern,
+        matchOptions,
+      );
+
+      if (Type.isAtom(matchResult) && matchResult.value === "nomatch") {
+        // No more matches found
+        const remaining =
+          cursor < subject.bytes.length
+            ? bytesToBitstring(subject.bytes.slice(cursor))
+            : Bitstring.fromText("");
         results.push(remaining);
-        foundMatch = false; // mark that we broke due to no match
+        foundMatch = false;
         break;
       }
 
-      const absoluteMatchIndex = actualStart + match.index;
+      // Extract match position and length
+      const matchPos = matchResult.data[0].value;
+      const matchLen = matchResult.data[1].value;
+      const matchStart = Number(matchPos);
+      const matchLength = Number(matchLen);
 
-      const beforeMatch = bytesToBitstring(
-        subject.bytes.slice(cursor, absoluteMatchIndex),
-      );
+      // Add part before match (if any)
+      if (matchStart > cursor) {
+        const beforeMatch = bytesToBitstring(
+          subject.bytes.slice(cursor, matchStart),
+        );
+        results.push(beforeMatch);
+      } else if (matchStart === cursor) {
+        // Empty part before match
+        results.push(Bitstring.fromText(""));
+      }
 
-      results.push(beforeMatch);
-      cursor = absoluteMatchIndex + match.length;
-      searchStart = cursor - scopeStart;
+      // Update cursor to position after match
+      cursor = matchStart + matchLength;
+      searchPos = cursor;
 
       if (!global) {
-        const remaining = bytesToBitstring(subject.bytes.slice(cursor));
+        // For non-global split, append remaining and stop
+        const remaining =
+          cursor < subject.bytes.length
+            ? bytesToBitstring(subject.bytes.slice(cursor))
+            : Bitstring.fromText("");
         results.push(remaining);
+        foundMatch = false;
         break;
       }
     }
@@ -809,7 +803,7 @@ const Erlang_Binary = {
     return Type.list(trimmedResults);
   },
   // End split/3
-  // Deps: [:binary._aho_corasick_search/3, :binary._boyer_moore_search/4, :binary._parse_search_opts/2, :binary.compile_pattern/1]
+  // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
 };
 
 export default Erlang_Binary;
