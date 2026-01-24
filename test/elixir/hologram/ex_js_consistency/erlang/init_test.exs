@@ -10,36 +10,30 @@ defmodule Hologram.ExJsConsistency.Erlang.InitTest do
   @moduletag :consistency
 
   describe "get_argument/1" do
-    test "returns :error when flag is not set" do
+    test ":home flag" do
+      assert {:ok, [[home_path]]} = :init.get_argument(:home)
+      assert is_list(home_path)
+    end
+
+    test ":progname flag" do
+      assert :init.get_argument(:progname) == {:ok, [[~c"erl"]]}
+    end
+
+    test ":root flag" do
+      assert {:ok, [[root_path]]} = :init.get_argument(:root)
+      assert is_list(root_path)
+    end
+
+    test "unknown flag" do
       assert :init.get_argument(:my_nonexistent_flag) == :error
     end
 
-    test "returns {:ok, Arg} for system flag :root" do
-      assert {:ok, [[_root_path]]} = :init.get_argument(:root)
-    end
-
-    test "returns {:ok, Arg} for system flag :home" do
-      assert {:ok, [[_home_path]]} = :init.get_argument(:home)
-    end
-
-    test "returns {:ok, Arg} for system flag :progname" do
-      assert {:ok, [[_progname]]} = :init.get_argument(:progname)
-    end
-
-    test "returns :error for nil" do
+    test "argument is nil" do
       assert :init.get_argument(nil) == :error
     end
 
-    test "returns :error if the argument is not an atom (integer)" do
+    test "argument is not an atom" do
       assert :init.get_argument(1) == :error
-    end
-
-    test "returns :error if the argument is not an atom (binary)" do
-      assert :init.get_argument("my_flag") == :error
-    end
-
-    test "returns :error if the argument is not an atom (list)" do
-      assert :init.get_argument([1, 2]) == :error
     end
   end
 end

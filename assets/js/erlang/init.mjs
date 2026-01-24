@@ -1,6 +1,5 @@
 "use strict";
 
-import MemoryStorage from "../memory_storage.mjs";
 import Type from "../type.mjs";
 
 // IMPORTANT!
@@ -8,27 +7,41 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Init = {
-  /**
-   * Retrieves values associated with a command-line flag.
-   * In the browser context, values are stored in MemoryStorage with key {:init_argument, flag}.
-   *
-   * @param {Object} flag - A boxed atom representing the flag name.
-   * @returns {Object} A boxed tuple {:ok, Arg} if the flag exists, or the boxed atom :error if not.
-   */
+  // Note: The JS implementation returns hardcoded values for security reasons:
+  // - :home returns {:ok, [[~c"/"]]}
+  // - :progname returns {:ok, [[~c"hologram"]]}
+  // - :root returns {:ok, [[~c"/"]]}
+  // - Any other flag returns :error
   // Start get_argument/1
   "get_argument/1": (flag) => {
     if (!Type.isAtom(flag)) {
       return Type.atom("error");
     }
 
-    const scopedKey = Type.tuple([Type.atom("init_argument"), flag]);
-    const value = MemoryStorage.get(Type.encodeMapKey(scopedKey));
+    const flagValue = flag.value;
 
-    if (value === null) {
-      return Type.atom("error");
+    if (flagValue === "home") {
+      return Type.tuple([
+        Type.atom("ok"),
+        Type.list([Type.list([Type.charlist("/")])]),
+      ]);
     }
 
-    return Type.tuple([Type.atom("ok"), value]);
+    if (flagValue === "progname") {
+      return Type.tuple([
+        Type.atom("ok"),
+        Type.list([Type.list([Type.charlist("hologram")])]),
+      ]);
+    }
+
+    if (flagValue === "root") {
+      return Type.tuple([
+        Type.atom("ok"),
+        Type.list([Type.list([Type.charlist("/")])]),
+      ]);
+    }
+
+    return Type.atom("error");
   },
   // End get_argument/1
   // Deps: []
