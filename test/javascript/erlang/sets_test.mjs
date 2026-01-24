@@ -146,8 +146,6 @@ describe("Erlang_Sets", () => {
     });
   });
 
-
-
   describe("filter/2", () => {
     const filter_2 = Erlang_Sets["filter/2"];
 
