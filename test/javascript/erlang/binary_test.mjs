@@ -496,22 +496,12 @@ describe("Erlang_Binary", () => {
   describe("split/2", () => {
     const split = Erlang_Binary["split/2"];
 
-    it("splits on single pattern once", () => {
-      const subject = Bitstring.fromText("hello world");
-      const pattern = Bitstring.fromText(" ");
-      const result = split(subject, pattern);
-
-      assert.deepStrictEqual(
-        result,
-        Type.list([Bitstring.fromText("hello"), Bitstring.fromText("world")]),
-      );
-    });
-
-    it("splits on single pattern when multiple matches exist", () => {
+    it("delegates to split/3 with empty options", () => {
       const subject = Bitstring.fromText("hello world world");
       const pattern = Bitstring.fromText(" ");
       const result = split(subject, pattern);
 
+      // Verifies default options (no :global) - splits only on first match
       assert.deepStrictEqual(
         result,
         Type.list([
@@ -519,50 +509,6 @@ describe("Erlang_Binary", () => {
           Bitstring.fromText("world world"),
         ]),
       );
-    });
-
-    it("splits with multi-byte pattern", () => {
-      const subject = Bitstring.fromText("aaabbbccc");
-      const pattern = Bitstring.fromText("bb");
-      const result = split(subject, pattern);
-
-      assert.deepStrictEqual(
-        result,
-        Type.list([Bitstring.fromText("aaa"), Bitstring.fromText("bccc")]),
-      );
-    });
-
-    it("returns list with original binary when pattern not found", () => {
-      const subject = Bitstring.fromText("test");
-      const pattern = Bitstring.fromText("x");
-      const result = split(subject, pattern);
-
-      assert.deepStrictEqual(result, Type.list([Bitstring.fromText("test")]));
-    });
-
-    it("splits with multiple patterns", () => {
-      const subject = Bitstring.fromText("hello-world_test");
-      const pattern = Type.list([
-        Bitstring.fromText("-"),
-        Bitstring.fromText("_"),
-      ]);
-      const result = split(subject, pattern);
-
-      assert.deepStrictEqual(
-        result,
-        Type.list([
-          Bitstring.fromText("hello"),
-          Bitstring.fromText("world_test"),
-        ]),
-      );
-    });
-
-    it("handles empty subject", () => {
-      const subject = Bitstring.fromText("");
-      const pattern = Bitstring.fromText("x");
-      const result = split(subject, pattern);
-
-      assert.deepStrictEqual(result, Type.list([Bitstring.fromText("")]));
     });
   });
 
@@ -991,6 +937,84 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError when pattern is empty", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("");
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is empty list", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list([]);
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is list with empty string", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list([
+          Bitstring.fromText("a"),
+          Bitstring.fromText(""),
+        ]);
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is an atom", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.atom("x");
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is an integer", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.integer(123);
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is list with non-binary", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list([Bitstring.fromText("a"), Type.atom("b")]);
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is list with bitstring", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list([
+          Bitstring.fromText("a"),
+          Type.bitstring([1, 0, 1]),
+        ]);
         const options = Type.list([]);
 
         assertBoxedError(
