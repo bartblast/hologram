@@ -179,4 +179,32 @@ describe("Erlang_Elixir_Aliases", () => {
       );
     });
   });
+  describe("safe_concat/1", () => {
+    const safe_concat = Erlang_Elixir_Aliases["safe_concat/1"];
+    const concat = Erlang_Elixir_Aliases["concat/1"];
+
+    it("works when the concatenated alias exists", () => {
+      const segments = Type.list([
+        Type.bitstring("Elixir"),
+        Type.bitstring("Enum"),
+      ]);
+
+      const result = safe_concat(segments);
+      const expectedAlias = Type.alias("Enum");
+
+      assert.deepStrictEqual(result, expectedAlias);
+    });
+
+    it("delegates to concat/1", () => {
+      const segments = Type.list([
+        Type.bitstring("Aaa"),
+        Type.bitstring("Bbb"),
+      ]);
+
+      const result = safe_concat(segments);
+      const expectedAlias = concat(segments);
+
+      assert.deepStrictEqual(result, expectedAlias);
+    });
+  });
 });
