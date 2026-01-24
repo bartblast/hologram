@@ -13,82 +13,6 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Binary = {
-  // Start _parse_search_opts/2
-  "_parse_search_opts/2": (opts, argPosition) => {
-    const raiseInvalidOptions = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(argPosition, "invalid options"),
-      );
-    };
-
-    if (!Type.isList(opts) || Type.isImproperList(opts)) {
-      raiseInvalidOptions();
-    }
-
-    let global = false;
-    let trim = false;
-    let trimAll = false;
-    let scopeStart = 0;
-    let scopeLength = -1; // -1 means "until end"
-
-    opts.data.forEach((option) => {
-      if (Type.isAtom(option)) {
-        if (option.value === "global") {
-          global = true;
-          return;
-        }
-
-        if (option.value === "trim") {
-          trim = true;
-          return;
-        }
-
-        if (option.value === "trim_all") {
-          trimAll = true;
-          return;
-        }
-
-        raiseInvalidOptions();
-      }
-
-      const isScopeTuple =
-        Type.isTuple(option) &&
-        option.data.length === 2 &&
-        Type.isAtom(option.data[0]) &&
-        option.data[0].value === "scope";
-
-      if (!isScopeTuple) {
-        raiseInvalidOptions();
-      }
-
-      const scopeData = option.data[1];
-
-      const isValidScope =
-        Type.isTuple(scopeData) &&
-        scopeData.data.length === 2 &&
-        Type.isInteger(scopeData.data[0]) &&
-        Type.isInteger(scopeData.data[1]);
-
-      if (!isValidScope) {
-        raiseInvalidOptions();
-      }
-
-      const startValue = scopeData.data[0].value;
-      const lengthValue = scopeData.data[1].value;
-
-      if (startValue < 0n || lengthValue < 0n) {
-        raiseInvalidOptions();
-      }
-
-      scopeStart = Number(startValue);
-      scopeLength = Number(lengthValue);
-    });
-
-    return {global, trim, trimAll, scopeStart, scopeLength};
-  },
-  // End _parse_search_opts/2
-  // Deps: []
-
   // Start _aho_corasick_search/3
   "_aho_corasick_search/3": (subject, rootNode, startIndex) => {
     Bitstring.maybeSetBytesFromText(subject);
@@ -175,6 +99,82 @@ const Erlang_Binary = {
     return null;
   },
   // End _boyer_moore_search/4
+  // Deps: []
+
+  // Start _parse_search_opts/2
+  "_parse_search_opts/2": (opts, argPosition) => {
+    const raiseInvalidOptions = () => {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(argPosition, "invalid options"),
+      );
+    };
+
+    if (!Type.isList(opts) || Type.isImproperList(opts)) {
+      raiseInvalidOptions();
+    }
+
+    let global = false;
+    let trim = false;
+    let trimAll = false;
+    let scopeStart = 0;
+    let scopeLength = -1; // -1 means "until end"
+
+    opts.data.forEach((option) => {
+      if (Type.isAtom(option)) {
+        if (option.value === "global") {
+          global = true;
+          return;
+        }
+
+        if (option.value === "trim") {
+          trim = true;
+          return;
+        }
+
+        if (option.value === "trim_all") {
+          trimAll = true;
+          return;
+        }
+
+        raiseInvalidOptions();
+      }
+
+      const isScopeTuple =
+        Type.isTuple(option) &&
+        option.data.length === 2 &&
+        Type.isAtom(option.data[0]) &&
+        option.data[0].value === "scope";
+
+      if (!isScopeTuple) {
+        raiseInvalidOptions();
+      }
+
+      const scopeData = option.data[1];
+
+      const isValidScope =
+        Type.isTuple(scopeData) &&
+        scopeData.data.length === 2 &&
+        Type.isInteger(scopeData.data[0]) &&
+        Type.isInteger(scopeData.data[1]);
+
+      if (!isValidScope) {
+        raiseInvalidOptions();
+      }
+
+      const startValue = scopeData.data[0].value;
+      const lengthValue = scopeData.data[1].value;
+
+      if (startValue < 0n || lengthValue < 0n) {
+        raiseInvalidOptions();
+      }
+
+      scopeStart = Number(startValue);
+      scopeLength = Number(lengthValue);
+    });
+
+    return {global, trim, trimAll, scopeStart, scopeLength};
+  },
+  // End _parse_search_opts/2
   // Deps: []
 
   // Start at/2
