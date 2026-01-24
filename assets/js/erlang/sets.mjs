@@ -92,32 +92,18 @@ const Erlang_Sets = {
 
   // Start is_disjoint/2
   "is_disjoint/2": (set1, set2) => {
-    [set1, set2].forEach((set) => {
-      if (!Type.isMap(set)) {
-        Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(":sets.is_disjoint/2", [
-            set1,
-            set2,
-          ]),
-        );
-      }
-    });
+    if (!Type.isMap(set1) || !Type.isMap(set2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
+          !Type.isMap(set1) ? set1 : set2,
+        ]),
+      );
+    }
 
     const encodedKeys1 = new Set(Object.keys(set1.data));
     const encodedKeys2 = new Set(Object.keys(set2.data));
 
-    const [smaller, larger] =
-      encodedKeys1.size <= encodedKeys2.size
-        ? [encodedKeys1, encodedKeys2]
-        : [encodedKeys2, encodedKeys1];
-
-    for (const key of smaller) {
-      if (larger.has(key)) {
-        return Type.boolean(false);
-      }
-    }
-
-    return Type.boolean(true);
+    return Type.boolean(encodedKeys1.isDisjointFrom(encodedKeys2));
   },
   // End is_disjoint/2
   // Deps: []
