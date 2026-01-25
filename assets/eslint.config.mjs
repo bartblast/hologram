@@ -41,6 +41,7 @@ export default [
         Erlang_Persistent_Term: "readonly",
         Erlang_Rand: "readonly",
         Erlang_Re: "readonly",
+        Erlang_Os: "readonly",
         Erlang_Sets: "readonly",
         Erlang_Unicode: "readonly",
       },
