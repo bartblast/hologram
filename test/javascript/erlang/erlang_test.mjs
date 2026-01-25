@@ -5570,7 +5570,7 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-    
+
     it("empty list", () => {
       const result = list_to_tuple(Type.list());
 
