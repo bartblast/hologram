@@ -370,43 +370,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfd_binary(input) == "a\u030a"
     end
 
-    test "raises ArgumentError on invalid code point" do
-      input = [97, 0x110000]
-
-      expected_msg =
-        build_argument_error_msg(1, "not valid character data (an iodata term)")
-
-      assert_error ArgumentError, expected_msg, fn ->
-        :unicode.characters_to_nfd_binary(input)
-      end
-    end
-
-    test "returns error tuple on invalid UTF-8 in binary" do
-      invalid_binary = <<255, 255>>
-      input = [<<"abc">>, invalid_binary]
-      expected = {:error, <<"abc">>, invalid_binary}
-      assert :unicode.characters_to_nfd_binary(input) == expected
-    end
-
-    test "raises ArgumentError on invalid code point after normalization" do
-      input = [<<"a">>, 0x030A, 0x110000]
-
-      expected_msg =
-        build_argument_error_msg(1, "not valid character data (an iodata term)")
-
-      assert_error ArgumentError, expected_msg, fn ->
-        :unicode.characters_to_nfd_binary(input)
-      end
-    end
-
-    test "returns error tuple for truncated UTF-8 sequence" do
-      # First two bytes of a 3-byte sequence (incomplete)
-      incomplete_binary = <<0xE4, 0xB8>>
-      input = ["a", incomplete_binary]
-      expected = {:error, "a", incomplete_binary}
-      assert :unicode.characters_to_nfd_binary(input) == expected
-    end
-
     test "handles multiple combining marks" do
       input = [<<"o">>, 0x0308, 0x0304]
       # NFD preserves combining marks in canonical order
@@ -426,6 +389,96 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
     test "preserves non-combining characters" do
       input = [0x3042, 0x3044]
       assert :unicode.characters_to_nfd_binary(input) == "あい"
+    end
+
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = [<<"abc">>, invalid_binary]
+      expected = {:error, <<"abc">>, invalid_binary}
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "returns error tuple for truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+      input = ["a", incomplete_binary]
+      expected = {:error, "a", incomplete_binary}
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point" do
+      input = [97, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = [<<"a">>, 0x030A, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
     end
   end
 end
