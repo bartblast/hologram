@@ -1,7 +1,9 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Unicode from "./unicode.mjs";
 import Erlang_UnicodeUtil from "./unicode_util.mjs";
+import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -74,6 +76,104 @@ const Erlang_String = {
   },
   // End join/2
   // Deps: []
+
+  // Start replace/3
+  "replace/3": (string, pattern, replacement) => {
+    return Erlang_String["replace/4"](
+      string,
+      pattern,
+      replacement,
+      Type.atom("leading"),
+    );
+  },
+  // End replace/3
+  // Deps: [:string.replace/4]
+
+  // Start replace/4
+  "replace/4": (string, pattern, replacement, direction) => {
+    // The first three arguments of Erlang :string.replace are actually of type unicode:chardata,
+    // we need to convert them to binaries in order to make validation and to convert them to text
+    function convertToBinary(input) {
+      try {
+        return Erlang_Unicode["characters_to_binary/1"](input);
+      } catch (error) {
+        switch (input) {
+          case string:
+            Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+            return;
+
+          case pattern:
+            Interpreter.raiseArgumentError(
+              Interpreter.buildArgumentErrorMsg(
+                1,
+                "not valid character data (an iodata term)",
+              ),
+            );
+            return;
+
+          case replacement:
+            throw new HologramInterpreterError(
+              "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
+            );
+
+          default:
+            throw error;
+        }
+      }
+    }
+
+    const stringBinary = convertToBinary(string);
+    const patternBinary = convertToBinary(pattern);
+    const replacementBinary = convertToBinary(replacement);
+
+    if (!Type.isAtom(direction)) {
+      Interpreter.raiseCaseClauseError(direction);
+    }
+
+    const stringText = Bitstring.toText(stringBinary);
+    const patternText = Bitstring.toText(patternBinary);
+    const replacementText = Bitstring.toText(replacementBinary);
+
+    if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
+      return Type.list([stringText]);
+    }
+
+    let splittedStringList, index;
+    switch (direction.value) {
+      case "all":
+        splittedStringList = stringText
+          .split(patternText)
+          .flatMap((elem, idx) => {
+            return idx === 0 ? [elem] : [replacementText, elem];
+          });
+        break;
+
+      case "trailing":
+        index = stringText.lastIndexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          replacementText,
+          stringText.slice(index + patternText.length),
+        ];
+        break;
+
+      case "leading":
+        index = stringText.indexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          replacementText,
+          stringText.slice(index + patternText.length),
+        ];
+        break;
+
+      default:
+        Interpreter.raiseCaseClauseError(direction);
+    }
+
+    return Type.list(splittedStringList);
+  },
+  // End replace/4
+  // Deps: [:unicode.characters_to_binary/1]
 
   // Start titlecase/1
   "titlecase/1": (subject) => {
