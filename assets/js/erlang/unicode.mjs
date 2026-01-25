@@ -391,11 +391,18 @@ const Erlang_Unicode = {
 
     // Fast path for binary input
     if (isBinary) {
-      const text = Bitstring.toText(chardata);
-      if (text === false) {
-        return createErrorTuple([], chardata);
+      const result = Erlang_Unicode["characters_to_nfc_binary/1"](chardata);
+      if (Type.isTuple(result)) {
+        const prefixBin = result.data[1];
+        const rest = result.data[2];
+        const prefixText = Bitstring.toText(prefixBin);
+        const prefixCodepoints =
+          prefixText === false
+            ? []
+            : convertBinaryToNormalizedCodepoints(prefixBin, prefixText);
+        return createErrorTuple(prefixCodepoints, rest);
       }
-      const codepoints = convertBinaryToNormalizedCodepoints(chardata, text);
+      const codepoints = convertBinaryToNormalizedCodepoints(result);
       return Type.list(codepoints);
     }
 
