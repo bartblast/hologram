@@ -8,7 +8,6 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_String from "../../../assets/js/erlang/string.mjs";
-import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -195,13 +194,31 @@ describe("Erlang_String", () => {
   });
 
   describe("replace/3", () => {
-    const replace = Erlang_String["replace/3"];
-    const string = Type.bitstring("Hello World !");
+    const replace3 = Erlang_String["replace/3"];
+    const replace4 = Erlang_String["replace/4"];
 
-    it("returns a three-elements list with the first word at the beginning, the replacement at the middle and the tail at the end", () => {
-      const result = replace(string, Type.bitstring(" "), Type.bitstring("_"));
+    it("delegates to replace/4 with :leading direction", () => {
+      // Use a string with multiple occurrences of the pattern to verify :leading (not :all or :trailing)
+      const string = Type.bitstring("a-b-c");
 
-      assert.deepStrictEqual(result, Type.list(["Hello", "_", "World !"]));
+      const pattern = Type.bitstring("-");
+      const replacement = Type.bitstring("_");
+
+      const result = replace3(string, pattern, replacement);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.bitstring("a"),
+          Type.bitstring("_"),
+          Type.bitstring("b-c"),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        replace4(string, pattern, replacement, Type.atom("leading")),
+      );
     });
   });
 
@@ -209,165 +226,287 @@ describe("Erlang_String", () => {
     const replace = Erlang_String["replace/4"];
     const string = Type.bitstring("Hello World !");
 
-    it("raises MatchError if the first argument is not a string", () => {
-      assertBoxedError(
-        () =>
-          replace(
-            Type.atom("hello_world"),
+    describe("direction variations", () => {
+      it("with direction :all", () => {
+        const result = replace(
+          string,
+          Type.bitstring(" "),
+          Type.bitstring("_"),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hello"),
             Type.bitstring("_"),
-            Type.bitstring(" "),
-            Type.atom("all"),
-          ),
-        "MatchError",
-        "no match of right hand side value: :hello_world",
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not a string", () => {
-      assertBoxedError(
-        () =>
-          replace(
-            Type.bitstring("Hello_World_!"),
-            Type.atom("_"),
-            Type.bitstring(" "),
-            Type.atom("all"),
-          ),
-        "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
-      );
-    });
-
-    it("raises HologramInterpreterError if third argument is not a binary", () => {
-      assert.throws(
-        () =>
-          replace(
-            string,
-            Type.bitstring(" "),
-            Type.atom("_"),
-            Type.atom("all"),
-          ),
-        HologramInterpreterError,
-        "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
-      );
-    });
-
-    it("raises CaseClauseError if the fourth argument is not a atom", () => {
-      assertBoxedError(
-        () =>
-          replace(
-            Type.bitstring("Hello World !"),
-            Type.bitstring(" "),
+            Type.bitstring("World"),
             Type.bitstring("_"),
-            Type.bitstring("all"),
+            Type.bitstring("!"),
+          ]),
+        );
+      });
+
+      it("with direction :leading", () => {
+        const result = replace(
+          string,
+          Type.bitstring(" "),
+          Type.bitstring("_"),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hello"),
+            Type.bitstring("_"),
+            Type.bitstring("World !"),
+          ]),
+        );
+      });
+
+      it("with direction :trailing", () => {
+        const result = replace(
+          string,
+          Type.bitstring(" "),
+          Type.bitstring("_"),
+          Type.atom("trailing"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hello World"),
+            Type.bitstring("_"),
+            Type.bitstring("!"),
+          ]),
+        );
+      });
+    });
+
+    describe("pattern position edge cases", () => {
+      it("when pattern is at the start of the string", () => {
+        const result = replace(
+          Type.bitstring("Hello"),
+          Type.bitstring("He"),
+          Type.bitstring("A"),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring(""),
+            Type.bitstring("A"),
+            Type.bitstring("llo"),
+          ]),
+        );
+      });
+
+      it("when pattern is at the end of the string", () => {
+        const result = replace(
+          Type.bitstring("Hello"),
+          Type.bitstring("lo"),
+          Type.bitstring("p"),
+          Type.atom("trailing"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hel"),
+            Type.bitstring("p"),
+            Type.bitstring(""),
+          ]),
+        );
+      });
+
+      it("with consecutive patterns", () => {
+        const result = replace(
+          Type.bitstring("lololo"),
+          Type.bitstring("lo"),
+          Type.bitstring("ha"),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring(""),
+            Type.bitstring("ha"),
+            Type.bitstring(""),
+            Type.bitstring("ha"),
+            Type.bitstring(""),
+            Type.bitstring("ha"),
+            Type.bitstring(""),
+          ]),
+        );
+      });
+    });
+
+    describe("input edge cases", () => {
+      it("with empty pattern", () => {
+        const result = replace(
+          string,
+          Type.bitstring(""),
+          Type.bitstring("_"),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(result, Type.list([string]));
+      });
+
+      it("when pattern is not found", () => {
+        const result = replace(
+          string,
+          Type.bitstring("."),
+          Type.bitstring("_"),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(result, Type.list([string]));
+      });
+
+      it("with empty replacement", () => {
+        const result = replace(
+          Type.bitstring("Hello World"),
+          Type.bitstring(" "),
+          Type.bitstring(""),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hello"),
+            Type.bitstring(""),
+            Type.bitstring("World"),
+          ]),
+        );
+      });
+
+      it("with unicode pattern", () => {
+        const result = replace(
+          Type.bitstring("Hello 👋 World"),
+          Type.bitstring("👋"),
+          Type.bitstring("🌍"),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hello "),
+            Type.bitstring("🌍"),
+            Type.bitstring(" World"),
+          ]),
+        );
+      });
+    });
+
+    describe("replacement type variations", () => {
+      it("accepts atom as replacement and inserts it as-is", () => {
+        const result = replace(
+          string,
+          Type.bitstring(" "),
+          Type.atom("_"),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hello"),
+            Type.atom("_"),
+            Type.bitstring("World"),
+            Type.atom("_"),
+            Type.bitstring("!"),
+          ]),
+        );
+      });
+
+      it("accepts charlist as replacement and inserts it as-is", () => {
+        const result = replace(
+          string,
+          Type.bitstring(" "),
+          Type.charlist("_"),
+          Type.atom("all"),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.bitstring("Hello"),
+            Type.charlist("_"),
+            Type.bitstring("World"),
+            Type.charlist("_"),
+            Type.bitstring("!"),
+          ]),
+        );
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises MatchError if the first argument is not valid chardata", () => {
+        const invalidArg = Type.atom("hello_world");
+
+        assertBoxedError(
+          () =>
+            replace(
+              invalidArg,
+              Type.bitstring("_"),
+              Type.bitstring(" "),
+              Type.atom("all"),
+            ),
+          "MatchError",
+          Interpreter.buildMatchErrorMsg(invalidArg),
+        );
+      });
+
+      it("raises ArgumentError if the second argument is not valid chardata", () => {
+        assertBoxedError(
+          () =>
+            replace(
+              Type.bitstring("Hello_World_!"),
+              Type.atom("_"),
+              Type.bitstring(" "),
+              Type.atom("all"),
+            ),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not valid character data (an iodata term)",
           ),
-        "CaseClauseError",
-        'no case clause matching: "all"',
-      );
-    });
+        );
+      });
 
-    it("returns unchanged string inside a list if the pattern is empty", () => {
-      const result = replace(
-        string,
-        Type.bitstring(""),
-        Type.bitstring("_"),
-        Type.atom("all"),
-      );
+      it("raises CaseClauseError if the fourth argument is not an atom", () => {
+        assertBoxedError(
+          () =>
+            replace(
+              Type.bitstring("Hello World !"),
+              Type.bitstring(" "),
+              Type.bitstring("_"),
+              Type.bitstring("all"),
+            ),
+          "CaseClauseError",
+          'no case clause matching: "all"',
+        );
+      });
 
-      assert.deepStrictEqual(result, Type.list([Bitstring.toText(string)]));
-    });
-
-    it("returns unchanged string inside a list if the pattern is not present inside the string", () => {
-      const result = replace(
-        string,
-        Type.bitstring("."),
-        Type.bitstring("_"),
-        Type.atom("all"),
-      );
-
-      assert.deepStrictEqual(result, Type.list([Bitstring.toText(string)]));
-    });
-
-    it("returns a list of each words separated by the replacement with the direction set to :all", () => {
-      const result = replace(
-        string,
-        Type.bitstring(" "),
-        Type.bitstring("_"),
-        Type.atom("all"),
-      );
-
-      assert.deepStrictEqual(
-        result,
-        Type.list(["Hello", "_", "World", "_", "!"]),
-      );
-    });
-
-    it("returns a three-elements list with the first word at the beginning and the tail at the end when the direction is set to :leading", () => {
-      const result = replace(
-        string,
-        Type.bitstring(" "),
-        Type.bitstring("_"),
-        Type.atom("leading"),
-      );
-
-      assert.deepStrictEqual(result, Type.list(["Hello", "_", "World !"]));
-    });
-
-    it("returns a three-elements list with the last word at the end and the rest at the beginning when the direction is set to :trailing", () => {
-      const result = replace(
-        string,
-        Type.bitstring(" "),
-        Type.bitstring("_"),
-        Type.atom("trailing"),
-      );
-
-      assert.deepStrictEqual(result, Type.list(["Hello World", "_", "!"]));
-    });
-
-    it("returns a list when patterns is at the start of the string", () => {
-      const result = replace(
-        Type.bitstring("Hello"),
-        Type.bitstring("He"),
-        Type.bitstring("A"),
-        Type.atom("leading"),
-      );
-
-      assert.deepStrictEqual(result, Type.list(["", "A", "llo"]));
-    });
-
-    it("returns a list when patterns is at the end of the string", () => {
-      const result = replace(
-        Type.bitstring("Hello"),
-        Type.bitstring("lo"),
-        Type.bitstring("p"),
-        Type.atom("trailing"),
-      );
-
-      assert.deepStrictEqual(result, Type.list(["Hel", "p", ""]));
-    });
-
-    it("returns a list with empty strings between consecutive pattern replacements", () => {
-      const result = replace(
-        Type.bitstring("lololo"),
-        Type.bitstring("lo"),
-        Type.bitstring("ha"),
-        Type.atom("all"),
-      );
-
-      assert.deepStrictEqual(
-        result,
-        Type.list(["", "ha", "", "ha", "", "ha", ""]),
-      );
-    });
-
-    it("correctly replaces unicode patterns (emoji)", () => {
-      const result = replace(
-        Type.bitstring("Hello 👋 World"),
-        Type.bitstring("👋"),
-        Type.bitstring("🌍"),
-        Type.atom("all"),
-      );
-
-      assert.deepStrictEqual(result, Type.list(["Hello ", "🌍", " World"]));
+      it("raises CaseClauseError if the fourth argument is an unrecognized atom", () => {
+        assertBoxedError(
+          () =>
+            replace(
+              Type.bitstring("Hello World"),
+              Type.bitstring(" "),
+              Type.bitstring("_"),
+              Type.atom("invalid"),
+            ),
+          "CaseClauseError",
+          "no case clause matching: :invalid",
+        );
+      });
     });
   });
 

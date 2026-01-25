@@ -76,63 +76,37 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "replace/3" do
-    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end" do
-      result = :string.replace("Hello World !", " ", "_")
+    test "delegates to replace/4 with :leading direction" do
+      # Use a string with multiple occurrences of the pattern to verify :leading (not :all or :trailing)
+      result = :string.replace("a-b-c", "-", "_")
 
-      assert result == ["Hello", "_", "World !"]
+      assert result == ["a", "_", "b-c"]
+      assert result == :string.replace("a-b-c", "-", "_", :leading)
     end
   end
 
   describe "replace/4" do
-    test "raise MatchError if first param is not a string" do
-      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
-        :string.replace(:hello_world, "_", " ", :all)
-      end
-    end
+    # Direction variations
 
-    test "raises ArgumentError if the second argument is not a string" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
-                   fn ->
-                     :string.replace("Hello_World_!", :_, " ", :all)
-                   end
-    end
-
-    test "raises CaseClauseError if the fourth argument is not a atom" do
-      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
-        :string.replace("Hello World !", " ", "_", "all")
-      end
-    end
-
-    test "returns unchanged string inside a list if the pattern is empty" do
-      result = :string.replace("Hello World !", "", "_", :all)
-
-      assert result == ["Hello World !"]
-    end
-
-    test "returns unchanged string inside a list if the pattern is not present inside the string" do
-      result = :string.replace("Hello World !", ".", "_", :all)
-
-      assert result == ["Hello World !"]
-    end
-
-    test "returns a list containing all the words separated by the replacement value with the direction set to :all" do
+    test "with direction :all" do
       result = :string.replace("Hello World !", " ", "_", :all)
 
       assert result == ["Hello", "_", "World", "_", "!"]
     end
 
-    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end when the direction is set to :leading" do
+    test "with direction :leading" do
       result = :string.replace("Hello World !", " ", "_", :leading)
 
       assert result == ["Hello", "_", "World !"]
     end
 
-    test "returns a three-elements list with the last word at the end, the replacement in the middle and the rest at the beginning when the direction is set to :trailing" do
+    test "with direction :trailing" do
       result = :string.replace("Hello World !", " ", "_", :trailing)
 
       assert result == ["Hello World", "_", "!"]
     end
+
+    # Pattern position edge cases
 
     test "when pattern is at the start of the string" do
       result = :string.replace("Hello", "He", "A", :leading)
@@ -146,16 +120,78 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert result == ["Hel", "p", ""]
     end
 
-    test "with consecutive pattern" do
+    test "with consecutive patterns" do
       result = :string.replace("lololo", "lo", "ha", :all)
 
       assert result == ["", "ha", "", "ha", "", "ha", ""]
+    end
+
+    # Input edge cases
+
+    test "with empty pattern" do
+      result = :string.replace("Hello World !", "", "_", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "when pattern is not found" do
+      result = :string.replace("Hello World !", ".", "_", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "with empty replacement" do
+      result = :string.replace("Hello World", " ", "", :all)
+
+      assert result == ["Hello", "", "World"]
     end
 
     test "with unicode pattern" do
       result = :string.replace("Hello 👋 World", "👋", "🌍", :all)
 
       assert result == ["Hello ", "🌍", " World"]
+    end
+
+    # Replacement type variations
+
+    test "accepts atom as replacement and inserts it as-is" do
+      result = :string.replace("Hello World !", " ", :_, :all)
+
+      assert result == ["Hello", :_, "World", :_, "!"]
+    end
+
+    test "accepts charlist as replacement and inserts it as-is" do
+      result = :string.replace("Hello World !", " ", ~c"_", :all)
+
+      assert result == ["Hello", ~c"_", "World", ~c"_", "!"]
+    end
+
+    # Error cases
+
+    test "raises MatchError if the first argument is not valid chardata" do
+      assert_error MatchError, build_match_error_msg(:hello_world), fn ->
+        :string.replace(:hello_world, "_", " ", :all)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not valid chardata" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.replace("Hello_World_!", :_, " ", :all)
+                   end
+    end
+
+    test "raises CaseClauseError if the fourth argument is not an atom" do
+      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+        :string.replace("Hello World !", " ", "_", "all")
+      end
+    end
+
+    test "raises CaseClauseError if the fourth argument is an unrecognized atom" do
+      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
+        :string.replace("Hello World", " ", "_", :invalid)
+      end
     end
   end
 
