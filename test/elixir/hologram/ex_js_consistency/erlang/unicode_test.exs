@@ -342,96 +342,177 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
   end
 
   describe "characters_to_nfc_list/1" do
-    test "empty list" do
-      assert :unicode.characters_to_nfc_list([]) == []
+    test "normalizes combining characters to NFC" do
+      assert :unicode.characters_to_nfc_list([?a, 0x030A]) == [229]
     end
 
-    test "empty binary" do
-      assert :unicode.characters_to_nfc_list(<<>>) == []
-    end
-
-    test "ASCII text as binary" do
-      assert :unicode.characters_to_nfc_list(<<"abc">>) == ~c"abc"
-    end
-
-    test "ASCII text as list of codepoints" do
-      assert :unicode.characters_to_nfc_list([?a, ?b, ?c]) == ~c"abc"
-    end
-
-    test "combining characters - a + combining ring above (778) becomes å (229)" do
-      assert :unicode.characters_to_nfc_list([?a, 778]) == [229]
-    end
-
-    test "already composed character å (229) stays as is" do
+    test "handles already normalized text" do
       assert :unicode.characters_to_nfc_list([229]) == [229]
     end
 
-    test "multiple combining characters" do
-      # "abc..a" + ring + "a" + diaeresis + "o" + diaeresis
-      input = [<<"abc..a">>, 778, ?a, 776, ?o, 776]
-      result = :unicode.characters_to_nfc_list(input)
-      expected = [?a, ?b, ?c, ?., ?., 229, 228, 246]
-      assert result == expected
+    test "normalizes nested chardata" do
+      input = [<<"abc..a">>, 0x030A, [?a], 0x0308, "o", 0x0308]
+
+      assert :unicode.characters_to_nfc_list(input) == [?a, ?b, ?c, ?., ?., 229, 228, 246]
     end
 
-    test "nested list" do
-      assert :unicode.characters_to_nfc_list([[?a, ?b]]) == ~c"ab"
+    test "handles empty binary" do
+      assert :unicode.characters_to_nfc_list(<<>>) == []
     end
 
-    test "list with binaries" do
-      assert :unicode.characters_to_nfc_list([<<"ab">>, [?c]]) == ~c"abc"
+    test "handles empty list" do
+      assert :unicode.characters_to_nfc_list([]) == []
     end
 
-    test "combining characters in binary (UTF-8 encoded)" do
-      # a (97) + combining ring (778) encoded as UTF-8: <<97, 204, 138>>
-      assert :unicode.characters_to_nfc_list(<<97, 204, 138>>) == [229]
+    test "handles deeply nested lists" do
+      input = [[[?a, 0x030A]]]
+
+      assert :unicode.characters_to_nfc_list(input) == [229]
     end
 
-    test "invalid codepoint (too large)" do
-      input = [1_114_113]
+    test "handles multiple combining marks" do
+      input = [?o, 0x0308, 0x0304]
 
-      assert_raise ArgumentError, ~r/not valid character data/, fn ->
+      # Normalized form combines these in canonical order
+      assert :unicode.characters_to_nfc_list(input) == [0x022B]
+    end
+
+    test "handles large input" do
+      str = String.duplicate("abcdefghij", 100)
+      large_input = String.to_charlist(str)
+
+      assert :unicode.characters_to_nfc_list(large_input) == large_input
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = ["hello", " ", [?a, 0x030A], " world"]
+
+      assert :unicode.characters_to_nfc_list(input) == [
+               ?h,
+               ?e,
+               ?l,
+               ?l,
+               ?o,
+               ?\s,
+               229,
+               ?\s,
+               ?w,
+               ?o,
+               ?r,
+               ?l,
+               ?d
+             ]
+    end
+
+    test "preserves non-combining characters" do
+      input = [0x3042, 0x3044]
+
+      assert :unicode.characters_to_nfc_list(input) == [0x3042, 0x3044]
+    end
+
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = [<<"abc">>, invalid_binary]
+      expected = {:error, ~c"abc", invalid_binary}
+
+      assert :unicode.characters_to_nfc_list(input) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = [<<"a">>, invalid_binary]
+
+      expected = {:error, ~c"a", invalid_binary}
+
+      assert :unicode.characters_to_nfc_list(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = [<<"a">>, invalid_binary]
+
+      expected = {:error, ~c"a", invalid_binary}
+
+      assert :unicode.characters_to_nfc_list(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = [<<"a">>, invalid_binary]
+
+      expected = {:error, ~c"a", invalid_binary}
+
+      assert :unicode.characters_to_nfc_list(input) == expected
+    end
+
+    test "returns error tuple for truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+
+      input = [<<"a">>, incomplete_binary]
+
+      expected = {:error, ~c"a", incomplete_binary}
+
+      assert :unicode.characters_to_nfc_list(input) == expected
+    end
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_list(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfc_list(input)
       end
     end
 
-    test "invalid codepoint (negative)" do
-      input = [-1]
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
 
-      assert_raise ArgumentError, ~r/not valid character data/, fn ->
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfc_list(input)
       end
     end
 
-    test "invalid UTF-8 binary" do
-      invalid_utf8 = <<0xFF, 0xFE>>
-      result = :unicode.characters_to_nfc_list(invalid_utf8)
-      expected = {:error, [], invalid_utf8}
-      assert result == expected
+    test "raises ArgumentError on invalid code point before normalization" do
+      input = [97, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_list(input)
+      end
     end
 
-    test "valid data followed by invalid UTF-8" do
-      invalid_utf8 = <<0xFF, 0xFE>>
-      input = [<<"abc">>, invalid_utf8]
-      result = :unicode.characters_to_nfc_list(input)
-      expected = {:error, ~c"abc", invalid_utf8}
-      assert result == expected
-    end
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = [[?a, 0x030A], 0x110000]
 
-    test "non-chardata input (atom)" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
-                   fn ->
-                     :unicode.characters_to_nfc_list(:abc)
-                   end
-    end
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
 
-    test "non-chardata input (float)" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
-                   fn ->
-                     :unicode.characters_to_nfc_list(123.45)
-                   end
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_list(input)
+      end
     end
   end
 

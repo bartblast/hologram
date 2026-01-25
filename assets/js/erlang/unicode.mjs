@@ -330,18 +330,8 @@ const Erlang_Unicode = {
       ]);
     };
 
-    // Handles invalid codepoint errors. Raises ArgumentError if no valid data
-    // exists yet (matching Erlang behavior), otherwise returns error tuple.
-    const handleInvalidCodepoint = (chunks, remainingElems) => {
-      // No valid data before error - raise ArgumentError (matching Erlang)
-      if (chunks.length === 0) {
-        raiseInvalidChardataError();
-      }
-      // Normalize valid prefix and return error tuple
-      const validBinary = Bitstring.concat(chunks);
-      const codepoints = convertBinaryToNormalizedCodepoints(validBinary);
-      return createErrorTuple(codepoints, Type.list(remainingElems));
-    };
+    // Invalid integer codepoints must raise ArgumentError (Erlang semantics).
+    // We raise directly where detected instead of delegating through a helper.
 
     // Handles invalid UTF-8 errors. Always returns error tuple (invalid UTF-8
     // in binaries returns tuples, not exceptions), even if no valid data exists.
@@ -375,11 +365,7 @@ const Erlang_Unicode = {
       // Process integer elements (guaranteed integer at this point)
       const isValidCodepoint = Bitstring.validateCodePoint(elem.value);
       if (!isValidCodepoint) {
-        const remainingElems = flatData.slice(index);
-        return {
-          type: "error",
-          data: handleInvalidCodepoint(chunks, remainingElems),
-        };
+        raiseInvalidChardataError();
       }
       return {type: "valid", data: convertCodepointToBinary(elem)};
     };
