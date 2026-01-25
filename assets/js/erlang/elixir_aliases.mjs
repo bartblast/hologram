@@ -3,7 +3,6 @@
 import Bitstring from "../bitstring.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
-import Erlang from "./erlang.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
@@ -65,19 +64,16 @@ const Erlang_Elixir_Aliases = {
   },
   // End concat/1
   // Deps: []
-  // Note: due to dependency on :erlang.binary_to_existing_atom/1 the behaviour of the client version is inconsistent
-  // with the server version.
-  // The client version works exactly the same as concat/1.
+  // Note: there's no atom table limitation in the client-side JavaScript runtime,
+  // safe_concat/1 can simply delegate directly to concat/1.
   // Start safe_concat/1
   "safe_concat/1": function (segments) {
-    const concat_atom = Erlang_Elixir_Aliases["concat/1"](segments);
-    const concat_result = Erlang["atom_to_binary/1"](concat_atom);
-    const result = Erlang["binary_to_existing_atom/1"](concat_result);
+    const result = Erlang_Elixir_Aliases["concat/1"](segments);
 
     return result;
   },
   // End safe_concat/1
-  // Deps: [:elixir_aliases.concat/1, :erlang.atom_to_binary/1, :erlang.binary_to_existing_atom/1]
+  // Deps: [:elixir_aliases.concat/1]
 };
 
 export default Erlang_Elixir_Aliases;

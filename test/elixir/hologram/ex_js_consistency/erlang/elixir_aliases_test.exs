@@ -83,8 +83,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
     end
   end
 
-  # Note: due to dependency on :erlang.binary_to_existing_atom/1 the behaviour of the client version is inconsistent
-  # with the server version.
-  # The client version works exactly the same as concat/1.
+  # Note: there's no atom table limitation in the client-side JavaScript runtime,
+  # safe_concat/1 can simply delegate directly to concat/1.
   # test "safe_concat/1"
 end
