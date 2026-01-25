@@ -5570,6 +5570,12 @@ describe("Erlang", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+    
+    it("empty list", () => {
+      const result = list_to_tuple(Type.list());
+
+      assert.deepStrictEqual(result, Type.tuple());
+    });
 
     it("raises ArgumentError if the argument is not a list", () => {
       assertBoxedError(
