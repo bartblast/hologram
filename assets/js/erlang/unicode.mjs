@@ -450,7 +450,11 @@ const Erlang_Unicode = {
 
     // Valid binary - check for UTF-8 validity then normalize
     const text = Bitstring.toText(converted);
-    if (text === false) return handleInvalidUtf8(converted.bytes);
+
+    if (text === false) {
+      const bytes = converted.bytes ?? new Uint8Array(0);
+      return handleInvalidUtf8(bytes);
+    }
 
     const normalized = text.normalize("NFC");
 
