@@ -10,12 +10,12 @@ defmodule Hologram.MixProject do
   def aliases do
     [
       eslint:
-        "cmd npx eslint --color --config assets/eslint.config.mjs assets/js/**/*.mjs benchmarks/javascript/**/*.mjs scripts/**/*.mjs test/javascript/**/*.mjs --no-error-on-unmatched-pattern",
-      f: ["format", "format.js", "cmd --cd test/features mix format"],
+        "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** scripts/** test/javascript/** --no-error-on-unmatched-pattern",
+      f: ["format", "format.js", "cmd cd test/features && mix format"],
       "format.js":
-        "cmd npx prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**/*.mjs' 'benchmarks/javascript/**/*.mjs' 'scripts/**/*.mjs' 'test/javascript/**/*.mjs' --config 'assets/.prettierrc.json' --write",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
       "format.js.check":
-        "cmd npx prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**/*.mjs' 'benchmarks/javascript/**/*.mjs' 'scripts/**/*.mjs' 'test/javascript/**/*.mjs' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
       setup: [
         "deps.get",
         "cmd --cd assets npm install",
