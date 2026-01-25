@@ -1448,18 +1448,19 @@ const Erlang = {
     const minute = now.getMinutes();
     const second = now.getSeconds();
 
-    const dateTime = Type.tuple([
+    const date = Type.tuple([
       Type.integer(year),
       Type.integer(month),
       Type.integer(day),
     ]);
+
     const time = Type.tuple([
       Type.integer(hour),
       Type.integer(minute),
       Type.integer(second),
     ]);
 
-    return Type.tuple([dateTime, time]);
+    return Type.tuple([date, time]);
   },
   // End localtime/0
   // Deps: []
