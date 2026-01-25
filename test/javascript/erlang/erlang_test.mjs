@@ -5558,6 +5558,44 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_tuple/1", () => {
+    const list_to_tuple = Erlang["list_to_tuple/1"];
+
+    it("returns a tuple corresponding to the given list", () => {
+      const data = [Type.integer(1), Type.integer(2), Type.integer(3)];
+      const list = Type.list(data);
+
+      const result = list_to_tuple(list);
+      const expected = Type.tuple(data);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list", () => {
+      const result = list_to_tuple(Type.list());
+
+      assert.deepStrictEqual(result, Type.tuple());
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_tuple(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is an improper list", () => {
+      const list = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => list_to_tuple(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+  });
+
   describe("localtime/0", () => {
     const localtime = Erlang["localtime/0"];
 

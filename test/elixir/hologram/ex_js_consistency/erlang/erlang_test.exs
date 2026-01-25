@@ -3464,6 +3464,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_tuple/1" do
+    test "returns a tuple corresponding to the given list" do
+      assert :erlang.list_to_tuple([1, 2, 3]) == {1, 2, 3}
+    end
+
+    test "empty list" do
+      assert :erlang.list_to_tuple([]) == {}
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_tuple, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_tuple, [[1, 2 | 3]]}
+    end
+  end
+
   describe "localtime/0" do
     test "returns a tuple with date and time" do
       assert {{year, month, day}, {hour, minute, second}} = :erlang.localtime()

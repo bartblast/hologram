@@ -1436,6 +1436,18 @@ const Erlang = {
   // End list_to_ref/1
   // Deps: []
 
+  // Start list_to_tuple/1
+  "list_to_tuple/1": (list) => {
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+    return Type.tuple(list.data);
+  },
+  // End list_to_tuple/1
+  // Deps: []
+
   // Start localtime/0
   "localtime/0": () => {
     const now = new Date();
