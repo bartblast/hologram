@@ -18,13 +18,12 @@ defmodule Hologram.Compiler.CallGraph do
 
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
-    {{:binary, :_aho_corasick_pattern_matcher, 1}, {:erlang, :make_ref, 0}},
-    {{:binary, :_aho_corasick_search, 3}, {:binary, :_parse_search_opts, 1}},
-    {{:binary, :_boyer_moore_pattern_matcher, 1}, {:erlang, :make_ref, 0}},
-    {{:binary, :_boyer_moore_search, 3}, {:binary, :_parse_search_opts, 1}},
-    {{:binary, :_parse_search_opts, 1}, {:lists, :keyfind, 3}},
-    {{:binary, :compile_pattern, 1}, {:binary, :_aho_corasick_pattern_matcher, 1}},
-    {{:binary, :compile_pattern, 1}, {:binary, :_boyer_moore_pattern_matcher, 1}},
+    {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
+    {{:binary, :split, 2}, {:binary, :split, 3}},
+    {{:binary, :split, 3}, {:binary, :_aho_corasick_search, 3}},
+    {{:binary, :split, 3}, {:binary, :_boyer_moore_search, 4}},
+    {{:binary, :split, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :split, 3}, {:binary, :compile_pattern, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
@@ -72,10 +71,13 @@ defmodule Hologram.Compiler.CallGraph do
     {{:sets, :is_subset, 2}, {:sets, :to_list, 1}},
     {{:sets, :new, 1}, {:sets, :_validate_opts, 1}},
     {{:sets, :to_list, 1}, {:maps, :keys, 1}},
+    {{:string, :replace, 3}, {:string, :replace, 4}},
+    {{:string, :replace, 4}, {:unicode, :characters_to_binary, 1}},
     {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
     {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
+    {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}},
+    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :characters_to_binary, 3}}
   ]
 
   # These functions are transpiled manually for at least one of the following reasons:

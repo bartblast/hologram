@@ -269,6 +269,7 @@ export default class Type {
     );
   }
 
+  // TODO: check if the pattern is in the ERTS binary patterns registry
   static isCompiledPattern(term) {
     if (!Type.isTuple(term)) return false;
 

@@ -75,6 +75,90 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
   end
 
+  describe "replace/3" do
+    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end" do
+      result = :string.replace("Hello World !", " ", "_")
+
+      assert result == ["Hello", "_", "World !"]
+    end
+  end
+
+  describe "replace/4" do
+    test "raise MatchError if first param is not a string" do
+      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
+        :string.replace(:hello_world, "_", " ", :all)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.replace("Hello_World_!", :_, " ", :all)
+                   end
+    end
+
+    test "raises CaseClauseError if the fourth argument is not a atom" do
+      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+        :string.replace("Hello World !", " ", "_", "all")
+      end
+    end
+
+    test "returns unchanged string inside a list if the pattern is empty" do
+      result = :string.replace("Hello World !", "", "_", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "returns unchanged string inside a list if the pattern is not present inside the string" do
+      result = :string.replace("Hello World !", ".", "_", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "returns a list containing all the words separated by the replacement value with the direction set to :all" do
+      result = :string.replace("Hello World !", " ", "_", :all)
+
+      assert result == ["Hello", "_", "World", "_", "!"]
+    end
+
+    test "returns a three-elements list with the first word at the beginning, the replacement in the middle and the tail at the end when the direction is set to :leading" do
+      result = :string.replace("Hello World !", " ", "_", :leading)
+
+      assert result == ["Hello", "_", "World !"]
+    end
+
+    test "returns a three-elements list with the last word at the end, the replacement in the middle and the rest at the beginning when the direction is set to :trailing" do
+      result = :string.replace("Hello World !", " ", "_", :trailing)
+
+      assert result == ["Hello World", "_", "!"]
+    end
+
+    test "when pattern is at the start of the string" do
+      result = :string.replace("Hello", "He", "A", :leading)
+
+      assert result == ["", "A", "llo"]
+    end
+
+    test "when pattern is at the end of the string" do
+      result = :string.replace("Hello", "lo", "p", :trailing)
+
+      assert result == ["Hel", "p", ""]
+    end
+
+    test "with consecutive pattern" do
+      result = :string.replace("lololo", "lo", "ha", :all)
+
+      assert result == ["", "ha", "", "ha", "", "ha", ""]
+    end
+
+    test "with unicode pattern" do
+      result = :string.replace("Hello 👋 World", "👋", "🌍", :all)
+
+      assert result == ["Hello ", "🌍", " World"]
+    end
+  end
+
   describe "titlecase/1" do
     # Section: with binary input
 

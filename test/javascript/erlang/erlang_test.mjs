@@ -5595,6 +5595,49 @@ describe("Erlang", () => {
       );
     });
   });
+  describe("localtime/0", () => {
+    const localtime = Erlang["localtime/0"];
+
+    it("returns a tuple with date and time", () => {
+      // Type checks
+
+      const result = localtime();
+      assert.isTrue(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 2);
+
+      const date = result.data[0];
+      assert.isTrue(Type.isTuple(date));
+      assert.strictEqual(date.data.length, 3);
+
+      const [year, month, day] = date.data;
+      assert.isTrue(Type.isInteger(year));
+      assert.isTrue(Type.isInteger(month));
+      assert.isTrue(Type.isInteger(day));
+
+      const time = result.data[1];
+      assert.isTrue(Type.isTuple(time));
+      assert.strictEqual(time.data.length, 3);
+
+      const [hour, minute, second] = time.data;
+      assert.isTrue(Type.isInteger(hour));
+      assert.isTrue(Type.isInteger(minute));
+      assert.isTrue(Type.isInteger(second));
+
+      // Range checks
+      assert.isAtLeast(year.value, 1970n);
+      assert.isAtMost(year.value, 2100n);
+      assert.isAtLeast(month.value, 1n);
+      assert.isAtMost(month.value, 12n);
+      assert.isAtLeast(day.value, 1n);
+      assert.isAtMost(day.value, 31n);
+      assert.isAtLeast(hour.value, 0n);
+      assert.isAtMost(hour.value, 23n);
+      assert.isAtLeast(minute.value, 0n);
+      assert.isAtMost(minute.value, 59n);
+      assert.isAtLeast(second.value, 0n);
+      assert.isAtMost(second.value, 59n);
+    });
+  });
 
   describe("make_ref/0", () => {
     const make_ref = Erlang["make_ref/0"];
