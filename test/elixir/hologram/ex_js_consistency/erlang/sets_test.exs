@@ -293,6 +293,82 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "is_disjoint/2" do
+    setup do
+      [
+        empty_set: :sets.new(version: 2),
+        set_123: :sets.from_list([1, 2, 3], version: 2)
+      ]
+    end
+
+    test "returns true if two sets have no common elements (primitives)" do
+      set1 = :sets.from_list([1, 2], version: 2)
+      set2 = :sets.from_list([3], version: 2)
+
+      assert :sets.is_disjoint(set1, set2) == true
+    end
+
+    test "returns true if two sets have no common elements (objects)" do
+      set1 = :sets.from_list([{1, 2}, {3, 4}], version: 2)
+      set2 = :sets.from_list([{5, 6}], version: 2)
+
+      assert :sets.is_disjoint(set1, set2) == true
+    end
+
+    test "returns false if two sets have common elements (primitives)" do
+      set1 = :sets.from_list([1, 2], version: 2)
+      set2 = :sets.from_list([2, 3], version: 2)
+
+      assert :sets.is_disjoint(set1, set2) == false
+    end
+
+    test "returns false if two sets have common elements (objects)" do
+      set1 = :sets.from_list([{1, 2}, {3, 4}], version: 2)
+      set2 = :sets.from_list([{3, 4}, {5, 6}], version: 2)
+
+      assert :sets.is_disjoint(set1, set2) == false
+    end
+
+    test "returns true if both sets are empty", %{empty_set: empty_set} do
+      assert :sets.is_disjoint(empty_set, empty_set) == true
+    end
+
+    test "returns true if first set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_disjoint(empty_set, set_123) == true
+    end
+
+    test "returns true if second set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_disjoint(set_123, empty_set) == true
+    end
+
+    test "returns false if sets are identical", %{set_123: set_123} do
+      assert :sets.is_disjoint(set_123, set_123) == false
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set_int = :sets.from_list([1], version: 2)
+      set_float = :sets.from_list([1.0], version: 2)
+
+      assert :sets.is_disjoint(set_int, set_float) == true
+    end
+
+    test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
+      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_disjoint(:abc, set_123)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
+      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_disjoint(set_123, :abc)
+      end
+    end
+  end
+
   describe "is_element/2" do
     test "returns true if element is in the set" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])

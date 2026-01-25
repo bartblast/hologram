@@ -146,6 +146,24 @@ const Erlang_Sets = {
   // End from_list/2
   // Deps: [:maps.from_keys/2, :sets._validate_opts/1]
 
+  // Start is_disjoint/2
+  "is_disjoint/2": (set1, set2) => {
+    if (!Type.isMap(set1) || !Type.isMap(set2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
+          !Type.isMap(set1) ? set1 : set2,
+        ]),
+      );
+    }
+
+    const encodedKeys1 = new Set(Object.keys(set1.data));
+    const encodedKeys2 = new Set(Object.keys(set2.data));
+
+    return Type.boolean(encodedKeys1.isDisjointFrom(encodedKeys2));
+  },
+  // End is_disjoint/2
+  // Deps: []
+  //
   // Start is_element/2
   "is_element/2": (element, set) => {
     if (!Type.isMap(set)) {
