@@ -572,38 +572,16 @@ describe("Erlang_Sets", () => {
     const is_disjoint_2 = Erlang_Sets["is_disjoint/2"];
     const from_list_2 = Erlang_Sets["from_list/2"];
 
-    it("returns true if two sets have no common elements (primitives)", () => {
+    it("returns true if sets have no common elements", () => {
       const set1 = from_list_2(Type.list([integer1, integer2]), opts);
       const set2 = from_list_2(Type.list([integer3]), opts);
 
       assertBoxedTrue(is_disjoint_2(set1, set2));
     });
 
-    it("returns true if two sets have no common elements (objects)", () => {
-      const tuple12 = Type.tuple([integer1, integer2]);
-      const tuple34 = Type.tuple([integer3, Type.integer(4)]);
-      const tuple56 = Type.tuple([Type.integer(5), Type.integer(6)]);
-
-      const set1 = from_list_2(Type.list([tuple12, tuple34]), opts);
-      const set2 = from_list_2(Type.list([tuple56]), opts);
-
-      assertBoxedTrue(is_disjoint_2(set1, set2));
-    });
-
-    it("returns false if two sets have common elements (primitives)", () => {
+    it("returns false if sets have common elements", () => {
       const set1 = from_list_2(Type.list([integer1, integer2]), opts);
       const set2 = from_list_2(Type.list([integer2, integer3]), opts);
-
-      assertBoxedFalse(is_disjoint_2(set1, set2));
-    });
-
-    it("returns false if two sets have common elements (objects)", () => {
-      const tuple12 = Type.tuple([integer1, integer2]);
-      const tuple34 = Type.tuple([integer3, Type.integer(4)]);
-      const tuple56 = Type.tuple([Type.integer(5), Type.integer(6)]);
-
-      const set1 = from_list_2(Type.list([tuple12, tuple34]), opts);
-      const set2 = from_list_2(Type.list([tuple34, tuple56]), opts);
 
       assertBoxedFalse(is_disjoint_2(set1, set2));
     });

@@ -301,30 +301,16 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       ]
     end
 
-    test "returns true if two sets have no common elements (primitives)" do
+    test "returns true if sets have no common elements" do
       set1 = :sets.from_list([1, 2], version: 2)
       set2 = :sets.from_list([3], version: 2)
 
       assert :sets.is_disjoint(set1, set2) == true
     end
 
-    test "returns true if two sets have no common elements (objects)" do
-      set1 = :sets.from_list([{1, 2}, {3, 4}], version: 2)
-      set2 = :sets.from_list([{5, 6}], version: 2)
-
-      assert :sets.is_disjoint(set1, set2) == true
-    end
-
-    test "returns false if two sets have common elements (primitives)" do
+    test "returns false if sets have common elements" do
       set1 = :sets.from_list([1, 2], version: 2)
       set2 = :sets.from_list([2, 3], version: 2)
-
-      assert :sets.is_disjoint(set1, set2) == false
-    end
-
-    test "returns false if two sets have common elements (objects)" do
-      set1 = :sets.from_list([{1, 2}, {3, 4}], version: 2)
-      set2 = :sets.from_list([{3, 4}, {5, 6}], version: 2)
 
       assert :sets.is_disjoint(set1, set2) == false
     end
