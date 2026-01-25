@@ -531,35 +531,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfkc_binary(input) == "å"
     end
 
-    test "raises ArgumentError on invalid code point" do
-      input = [97, 0x110000]
-
-      expected_msg =
-        build_argument_error_msg(1, "not valid character data (an iodata term)")
-
-      assert_error ArgumentError, expected_msg, fn ->
-        :unicode.characters_to_nfkc_binary(input)
-      end
-    end
-
-    test "returns error tuple on invalid UTF-8 in binary" do
-      invalid_binary = <<255, 255>>
-      input = ["abc", invalid_binary]
-      expected = {:error, "abc", invalid_binary}
-      assert :unicode.characters_to_nfkc_binary(input) == expected
-    end
-
-    test "raises ArgumentError on invalid code point after normalization" do
-      input = ["a", 0x030A, 0x110000]
-
-      expected_msg =
-        build_argument_error_msg(1, "not valid character data (an iodata term)")
-
-      assert_error ArgumentError, expected_msg, fn ->
-        :unicode.characters_to_nfkc_binary(input)
-      end
-    end
-
     test "handles multiple combining marks" do
       input = ["o", 0x0308, 0x0304]
       # Normalized form combines these in canonical order
@@ -597,6 +568,13 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       # NFKC normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
       input = "\uFF21"
       assert :unicode.characters_to_nfkc_binary(input) == "A"
+    end
+
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+      assert :unicode.characters_to_nfkc_binary(input) == expected
     end
 
     test "rejects overlong encoding (2-byte for ASCII)" do
@@ -653,6 +631,59 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       input = ["test", truncated_binary]
       expected = {:error, "test", truncated_binary}
       assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point before normalization" do
+      input = [97, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = ["a", 0x030A, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
     end
   end
 end
