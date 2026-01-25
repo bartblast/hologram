@@ -5561,7 +5561,7 @@ describe("Erlang", () => {
   describe("list_to_tuple/1", () => {
     const list_to_tuple = Erlang["list_to_tuple/1"];
 
-    it("returns a tuple corresponding to the given list", () => {
+    it("non-empty list", () => {
       const data = [Type.integer(1), Type.integer(2), Type.integer(3)];
       const list = Type.list(data);
 
@@ -5586,7 +5586,11 @@ describe("Erlang", () => {
     });
 
     it("raises ArgumentError if the argument is an improper list", () => {
-      const list = Type.improperList([Type.integer(1), Type.integer(2)]);
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
 
       assertBoxedError(
         () => list_to_tuple(list),

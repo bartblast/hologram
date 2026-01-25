@@ -3465,7 +3465,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "list_to_tuple/1" do
-    test "returns a tuple corresponding to the given list" do
+    test "non-empty list" do
       assert :erlang.list_to_tuple([1, 2, 3]) == {1, 2, 3}
     end
 
