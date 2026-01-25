@@ -1183,51 +1183,6 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
     });
 
-    it("raises ArgumentError on invalid code point", () => {
-      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
-
-      assertBoxedError(
-        () => fun(input),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
-    });
-
-    it("returns error tuple on invalid UTF-8 in binary", () => {
-      const invalidBinary = Bitstring.fromBytes([255, 255]);
-      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
-
-      const result = fun(input);
-
-      const expected = Type.tuple([
-        Type.atom("error"),
-        Type.bitstring("abc"),
-        invalidBinary,
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("raises ArgumentError on invalid code point after normalization", () => {
-      const input = Type.list([
-        Type.bitstring("a"),
-        Type.integer(0x030a),
-        Type.integer(0x110000),
-      ]);
-
-      assertBoxedError(
-        () => fun(input),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
-    });
-
     it("handles multiple combining marks", () => {
       const input = Type.list([
         Type.bitstring("o"),
@@ -1294,6 +1249,21 @@ describe("Erlang_Unicode", () => {
       const input = Type.bitstring("\uFF21"); // Ａ FULLWIDTH LATIN CAPITAL LETTER A
       const result = fun(input);
       assert.deepStrictEqual(result, Type.bitstring("A"));
+    });
+
+    it("returns error tuple on invalid UTF-8 in binary", () => {
+      const invalidBinary = Bitstring.fromBytes([255, 255]);
+      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abc"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("rejects overlong encoding (2-byte for ASCII)", () => {
@@ -1406,6 +1376,73 @@ describe("Erlang_Unicode", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError when input is not a list or a bitstring", () => {
+      assertBoxedError(
+        () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input is a non-binary bitstring", () => {
+      const input = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input list contains invalid types", () => {
+      const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point before normalization", () => {
+      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point after normalization", () => {
+      const input = Type.list([
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.integer(0x110000),
+      ]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
     });
   });
 });
