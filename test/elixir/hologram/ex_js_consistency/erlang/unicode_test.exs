@@ -192,6 +192,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "normalizes nested chardata" do
       input = ["abc..", ["a", 0x030A], "a", [0x0308], "o", 0x0308]
+
       assert :unicode.characters_to_nfc_binary(input) == "abc..åäö"
     end
 
@@ -205,11 +206,98 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "handles deeply nested lists" do
       input = [[["a", 0x030A]]]
+
       assert :unicode.characters_to_nfc_binary(input) == "å"
     end
 
-    test "raises ArgumentError on invalid code point" do
-      input = [97, 0x110000]
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
+    test "returns error tuple for truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+
+      input = ["a", incomplete_binary]
+
+      expected = {:error, "a", incomplete_binary}
+
+      assert :unicode.characters_to_nfc_binary(input) == expected
+    end
+
+    test "handles multiple combining marks" do
+      input = ["o", 0x0308, 0x0304]
+
+      # Normalized form combines these in canonical order
+      assert :unicode.characters_to_nfc_binary(input) == "ȫ"
+    end
+
+    test "handles large input" do
+      large_input = String.duplicate("abcdefghij", 100)
+
+      assert :unicode.characters_to_nfc_binary(large_input) == large_input
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = ["hello", " ", "a", 0x030A, " world"]
+
+      assert :unicode.characters_to_nfc_binary(input) == "hello å world"
+    end
+
+    test "preserves non-combining characters" do
+      input = [0x3042, 0x3044]
+
+      assert :unicode.characters_to_nfc_binary(input) == "あい"
+    end
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_binary(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
 
       expected_msg =
         build_argument_error_msg(1, "not valid character data (an iodata term)")
@@ -219,35 +307,26 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       end
     end
 
-    test "returns error tuple on invalid UTF-8 in binary" do
-      invalid_binary = <<255, 255>>
-      input = ["abc", invalid_binary]
-      expected = {:error, "abc", invalid_binary}
-      assert :unicode.characters_to_nfc_binary(input) == expected
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_binary(input)
+      end
     end
 
-    test "rejects overlong UTF-8 sequence in binary" do
-      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
-      invalid_binary = <<0xC0, 0x80>>
-      input = ["a", invalid_binary]
-      expected = {:error, "a", invalid_binary}
-      assert :unicode.characters_to_nfc_binary(input) == expected
-    end
+    test "raises ArgumentError on invalid code point before normalization" do
+      input = [97, 0x110000]
 
-    test "rejects UTF-16 surrogate range in binary" do
-      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
-      invalid_binary = <<0xED, 0xA0, 0x80>>
-      input = ["a", invalid_binary]
-      expected = {:error, "a", invalid_binary}
-      assert :unicode.characters_to_nfc_binary(input) == expected
-    end
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
 
-    test "rejects code points above U+10FFFF in binary" do
-      # Leader 0xF5 starts sequences above Unicode max (invalid)
-      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
-      input = ["a", invalid_binary]
-      expected = {:error, "a", invalid_binary}
-      assert :unicode.characters_to_nfc_binary(input) == expected
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_binary(input)
+      end
     end
 
     test "raises ArgumentError on invalid code point after normalization" do
@@ -259,35 +338,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfc_binary(input)
       end
-    end
-
-    test "returns error tuple for truncated UTF-8 sequence" do
-      # First two bytes of a 3-byte sequence (incomplete)
-      incomplete_binary = <<0xE4, 0xB8>>
-      input = ["a", incomplete_binary]
-      expected = {:error, "a", incomplete_binary}
-      assert :unicode.characters_to_nfc_binary(input) == expected
-    end
-
-    test "handles multiple combining marks" do
-      input = ["o", 0x0308, 0x0304]
-      # Normalized form combines these in canonical order
-      assert :unicode.characters_to_nfc_binary(input) == "ȫ"
-    end
-
-    test "handles large input" do
-      large_input = String.duplicate("abcdefghij", 100)
-      assert :unicode.characters_to_nfc_binary(large_input) == large_input
-    end
-
-    test "handles mixed ASCII and Unicode" do
-      input = ["hello", " ", "a", 0x030A, " world"]
-      assert :unicode.characters_to_nfc_binary(input) == "hello å world"
-    end
-
-    test "preserves non-combining characters" do
-      input = [0x3042, 0x3044]
-      assert :unicode.characters_to_nfc_binary(input) == "あい"
     end
   end
 end

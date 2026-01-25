@@ -298,12 +298,14 @@ describe("Erlang_Unicode", () => {
     it("normalizes combining characters to NFC", () => {
       const input = Type.bitstring("a\u030a");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("å"));
     });
 
     it("handles already normalized text", () => {
       const input = Type.bitstring("åäö");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("åäö"));
     });
 
@@ -325,12 +327,14 @@ describe("Erlang_Unicode", () => {
     it("handles empty binary", () => {
       const input = Type.bitstring("");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
     it("handles empty list", () => {
       const input = Type.list();
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
@@ -342,19 +346,6 @@ describe("Erlang_Unicode", () => {
       const result = fun(input);
 
       assert.deepStrictEqual(result, Type.bitstring("å"));
-    });
-
-    it("raises ArgumentError on invalid code point", () => {
-      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
-
-      assertBoxedError(
-        () => fun(input),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
     });
 
     it("returns error tuple on invalid UTF-8 in binary", () => {
@@ -375,6 +366,7 @@ describe("Erlang_Unicode", () => {
     it("rejects overlong UTF-8 sequence in binary", () => {
       // Overlong encoding of NUL: 0xC0 0x80 (invalid)
       const invalidBinary = Bitstring.fromBytes([0xc0, 0x80]);
+
       const input = Type.list([Type.bitstring("a"), invalidBinary]);
 
       const result = fun(input);
@@ -391,6 +383,7 @@ describe("Erlang_Unicode", () => {
     it("rejects UTF-16 surrogate range in binary", () => {
       // CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
       const invalidBinary = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+
       const input = Type.list([Type.bitstring("a"), invalidBinary]);
 
       const result = fun(input);
@@ -407,6 +400,7 @@ describe("Erlang_Unicode", () => {
     it("rejects code points above U+10FFFF in binary", () => {
       // Leader 0xF5 starts sequences above Unicode max (invalid)
       const invalidBinary = Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]);
+
       const input = Type.list([Type.bitstring("a"), invalidBinary]);
 
       const result = fun(input);
@@ -420,26 +414,10 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("raises ArgumentError on invalid code point after normalization", () => {
-      const input = Type.list([
-        Type.bitstring("a"),
-        Type.integer(0x030a),
-        Type.integer(0x110000),
-      ]);
-
-      assertBoxedError(
-        () => fun(input),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
-    });
-
     it("returns error tuple for truncated UTF-8 sequence", () => {
       // First two bytes of a 3-byte sequence (incomplete)
       const incompleteBinary = Bitstring.fromBytes([0xe4, 0xb8]);
+
       const input = Type.list([Type.bitstring("a"), incompleteBinary]);
 
       const result = fun(input);
@@ -498,6 +476,73 @@ describe("Erlang_Unicode", () => {
       const result = fun(input);
 
       assert.deepStrictEqual(result, Type.bitstring("あい"));
+    });
+
+    it("raises ArgumentError when input is not a list or a bitstring", () => {
+      assertBoxedError(
+        () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input is a non-binary bitstring", () => {
+      const input = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input list contains invalid types", () => {
+      const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point before normalization", () => {
+      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point after normalization", () => {
+      const input = Type.list([
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.integer(0x110000),
+      ]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
     });
   });
 });
