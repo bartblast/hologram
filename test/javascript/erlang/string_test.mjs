@@ -514,7 +514,7 @@ describe("Erlang_String", () => {
     const split = Erlang_String["split/2"];
     const string_test = Type.bitstring("Hello World !");
 
-    it("returns a two-elements list with the first word at the begining and the tail at the end", () => {
+    it("returns a two-elements list with the first word at the beginning and the tail at the end", () => {
       const result = split(string_test, Type.bitstring(" "));
 
       assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
@@ -551,7 +551,7 @@ describe("Erlang_String", () => {
       );
     });
 
-    it("raises CaseClauseError if the third argument is not a atom", () => {
+    it("raises CaseClauseError if the third argument is not an atom", () => {
       assertBoxedError(
         () =>
           split(
@@ -588,7 +588,7 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["Hello", "World", "!"]));
     });
 
-    it("returns a two-elements list with the first word at the begining and the tail at the end when the direction is set to :leading", () => {
+    it("returns a two-element list with the first word at the beginning and the tail at the end when the direction is set to :leading", () => {
       const result = split(
         string_test,
         Type.bitstring(" "),
@@ -598,7 +598,7 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
     });
 
-    it("returns a two-elements list with the last word at the end and the rest at the begining when the direction is set to :trailing", () => {
+    it("returns a two-element list with the last word at the end and the rest at the begining when the direction is set to :trailing", () => {
       const result = split(
         string_test,
         Type.bitstring(" "),
@@ -977,8 +977,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬁ (64257) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_257), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("le"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_257), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("le"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -1063,8 +1063,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬀ (64256) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_256), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("ox"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_256), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("ox"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -1101,8 +1101,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬄ (64260) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_260), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("at"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_260), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("at"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);

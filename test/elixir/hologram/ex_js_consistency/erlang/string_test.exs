@@ -196,7 +196,7 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "split/2" do
-    test "returns a two-elements list with the first word at the begining and the tail at the end" do
+    test "returns a two-elements list with the first word at the beginning and the tail at the end" do
       result = :string.split("Hello World !", " ")
 
       assert result == ["Hello", "World !"]
@@ -218,7 +218,7 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
                    end
     end
 
-    test "raises CaseClauseError if the third argument is not a atom" do
+    test "raises CaseClauseError if the third argument is not an atom" do
       assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
         :string.split("Hello World !", " ", "all")
       end
@@ -242,13 +242,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert result == ["Hello", "World", "!"]
     end
 
-    test "returns a two-elements list with the first word at the begining and the tail at the end when the direction is set to :leading" do
+    test "returns a two-element list with the first word at the beginning and the tail at the end when the direction is set to :leading" do
       result = :string.split("Hello World !", " ", :leading)
 
       assert result == ["Hello", "World !"]
     end
 
-    test "returns a two-elements list with the last word at the end and the rest at the begining when the direction is set to :trailing" do
+    test "returns a two-element list with the last word at the end and the rest at the begining when the direction is set to :trailing" do
       result = :string.split("Hello World !", " ", :trailing)
 
       assert result == ["Hello World", "!"]
