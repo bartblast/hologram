@@ -148,38 +148,17 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
-  describe "is_key/2" do
-    test "returns true if the given map has the given key" do
-      assert :maps.is_key(:b, %{a: 1, b: 2}) == true
-    end
-
-    test "returns false if the given map doesn't have the given key" do
-      assert :maps.is_key(:c, %{a: 1, b: 2}) == false
-    end
-
-    test "raises BadMapError if the second argument is not a map" do
-      assert_error BadMapError, "expected a map, got: :abc", {:maps, :is_key, [:x, :abc]}
-    end
-  end
-
   describe "intersect/2" do
-    test "takes value from map2 (atom keys)" do
+    test "takes value from map2" do
       assert :maps.intersect(%{a: 1, b: 3}, %{a: 2, c: 4}) == %{a: 2}
     end
 
-    test "takes value from map2 (bitstring keys)" do
-      assert :maps.intersect(%{"a" => 1, "b" => 3}, %{"a" => 2, "c" => 4}) == %{"a" => 2}
+    test "handles not strictly equal keys" do
+      assert :maps.intersect(%{1 => 1}, %{1.0 => 2}) == %{}
     end
 
-    test "takes value from map2 (integer keys)" do
-      assert :maps.intersect(%{1 => 1, 2 => 3}, %{1 => 2, 3 => 4}) == %{1 => 2}
-    end
-
-    test "handles mixed keys" do
-      assert :maps.intersect(
-               %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9},
-               %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
-             ) == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+    test "returns an empty map when no common keys exist" do
+      assert :maps.intersect(%{a: 1, b: 3}, %{c: 2, d: 4}) == %{}
     end
 
     test "returns an empty map when map1 is empty" do
@@ -188,6 +167,18 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "returns an empty map when map2 is empty" do
       assert :maps.intersect(%{a: 1}, %{}) == %{}
+    end
+
+    test "returns an empty map when map1 and map2 are empty" do
+      assert :maps.intersect(%{}, %{}) == %{}
+    end
+
+    test "doesn't mutate the inputs" do
+      map1 = %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
+      map2 = %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+      :maps.intersect(map1, map2)
+      assert map1 == %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
+      assert map2 == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
     end
 
     test "map1 not a map" do
@@ -201,13 +192,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
         :maps.intersect(%{}, :abc)
       end
     end
+  end
 
-    test "doesn't mutate the inputs" do
-      map1 = %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
-      map2 = %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
-      :maps.intersect(map1, map2)
-      assert map1 == %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
-      assert map2 == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+  describe "is_key/2" do
+    test "returns true if the given map has the given key" do
+      assert :maps.is_key(:b, %{a: 1, b: 2}) == true
+    end
+
+    test "returns false if the given map doesn't have the given key" do
+      assert :maps.is_key(:c, %{a: 1, b: 2}) == false
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", {:maps, :is_key, [:x, :abc]}
     end
   end
 
