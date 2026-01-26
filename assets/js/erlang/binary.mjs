@@ -35,24 +35,31 @@ const Erlang_Binary = {
 
       // Check if current state has any pattern matches
       if (candidateNode.output.length > 0) {
-        const matchedPatternLength = candidateNode.output[0].length;
-        const matchIndex = index - matchedPatternLength + 1;
+        // Check all matches at this position and keep the longest one
+        for (const matchedPattern of candidateNode.output) {
+          const matchedPatternLength = matchedPattern.length;
+          const matchIndex = index - matchedPatternLength + 1;
 
-        // Update best match if this is first match or a longer match at same/earlier position
-        if (
-          bestMatch === null ||
-          matchIndex < bestMatch.index ||
-          (matchIndex === bestMatch.index &&
-            matchedPatternLength > bestMatch.length)
-        ) {
-          bestMatch = {index: matchIndex, length: matchedPatternLength};
+          // Update best match if this is first match or a longer match at same/earlier position
+          if (
+            bestMatch === null ||
+            matchIndex < bestMatch.index ||
+            (matchIndex === bestMatch.index &&
+              matchedPatternLength > bestMatch.length)
+          ) {
+            bestMatch = {index: matchIndex, length: matchedPatternLength};
+          }
         }
       }
 
       // Check if we should return the current best match
-      // Return when we have a match AND current position is past the match end
-      // (meaning we can't extend it further with a longer overlapping pattern)
-      if (bestMatch !== null && index >= bestMatch.index + bestMatch.length) {
+      // Return when we have a match AND we're past the match end AND we're not matching any pattern
+      // (candidateNode == rootNode means we're not in the middle of matching)
+      if (
+        bestMatch !== null &&
+        index >= bestMatch.index + bestMatch.length &&
+        candidateNode === rootNode
+      ) {
         return bestMatch;
       }
     }
@@ -117,7 +124,7 @@ const Erlang_Binary = {
     let trim = false;
     let trimAll = false;
     let scopeStart = 0;
-    let scopeLength = -1; // -1 means "until end"
+    let scopeLength = null; // null means "until end"
 
     opts.data.forEach((option) => {
       if (Type.isAtom(option)) {
@@ -164,7 +171,7 @@ const Erlang_Binary = {
       const startValue = scopeData.data[0].value;
       const lengthValue = scopeData.data[1].value;
 
-      if (startValue < 0n || lengthValue < 0n) {
+      if (startValue < 0n) {
         raiseInvalidOptions();
       }
 
@@ -439,6 +446,133 @@ const Erlang_Binary = {
   // End last/1
   // Deps: []
 
+  // Start match/2
+  "match/2": (subject, pattern) => {
+    return Erlang_Binary["match/3"](subject, pattern, Type.list());
+  },
+  // End match/2
+  // Deps: [:binary.match/3]
+
+  // Start match/3
+  "match/3": (subject, pattern, options) => {
+    // Validate subject is a binary
+    if (!Type.isBinary(subject)) {
+      const msg = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    }
+
+    // Ensure subject bytes are available after validation
+    Bitstring.maybeSetBytesFromText(subject);
+
+    // Parse options and reject unsupported flags for match/3
+    const {global, trim, trimAll, scopeStart, scopeLength} = Erlang_Binary[
+      "_parse_search_opts/2"
+    ](options, 3);
+
+    // match/3 only supports :scope; reject :global, :trim, and :trim_all
+    // Validate scope start is within subject bounds
+    if (global || trim || trimAll || scopeStart > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    // Validate that if scopeLength is specified, scopeStart + scopeLength >= 0
+    if (scopeLength !== null && scopeStart + scopeLength < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    const effectiveLength =
+      scopeLength === null ? subject.bytes.length - scopeStart : scopeLength;
+
+    // Validate scope doesn't extend beyond subject
+    if (scopeStart + effectiveLength > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    const scopeEnd = scopeStart + effectiveLength;
+
+    // For negative scopeLength, ensure slice bounds are in correct order
+    const actualStart = Math.min(scopeStart, scopeEnd);
+    const actualEnd = Math.max(scopeStart, scopeEnd);
+
+    // Validate pattern before checking scope length - pattern errors take priority
+    const isCompiledPattern = Type.isCompiledPattern(pattern);
+
+    let compiledPattern;
+    try {
+      compiledPattern = isCompiledPattern
+        ? pattern
+        : Erlang_Binary["compile_pattern/1"](pattern);
+    } catch (error) {
+      // Re-raise pattern compilation errors with correct argument position
+      if (error.struct) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      }
+      throw error;
+    }
+
+    const patternType = compiledPattern.data[0].value;
+    const patternRef = compiledPattern.data[1];
+    const compiledData = ERTS.binaryPatternRegistry.get(patternRef);
+    if (!compiledData || compiledData.type !== patternType) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+      );
+    }
+
+    // After pattern validation passes, check if search range is available
+    if (scopeLength === 0) {
+      return Type.atom("nomatch");
+    }
+
+    const scopedBytes = subject.bytes.slice(actualStart, actualEnd);
+    const scopedSubject = Bitstring.fromBytes(scopedBytes);
+
+    // Find first pattern match based on algorithm type
+    let match = null;
+    if (patternType === "bm") {
+      const patternBytes = compiledData.patternBytes;
+      if (!patternBytes) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      }
+
+      match = Erlang_Binary["_boyer_moore_search/4"](
+        scopedSubject,
+        patternBytes,
+        compiledData.badShift,
+        0,
+      );
+    } else {
+      match = Erlang_Binary["_aho_corasick_search/3"](
+        scopedSubject,
+        compiledData.rootNode,
+        0,
+      );
+    }
+
+    if (match === null) {
+      return Type.atom("nomatch");
+    }
+
+    // Convert match position from scoped to absolute
+    const absolutePos = actualStart + match.index;
+
+    return Type.tuple([Type.integer(absolutePos), Type.integer(match.length)]);
+  },
+  // End match/3
+  // Deps: [:binary._aho_corasick_search/3, :binary._boyer_moore_search/4, :binary._parse_search_opts/2, :binary.compile_pattern/1]
+
   // Start split/2
   "split/2": (subject, pattern) => {
     return Erlang_Binary["split/3"](subject, pattern, Type.list());
@@ -504,6 +638,13 @@ const Erlang_Binary = {
       );
     }
 
+    // Validate that if scopeLength is specified, scopeStart + scopeLength >= 0
+    if (scopeLength !== null && scopeStart + scopeLength < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
     // Validate pattern before compiling (to raise with correct arg position)
     const raiseInvalidPattern = () => {
       Interpreter.raiseArgumentError(
@@ -559,7 +700,7 @@ const Erlang_Binary = {
     }
 
     const effectiveLength =
-      scopeLength === -1 ? subject.bytes.length - scopeStart : scopeLength;
+      scopeLength === null ? subject.bytes.length - scopeStart : scopeLength;
 
     // Validate scope doesn't extend beyond subject
     if (scopeStart + effectiveLength > subject.bytes.length) {
@@ -570,13 +711,17 @@ const Erlang_Binary = {
 
     const scopeEnd = scopeStart + effectiveLength;
 
+    // For negative scopeLength, ensure slice bounds are in correct order
+    const actualStart = Math.min(scopeStart, scopeEnd);
+    const actualEnd = Math.max(scopeStart, scopeEnd);
+
     // No search range available
     if (scopeStart >= subject.bytes.length || scopeLength === 0) {
       const parts = [bytesToBitstring(subject.bytes)];
       return Type.list(applyTrim(parts));
     }
 
-    const scopedBytes = subject.bytes.slice(scopeStart, scopeEnd);
+    const scopedBytes = subject.bytes.slice(actualStart, actualEnd);
     const scopedSubject = Bitstring.fromBytes(scopedBytes);
 
     // Helper: Find next pattern match based on algorithm type inside scoped subject
@@ -585,7 +730,9 @@ const Erlang_Binary = {
         const patternBytes = compiledData.patternBytes;
 
         if (!patternBytes) {
-          Interpreter.raiseArgumentError("is not a valid pattern");
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(2, "is not a valid pattern"),
+          );
         }
 
         return Erlang_Binary["_boyer_moore_search/4"](
@@ -620,7 +767,7 @@ const Erlang_Binary = {
         break;
       }
 
-      const absoluteMatchIndex = scopeStart + match.index;
+      const absoluteMatchIndex = actualStart + match.index;
 
       const beforeMatch = bytesToBitstring(
         subject.bytes.slice(cursor, absoluteMatchIndex),
