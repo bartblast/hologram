@@ -289,6 +289,10 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
       assert :uri_string.parse("http://example.com:abc") == {:error, :invalid_uri, ~c":"}
     end
 
+    test "port with trailing non-digits returns invalid_uri" do
+      assert :uri_string.parse("http://example.com:8080abc/path") == {:error, :invalid_uri, ~c":"}
+    end
+
     test "second fragment separator returns invalid_uri" do
       assert :uri_string.parse("http://h/p#f#x") == {:error, :invalid_uri, ~c":"}
     end

@@ -445,6 +445,19 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("port with trailing non-digits returns invalid_uri", () => {
+      const uri = Type.bitstring("http://example.com:8080abc/path");
+      const result = parse(uri);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.atom("invalid_uri"),
+        Type.charlist(":"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("second fragment separator returns invalid_uri", () => {
       const uri = Type.bitstring("http://h/p#f#x");
       const result = parse(uri);
