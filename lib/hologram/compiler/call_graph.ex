@@ -71,7 +71,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:sets, :is_subset, 2}, {:sets, :is_element, 2}},
     {{:sets, :is_subset, 2}, {:sets, :to_list, 1}},
     {{:sets, :new, 1}, {:sets, :_validate_opts, 1}},
-    {{:sets, :size, 1}, {:maps, :keys, 1}},
+    {{:sets, :size, 1}, {:erlang, :map_size, 1}},
     {{:sets, :to_list, 1}, {:maps, :keys, 1}},
     {{:string, :replace, 3}, {:string, :replace, 4}},
     {{:string, :replace, 4}, {:unicode, :characters_to_binary, 1}},

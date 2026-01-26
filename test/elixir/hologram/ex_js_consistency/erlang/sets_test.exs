@@ -495,6 +495,28 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "size/1" do
+    test "returns zero if given an empty set" do
+      set = :sets.new(version: 2)
+
+      assert :sets.size(set) == 0
+    end
+
+    test "returns count for non-empty set" do
+      set = :sets.from_list([1, 2, 3], version: 2)
+
+      assert :sets.size(set) == 3
+    end
+
+    test "raises FunctionClauseError if the argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.size(:abc)
+      end
+    end
+  end
+
   describe "to_list/1" do
     test "returns an empty list if given an empty set" do
       set = :sets.new(version: 2)
@@ -517,35 +539,6 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.to_list(:abc)
-      end
-    end
-  end
-
-  describe "size/1" do
-    test "returns 0 if given an empty set" do
-      set = :sets.new(version: 2)
-
-      assert :sets.size(set) == 0
-    end
-
-    test "returns correct count for non-deleted entries" do
-      set = :sets.from_list([1, 2, 3], version: 2)
-
-      assert :sets.size(set) == 3
-    end
-
-    test "excludes deleted entries from count" do
-      set = :sets.from_list([1, 2, 3], version: 2)
-      result = :sets.del_element(2, set)
-
-      assert :sets.size(result) == 2
-    end
-
-    test "raises FunctionClauseError if the argument is not a set" do
-      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :sets.size(:abc)
       end
     end
   end

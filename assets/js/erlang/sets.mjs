@@ -1,5 +1,6 @@
 "use strict";
 
+import Erlang from "./erlang.mjs";
 import Erlang_Lists from "./lists.mjs";
 import Erlang_Maps from "./maps.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
@@ -220,6 +221,19 @@ const Erlang_Sets = {
   // End new/1
   // Deps: [:sets._validate_opts/1]
 
+  // Start size/1
+  "size/1": (set) => {
+    if (!Type.isMap(set)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [set]),
+      );
+    }
+
+    return Erlang["map_size/1"](set);
+  },
+  // End size/1
+  // Deps: [:erlang.map_size/1]
+
   // Start to_list/1
   "to_list/1": (set) => {
     if (!Type.isMap(set)) {
@@ -231,19 +245,6 @@ const Erlang_Sets = {
     return Erlang_Maps["keys/1"](set);
   },
   // End to_list/1
-  // Deps: [:maps.keys/1]
-
-  // Start size/1
-  "size/1": (set) => {
-    if (!Type.isMap(set)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [set]),
-      );
-    }
-
-    return Type.integer(Erlang_Maps["keys/1"](set).data.length);
-  },
-  // End size/1
   // Deps: [:maps.keys/1]
 };
 

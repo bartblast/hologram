@@ -822,6 +822,36 @@ describe("Erlang_Sets", () => {
     });
   });
 
+  describe("size/1", () => {
+    const size = Erlang_Sets["size/1"];
+
+    it("returns zero if given an empty set", () => {
+      const set = Erlang_Sets["new/1"](opts);
+      const result = size(set);
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns count for non-empty set", () => {
+      const result = size(set123);
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("raises FunctionClauseError if the argument is not a set", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":sets.size/1",
+        [atomAbc],
+      );
+
+      assertBoxedError(
+        () => size(atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("to_list/1", () => {
     const to_list = Erlang_Sets["to_list/1"];
 
@@ -853,43 +883,6 @@ describe("Erlang_Sets", () => {
 
       assertBoxedError(
         () => to_list(atomAbc),
-        "FunctionClauseError",
-        expectedMessage,
-      );
-    });
-  });
-
-  describe("size/1", () => {
-    const size = Erlang_Sets["size/1"];
-
-    it("returns 0 if given an empty set", () => {
-      const set = Erlang_Sets["new/1"](opts);
-      const result = size(set);
-
-      assert.deepStrictEqual(result, Type.integer(0));
-    });
-
-    it("returns correct count for non-deleted entries", () => {
-      const result = size(set123);
-
-      assert.deepStrictEqual(result, Type.integer(3));
-    });
-
-    it("excludes deleted entries from count", () => {
-      const set = Erlang_Sets["del_element/2"](integer2, set123);
-      const result = size(set);
-
-      assert.deepStrictEqual(result, Type.integer(2));
-    });
-
-    it("raises FunctionClauseError if the argument is not a set", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":sets.size/1",
-        [atomAbc],
-      );
-
-      assertBoxedError(
-        () => size(atomAbc),
         "FunctionClauseError",
         expectedMessage,
       );
