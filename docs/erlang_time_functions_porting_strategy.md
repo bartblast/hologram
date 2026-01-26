@@ -33,7 +33,7 @@ All other functions should delegate to these rather than calling JS APIs directl
 
 Supported units: `second`, `millisecond`, `microsecond`, `nanosecond`, `native`
 
-**Note:** `native` unit = nanoseconds (since `performance.now()` precision is 100ns)
+**Note:** `native` unit = nanoseconds for API compatibility with Erlang. However, `performance.now()` actual precision is ~100 microseconds to 1 millisecond (due to browser timing attack mitigations), so values will have nanosecond granularity but not nanosecond accuracy.
 
 ### Layer 3: Derived Erlang functions
 
