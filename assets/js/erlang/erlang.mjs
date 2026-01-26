@@ -1477,26 +1477,6 @@ const Erlang = {
   // End localtime/0
   // Deps: []
 
-  // Start ref_to_list/1
-  "ref_to_list/1": (reference) => {
-    if (!Type.isReference(reference)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
-      );
-    }
-
-    const localIncarnationId = ERTS.nodeTable.getLocalIncarnationId(
-      reference.node,
-      reference.creation,
-    );
-
-    const text = `#Ref<${localIncarnationId}.${reference.idWords.toReversed().join(".")}>`;
-
-    return Bitstring.toCodepoints(Type.bitstring(text));
-  },
-  // End ref_to_list/1
-  // Deps: []
-
   // Start make_ref/0
   "make_ref/0": () => {
     const node = ERTS.nodeTable.CLIENT_NODE;
@@ -1614,6 +1594,26 @@ const Erlang = {
     return Bitstring.toCodepoints(Type.bitstring(pidText));
   },
   // End pid_to_list/1
+  // Deps: []
+
+  // Start ref_to_list/1
+  "ref_to_list/1": (reference) => {
+    if (!Type.isReference(reference)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    const localIncarnationId = ERTS.nodeTable.getLocalIncarnationId(
+      reference.node,
+      reference.creation,
+    );
+
+    const text = `#Ref<${localIncarnationId}.${reference.idWords.toReversed().join(".")}>`;
+
+    return Bitstring.toCodepoints(Type.bitstring(text));
+  },
+  // End ref_to_list/1
   // Deps: []
 
   // Start rem/2
