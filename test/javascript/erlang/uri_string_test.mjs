@@ -16,11 +16,6 @@ defineGlobalErlangAndElixirModules();
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/uri_string_test.exs
 // Always update both together.
 
-// Helper to convert string to charlist
-function stringToCharlist(str) {
-  return Type.list(str.split("").map((c) => Type.integer(c.charCodeAt(0))));
-}
-
 describe("Erlang_Uri_String", () => {
   describe("parse/1", () => {
     const parse = Erlang_Uri_String["parse/1"];
@@ -45,19 +40,19 @@ describe("Erlang_Uri_String", () => {
     });
 
     it("full URI with all components (list)", () => {
-      const uri = stringToCharlist(
+      const uri = Type.charlist(
         "foo://user@example.com:8042/over/there?name=ferret#nose",
       );
       const result = parse(uri);
 
       const expected = Type.map([
-        [Type.atom("fragment"), stringToCharlist("nose")],
-        [Type.atom("host"), stringToCharlist("example.com")],
-        [Type.atom("path"), stringToCharlist("/over/there")],
+        [Type.atom("fragment"), Type.charlist("nose")],
+        [Type.atom("host"), Type.charlist("example.com")],
+        [Type.atom("path"), Type.charlist("/over/there")],
         [Type.atom("port"), Type.integer(8042)],
-        [Type.atom("query"), stringToCharlist("name=ferret")],
-        [Type.atom("scheme"), stringToCharlist("foo")],
-        [Type.atom("userinfo"), stringToCharlist("user")],
+        [Type.atom("query"), Type.charlist("name=ferret")],
+        [Type.atom("scheme"), Type.charlist("foo")],
+        [Type.atom("userinfo"), Type.charlist("user")],
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -390,7 +385,7 @@ describe("Erlang_Uri_String", () => {
       const expected = Type.tuple([
         Type.atom("error"),
         Type.atom("invalid_uri"),
-        stringToCharlist(":"),
+        Type.charlist(":"),
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -403,7 +398,7 @@ describe("Erlang_Uri_String", () => {
       const expected = Type.tuple([
         Type.atom("error"),
         Type.atom("invalid_uri"),
-        stringToCharlist(":"),
+        Type.charlist(":"),
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -416,7 +411,7 @@ describe("Erlang_Uri_String", () => {
       const expected = Type.tuple([
         Type.atom("error"),
         Type.atom("invalid_uri"),
-        stringToCharlist(":"),
+        Type.charlist(":"),
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -446,6 +441,61 @@ describe("Erlang_Uri_String", () => {
           invalidInput,
         ]),
       );
+    });
+
+    it("multiple @ symbols in authority (bare //) returns invalid_uri", () => {
+      const uri = Type.bitstring("//a@b@c/path");
+      const result = parse(uri);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.atom("invalid_uri"),
+        Type.charlist("@"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple @ symbols in authority (with scheme) returns invalid_uri", () => {
+      const uri = Type.bitstring("http://a@b@c/path");
+      const result = parse(uri);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.atom("invalid_uri"),
+        Type.charlist(":"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple @ symbols in authority with port returns invalid_uri", () => {
+      const uri = Type.bitstring("http://user@host@extra:8080/path");
+      const result = parse(uri);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.atom("invalid_uri"),
+        Type.charlist(":"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // Duplicate of the bare // case above removed for clarity.
+
+    it("single @ in userinfo, multiple in path is valid", () => {
+      const uri = Type.bitstring("http://user@host/path@with@at");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("host")],
+        [Type.atom("path"), Type.bitstring("/path@with@at")],
+        [Type.atom("scheme"), Type.bitstring("http")],
+        [Type.atom("userinfo"), Type.bitstring("user")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 });

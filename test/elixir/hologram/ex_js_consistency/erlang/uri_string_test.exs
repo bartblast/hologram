@@ -281,5 +281,28 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                    expected_msg,
                    fn -> :uri_string.parse(123) end
     end
+
+    test "multiple @ symbols in authority (bare //) returns invalid_uri" do
+      assert :uri_string.parse("//a@b@c/path") == {:error, :invalid_uri, ~c"@"}
+    end
+
+    test "multiple @ symbols in authority (with scheme) returns invalid_uri" do
+      assert :uri_string.parse("http://a@b@c/path") == {:error, :invalid_uri, ~c":"}
+    end
+
+    test "multiple @ symbols in authority with port returns invalid_uri" do
+      assert :uri_string.parse("http://user@host@extra:8080/path") ==
+               {:error, :invalid_uri, ~c":"}
+    end
+
+    test "single @ in userinfo, multiple in path is valid" do
+      assert :uri_string.parse("http://user@host/path@with@at") ==
+               %{
+                 host: "host",
+                 path: "/path@with@at",
+                 scheme: "http",
+                 userinfo: "user"
+               }
+    end
   end
 end

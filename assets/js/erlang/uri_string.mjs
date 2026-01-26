@@ -123,6 +123,27 @@ const Erlang_Uri_String = {
         ? withoutSlashes.slice(atIndex + 1)
         : withoutSlashes;
 
+      // Check for multiple @ symbols in the authority portion (before /, ?, or #).
+      // Extract the authority portion (everything before /, ?, or #).
+      const authorityEndIndex = afterUserinfo.search(/[/?#]/);
+      const authorityPortion =
+        authorityEndIndex === -1
+          ? afterUserinfo
+          : afterUserinfo.slice(0, authorityEndIndex);
+
+      // If there's a @ in the authority portion after userinfo, it's invalid.
+      // OTP payload differs depending on presence of scheme:
+      // - With scheme (e.g., http://a@b@c/path) -> ':'
+      // - Bare authority (e.g., //a@b@c/path)   -> '@'
+      if (authorityPortion.includes("@")) {
+        const payloadChar = state.uri.scheme ? 58 /* ':' */ : 64; /* '@' */
+        return Type.tuple([
+          Type.atom("error"),
+          Type.atom("invalid_uri"),
+          Type.list([Type.integer(payloadChar)]),
+        ]);
+      }
+
       const hasBracketHost = afterUserinfo.startsWith("[");
       const closeBracketIndex = hasBracketHost
         ? afterUserinfo.indexOf("]")
