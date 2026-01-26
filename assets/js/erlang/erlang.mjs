@@ -1566,21 +1566,6 @@ const Erlang = {
   // End not/1
   // Deps: []
 
-  // Start pid_to_list/1
-  "pid_to_list/1": (pid) => {
-    if (!Type.isPid(pid)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
-      );
-    }
-
-    const pidText = `<${pid.segments.join(".")}>`;
-
-    return Bitstring.toCodepoints(Type.bitstring(pidText));
-  },
-  // End pid_to_list/1
-  // Deps: []
-
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1594,6 +1579,21 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // End orelse/2
+  // Deps: []
+
+  // Start pid_to_list/1
+  "pid_to_list/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    const pidText = `<${pid.segments.join(".")}>`;
+
+    return Bitstring.toCodepoints(Type.bitstring(pidText));
+  },
+  // End pid_to_list/1
   // Deps: []
 
   // Start rem/2
