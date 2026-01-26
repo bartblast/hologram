@@ -210,6 +210,20 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("URI with port 0", () => {
+      const uri = Type.bitstring("http://example.com:0/path");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("example.com")],
+        [Type.atom("path"), Type.bitstring("/path")],
+        [Type.atom("port"), Type.integer(0)],
+        [Type.atom("scheme"), Type.bitstring("http")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("relative URI (path only)", () => {
       const uri = Type.bitstring("/path/to/resource");
       const result = parse(uri);

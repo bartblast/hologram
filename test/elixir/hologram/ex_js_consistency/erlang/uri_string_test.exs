@@ -142,6 +142,16 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
+    test "URI with port 0" do
+      assert :uri_string.parse("http://example.com:0/path") ==
+               %{
+                 host: "example.com",
+                 path: "/path",
+                 port: 0,
+                 scheme: "http"
+               }
+    end
+
     test "relative URI (path only)" do
       assert :uri_string.parse("/path/to/resource") ==
                %{
