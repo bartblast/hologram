@@ -436,83 +436,83 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     # Invalid options
 
     test "raises ArgumentError with invalid option" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("ababab", "ab", [:global])
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["ababab", "ab", [:global]]}
     end
 
     test "raises ArgumentError with :trim option" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("ababab", "ab", [:trim])
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["ababab", "ab", [:trim]]}
     end
 
     test "raises ArgumentError with :trim_all option" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("ababab", "ab", [:trim_all])
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["ababab", "ab", [:trim_all]]}
     end
 
     # Options validation
 
     test "raises ArgumentError if options is not a list" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", :invalid)
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", :invalid]}
     end
 
     test "raises ArgumentError if options is an improper list" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", [:global | :tail])
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", [:global | :tail]]}
     end
 
     test "raises ArgumentError with unknown atom option" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", [:unknown])
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", [:unknown]]}
     end
 
     test "raises ArgumentError with malformed scope tuple" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", scope: :bad)
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", [scope: :bad]]}
     end
 
     test "raises ArgumentError when scope start exceeds subject length" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "t", scope: {10, 1})
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "t", [scope: {10, 1}]]}
     end
 
     test "raises ArgumentError when scope extends beyond subject" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "st", scope: {0, 100})
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "st", [scope: {0, 100}]]}
     end
 
     test "raises ArgumentError with negative scope start" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", scope: {-1, 2})
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", [scope: {-1, 2}]]}
     end
 
     test "raises ArgumentError when scope start plus negative length is below zero" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", scope: {0, -1})
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", [scope: {0, -1}]]}
     end
 
     test "raises ArgumentError with non-integer scope start" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", scope: {:bad, 2})
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", [scope: {:bad, 2}]]}
     end
 
     test "raises ArgumentError with non-integer scope length" do
-      assert_raise ArgumentError, fn ->
-        :binary.match("test", "es", scope: {0, :bad})
-      end
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :match, ["test", "es", [scope: {0, :bad}]]}
     end
   end
 
