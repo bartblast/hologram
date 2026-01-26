@@ -11,6 +11,21 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
   @binary <<5, 19, 72, 33>>
 
+  # Erlang/OTP 27 on Linux with Elixir 1.18.x returns a more specific error message
+  # for invalid scope in :binary.match/3. Other combinations return "invalid options".
+  defp binary_match_invalid_scope_error_msg do
+    otp_release = String.to_integer(System.otp_release())
+    %{major: major, minor: minor} = Version.parse!(System.version())
+    elixir_1_18? = major == 1 and minor == 18
+    {os_type, _os_name} = :os.type()
+
+    if os_type == :unix and otp_release == 27 and elixir_1_18? do
+      build_argument_error_msg(3, "specified part is not wholly inside binary")
+    else
+      build_argument_error_msg(3, "invalid options")
+    end
+  end
+
   describe "at/2" do
     test "returns first byte" do
       assert :binary.at(@binary, 0) == 5
@@ -459,25 +474,25 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "raises ArgumentError when scope start exceeds subject length" do
       assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
+                   binary_match_invalid_scope_error_msg(),
                    {:binary, :match, ["test", "t", [scope: {10, 1}]]}
     end
 
     test "raises ArgumentError when scope extends beyond subject" do
       assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
+                   binary_match_invalid_scope_error_msg(),
                    {:binary, :match, ["test", "st", [scope: {0, 100}]]}
     end
 
     test "raises ArgumentError with negative scope start" do
       assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
+                   binary_match_invalid_scope_error_msg(),
                    {:binary, :match, ["test", "es", [scope: {-1, 2}]]}
     end
 
     test "raises ArgumentError when scope start plus negative length is below zero" do
       assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
+                   binary_match_invalid_scope_error_msg(),
                    {:binary, :match, ["test", "es", [scope: {0, -1}]]}
     end
 
