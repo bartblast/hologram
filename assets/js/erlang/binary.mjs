@@ -455,11 +455,11 @@ const Erlang_Binary = {
 
   // Start match/3
   "match/3": (subject, pattern, options) => {
-    // Validate subject is a binary
     if (!Type.isBinary(subject)) {
       const msg = Type.isBitstring(subject)
         ? "is a bitstring (expected a binary)"
         : "not a binary";
+
       Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
     }
 
@@ -506,6 +506,7 @@ const Erlang_Binary = {
     const isCompiledPattern = Type.isCompiledPattern(pattern);
 
     let compiledPattern;
+
     try {
       compiledPattern = isCompiledPattern
         ? pattern
@@ -517,12 +518,14 @@ const Erlang_Binary = {
           Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       }
+
       throw error;
     }
 
     const patternType = compiledPattern.data[0].value;
     const patternRef = compiledPattern.data[1];
     const compiledData = ERTS.binaryPatternRegistry.get(patternRef);
+
     if (!compiledData || compiledData.type !== patternType) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
@@ -539,8 +542,10 @@ const Erlang_Binary = {
 
     // Find first pattern match based on algorithm type
     let match = null;
+
     if (patternType === "bm") {
       const patternBytes = compiledData.patternBytes;
+
       if (!patternBytes) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),

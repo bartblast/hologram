@@ -295,6 +295,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
   describe "match/3" do
     # Finding patterns
+
     test "finds single pattern at start" do
       assert :binary.match("the rain in spain", "the", []) == {0, 3}
     end
@@ -333,6 +334,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "works with compiled pattern" do
       compiled = :binary.compile_pattern("world")
+
       assert :binary.match("hello world", compiled, []) == {6, 5}
     end
 
@@ -349,6 +351,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     # Scope option - valid cases
+
     test "finds pattern within scope" do
       assert :binary.match("hello world", "world", scope: {0, 3}) == :nomatch
     end
@@ -371,17 +374,21 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "accepts negative scope length (reverse part)" do
       subject = "hello world"
-      assert :binary.match(subject, "world", scope: {byte_size(subject), -5}) == {6, 5}
+      opts = [scope: {byte_size(subject), -5}]
+
+      assert :binary.match(subject, "world", opts) == {6, 5}
     end
 
     # With empty options list
+
     test "works with empty options list" do
       assert :binary.match("test", "es", []) == {1, 2}
     end
 
-    # Error tests start here
+    # Error case tests
 
     # Input validation
+
     test "raises ArgumentError if subject is not a binary" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),
@@ -427,6 +434,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     # Invalid options
+
     test "raises ArgumentError with invalid option" do
       assert_raise ArgumentError, fn ->
         :binary.match("ababab", "ab", [:global])
@@ -446,6 +454,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     # Options validation
+
     test "raises ArgumentError if options is not a list" do
       assert_raise ArgumentError, fn ->
         :binary.match("test", "es", :invalid)

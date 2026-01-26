@@ -578,10 +578,12 @@ describe("Erlang_Binary", () => {
 
       it("finds first match with multiple patterns", () => {
         const subject = Bitstring.fromText("abcde");
+
         const pattern = Type.list([
           Bitstring.fromText("bcde"),
           Bitstring.fromText("cd"),
         ]);
+
         const result = match(subject, pattern, Type.list());
 
         assertBoxedStrictEqual(
@@ -592,10 +594,12 @@ describe("Erlang_Binary", () => {
 
       it("returns longest match when patterns start at same position", () => {
         const subject = Bitstring.fromText("abcde");
+
         const pattern = Type.list([
           Bitstring.fromText("ab"),
           Bitstring.fromText("abcd"),
         ]);
+
         const result = match(subject, pattern, Type.list());
 
         assertBoxedStrictEqual(
@@ -606,12 +610,14 @@ describe("Erlang_Binary", () => {
 
       it("returns longest match with three or more overlapping patterns", () => {
         const subject = Bitstring.fromText("abcdefgh");
+
         const pattern = Type.list([
           Bitstring.fromText("ab"),
           Bitstring.fromText("abc"),
           Bitstring.fromText("abcd"),
           Bitstring.fromText("abcde"),
         ]);
+
         const result = match(subject, pattern, Type.list());
 
         assertBoxedStrictEqual(
@@ -664,9 +670,11 @@ describe("Erlang_Binary", () => {
       it("finds pattern within scope", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
+
         const options = Type.list([
           Type.tuple([Type.atom("scope"), Type.tuple([integer0, integer3])]),
         ]);
+
         const result = match(subject, pattern, options);
 
         assertBoxedStrictEqual(result, Type.atom("nomatch"));
@@ -675,12 +683,14 @@ describe("Erlang_Binary", () => {
       it("respects scope start position", () => {
         const subject = Bitstring.fromText("the rain in spain");
         const pattern = Bitstring.fromText("ain");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
             Type.tuple([Type.integer(5), Type.integer(8)]),
           ]),
         ]);
+
         const result = match(subject, pattern, options);
 
         assertBoxedStrictEqual(
@@ -692,12 +702,14 @@ describe("Erlang_Binary", () => {
       it("finds match at start of scope", () => {
         const subject = Bitstring.fromText("abcdef");
         const pattern = Bitstring.fromText("cd");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
             Type.tuple([Type.integer(2), Type.integer(4)]),
           ]),
         ]);
+
         const result = match(subject, pattern, options);
 
         assertBoxedStrictEqual(
@@ -709,12 +721,14 @@ describe("Erlang_Binary", () => {
       it("returns nomatch when pattern outside scope", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
             Type.tuple([integer0, Type.integer(5)]),
           ]),
         ]);
+
         const result = match(subject, pattern, options);
 
         assertBoxedStrictEqual(result, Type.atom("nomatch"));
@@ -723,9 +737,11 @@ describe("Erlang_Binary", () => {
       it("returns nomatch when scope length is zero", () => {
         const subject = Bitstring.fromText("hello");
         const pattern = Bitstring.fromText("h");
+
         const options = Type.list([
           Type.tuple([Type.atom("scope"), Type.tuple([integer0, integer0])]),
         ]);
+
         const result = match(subject, pattern, options);
 
         assertBoxedStrictEqual(result, Type.atom("nomatch"));
@@ -734,6 +750,7 @@ describe("Erlang_Binary", () => {
       it("accepts negative scope length (reverse part)", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -761,7 +778,8 @@ describe("Erlang_Binary", () => {
       });
     });
 
-    // Error tests start here
+    // Error case tests
+
     describe("input validation", () => {
       it("raises ArgumentError if subject is not a binary", () => {
         const pattern = Bitstring.fromText("test");
@@ -897,6 +915,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError if options is an improper list", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("es");
+
         const options = Type.improperList([
           Type.atom("global"),
           Type.atom("tail"),
@@ -924,6 +943,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError with malformed scope tuple", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("es");
+
         const options = Type.list([
           Type.tuple([Type.atom("scope"), Type.atom("bad")]),
         ]);
@@ -938,6 +958,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError when scope start exceeds subject length", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("t");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -955,6 +976,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError when scope extends beyond subject", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("st");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -972,6 +994,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError with negative scope start", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("es");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -989,6 +1012,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError when scope start plus negative length is below zero", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("es");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -1006,6 +1030,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError with non-integer scope start", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("es");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -1023,6 +1048,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError with non-integer scope length", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("es");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
