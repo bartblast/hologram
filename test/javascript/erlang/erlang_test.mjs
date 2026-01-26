@@ -10,7 +10,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import { defineModule1Fixture as defineErlangModule1Fixture } from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -1418,7 +1418,7 @@ describe("Erlang", () => {
 
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1432,7 +1432,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1458,7 +1458,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(
@@ -3343,6 +3343,102 @@ describe("Erlang", () => {
       });
     });
 
+    describe("compressed terms", () => {
+      it("decodes compressed term (COMPRESSED tag 80) with repeated string", () => {
+        // Real Erlang-generated compressed term for String.duplicate("hello", 100)
+        // Generated with: :erlang.term_to_binary(String.duplicate("hello", 100), [compressed: 9])
+        // Format: 131 (version) + 80 (COMPRESSED) + uncompressed_size (4 bytes) + zlib compressed data
+        // Uncompressed size = 505 bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146, 145,
+            154, 147, 147, 63, 74, 140, 40, 2, 0, 21, 94, 209, 51,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        const expected = Type.bitstring("hello".repeat(100));
+        assertBoxedStrictEqual(result, expected);
+      });
+
+      it("decodes compressed term with list of tuples", () => {
+        // Real Erlang-generated compressed term for a list of 50 identical tuples
+        // Generated with: :erlang.term_to_binary(List.duplicate({:ok, 42}, 50), [compressed: 9])
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 80, 0, 0, 1, 150, 120, 218, 203, 97, 96, 96, 48, 202, 96, 42,
+            103, 202, 207, 78, 212, 26, 165, 7, 7, 157, 5, 0, 189, 136, 115, 25,
+          ]),
+        );
+        const result = binary_to_term(binary);
+        const expectedTuple = Type.tuple([Type.atom("ok"), Type.integer(42)]);
+        const expectedList = Type.list(Array(50).fill(expectedTuple));
+        assertBoxedStrictEqual(result, expectedList);
+      });
+
+      it("raises ArgumentError for compressed term with truncated uncompressed size", () => {
+        // COMPRESSED tag but missing uncompressed size bytes
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 80, 0, 0]), // Only 2 bytes of size instead of 4
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for compressed term with invalid zlib data", () => {
+        // COMPRESSED tag with invalid compressed data
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131,
+            80,
+            0,
+            0,
+            0,
+            2, // version, COMPRESSED tag, uncompressed size = 2
+            255,
+            255,
+            255, // invalid zlib data
+          ]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+
+      it("raises ArgumentError for compressed term with size mismatch", () => {
+        // COMPRESSED tag where decompressed size doesn't match declared size
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131,
+            80,
+            0,
+            0,
+            0,
+            10, // version, COMPRESSED tag, uncompressed size = 10 (wrong!)
+            120,
+            156,
+            74,
+            180,
+            2,
+            0,
+            0,
+            121,
+            0,
+            121, // zlib data that decompresses to 2 bytes
+          ]),
+        );
+        assertBoxedError(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+        );
+      });
+    });
+
     describe("error handling", () => {
       it("raises ArgumentError if argument is not a binary", () => {
         assertBoxedError(
@@ -3376,7 +3472,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_term(binary),
           "ArgumentError",
-          "unsupported external term format tag: 50",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
         );
       });
 
@@ -3386,7 +3482,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_term(binary),
           "ArgumentError",
-          "unsupported external term format tag: 255",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
         );
       });
 
@@ -3396,7 +3492,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => binary_to_term(binary),
           "ArgumentError",
-          "unsupported external term format tag: 1",
+          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
         );
       });
 
@@ -7263,7 +7359,7 @@ describe("Erlang", () => {
 
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -7277,7 +7373,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -7303,7 +7399,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(

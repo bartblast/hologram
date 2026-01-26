@@ -610,6 +610,7 @@ const Erlang = {
     // ETF tag constants
     const NEW_FLOAT_EXT = 70;
     const BIT_BINARY_EXT = 77;
+    const COMPRESSED = 80;
     const NEW_PID_EXT = 88;
     const NEW_PORT_EXT = 89;
     const NEWER_REFERENCE_EXT = 90;
@@ -648,6 +649,9 @@ const Erlang = {
       const tag = dataView.getUint8(offset);
 
       switch (tag) {
+        case COMPRESSED:
+          return decodeCompressed(dataView, bytes, offset + 1);
+
         case SMALL_INTEGER_EXT:
           return decodeSmallInteger(dataView, offset + 1);
 
@@ -733,6 +737,53 @@ const Erlang = {
               "invalid external representation of a term",
             ),
           );
+      }
+    };
+
+    // Compressed term decoder
+    // Format: COMPRESSED (80) | UncompressedSize (4 bytes, big-endian) | ZlibCompressedData
+    // The decompressed data contains the ETF representation of the term without the version byte
+
+    const decodeCompressed = (dataView, bytes, offset) => {
+      if (offset + 4 > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      const uncompressedSize = dataView.getUint32(offset, false);
+      const compressedData = bytes.slice(offset + 4);
+
+      try {
+        // Use Utils.zlibInflate for zlib decompression
+        const decompressed = Utils.zlibInflate(compressedData);
+
+        if (decompressed.length !== uncompressedSize) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
+        const decompressedView = new DataView(
+          decompressed.buffer,
+          decompressed.byteOffset,
+          decompressed.byteLength,
+        );
+
+        return decodeTerm(decompressedView, decompressed, 0);
+      } catch {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
       }
     };
 
@@ -939,8 +990,9 @@ const Erlang = {
         newOffset: currentOffset,
       };
     };
+    
     // Map decoder
-
+ 
     const decodeMap = (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
       const entries = [];

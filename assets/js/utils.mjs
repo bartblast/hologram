@@ -1,5 +1,7 @@
 "use strict";
 
+import pako from "pako";
+
 export default class Utils {
   static capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
@@ -84,5 +86,12 @@ export default class Utils {
     // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
     // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
     return {...obj};
+  }
+
+  // Decompresses zlib-compressed data using pako
+  // Returns a Uint8Array with the decompressed data
+  // Throws an error if decompression fails
+  static zlibInflate(compressedData) {
+    return pako.inflate(compressedData);
   }
 }

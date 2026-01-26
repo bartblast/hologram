@@ -2218,6 +2218,66 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == term
     end
 
+    test "decodes compressed term (COMPRESSED tag 80) with repeated string" do
+      # Real Erlang-generated compressed term for String.duplicate("hello", 100)
+      # Generated with: :erlang.term_to_binary(String.duplicate("hello", 100), [compressed: 9])
+      binary =
+        <<131, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146, 145, 154, 147, 147, 63, 74,
+          140, 40, 2, 0, 21, 94, 209, 51>>
+
+      expected = String.duplicate("hello", 100)
+      assert :erlang.binary_to_term(binary) == expected
+    end
+
+    test "decodes compressed term with list of tuples" do
+      # Real Erlang-generated compressed term for a list of 50 identical tuples
+      # Generated with: :erlang.term_to_binary(List.duplicate({:ok, 42}, 50), [compressed: 9])
+      binary =
+        <<131, 80, 0, 0, 1, 150, 120, 218, 203, 97, 96, 96, 48, 202, 96, 42, 103, 202, 207, 78,
+          212, 26, 165, 7, 7, 157, 5, 0, 189, 136, 115, 25>>
+
+      expected = List.duplicate({:ok, 42}, 50)
+      assert :erlang.binary_to_term(binary) == expected
+    end
+
+    test "decodes compressed term round-trip" do
+      # Test that we can decode Erlang's compressed format
+      term = %{
+        data: List.duplicate({:item, "value", 123}, 100),
+        metadata: %{compressed: true, version: 1}
+      }
+
+      binary = :erlang.term_to_binary(term, compressed: 9)
+      assert :erlang.binary_to_term(binary) == term
+    end
+
+    test "raises ArgumentError for compressed term with truncated uncompressed size" do
+      # COMPRESSED tag but missing uncompressed size bytes
+      binary = <<131, 80, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for compressed term with invalid zlib data" do
+      # COMPRESSED tag with invalid compressed data
+      binary = <<131, 80, 0, 0, 0, 2, 255, 255, 255>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for compressed term with size mismatch" do
+      # COMPRESSED tag where decompressed size doesn't match declared size
+      binary = <<131, 80, 0, 0, 0, 10, 120, 156, 74, 180, 2, 0, 0, 121, 0, 121>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "raises ArgumentError if argument is not a binary" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),
