@@ -317,6 +317,20 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("URI with userinfo containing password", () => {
+      const uri = Type.bitstring("http://user:password@example.com/path");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("example.com")],
+        [Type.atom("path"), Type.bitstring("/path")],
+        [Type.atom("scheme"), Type.bitstring("http")],
+        [Type.atom("userinfo"), Type.bitstring("user:password")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("invalid UTF-8 binary raises FunctionClauseError", () => {
       const invalid = Type.bitstring([1, 1, 1, 1, 1, 1, 1, 1]);
 

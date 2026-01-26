@@ -215,6 +215,16 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
+    test "URI with userinfo containing password" do
+      assert :uri_string.parse("http://user:password@example.com/path") ==
+               %{
+                 host: "example.com",
+                 path: "/path",
+                 scheme: "http",
+                 userinfo: "user:password"
+               }
+    end
+
     test "invalid UTF-8 binary raises FunctionClauseError" do
       assert_error FunctionClauseError,
                    ~r/parse_scheme_start/,
