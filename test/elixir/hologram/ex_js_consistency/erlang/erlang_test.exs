@@ -3588,34 +3588,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "pid_to_list/1" do
     test "single digit segments" do
-      p = :erlang.list_to_pid(~c"<0.1.0>")
-      assert :erlang.pid_to_list(p) == ~c"<0.1.0>"
+      pid = pid("0.1.2")
+
+      assert :erlang.pid_to_list(pid) == ~c"<0.1.2>"
     end
 
     test "multi-digit segments" do
-      p = :erlang.list_to_pid(~c"<0.11.222>")
-      assert :erlang.pid_to_list(p) == ~c"<0.11.222>"
-    end
+      pid = pid("0.11.222")
 
-    test "self() pid" do
-      # Self returns a PID, so we can convert it to list and back
-      p = self()
-      list = :erlang.pid_to_list(p)
-      assert is_list(list)
-      # Verify the format matches the PID string format
-      assert Enum.all?(list, &is_integer/1)
+      assert :erlang.pid_to_list(pid) == ~c"<0.11.222>"
     end
 
     test "not a pid" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a pid"),
                    {:erlang, :pid_to_list, [123]}
-    end
-
-    test "atom is not a pid" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a pid"),
-                   {:erlang, :pid_to_list, [:test]}
     end
   end
 

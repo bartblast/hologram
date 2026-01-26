@@ -5792,29 +5792,29 @@ describe("Erlang", () => {
   });
 
   describe("pid_to_list/1", () => {
-    const fun = Erlang["pid_to_list/1"];
+    const testedFun = Erlang["pid_to_list/1"];
 
-    it("valid pid with single digit segments", () => {
-      const pid = Type.pid("client", [0, 1, 0], "client");
-      const result = fun(pid);
+    it("single digit segments", () => {
+      const pid = Type.pid("hologram_client", [0, 1, 2], "client");
+      const result = testedFun(pid);
 
-      // "<0.1.0>" has codepoints [60, 48, 46, 49, 46, 48, 62]
+      // "<0.1.2>" has codepoints [60, 48, 46, 49, 46, 50, 62]
       const expected = Type.list([
         Type.integer(60), // <
         Type.integer(48), // 0
         Type.integer(46), // .
         Type.integer(49), // 1
         Type.integer(46), // .
-        Type.integer(48), // 0
+        Type.integer(50), // 2
         Type.integer(62), // >
       ]);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("valid pid with multi-digit segments", () => {
-      const pid = Type.pid("client", [0, 11, 222], "client");
-      const result = fun(pid);
+    it("multi-digit segments", () => {
+      const pid = Type.pid("hologram_client", [0, 11, 222], "client");
+      const result = testedFun(pid);
 
       // "<0.11.222>" has codepoints [60, 48, 46, 49, 49, 46, 50, 50, 50, 62]
       const expected = Type.list([
@@ -5833,9 +5833,9 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("raises ArgumentError if the argument is not a pid", () => {
+    it("not a pid", () => {
       assertBoxedError(
-        () => fun(Type.integer(123)),
+        () => testedFun(Type.integer(123)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a pid"),
       );

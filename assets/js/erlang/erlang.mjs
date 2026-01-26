@@ -1574,8 +1574,9 @@ const Erlang = {
       );
     }
 
-    const pidString = `<${pid.segments.join(".")}>`;
-    return Bitstring.toCodepoints(Type.bitstring(pidString));
+    const pidText = `<${pid.segments.join(".")}>`;
+
+    return Bitstring.toCodepoints(Type.bitstring(pidText));
   },
   // End pid_to_list/1
   // Deps: []
