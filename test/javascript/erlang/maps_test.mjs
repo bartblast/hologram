@@ -356,6 +356,44 @@ describe("Erlang_Maps", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("handles multiple common keys", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.bitstring("a"), Type.integer(2)],
+        [Type.integer("1"), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(10)],
+        [Type.bitstring("a"), Type.integer(20)],
+        [Type.integer("1"), Type.integer(30)],
+      ]);
+
+      const result = intersect_with(fun, map1, map2);
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(11)],
+        [Type.bitstring("a"), Type.integer(22)],
+        [Type.integer("1"), Type.integer(33)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns an empty map when no keys are common", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("c"), Type.integer(2)],
+        [Type.atom("d"), Type.integer(4)],
+      ]);
+
+      const result = intersect_with(fun, map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
     it("returns an empty map when map1 is empty", () => {
       const map1 = Type.map([]);
       const map2 = Type.map([[Type.atom("a"), Type.integer(2)]]);

@@ -114,12 +114,13 @@ const Erlang_Maps = {
 
   // Start intersect_with/3
   "intersect_with/3": (fun, map1, map2) => {
+    // Note: Erlang checks which map is smaller and iterates over the smaller map.
+    //       We don't do this check as getting the size of an Object in JavaScript is O(n).
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
           1,
           "not a fun that takes three arguments",
-          [],
         ),
       );
     }
@@ -131,18 +132,20 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map2);
     }
 
-    return Type.map(
-      Object.values(map1.data).reduce((acc, [key, value]) => {
-        const keyValue2 = map2.data[Type.encodeMapKey(key)];
-        if (keyValue2) {
-          acc.push([
-            key,
-            Interpreter.callAnonymousFunction(fun, [key, value, keyValue2[1]]),
-          ]);
-        }
-        return acc;
-      }, []),
-    );
+    const entries = Object.values(map1.data).reduce((acc, [key, value]) => {
+      const encodedKey = Type.encodeMapKey(key);
+      const keyValue2 = map2.data[encodedKey];
+
+      if (keyValue2) {
+        acc.push([
+          key,
+          Interpreter.callAnonymousFunction(fun, [key, value, keyValue2[1]]),
+        ]);
+      }
+      return acc;
+    }, []);
+
+    return Type.map(entries);
   },
   // End intersect_with/3
   // Deps: []
