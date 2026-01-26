@@ -778,8 +778,6 @@ describe("Erlang_Binary", () => {
       });
     });
 
-    // Error case tests
-
     describe("input validation", () => {
       it("raises ArgumentError if subject is not a binary", () => {
         const pattern = Bitstring.fromText("test");
@@ -858,44 +856,6 @@ describe("Erlang_Binary", () => {
           () => match(subject, pattern, Type.list()),
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-    });
-
-    describe("invalid options", () => {
-      it("raises ArgumentError with invalid option", () => {
-        const subject = Bitstring.fromText("ababab");
-        const pattern = Bitstring.fromText("ab");
-        const options = Type.list([Type.atom("global")]);
-
-        assertBoxedError(
-          () => match(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError with :trim option", () => {
-        const subject = Bitstring.fromText("ababab");
-        const pattern = Bitstring.fromText("ab");
-        const options = Type.list([Type.atom("trim")]);
-
-        assertBoxedError(
-          () => match(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError with :trim_all option", () => {
-        const subject = Bitstring.fromText("ababab");
-        const pattern = Bitstring.fromText("ab");
-        const options = Type.list([Type.atom("trim_all")]);
-
-        assertBoxedError(
-          () => match(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
         );
       });
     });

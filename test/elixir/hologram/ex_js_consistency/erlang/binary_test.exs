@@ -385,8 +385,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.match("test", "es", []) == {1, 2}
     end
 
-    # Error case tests
-
     # Input validation
 
     test "raises ArgumentError if subject is not a binary" do
@@ -431,26 +429,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a valid pattern"),
                    {:binary, :match, ["test", {:bm, invalid_ref}, []]}
-    end
-
-    # Invalid options
-
-    test "raises ArgumentError with invalid option" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   {:binary, :match, ["ababab", "ab", [:global]]}
-    end
-
-    test "raises ArgumentError with :trim option" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   {:binary, :match, ["ababab", "ab", [:trim]]}
-    end
-
-    test "raises ArgumentError with :trim_all option" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   {:binary, :match, ["ababab", "ab", [:trim_all]]}
     end
 
     # Options validation
