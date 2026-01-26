@@ -359,7 +359,7 @@ describe("Erlang_Uri_String", () => {
     });
 
     it("invalid UTF-8 binary raises FunctionClauseError", () => {
-      const invalid = Type.bitstring([1, 1, 1, 1, 1, 1, 1, 1]);
+      const invalid = Type.bitstring([255, 255, 255, 255]);
 
       assertBoxedError(
         () => parse(invalid),

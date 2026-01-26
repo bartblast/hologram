@@ -247,7 +247,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
     test "invalid UTF-8 binary raises FunctionClauseError" do
       assert_error FunctionClauseError,
                    ~r/parse_scheme_start/,
-                   fn -> :uri_string.parse(<<255>>) end
+                   fn -> :uri_string.parse(<<255, 255, 255, 255>>) end
     end
 
     test "charlist with non-integer raises ArgumentError" do
