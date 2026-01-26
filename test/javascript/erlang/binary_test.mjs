@@ -986,7 +986,7 @@ describe("Erlang_Binary", () => {
         );
       });
 
-      it("raises ArgumentError with negative scope length", () => {
+      it("raises ArgumentError when scope start plus negative length is below zero", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("es");
         const options = Type.list([

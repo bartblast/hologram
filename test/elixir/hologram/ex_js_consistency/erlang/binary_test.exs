@@ -488,7 +488,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       end
     end
 
-    test "raises ArgumentError with negative scope length" do
+    test "raises ArgumentError when scope start plus negative length is below zero" do
       assert_raise ArgumentError, fn ->
         :binary.match("test", "es", scope: {0, -1})
       end
