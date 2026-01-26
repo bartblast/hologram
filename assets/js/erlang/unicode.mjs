@@ -323,9 +323,11 @@ const Erlang_Unicode = {
         if (length === 1) {
           return bytes[start];
         }
+
         if (length === 2) {
           return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
         }
+
         if (length === 3) {
           return (
             ((bytes[start] & 0x0f) << 12) |
@@ -373,6 +375,7 @@ const Erlang_Unicode = {
 
         // Decode and validate the code point value
         const codePoint = decodeCodePoint(start, length);
+
         return isValidCodePoint(codePoint, length);
       };
 
@@ -405,6 +408,7 @@ const Erlang_Unicode = {
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
       const textPrefix = Bitstring.toText(prefix);
+
       const normalizedPrefix =
         textPrefix === false
           ? prefix
@@ -437,6 +441,7 @@ const Erlang_Unicode = {
     // Main logic
 
     const utf8 = Type.atom("utf8");
+
     const converted = Erlang_Unicode["characters_to_binary/3"](
       data,
       utf8,
@@ -454,6 +459,7 @@ const Erlang_Unicode = {
 
     // Valid binary - check for UTF-8 validity then normalize
     const text = Bitstring.toText(converted);
+
     if (text === false) {
       const bytes = converted.bytes ?? new Uint8Array(0);
       return handleInvalidUtf8(bytes);

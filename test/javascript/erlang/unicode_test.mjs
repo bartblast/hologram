@@ -552,12 +552,14 @@ describe("Erlang_Unicode", () => {
     it("decomposes combining characters to NFD", () => {
       const input = Type.bitstring("å");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
     });
 
     it("handles already decomposed text", () => {
       const input = Type.bitstring("a\u030a");
       const result = fun(input);
+
       assert.deepStrictEqual(result, input);
     });
 
@@ -582,12 +584,14 @@ describe("Erlang_Unicode", () => {
     it("handles empty binary", () => {
       const input = Type.bitstring("");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
     it("handles empty list", () => {
       const input = Type.list();
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
@@ -742,6 +746,19 @@ describe("Erlang_Unicode", () => {
 
     it("raises ArgumentError when input is a non-binary bitstring", () => {
       const input = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input list contains invalid types", () => {
+      const input = Type.list([Type.float(123.45), Type.atom("abc")]);
 
       assertBoxedError(
         () => fun(input),

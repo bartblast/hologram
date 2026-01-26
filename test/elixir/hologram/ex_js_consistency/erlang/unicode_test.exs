@@ -349,11 +349,13 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
     test "handles already decomposed text" do
       # "a\u030a" is already in NFD form
       input = "a\u030a"
+
       assert :unicode.characters_to_nfd_binary(input) == input
     end
 
     test "decomposes nested chardata" do
       input = [<<"abc..">>, [<<"a">>, 0x030A], <<"a">>, [0x0308], <<"o">>, 0x0308]
+
       assert :unicode.characters_to_nfd_binary(input) == "abc..a\u030aa\u0308o\u0308"
     end
 
@@ -367,27 +369,32 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "handles deeply nested lists" do
       input = [[[<<"a">>, 0x030A]]]
+
       assert :unicode.characters_to_nfd_binary(input) == "a\u030a"
     end
 
     test "handles multiple combining marks" do
       input = [<<"o">>, 0x0308, 0x0304]
+
       # NFD preserves combining marks in canonical order
       assert :unicode.characters_to_nfd_binary(input) == "o\u0308\u0304"
     end
 
     test "handles large input" do
       large_input = String.duplicate("abcdefghij", 100)
+
       assert :unicode.characters_to_nfd_binary(large_input) == large_input
     end
 
     test "handles mixed ASCII and Unicode" do
       input = [<<"hello">>, <<"  ">>, <<"å">>, <<"  world">>]
+
       assert :unicode.characters_to_nfd_binary(input) == "hello  a\u030a  world"
     end
 
     test "preserves non-combining characters" do
       input = [0x3042, 0x3044]
+
       assert :unicode.characters_to_nfd_binary(input) == "あい"
     end
 
@@ -395,6 +402,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       invalid_binary = <<255, 255>>
       input = [<<"abc">>, invalid_binary]
       expected = {:error, <<"abc">>, invalid_binary}
+
       assert :unicode.characters_to_nfd_binary(input) == expected
     end
 
@@ -434,8 +442,11 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
     test "returns error tuple for truncated UTF-8 sequence" do
       # First two bytes of a 3-byte sequence (incomplete)
       incomplete_binary = <<0xE4, 0xB8>>
+
       input = ["a", incomplete_binary]
+
       expected = {:error, "a", incomplete_binary}
+
       assert :unicode.characters_to_nfd_binary(input) == expected
     end
 
@@ -450,6 +461,17 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "raises ArgumentError when input is a non-binary bitstring" do
       input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
 
       expected_msg =
         build_argument_error_msg(1, "not valid character data (an iodata term)")
