@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -287,6 +288,515 @@ describe("Erlang_Unicode", () => {
         "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
           "The following input was received: 123\n" +
           "See what to do here: https://www.hologram.page/TODO",
+      );
+    });
+  });
+
+  describe("characters_to_nfc_binary/1", () => {
+    const fun = Erlang_Unicode["characters_to_nfc_binary/1"];
+
+    it("normalizes combining characters to NFC", () => {
+      const input = Type.bitstring("a\u030a");
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("å"));
+    });
+
+    it("handles already normalized text", () => {
+      const input = Type.bitstring("åäö");
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("åäö"));
+    });
+
+    it("normalizes nested chardata", () => {
+      const input = Type.list([
+        Type.bitstring("abc.."),
+        Type.list([Type.bitstring("a"), Type.integer(0x030a)]),
+        Type.bitstring("a"),
+        Type.list([Type.integer(0x0308)]),
+        Type.bitstring("o"),
+        Type.integer(0x0308),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("abc..åäö"));
+    });
+
+    it("handles empty binary", () => {
+      const input = Type.bitstring("");
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles empty list", () => {
+      const input = Type.list();
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles deeply nested lists", () => {
+      const input = Type.list([
+        Type.list([Type.list([Type.bitstring("a"), Type.integer(0x030a)])]),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("å"));
+    });
+
+    it("returns error tuple on invalid UTF-8 in binary", () => {
+      const invalidBinary = Bitstring.fromBytes([255, 255]);
+      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abc"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects overlong UTF-8 sequence in binary", () => {
+      // Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      const invalidBinary = Bitstring.fromBytes([0xc0, 0x80]);
+
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate range in binary", () => {
+      // CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      const invalidBinary = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects code points above U+10FFFF in binary", () => {
+      // Leader 0xF5 starts sequences above Unicode max (invalid)
+      const invalidBinary = Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]);
+
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple for truncated UTF-8 sequence", () => {
+      // First two bytes of a 3-byte sequence (incomplete)
+      const incompleteBinary = Bitstring.fromBytes([0xe4, 0xb8]);
+
+      const input = Type.list([Type.bitstring("a"), incompleteBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        incompleteBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple combining marks", () => {
+      const input = Type.list([
+        Type.bitstring("o"),
+        Type.integer(0x0308), // Combining diaeresis
+        Type.integer(0x0304), // Combining macron
+      ]);
+
+      const result = fun(input);
+
+      // Normalized form combines these in canonical order
+      assert.deepStrictEqual(result, Type.bitstring("ȫ"));
+    });
+
+    it("handles large input", () => {
+      const largeInput = "abcdefghij".repeat(100);
+      const input = Type.bitstring(largeInput);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(largeInput));
+    });
+
+    it("handles mixed ASCII and Unicode", () => {
+      const input = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring(" "),
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.bitstring(" world"),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("hello å world"));
+    });
+
+    it("preserves non-combining characters", () => {
+      const input = Type.list([
+        Type.integer(0x3042), // Hiragana A
+        Type.integer(0x3044), // Hiragana I
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("あい"));
+    });
+
+    it("raises ArgumentError when input is not a list or a bitstring", () => {
+      assertBoxedError(
+        () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input is a non-binary bitstring", () => {
+      const input = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input list contains invalid types", () => {
+      const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point before normalization", () => {
+      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point after normalization", () => {
+      const input = Type.list([
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.integer(0x110000),
+      ]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+  });
+
+  describe("characters_to_nfd_binary/1", () => {
+    const fun = Erlang_Unicode["characters_to_nfd_binary/1"];
+
+    it("decomposes combining characters to NFD", () => {
+      const input = Type.bitstring("å");
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
+    });
+
+    it("handles already decomposed text", () => {
+      const input = Type.bitstring("a\u030a");
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("decomposes nested chardata", () => {
+      const input = Type.list([
+        Type.bitstring("abc.."),
+        Type.list([Type.bitstring("a"), Type.integer(0x030a)]),
+        Type.bitstring("a"),
+        Type.list([Type.integer(0x0308)]),
+        Type.bitstring("o"),
+        Type.integer(0x0308),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(
+        result,
+        Type.bitstring("abc..a\u030aa\u0308o\u0308"),
+      );
+    });
+
+    it("handles empty binary", () => {
+      const input = Type.bitstring("");
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles empty list", () => {
+      const input = Type.list();
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles deeply nested lists", () => {
+      const input = Type.list([
+        Type.list([Type.list([Type.bitstring("a"), Type.integer(0x030a)])]),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
+    });
+
+    it("handles multiple combining marks", () => {
+      const input = Type.list([
+        Type.bitstring("o"),
+        Type.integer(0x0308), // Combining diaeresis
+        Type.integer(0x0304), // Combining macron
+      ]);
+
+      const result = fun(input);
+
+      // NFD preserves combining marks in canonical order
+      assert.deepStrictEqual(result, Type.bitstring("o\u0308\u0304"));
+    });
+
+    it("handles large input", () => {
+      const largeInput = "abcdefghij".repeat(100);
+      const input = Type.bitstring(largeInput);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(largeInput));
+    });
+
+    it("handles mixed ASCII and Unicode", () => {
+      const input = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring("  "),
+        Type.bitstring("å"),
+        Type.bitstring("  world"),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("hello  a\u030a  world"));
+    });
+
+    it("preserves non-combining characters", () => {
+      const input = Type.list([
+        Type.integer(0x3042), // Hiragana A
+        Type.integer(0x3044), // Hiragana I
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("あい"));
+    });
+
+    it("returns error tuple on invalid UTF-8 in binary", () => {
+      const invalidBinary = Bitstring.fromBytes([255, 255]);
+      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abc"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects overlong UTF-8 sequence in binary", () => {
+      // Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      const invalidBinary = Bitstring.fromBytes([0xc0, 0x80]);
+
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate range in binary", () => {
+      // CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      const invalidBinary = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects code points above U+10FFFF in binary", () => {
+      // Leader 0xF5 starts sequences above Unicode max (invalid)
+      const invalidBinary = Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]);
+
+      const input = Type.list([Type.bitstring("a"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple for truncated UTF-8 sequence", () => {
+      // First two bytes of a 3-byte sequence (incomplete)
+      const incompleteBinary = Bitstring.fromBytes([0xe4, 0xb8]);
+      const input = Type.list([Type.bitstring("a"), incompleteBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a"),
+        incompleteBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError when input is not a list or a bitstring", () => {
+      assertBoxedError(
+        () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input is a non-binary bitstring", () => {
+      const input = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input list contains invalid types", () => {
+      const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point", () => {
+      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point after normalization", () => {
+      const input = Type.list([
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.integer(0x110000),
+      ]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
       );
     });
   });

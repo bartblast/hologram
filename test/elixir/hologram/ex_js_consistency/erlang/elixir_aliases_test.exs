@@ -82,4 +82,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
                    end
     end
   end
+
+  # Note: there's no atom table limitation in the client-side Hologram runtime,
+  # safe_concat/1 can simply delegate directly to concat/1 there.
+  # Here we're just testing the function is available.
+  test "safe_concat/1" do
+    assert :elixir_aliases.safe_concat([Date, Range]) == Date.Range
+  end
 end

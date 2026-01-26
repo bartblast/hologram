@@ -3464,6 +3464,41 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_tuple/1" do
+    test "non-empty list" do
+      assert :erlang.list_to_tuple([1, 2, 3]) == {1, 2, 3}
+    end
+
+    test "empty list" do
+      assert :erlang.list_to_tuple([]) == {}
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_tuple, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_tuple, [[1, 2 | 3]]}
+    end
+  end
+
+  describe "localtime/0" do
+    test "returns a tuple with date and time" do
+      assert {{year, month, day}, {hour, minute, second}} = :erlang.localtime()
+
+      assert year in 1970..2100
+      assert month in 1..12
+      assert day in 1..31
+      assert hour in 0..23
+      assert minute in 0..59
+      assert second in 0..59
+    end
+  end
+
   describe "make_ref/0" do
     test "returns a reference" do
       result = :erlang.make_ref()

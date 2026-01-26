@@ -18,6 +18,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
+    {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
+    {{:binary, :split, 2}, {:binary, :split, 3}},
+    {{:binary, :split, 3}, {:binary, :_aho_corasick_search, 3}},
+    {{:binary, :split, 3}, {:binary, :_boyer_moore_search, 4}},
+    {{:binary, :split, 3}, {:binary, :_parse_search_opts, 2}},
+    {{:binary, :split, 3}, {:binary, :compile_pattern, 1}},
+    {{:elixir_aliases, :safe_concat, 1}, {:elixir_aliases, :concat, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
@@ -42,14 +49,20 @@ defmodule Hologram.Compiler.CallGraph do
     {{:filename, :extension, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :extension, 1}, {:filename, :flatten, 1}},
     {{:filename, :flatten, 1}, {:filename, :_do_flatten, 2}},
+    {{:filename, :join, 1}, {:filename, :join, 2}},
+    {{:filename, :join, 2}, {:erlang, :iolist_to_binary, 1}},
+    {{:filename, :join, 2}, {:filename, :flatten, 1}},
     {{:filename, :split, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :split, 1}, {:filename, :flatten, 1}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
     {{:lists, :keysort, 2}, {:erlang, :element, 2}},
     {{:maps, :get, 2}, {:maps, :get, 3}},
+    {{:maps, :take, 2}, {:maps, :get, 3}},
+    {{:maps, :take, 2}, {:maps, :remove, 2}},
     {{:maps, :update, 3}, {:maps, :is_key, 2}},
     {{:maps, :update, 3}, {:maps, :put, 3}},
     {{:sets, :_validate_opts, 1}, {:lists, :keyfind, 3}},
+    {{:sets, :add_element, 2}, {:maps, :put, 3}},
     {{:sets, :del_element, 2}, {:maps, :remove, 2}},
     {{:sets, :fold, 3}, {:maps, :keys, 1}},
     {{:sets, :from_list, 2}, {:maps, :from_keys, 2}},
@@ -58,12 +71,16 @@ defmodule Hologram.Compiler.CallGraph do
     {{:sets, :is_subset, 2}, {:sets, :is_element, 2}},
     {{:sets, :is_subset, 2}, {:sets, :to_list, 1}},
     {{:sets, :new, 1}, {:sets, :_validate_opts, 1}},
-    {{:sets, :to_list, 1}, {:maps, :keys, 1}},
     {{:sets, :size, 1}, {:maps, :keys, 1}},
+    {{:sets, :to_list, 1}, {:maps, :keys, 1}},
+    {{:string, :replace, 3}, {:string, :replace, 4}},
+    {{:string, :replace, 4}, {:unicode, :characters_to_binary, 1}},
     {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
     {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
-    {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
+    {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}},
+    {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :characters_to_nfd_binary, 1}, {:unicode, :characters_to_binary, 3}}
   ]
 
   # These functions are transpiled manually for at least one of the following reasons:

@@ -18,6 +18,7 @@ const Erlang_UnicodeUtil = {
     const BMP_MAX = 0xffff;
 
     // Helper functions
+
     const errorTuple = (binary) => Type.tuple([Type.atom("error"), binary]);
 
     const isSurrogatePair = (codepoint) =>

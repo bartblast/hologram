@@ -1436,6 +1436,47 @@ const Erlang = {
   // End list_to_ref/1
   // Deps: []
 
+  // Start list_to_tuple/1
+  "list_to_tuple/1": (list) => {
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+    return Type.tuple(list.data);
+  },
+  // End list_to_tuple/1
+  // Deps: []
+
+  // Start localtime/0
+  "localtime/0": () => {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1; // JavaScript months are 0-indexed
+    const day = now.getDate();
+
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const second = now.getSeconds();
+
+    const date = Type.tuple([
+      Type.integer(year),
+      Type.integer(month),
+      Type.integer(day),
+    ]);
+
+    const time = Type.tuple([
+      Type.integer(hour),
+      Type.integer(minute),
+      Type.integer(second),
+    ]);
+
+    return Type.tuple([date, time]);
+  },
+  // End localtime/0
+  // Deps: []
+
   // Start make_ref/0
   "make_ref/0": () => {
     const node = ERTS.nodeTable.CLIENT_NODE;

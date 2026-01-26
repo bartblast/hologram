@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Unicode from "./unicode.mjs";
 import Erlang_UnicodeUtil from "./unicode_util.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -74,6 +75,81 @@ const Erlang_String = {
   },
   // End join/2
   // Deps: []
+
+  // Start replace/3
+  "replace/3": (string, pattern, replacement) => {
+    return Erlang_String["replace/4"](
+      string,
+      pattern,
+      replacement,
+      Type.atom("leading"),
+    );
+  },
+  // End replace/3
+  // Deps: [:string.replace/4]
+
+  // Start replace/4
+  "replace/4": (string, pattern, replacement, direction) => {
+    let stringBinary;
+
+    // Convert string to binary - re-throw as MatchError (Erlang raises MatchError for invalid string)
+    try {
+      stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
+    } catch {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    }
+
+    // Convert pattern to binary - let ArgumentError propagate naturally
+    const patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
+
+    if (!Type.isAtom(direction)) {
+      Interpreter.raiseCaseClauseError(direction);
+    }
+
+    const stringText = Bitstring.toText(stringBinary);
+    const patternText = Bitstring.toText(patternBinary);
+
+    if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
+      return Type.list([Type.bitstring(stringText)]);
+    }
+
+    let resultList, index;
+
+    switch (direction.value) {
+      case "all":
+        resultList = stringText.split(patternText).flatMap((elem, idx) => {
+          return idx === 0
+            ? [Type.bitstring(elem)]
+            : [replacement, Type.bitstring(elem)];
+        });
+        break;
+
+      case "trailing":
+        index = stringText.lastIndexOf(patternText);
+        resultList = [
+          Type.bitstring(stringText.slice(0, index)),
+          replacement,
+          Type.bitstring(stringText.slice(index + patternText.length)),
+        ];
+        break;
+
+      case "leading":
+        index = stringText.indexOf(patternText);
+        resultList = [
+          Type.bitstring(stringText.slice(0, index)),
+          replacement,
+          Type.bitstring(stringText.slice(index + patternText.length)),
+        ];
+        break;
+
+      default:
+        Interpreter.raiseCaseClauseError(direction);
+    }
+
+    return Type.list(resultList);
+  },
+  // End replace/4
+  // Deps: [:unicode.characters_to_binary/1]
 
   // Start titlecase/1
   "titlecase/1": (subject) => {

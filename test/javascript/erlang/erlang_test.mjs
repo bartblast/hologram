@@ -5558,6 +5558,92 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_tuple/1", () => {
+    const list_to_tuple = Erlang["list_to_tuple/1"];
+
+    it("non-empty list", () => {
+      const data = [Type.integer(1), Type.integer(2), Type.integer(3)];
+      const list = Type.list(data);
+
+      const result = list_to_tuple(list);
+      const expected = Type.tuple(data);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list", () => {
+      const result = list_to_tuple(Type.list());
+
+      assert.deepStrictEqual(result, Type.tuple());
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_tuple(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assertBoxedError(
+        () => list_to_tuple(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+  });
+
+  describe("localtime/0", () => {
+    const localtime = Erlang["localtime/0"];
+
+    it("returns a tuple with date and time", () => {
+      // Type checks
+
+      const result = localtime();
+      assert.isTrue(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 2);
+
+      const date = result.data[0];
+      assert.isTrue(Type.isTuple(date));
+      assert.strictEqual(date.data.length, 3);
+
+      const [year, month, day] = date.data;
+      assert.isTrue(Type.isInteger(year));
+      assert.isTrue(Type.isInteger(month));
+      assert.isTrue(Type.isInteger(day));
+
+      const time = result.data[1];
+      assert.isTrue(Type.isTuple(time));
+      assert.strictEqual(time.data.length, 3);
+
+      const [hour, minute, second] = time.data;
+      assert.isTrue(Type.isInteger(hour));
+      assert.isTrue(Type.isInteger(minute));
+      assert.isTrue(Type.isInteger(second));
+
+      // Range checks
+      assert.isAtLeast(year.value, 1970n);
+      assert.isAtMost(year.value, 2100n);
+      assert.isAtLeast(month.value, 1n);
+      assert.isAtMost(month.value, 12n);
+      assert.isAtLeast(day.value, 1n);
+      assert.isAtMost(day.value, 31n);
+      assert.isAtLeast(hour.value, 0n);
+      assert.isAtMost(hour.value, 23n);
+      assert.isAtLeast(minute.value, 0n);
+      assert.isAtMost(minute.value, 59n);
+      assert.isAtLeast(second.value, 0n);
+      assert.isAtMost(second.value, 59n);
+    });
+  });
+
   describe("make_ref/0", () => {
     const make_ref = Erlang["make_ref/0"];
 

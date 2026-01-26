@@ -623,6 +623,539 @@ describe("Erlang_Filename", () => {
     });
   });
 
+  describe("join/1", () => {
+    const join = Erlang_Filename["join/1"];
+
+    it("joins multiple path components", () => {
+      const components = Type.list([
+        Type.bitstring("usr"),
+        Type.bitstring("local"),
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("usr/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("joins components with leading slash", () => {
+      const components = Type.list([
+        Type.bitstring("/usr"),
+        Type.bitstring("local"),
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("normalizes path with redundant slashes", () => {
+      const components = Type.list([Type.bitstring("a/b///c/")]);
+      const result = join(components);
+      const expected = Type.bitstring("a/b/c");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles single component", () => {
+      const components = Type.list([Type.bitstring("foo")]);
+      const result = join(components);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute path in middle component", () => {
+      const components = Type.list([
+        Type.bitstring("usr"),
+        Type.bitstring("/local"),
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles trailing slashes", () => {
+      const components = Type.list([
+        Type.bitstring("a/"),
+        Type.bitstring("b"),
+        Type.bitstring("c"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("a/b/c");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty string components", () => {
+      const components = Type.list([
+        Type.bitstring(""),
+        Type.bitstring(""),
+        Type.bitstring(""),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles dot components", () => {
+      const components = Type.list([
+        Type.bitstring("."),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("./local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles parent directory references", () => {
+      const components = Type.list([
+        Type.bitstring(".."),
+        Type.bitstring("usr"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("../usr");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles atom components", () => {
+      const components = Type.list([Type.atom("foo"), Type.atom("bar")]);
+      const result = join(components);
+      const expected = Type.charlist("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles nested list components", () => {
+      const components = Type.list([
+        Type.list([Type.bitstring("a"), Type.bitstring("b")]),
+        Type.bitstring("c"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("ab/c");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles iolist components", () => {
+      const components = Type.list([
+        Type.list([
+          Type.integer(117), // 'u'
+          Type.integer(115), // 's'
+          Type.integer(114), // 'r'
+        ]),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles root with additional components", () => {
+      const components = Type.list([
+        Type.bitstring("/"),
+        Type.bitstring("usr"),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple consecutive slashes", () => {
+      const components = Type.list([
+        Type.bitstring("//usr"),
+        Type.bitstring("local"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("preserves invalid UTF-8 bytes in binary components", () => {
+      const invalid = Bitstring.fromBytes([0xc3, 0x28]); // invalid 2-byte sequence
+      Bitstring.maybeSetTextFromBytes(invalid);
+
+      const components = Type.list([
+        Type.bitstring("usr"),
+        invalid,
+        Type.bitstring("bin"),
+      ]);
+
+      const result = join(components);
+
+      const expected = Bitstring.fromBytes([
+        117, 115, 114, 47, 0xc3, 0x28, 47, 98, 105, 110,
+      ]);
+
+      Bitstring.maybeSetTextFromBytes(expected);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles single absolute component", () => {
+      const components = Type.list([Type.bitstring("/usr/local/bin")]);
+      const result = join(components);
+      const expected = Type.bitstring("/usr/local/bin");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles single root component", () => {
+      const components = Type.list([Type.bitstring("/")]);
+      const result = join(components);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles deeply nested iolist components", () => {
+      const components = Type.list([
+        Type.list([Type.list([Type.bitstring("a")])]),
+        Type.bitstring("b"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("a/b");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles mixed types with absolute path override", () => {
+      const components = Type.list([
+        Type.bitstring("usr"),
+        Type.bitstring("local"),
+        Type.bitstring("/tmp"),
+        Type.bitstring("file"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("/tmp/file");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple atoms and binaries", () => {
+      const components = Type.list([
+        Type.atom("home"),
+        Type.bitstring("user"),
+        Type.atom("documents"),
+      ]);
+
+      const result = join(components);
+      const expected = Type.bitstring("home/user/documents");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      const arg = Type.bitstring("not-a-list");
+
+      assertBoxedError(
+        () => join(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is empty", () => {
+      const arg = Type.list([]);
+
+      assertBoxedError(
+        () => join(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+      );
+    });
+  });
+
+  describe("join/2", () => {
+    const join = Erlang_Filename["join/2"];
+
+    it("joins two path components", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute first component", () => {
+      const name1 = Type.bitstring("/usr");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute second component", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("/local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty first component", () => {
+      const name1 = Type.bitstring("");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty second component", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles both empty components", () => {
+      const name1 = Type.bitstring("");
+      const name2 = Type.bitstring("");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles trailing slash in first component", () => {
+      const name1 = Type.bitstring("usr/");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles absolute second component with trailing slash in first", () => {
+      const name1 = Type.bitstring("usr/");
+      const name2 = Type.bitstring("/local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles atom inputs", () => {
+      const name1 = Type.atom("foo");
+      const name2 = Type.atom("bar");
+      const result = join(name1, name2);
+      const expected = Type.charlist("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles mixed atom and binary inputs", () => {
+      const name1 = Type.atom("foo");
+      const name2 = Type.bitstring("bar");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles list input for first component", () => {
+      const name1 = Type.list([
+        Type.integer(117),
+        Type.integer(115),
+        Type.integer(114),
+      ]); // 'usr'
+
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles list input for second component", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.list([
+        Type.integer(108),
+        Type.integer(111),
+        Type.integer(99),
+        Type.integer(97),
+        Type.integer(108),
+      ]); // 'local'
+
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles iolist inputs", () => {
+      const name1 = Type.list([
+        Type.list([Type.integer(117), Type.integer(115), Type.integer(114)]),
+      ]); // [[?u, ?s, ?r]]
+
+      const name2 = Type.list([
+        Type.list([
+          Type.integer(108),
+          Type.integer(111),
+          Type.integer(99),
+          Type.integer(97),
+          Type.integer(108),
+        ]),
+      ]); // [[?l, ?o, ?c, ?a, ?l]]
+
+      const result = join(name1, name2);
+      const expected = Type.charlist("usr/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("normalizes redundant slashes", () => {
+      const name1 = Type.bitstring("usr//");
+      const name2 = Type.bitstring("//local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles dot in paths", () => {
+      const name1 = Type.bitstring(".");
+      const name2 = Type.bitstring("local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("./local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles parent directory reference", () => {
+      const name1 = Type.bitstring("usr");
+      const name2 = Type.bitstring("../local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("usr/../local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("preserves invalid UTF-8 bytes in binary inputs", () => {
+      const invalidBytes = [0xc3, 0x28]; // invalid 2-byte UTF-8 sequence
+      const name1 = Type.bitstring("usr");
+
+      const name2 = Bitstring.fromBytes(invalidBytes);
+      Bitstring.maybeSetTextFromBytes(name2);
+
+      const result = join(name1, name2);
+
+      const expected = Bitstring.fromBytes([
+        117,
+        115,
+        114,
+        47,
+        ...invalidBytes,
+      ]);
+
+      Bitstring.maybeSetTextFromBytes(expected);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles both components as slash", () => {
+      const name1 = Type.bitstring("/");
+      const name2 = Type.bitstring("/");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles slash with empty", () => {
+      const name1 = Type.bitstring("/");
+      const name2 = Type.bitstring("");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty with slash", () => {
+      const name1 = Type.bitstring("");
+      const name2 = Type.bitstring("/");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple absolute path components", () => {
+      const name1 = Type.bitstring("/usr");
+      const name2 = Type.bitstring("/local");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("/local");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles complex path with dots", () => {
+      const name1 = Type.bitstring("./foo");
+      const name2 = Type.bitstring("bar/./baz");
+      const result = join(name1, name2);
+      const expected = Type.bitstring("./foo/bar/baz");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if first argument is invalid", () => {
+      const arg1 = Type.integer(123);
+      const arg2 = Type.bitstring("local");
+
+      assertBoxedError(
+        () => join(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
+          arg1,
+          arg2,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is invalid", () => {
+      const arg1 = Type.bitstring("usr");
+      const arg2 = Type.integer(123);
+
+      assertBoxedError(
+        () => join(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/2", [
+          arg1,
+          arg2,
+        ]),
+      );
+    });
+  });
+
   describe("split/1", () => {
     const split = Erlang_Filename["split/1"];
 
