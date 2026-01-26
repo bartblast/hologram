@@ -902,7 +902,7 @@ describe("Erlang_Unicode", () => {
 
     it("normalizes compatibility characters", () => {
       // NFKC normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
-      const input = Type.bitstring("\u210C"); // ℌ DOUBLE-STRUCK CAPITAL H
+      const input = Type.bitstring("\u210C"); // ℌ SCRIPT CAPITAL H
       const result = fun(input);
       assert.deepStrictEqual(result, Type.bitstring("H"));
     });
@@ -988,16 +988,16 @@ describe("Erlang_Unicode", () => {
     });
 
     it("returns error tuple for truncated UTF-8 sequence", () => {
-      // Truncated UTF-8: start of a 2-byte sequence without continuation
-      const truncatedBinary = Bitstring.fromBytes([0xc3]);
-      const input = Type.list([Type.bitstring("test"), truncatedBinary]);
+      // First two bytes of a 3-byte sequence (incomplete)
+      const incompleteBinary = Bitstring.fromBytes([0xe4, 0xb8]);
+      const input = Type.list([Type.bitstring("a"), incompleteBinary]);
 
       const result = fun(input);
 
       const expected = Type.tuple([
         Type.atom("error"),
-        Type.bitstring("test"),
-        truncatedBinary,
+        Type.bitstring("a"),
+        incompleteBinary,
       ]);
 
       assert.deepStrictEqual(result, expected);
