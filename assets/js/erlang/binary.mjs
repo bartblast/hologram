@@ -578,6 +578,125 @@ const Erlang_Binary = {
   // End match/3
   // Deps: [:binary._aho_corasick_search/3, :binary._boyer_moore_search/4, :binary._parse_search_opts/2, :binary.compile_pattern/1]
 
+  // Start matches/2
+  "matches/2": (subject, pattern) => {
+    return Erlang_Binary["matches/3"](subject, pattern, Type.list());
+  },
+  // End matches/2
+  // Deps: [:binary.matches/3]
+
+  // Start matches/3
+  "matches/3": (subject, pattern, options) => {
+    if (!Type.isBinary(subject)) {
+      const msg = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    }
+
+    Bitstring.maybeSetBytesFromText(subject);
+
+    const {global, trim, trimAll, scopeStart, scopeLength} = Erlang_Binary[
+      "_parse_search_opts/2"
+    ](options, 3);
+
+    if (global || trim || trimAll || scopeStart > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    if (scopeLength !== null && scopeStart + scopeLength < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    const isCompiledPattern = Type.isCompiledPattern(pattern);
+
+    let compiledPattern;
+
+    try {
+      compiledPattern = isCompiledPattern
+        ? pattern
+        : Erlang_Binary["compile_pattern/1"](pattern);
+    } catch (error) {
+      if (error.struct) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      }
+
+      throw error;
+    }
+
+    const patternType = compiledPattern.data[0].value;
+    const patternRef = compiledPattern.data[1];
+    const compiledData = ERTS.binaryPatternRegistry.get(patternRef);
+
+    if (!compiledData || compiledData.type !== patternType) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+      );
+    }
+
+    const effectiveLength =
+      scopeLength === null ? subject.bytes.length - scopeStart : scopeLength;
+
+    if (scopeStart + effectiveLength > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    const scopeEnd = scopeStart + effectiveLength;
+    const searchStart = Math.min(scopeStart, scopeEnd);
+    const searchEnd = Math.max(scopeStart, scopeEnd);
+
+    if (scopeLength === 0 || searchStart >= subject.bytes.length) {
+      return Type.list();
+    }
+
+    const results = [];
+    let currentStart = searchStart;
+
+    while (currentStart < searchEnd) {
+      const remainingLength = searchEnd - currentStart;
+
+      const matchOptions = Type.list([
+        Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([
+            Type.integer(currentStart),
+            Type.integer(remainingLength),
+          ]),
+        ]),
+      ]);
+
+      const matchResult = Erlang_Binary["match/3"](
+        subject,
+        compiledPattern,
+        matchOptions,
+      );
+
+      if (Type.isAtom(matchResult) && matchResult.value === "nomatch") {
+        break;
+      }
+
+      results.push(matchResult);
+
+      const matchPos = Number(matchResult.data[0].value);
+      const matchLength = Number(matchResult.data[1].value);
+
+      currentStart = matchPos + matchLength;
+    }
+
+    return Type.list(results);
+  },
+  // End matches/3
+  // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
+
   // Start split/2
   "split/2": (subject, pattern) => {
     return Erlang_Binary["split/3"](subject, pattern, Type.list());
