@@ -123,6 +123,15 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
+    test "URI with IPv6 address without port" do
+      assert :uri_string.parse("http://[2001:db8::1]/path") ==
+               %{
+                 host: "2001:db8::1",
+                 path: "/path",
+                 scheme: "http"
+               }
+    end
+
     test "URI with empty port" do
       assert :uri_string.parse("http://example.com:/path") ==
                %{

@@ -183,6 +183,19 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("URI with IPv6 address without port", () => {
+      const uri = Type.bitstring("http://[2001:db8::1]/path");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("2001:db8::1")],
+        [Type.atom("path"), Type.bitstring("/path")],
+        [Type.atom("scheme"), Type.bitstring("http")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("URI with empty port", () => {
       const uri = Type.bitstring("http://example.com:/path");
       const result = parse(uri);
