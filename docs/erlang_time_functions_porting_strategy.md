@@ -20,7 +20,7 @@ These are the **only** functions that should directly use JavaScript APIs:
 
 | Function | JS API | Notes |
 |----------|--------|-------|
-| `:os.system_time/0` | `Date.now()` | Convert to nanoseconds |
+| `:os.system_time/0` | `performance.timeOrigin + performance.now()` | Convert to nanoseconds |
 | `:erlang.monotonic_time/0` | `performance.now()` | Convert to nanoseconds |
 
 All other functions should delegate to these rather than calling JS APIs directly.
@@ -63,7 +63,7 @@ All `/1` variants should delegate to their `/0` counterpart + `convert_time_unit
 
 ```
 Layer 1 (Base functions):
-    Date.now()  ─────────────►  :os.system_time/0
+    performance.timeOrigin + performance.now()  ──►  :os.system_time/0
     performance.now()  ──────►  :erlang.monotonic_time/0
 
 Layer 2 (Utility):
