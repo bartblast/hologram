@@ -570,6 +570,13 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfkc_binary(input) == "A"
     end
 
+    test "normalizes fullwidth numbers" do
+      # NFKC normalizes fullwidth digits: ３２ -> 32
+      input = [0xFF13, 0xFF12]
+
+      assert :unicode.characters_to_nfkc_binary(input) == "32"
+    end
+
     test "returns error tuple on invalid UTF-8 in binary" do
       invalid_binary = <<255, 255>>
       input = ["abc", invalid_binary]

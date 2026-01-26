@@ -921,6 +921,18 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, Type.bitstring("A"));
     });
 
+    it("normalizes fullwidth numbers", () => {
+      // NFKC normalizes fullwidth digits to ASCII: ３２ (U+FF13, U+FF12) -> 32
+      const input = Type.list([
+        Type.integer(0xff13), // ３ FULLWIDTH DIGIT THREE
+        Type.integer(0xff12), // ２ FULLWIDTH DIGIT TWO
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("32"));
+    });
+
     it("returns error tuple on invalid UTF-8 in binary", () => {
       const invalidBinary = Bitstring.fromBytes([255, 255]);
       const input = Type.list([Type.bitstring("abc"), invalidBinary]);
