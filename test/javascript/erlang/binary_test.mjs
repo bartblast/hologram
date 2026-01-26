@@ -667,7 +667,7 @@ describe("Erlang_Binary", () => {
     });
 
     describe("scope option - valid cases", () => {
-      it("finds pattern within scope", () => {
+      it("returns nomatch when pattern exists but not within scope", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
 

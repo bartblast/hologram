@@ -352,7 +352,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     # Scope option - valid cases
 
-    test "finds pattern within scope" do
+    test "returns nomatch when pattern exists but not within scope" do
       assert :binary.match("hello world", "world", scope: {0, 3}) == :nomatch
     end
 
