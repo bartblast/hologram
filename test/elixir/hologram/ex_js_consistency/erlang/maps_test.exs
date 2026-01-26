@@ -181,13 +181,13 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert map2 == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
     end
 
-    test "map1 not a map" do
+    test "raises when map1 is not a map" do
       assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.intersect(:abc, %{})
       end
     end
 
-    test "map2 not a map" do
+    test "raises when map2 is not a map" do
       assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.intersect(%{}, :abc)
       end
