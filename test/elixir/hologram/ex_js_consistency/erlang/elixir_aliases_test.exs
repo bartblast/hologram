@@ -82,4 +82,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
                    end
     end
   end
+
+  # Note: there's no atom table limitation in the client-side JavaScript runtime,
+  # safe_concat/1 can simply delegate directly to concat/1.
+  # test "safe_concat/1"
 end
