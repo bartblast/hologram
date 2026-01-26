@@ -1727,6 +1727,59 @@ const Erlang = {
   // End tl/1
   // Deps: []
 
+  // Start time_offset/0
+  "time_offset/0": () => {
+    return Erlang["time_offset/1"](Type.atom("native"));
+  },
+  // End time_offset/0
+  // Deps: [:erlang.time_offset/1]
+
+  // Start time_offset/1
+  "time_offset/1": (unit) => {
+    let unitValue;
+
+    if (Type.isAtom(unit)) {
+      switch (unit.value) {
+        case "native":
+          unitValue = 1_000_000n;
+          break;
+        case "second":
+          unitValue = 1_000_000_000n;
+          break;
+        case "millisecond":
+          unitValue = 1_000_000n;
+          break;
+        case "microsecond":
+          unitValue = 1_000n;
+          break;
+        case "nanosecond":
+          unitValue = 1n;
+          break;
+        default:
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+          );
+      }
+    } else if (Type.isInteger(unit) && unit.value >= 1n) {
+      unitValue = unit.value;
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    }
+
+    const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
+    const monoTimeNs =
+      BigInt(Math.round(performance.timeOrigin + performance.now())) *
+      1_000_000n;
+    const offsetNs = systemTimeNs - monoTimeNs;
+
+    const quotient = offsetNs / unitValue;
+    return Type.integer(quotient);
+  },
+  // End time_offset/1
+  // Deps: []
+
   // Start trunc/1
   "trunc/1": (number) => {
     if (!Type.isNumber(number)) {

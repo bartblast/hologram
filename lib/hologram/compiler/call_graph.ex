@@ -47,6 +47,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :is_map_key, 2}, {:maps, :is_key, 2}},
     {{:erlang, :list_to_integer, 1}, {:erlang, :list_to_integer, 2}},
     {{:erlang, :split_binary, 2}, {:erlang, :byte_size, 1}},
+    {{:erlang, :time_offset, 0}, {:erlang, :time_offset, 1}},
     {{:filename, :_do_flatten, 2}, {:erlang, :atom_to_list, 1}},
     {{:filename, :basename, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :basename, 1}, {:filename, :flatten, 1}},
