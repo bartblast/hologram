@@ -718,6 +718,7 @@ const Erlang_Binary = {
     }
 
     // Main split logic using match/3
+
     const results = [];
     let cursor = 0; // position in full subject where next segment starts
     let searchPos = actualStart; // current search position
@@ -725,6 +726,7 @@ const Erlang_Binary = {
 
     while (searchPos < actualEnd) {
       const remainingLength = actualEnd - searchPos;
+
       const matchOptions = Type.list([
         Type.tuple([
           Type.atom("scope"),
@@ -739,14 +741,16 @@ const Erlang_Binary = {
         matchOptions,
       );
 
+      // No more matches found
       if (Type.isAtom(matchResult) && matchResult.value === "nomatch") {
-        // No more matches found
         const remaining =
           cursor < subject.bytes.length
             ? bytesToBitstring(subject.bytes.slice(cursor))
             : Bitstring.fromText("");
+
         results.push(remaining);
         foundMatch = false;
+
         break;
       }
 
@@ -761,6 +765,7 @@ const Erlang_Binary = {
         const beforeMatch = bytesToBitstring(
           subject.bytes.slice(cursor, matchStart),
         );
+
         results.push(beforeMatch);
       } else if (matchStart === cursor) {
         // Empty part before match
@@ -777,8 +782,10 @@ const Erlang_Binary = {
           cursor < subject.bytes.length
             ? bytesToBitstring(subject.bytes.slice(cursor))
             : Bitstring.fromText("");
+
         results.push(remaining);
         foundMatch = false;
+
         break;
       }
     }
