@@ -1566,6 +1566,20 @@ const Erlang = {
   // End not/1
   // Deps: []
 
+  // Start pid_to_list/1
+  "pid_to_list/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    const pidString = `<${pid.segments.join(".")}>`;
+    return Bitstring.toCodepoints(Type.bitstring(pidString));
+  },
+  // End pid_to_list/1
+  // Deps: []
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
