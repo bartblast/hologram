@@ -2808,13 +2808,22 @@ describe("Erlang", () => {
       });
 
       it("decodes large positive integer (LARGE_BIG_EXT)", () => {
-        // :erlang.term_to_binary(1000000000000) but manually crafted with LARGE_BIG_EXT tag
-        // Note: In practice, Erlang might use SMALL_BIG_EXT for this, but we test LARGE_BIG_EXT support
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 111, 0, 0, 0, 5, 0, 0, 16, 165, 212, 232]),
-        );
+        // 2^2048 requires 257 bytes (bit 2048 is in byte 256), which requires LARGE_BIG_EXT (SMALL_BIG_EXT max is 255 bytes)
+        // Format: [131, 111, length(4 bytes BE), sign(1 byte), data bytes(LE)]
+        const bytes = new Uint8Array(1 + 1 + 4 + 1 + 257);
+        bytes[0] = 131;
+        bytes[1] = 111;
+        bytes[2] = 0; // Length: 257 (0x00000101 in big-endian)
+        bytes[3] = 0;
+        bytes[4] = 1;
+        bytes[5] = 1;
+        bytes[6] = 0; // Sign: 0 (positive)
+        // 2^2048 in little-endian: byte 256 (index 7+256=263) has bit 0 set (0x01), all others are 0x00
+        bytes[263] = 1; // byte at index 7 + 256 = 263
+
+        const binary = Bitstring.fromBytes(bytes);
         const result = binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(1000000000000n));
+        assert.deepStrictEqual(result, Type.integer(2n ** 2048n));
       });
     });
 
