@@ -360,13 +360,13 @@ describe("Erlang_Maps", () => {
       const map1 = Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.bitstring("a"), Type.integer(2)],
-        [Type.integer("1"), Type.integer(3)],
+        [Type.integer(1), Type.integer(3)],
       ]);
 
       const map2 = Type.map([
         [Type.atom("a"), Type.integer(10)],
         [Type.bitstring("a"), Type.integer(20)],
-        [Type.integer("1"), Type.integer(30)],
+        [Type.integer(1), Type.integer(30)],
       ]);
 
       const result = intersect_with(fun, map1, map2);
