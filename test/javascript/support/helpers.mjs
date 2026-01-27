@@ -11,6 +11,7 @@ import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
 import Erlang_Elixir_Aliases from "../../../assets/js/erlang/elixir_aliases.mjs";
 import Erlang_Elixir_Locals from "../../../assets/js/erlang/elixir_locals.mjs";
+import Erlang_Filelib from "../../../assets/js/erlang/filelib.mjs";
 import Erlang_Filename from "../../../assets/js/erlang/filename.mjs";
 import Erlang_Init from "../../../assets/js/erlang/init.mjs";
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
@@ -253,6 +254,7 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang_Code = Erlang_Code;
   globalThis.Erlang_Elixir_Aliases = Erlang_Elixir_Aliases;
   globalThis.Erlang_Elixir_Locals = Erlang_Elixir_Locals;
+  globalThis.Erlang_Filelib = Erlang_Filelib;
   globalThis.Erlang_Filename = Erlang_Filename;
   globalThis.Erlang_Init = Erlang_Init;
   globalThis.Erlang_Lists = Erlang_Lists;
