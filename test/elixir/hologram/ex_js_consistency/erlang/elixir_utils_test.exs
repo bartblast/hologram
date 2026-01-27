@@ -11,49 +11,70 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
 
   if Version.match?(System.version(), "> 1.17.0") do
     describe "jaro_similarity/2" do
-      test "works with strings, charlists, and integer lists producing same results" do
-        str_result = :elixir_utils.jaro_similarity("abc", "abd")
-        char_result = :elixir_utils.jaro_similarity(~c"abc", ~c"abd")
-        int_result = :elixir_utils.jaro_similarity([97, 98, 99], [97, 98, 100])
-        assert str_result == char_result
-        assert char_result == int_result
+      test "returns 1.0 for identical strings" do
+        assert :elixir_utils.jaro_similarity("hello", "hello") == 1.0
       end
 
-      test "handles slight deviations" do
-        assert_in_delta :elixir_utils.jaro_similarity("martha", "marhta"), 0.944, 0.001
-        assert_in_delta :elixir_utils.jaro_similarity("dwayne", "duane"), 0.822, 0.001
-        assert_in_delta :elixir_utils.jaro_similarity("dixon", "dicksonx"), 0.767, 0.001
+      test "returns 1.0 when both inputs are empty" do
+        assert :elixir_utils.jaro_similarity("", "") == 1.0
       end
 
       test "returns 0.0 for completely different inputs" do
         assert :elixir_utils.jaro_similarity("abc", "xyz") == 0.0
       end
 
-      test "handles empty inputs" do
-        assert :elixir_utils.jaro_similarity("", "") == 1.0
+      test "returns 0.0 when first input is empty" do
         assert :elixir_utils.jaro_similarity("", "hello") == 0.0
+      end
+
+      test "returns 0.0 when second input is empty" do
         assert :elixir_utils.jaro_similarity("hello", "") == 0.0
       end
 
-      test "handles single character inputs" do
+      test "returns 0.0 for identical single characters" do
         # Known issue in :elixir_utils.jaro_similarity/2
         # will be fixed when Elixir requires Erlang/OTP 27+
         # and switches to :string.jaro_similarity/2
         assert :elixir_utils.jaro_similarity("a", "a") == 0.0
+      end
+
+      test "returns 0.0 for different single characters" do
         assert :elixir_utils.jaro_similarity("a", "b") == 0.0
       end
 
-      test "handles transpositions" do
+      test "returns 0.0 for completely transposed two-character string" do
         assert :elixir_utils.jaro_similarity("ab", "ba") == 0.0
-        assert :elixir_utils.jaro_similarity("abcd", "abdc") > 0.9
+      end
+
+      test "returns similarity score with partial transposition" do
+        assert :elixir_utils.jaro_similarity("abcd", "abdc") == 0.9166666666666666
+      end
+
+      test "handles slight deviations" do
+        assert :elixir_utils.jaro_similarity("martha", "marhta") == 0.9444444444444445
+        assert :elixir_utils.jaro_similarity("dwayne", "duane") == 0.8222222222222223
+        assert :elixir_utils.jaro_similarity("dixon", "dicksonx") == 0.7666666666666666
       end
 
       test "is case sensitive" do
-        assert :elixir_utils.jaro_similarity("Hello", "hello") < 1.0
+        assert :elixir_utils.jaro_similarity("Hello", "hello") == 0.8666666666666667
       end
 
       test "handles unicode characters" do
-        assert :elixir_utils.jaro_similarity("café", "cafe") < 1.0
+        assert :elixir_utils.jaro_similarity("café", "cafe") == 0.8333333333333334
+      end
+
+      test "handles emoji characters" do
+        assert :elixir_utils.jaro_similarity("hello😀", "hello😀") == 1.0
+      end
+
+      test "works with strings, charlists, and integer lists producing same results" do
+        str_result = :elixir_utils.jaro_similarity("abc", "abd")
+        char_result = :elixir_utils.jaro_similarity(~c"abc", ~c"abd")
+        int_result = :elixir_utils.jaro_similarity([97, 98, 99], [97, 98, 100])
+
+        assert str_result == char_result
+        assert char_result == int_result
       end
 
       test "handles lists with string elements" do
@@ -66,11 +87,11 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
 
       test "handles lists with multi-character strings" do
         result = :elixir_utils.jaro_similarity(["ab", "cd"], ["ab", "cd"])
-        assert result == 1
+        assert result == 1.0
       end
 
       test "handles nested lists" do
-        result = :elixir_utils.jaro_similarity([1, 2, [1]], [1, 2, [1]])
+        result = :elixir_utils.jaro_similarity([97, 98, [99]], [97, 98, [99]])
         assert result == 1.0
       end
 
@@ -101,6 +122,14 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
                      fn ->
                        :elixir_utils.jaro_similarity([:a, :b], [:a, :b])
                      end
+      end
+
+      test "raises ArgumentError for invalid UTF-8 bytes" do
+        invalid_utf8 = <<255, 254, 253>>
+
+        assert_raise ArgumentError, fn ->
+          :elixir_utils.jaro_similarity(invalid_utf8, "test")
+        end
       end
     end
   end

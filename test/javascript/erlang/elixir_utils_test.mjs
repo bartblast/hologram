@@ -20,6 +20,113 @@ describe("Erlang_Elixir_Utils", () => {
   describe("jaro_similarity/2", () => {
     const jaroSimilarity = Erlang_Elixir_Utils["jaro_similarity/2"];
 
+    it("returns 1.0 for identical strings", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("hello"),
+        Type.bitstring("hello"),
+      );
+      assert.strictEqual(result.value, 1.0);
+    });
+
+    it("returns 1.0 when both inputs are empty", () => {
+      const result = jaroSimilarity(Type.bitstring(""), Type.bitstring(""));
+      assert.strictEqual(result.value, 1.0);
+    });
+
+    it("returns 0.0 for completely different inputs", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("abc"),
+        Type.bitstring("xyz"),
+      );
+      assert.strictEqual(result.value, 0.0);
+    });
+
+    it("returns 0.0 when first input is empty", () => {
+      const result = jaroSimilarity(
+        Type.bitstring(""),
+        Type.bitstring("hello"),
+      );
+      assert.strictEqual(result.value, 0.0);
+    });
+
+    it("returns 0.0 when second input is empty", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("hello"),
+        Type.bitstring(""),
+      );
+      assert.strictEqual(result.value, 0.0);
+    });
+
+    it("returns 0.0 for identical single characters", () => {
+      // Known issue in :elixir_utils.jaro_similarity/2
+      // will be fixed when Elixir requires Erlang/OTP 27+
+      // and switches to :string.jaro_similarity/2
+      const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("a"));
+      assert.strictEqual(result.value, 0.0);
+    });
+
+    it("returns 0.0 for different single characters", () => {
+      const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("b"));
+      assert.strictEqual(result.value, 0.0);
+    });
+
+    it("returns 0.0 for completely transposed two-character string", () => {
+      const result = jaroSimilarity(Type.bitstring("ab"), Type.bitstring("ba"));
+      assert.strictEqual(result.value, 0.0);
+    });
+
+    it("returns similarity score with partial transposition", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("abcd"),
+        Type.bitstring("abdc"),
+      );
+      assert.strictEqual(result.value, 0.9166666666666666);
+    });
+
+    it("handles slight deviations", () => {
+      const result1 = jaroSimilarity(
+        Type.bitstring("martha"),
+        Type.bitstring("marhta"),
+      );
+      assert.strictEqual(result1.value, 0.9444444444444445);
+
+      const result2 = jaroSimilarity(
+        Type.bitstring("dwayne"),
+        Type.bitstring("duane"),
+      );
+      assert.strictEqual(result2.value, 0.8222222222222223);
+
+      const result3 = jaroSimilarity(
+        Type.bitstring("dixon"),
+        Type.bitstring("dicksonx"),
+      );
+      assert.strictEqual(result3.value, 0.7666666666666666);
+    });
+
+    it("is case sensitive", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("Hello"),
+        Type.bitstring("hello"),
+      );
+      assert.strictEqual(result.value, 0.8666666666666667);
+    });
+
+    it("handles unicode characters", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("café"),
+        Type.bitstring("cafe"),
+      );
+      assert.strictEqual(result.value, 0.8333333333333334);
+    });
+
+    it("handles emoji characters", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("hello😀"),
+        Type.bitstring("hello😀"),
+      );
+      assert.strictEqual(result.value, 1.0);
+    });
+
     it("works with strings, charlists, and integer lists producing same results", () => {
       const strResult = jaroSimilarity(
         Type.bitstring("abc"),
@@ -36,92 +143,6 @@ describe("Erlang_Elixir_Utils", () => {
 
       assert.deepStrictEqual(strResult, charResult);
       assert.deepStrictEqual(charResult, intResult);
-    });
-
-    it("handles slight deviations", () => {
-      const result1 = jaroSimilarity(
-        Type.bitstring("martha"),
-        Type.bitstring("marhta"),
-      );
-      assert.ok(Math.abs(result1.value - 0.944) < 0.001);
-
-      const result2 = jaroSimilarity(
-        Type.bitstring("dwayne"),
-        Type.bitstring("duane"),
-      );
-      assert.ok(Math.abs(result2.value - 0.822) < 0.001);
-
-      const result3 = jaroSimilarity(
-        Type.bitstring("dixon"),
-        Type.bitstring("dicksonx"),
-      );
-      assert.ok(Math.abs(result3.value - 0.767) < 0.001);
-    });
-
-    it("returns 0.0 for completely different inputs", () => {
-      const result = jaroSimilarity(
-        Type.bitstring("abc"),
-        Type.bitstring("xyz"),
-      );
-      assert.strictEqual(result.value, 0.0);
-    });
-
-    it("handles empty inputs", () => {
-      const result1 = jaroSimilarity(Type.bitstring(""), Type.bitstring(""));
-      assert.strictEqual(result1.value, 1.0);
-
-      const result2 = jaroSimilarity(
-        Type.bitstring(""),
-        Type.bitstring("hello"),
-      );
-      assert.strictEqual(result2.value, 0.0);
-
-      const result3 = jaroSimilarity(
-        Type.bitstring("hello"),
-        Type.bitstring(""),
-      );
-      assert.strictEqual(result3.value, 0.0);
-    });
-
-    it("handles single character inputs", () => {
-      // Known issue in :elixir_utils.jaro_similarity/2
-      // will be fixed when Elixir requires Erlang/OTP 27+
-      // and switches to :string.jaro_similarity/2
-      const result1 = jaroSimilarity(Type.bitstring("a"), Type.bitstring("a"));
-      assert.strictEqual(result1.value, 0.0);
-
-      const result2 = jaroSimilarity(Type.bitstring("a"), Type.bitstring("b"));
-      assert.strictEqual(result2.value, 0.0);
-    });
-
-    it("handles transpositions", () => {
-      const result1 = jaroSimilarity(
-        Type.bitstring("ab"),
-        Type.bitstring("ba"),
-      );
-      assert.strictEqual(result1.value, 0.0);
-
-      const result2 = jaroSimilarity(
-        Type.bitstring("abcd"),
-        Type.bitstring("abdc"),
-      );
-      assert.ok(result2.value > 0.9);
-    });
-
-    it("is case sensitive", () => {
-      const result = jaroSimilarity(
-        Type.bitstring("Hello"),
-        Type.bitstring("hello"),
-      );
-      assert.ok(result.value < 1.0);
-    });
-
-    it("handles unicode characters", () => {
-      const result = jaroSimilarity(
-        Type.bitstring("café"),
-        Type.bitstring("cafe"),
-      );
-      assert.ok(result.value < 1.0);
     });
 
     it("handles lists with string elements", () => {
@@ -159,14 +180,14 @@ describe("Erlang_Elixir_Utils", () => {
     it("handles nested lists", () => {
       const result = jaroSimilarity(
         Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.list([Type.integer(1)]),
+          Type.integer(97),
+          Type.integer(98),
+          Type.list([Type.integer(99)]),
         ]),
         Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.list([Type.integer(1)]),
+          Type.integer(97),
+          Type.integer(98),
+          Type.list([Type.integer(99)]),
         ]),
       );
       assert.strictEqual(result.value, 1.0);
@@ -217,6 +238,20 @@ describe("Erlang_Elixir_Utils", () => {
             Type.list([Type.atom("a"), Type.atom("b")]),
           ),
         "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError for invalid UTF-8 bytes", () => {
+      const invalidUtf8 = Type.bitstring("");
+      invalidUtf8.bytes = new Uint8Array([255, 254, 253]);
+      invalidUtf8.text = null;
+
+      const expectedMessage = Interpreter.buildArgumentErrorMsg(invalidUtf8);
+
+      assertBoxedError(
+        () => jaroSimilarity(invalidUtf8, Type.bitstring("test")),
+        "ArgumentError",
         expectedMessage,
       );
     });

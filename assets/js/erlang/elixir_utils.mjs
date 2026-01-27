@@ -11,58 +11,88 @@ import Type from "../type.mjs";
 const Erlang_Elixir_Utils = {
   // Start jaro_similarity/2
   "jaro_similarity/2": (str1, str2) => {
-    // Helper: Extract code points from a bitstring or list (including nested lists)
     const extractCodePoints = (str) => {
       if (Type.isBitstring(str)) {
-        Bitstring.maybeSetTextFromBytes(str);
-        return Array.from(str.text).map((c) => c.charCodeAt(0));
-      } else if (Type.isList(str)) {
-        const codePoints = [];
-        for (let i = 0; i < str.data.length; i++) {
-          const n = str.data[i];
+        const text = Bitstring.toText(str);
 
-          if (Type.isInteger(n)) {
-            codePoints.push(Number(n.value));
-          } else if (Type.isBitstring(n)) {
-            Bitstring.maybeSetTextFromBytes(n);
-            codePoints.push(n.text.charCodeAt(0));
-          } else if (Type.isList(n) && n.data.length > 0) {
-            const firstElem = n.data[0];
+        if (text === false) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(str),
+          );
+        }
+
+        return Array.from(text).map((c) => c.codePointAt(0));
+      }
+
+      if (Type.isList(str)) {
+        const codePoints = [];
+
+        for (let i = 0; i < str.data.length; i++) {
+          const elem = str.data[i];
+
+          if (Type.isInteger(elem)) {
+            codePoints.push(Number(elem.value));
+            continue;
+          }
+
+          if (Type.isBitstring(elem)) {
+            const text = Bitstring.toText(elem);
+
+            if (text === false) {
+              Interpreter.raiseArgumentError(
+                Interpreter.buildArgumentErrorMsg(elem),
+              );
+            }
+
+            codePoints.push(text.codePointAt(0));
+            continue;
+          }
+
+          if (Type.isList(elem) && elem.data.length > 0) {
+            const firstElem = elem.data[0];
+
             if (Type.isInteger(firstElem)) {
               codePoints.push(Number(firstElem.value));
-            } else if (Type.isBitstring(firstElem)) {
-              Bitstring.maybeSetTextFromBytes(firstElem);
-              codePoints.push(firstElem.text.charCodeAt(0));
+              continue;
             }
-          } else {
-            if (str.data.length > 1) {
-              const remaining = Type.list(str.data.slice(i + 1));
-              Interpreter.raiseFunctionClauseError(
-                Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
-                  n,
-                  remaining,
-                ]),
-              );
-            } else {
-              Interpreter.raiseFunctionClauseError(
-                Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-                  n,
-                ]),
-              );
+
+            if (Type.isBitstring(firstElem)) {
+              const text = Bitstring.toText(firstElem);
+
+              if (text === false) {
+                Interpreter.raiseArgumentError(
+                  Interpreter.buildArgumentErrorMsg(firstElem),
+                );
+              }
+
+              codePoints.push(text.codePointAt(0));
+              continue;
             }
           }
+
+          const isMultiElement = str.data.length > 1;
+          const funcName = isMultiElement
+            ? ":unicode_util.cpl/2"
+            : ":unicode_util.cp/1";
+          const args = isMultiElement
+            ? [elem, Type.list(str.data.slice(i + 1))]
+            : [elem];
+
+          Interpreter.raiseFunctionClauseError(
+            Interpreter.buildFunctionClauseErrorMsg(funcName, args),
+          );
         }
+
         return codePoints;
-      } else {
-        Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [str]),
-        );
       }
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [str]),
+      );
     };
 
     const codePoints1 = extractCodePoints(str1);
     const codePoints2 = extractCodePoints(str2);
-
     const len1 = codePoints1.length;
     const len2 = codePoints2.length;
 
