@@ -426,7 +426,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.gc([]) == []
     end
 
-    test "handles list of integers" do
+    test "extracts single-codepoint cluster when next codepoint is non-combining" do
       assert :unicode_util.gc([97, 98]) == [97, 98]
     end
 

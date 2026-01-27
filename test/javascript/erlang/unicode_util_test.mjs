@@ -876,7 +876,7 @@ describe("Erlang_UnicodeUtil", () => {
         assert.deepStrictEqual(result, Type.list());
       });
 
-      it("handles list of integers", () => {
+      it("extracts single-codepoint cluster when next codepoint is non-combining", () => {
         const result = gc(Type.list([Type.integer(97), Type.integer(98)]));
 
         assert.deepStrictEqual(
