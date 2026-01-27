@@ -35,6 +35,35 @@ MFAs for sorting:
 |> Enum.sort()
 */
 
+const _getTimeUnitValue = (unit) => {
+  if (Type.isAtom(unit)) {
+    switch (unit.value) {
+      case "native":
+        return 1_000_000n;
+      case "second":
+        return 1_000_000_000n;
+      case "millisecond":
+        return 1_000_000n;
+      case "microsecond":
+        return 1_000n;
+      case "nanosecond":
+        return 1n;
+      default:
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+        );
+    }
+  }
+
+  if (Type.isInteger(unit) && unit.value >= 1n) {
+    return unit.value;
+  }
+
+  Interpreter.raiseArgumentError(
+    Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+  );
+};
+
 const Erlang = {
   // Start */2
   "*/2": (left, right) => {
@@ -1555,6 +1584,27 @@ const Erlang = {
   // End min/2
   // Deps: []
 
+  // Start monotonic_time/0
+  "monotonic_time/0": () => {
+    return Erlang["monotonic_time/1"](Type.atom("native"));
+  },
+  // End monotonic_time/0
+  // Deps: [:erlang.monotonic_time/1]
+
+  // Start monotonic_time/1
+  "monotonic_time/1": (unit) => {
+    const unitValue = _getTimeUnitValue(unit);
+
+    const monoTimeNs =
+      BigInt(Math.round(performance.timeOrigin + performance.now())) *
+      1_000_000n;
+
+    const quotient = monoTimeNs / unitValue;
+    return Type.integer(quotient);
+  },
+  // End monotonic_time/1
+  // Deps: []
+
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
@@ -1736,37 +1786,7 @@ const Erlang = {
 
   // Start time_offset/1
   "time_offset/1": (unit) => {
-    let unitValue;
-
-    if (Type.isAtom(unit)) {
-      switch (unit.value) {
-        case "native":
-          unitValue = 1_000_000n;
-          break;
-        case "second":
-          unitValue = 1_000_000_000n;
-          break;
-        case "millisecond":
-          unitValue = 1_000_000n;
-          break;
-        case "microsecond":
-          unitValue = 1_000n;
-          break;
-        case "nanosecond":
-          unitValue = 1n;
-          break;
-        default:
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-          );
-      }
-    } else if (Type.isInteger(unit) && unit.value >= 1n) {
-      unitValue = unit.value;
-    } else {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-      );
-    }
+    const unitValue = _getTimeUnitValue(unit);
 
     const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
     const monoTimeNs =
