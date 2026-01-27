@@ -824,6 +824,13 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.split("abcdef", "d", [{:scope, {1, 3}}, :global]) == ["abc", "ef"]
     end
 
+    test "accepts negative scope length (reverse part)" do
+      subject = "hello world"
+      opts = [scope: {byte_size(subject), -6}]
+
+      assert :binary.split(subject, " ", opts) == ["hello", "world"]
+    end
+
     # Overlapping patterns
 
     test "with overlapping patterns, matches first found" do
@@ -914,12 +921,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "invalid options"),
                    fn -> :binary.split("abc", "b", scope: {1, 3}) end
-    end
-
-    test "raises ArgumentError for negative scope length" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   fn -> :binary.split("abc", "b", scope: {0, -1}) end
     end
   end
 end
