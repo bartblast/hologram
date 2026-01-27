@@ -716,6 +716,14 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("multi-component path with multiple trailing slashes", () => {
+      const filename = Type.bitstring("foo/bar//");
+      const result = dirname(filename);
+      const expected = Type.bitstring("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("single dot", () => {
       const filename = Type.bitstring(".");
       const result = dirname(filename);
@@ -838,6 +846,13 @@ describe("Erlang_Filename", () => {
       const expected = Type.bitstring(".");
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("invalid UTF-8 with trailing separators", () => {
+      const filename = Bitstring.fromBytes(new Uint8Array([255, 47, 47]));
+      const result = dirname(filename);
+
+      assert.deepStrictEqual(result.bytes, new Uint8Array([255]));
     });
 
     it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {

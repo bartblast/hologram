@@ -331,6 +331,10 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.dirname("foo/bar/baz/") == "foo/bar/baz"
     end
 
+    test "multi-component path with multiple trailing slashes" do
+      assert :filename.dirname("foo/bar//") == "foo/bar"
+    end
+
     test "single dot" do
       assert :filename.dirname(".") == "."
     end
@@ -391,6 +395,12 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       filename = <<255, 254, 253>>
 
       assert :filename.dirname(filename) == "."
+    end
+
+    test "invalid UTF-8 with trailing separators" do
+      filename = <<255, 47, 47>>
+
+      assert :filename.dirname(filename) == <<255>>
     end
 
     test "raises FunctionClauseError if the argument is not a bitstring or atom or list" do

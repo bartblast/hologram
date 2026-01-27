@@ -14,6 +14,13 @@ const Erlang_Filename = {
   "_dirname_raw/1": (filenameBinary) => {
     // Helpers
 
+    const trimTrailingSeparators = (bytes, DIR_SEPARATOR_BYTE) => {
+      let end = bytes.length - 1;
+      while (end >= 0 && bytes[end] === DIR_SEPARATOR_BYTE) end--;
+      if (end < 0) return [DIR_SEPARATOR_BYTE];
+      return bytes.slice(0, end + 1);
+    };
+
     const computeResultBytes = (
       lastSlashIndex,
       trimmedBytes,
@@ -29,7 +36,11 @@ const Erlang_Filename = {
 
       // Return bytes before the last separator (convert reversed index back to normal index)
       // Formula: normal_index = array_length - 1 - reversed_index
-      return trimmedBytes.slice(0, trimmedBytes.length - 1 - lastSlashIndex);
+      const raw = trimmedBytes.slice(
+        0,
+        trimmedBytes.length - 1 - lastSlashIndex,
+      );
+      return trimTrailingSeparators(raw, DIR_SEPARATOR_BYTE);
     };
 
     // Search from end of array; returns reversed index (distance from end)
@@ -66,6 +77,13 @@ const Erlang_Filename = {
     }
 
     const trimmedBytes = bytes.slice(0, bytes.length - reversedIndex);
+    const hadTrailingSeparators = reversedIndex > 0;
+
+    if (hadTrailingSeparators) {
+      const result = Bitstring.fromBytes(trimmedBytes);
+      Bitstring.maybeSetTextFromBytes(result);
+      return result;
+    }
 
     // Find last separator in trimmed bytes
     const lastSlashIndex = findLastSeparatorIndex(
