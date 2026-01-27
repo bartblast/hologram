@@ -515,6 +515,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "normalizes nested chardata" do
       input = ["abc..", ["a", 0x030A], "a", [0x0308], "o", 0x0308]
+
       assert :unicode.characters_to_nfkc_binary(input) == "abc..åäö"
     end
 
@@ -528,45 +529,53 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "handles deeply nested lists" do
       input = [[["a", 0x030A]]]
+
       assert :unicode.characters_to_nfkc_binary(input) == "å"
     end
 
     test "handles multiple combining marks" do
       input = ["o", 0x0308, 0x0304]
+
       # Normalized form combines these in canonical order
       assert :unicode.characters_to_nfkc_binary(input) == "ȫ"
     end
 
     test "handles large input" do
       large_input = String.duplicate("abcdefghij", 100)
+
       assert :unicode.characters_to_nfkc_binary(large_input) == large_input
     end
 
     test "handles mixed ASCII and Unicode" do
       input = ["hello", " ", "a", 0x030A, " world"]
+
       assert :unicode.characters_to_nfkc_binary(input) == "hello å world"
     end
 
     test "preserves non-combining characters" do
       input = [0x3042, 0x3044]
+
       assert :unicode.characters_to_nfkc_binary(input) == "あい"
     end
 
     test "normalizes compatibility characters" do
       # NFKC normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
       input = "\u210C"
+
       assert :unicode.characters_to_nfkc_binary(input) == "H"
     end
 
     test "normalizes ligatures" do
       # NFKC normalizes ligatures like ﬁ (U+FB01) to fi (U+0066 U+0069)
       input = "\uFB01"
+
       assert :unicode.characters_to_nfkc_binary(input) == "fi"
     end
 
     test "normalizes width variants" do
       # NFKC normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
       input = "\uFF21"
+
       assert :unicode.characters_to_nfkc_binary(input) == "A"
     end
 
@@ -581,6 +590,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       invalid_binary = <<255, 255>>
       input = ["abc", invalid_binary]
       expected = {:error, "abc", invalid_binary}
+
       assert :unicode.characters_to_nfkc_binary(input) == expected
     end
 
@@ -628,6 +638,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfkc_binary(input) == expected
     end
 
+    test "returns error tuple for single invalid binary not wrapped in a list" do
+      invalid_binary = <<255, 255>>
+
+      expected = {:error, "", invalid_binary}
+
+      assert :unicode.characters_to_nfkc_binary(invalid_binary) == expected
+    end
+
     test "raises ArgumentError when input is not a list or a bitstring" do
       expected_msg =
         build_argument_error_msg(1, "not valid character data (an iodata term)")
@@ -650,6 +668,17 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "raises ArgumentError when input list contains invalid types" do
       input = [123.45, :abc]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on negative integer code point" do
+      input = [-1]
 
       expected_msg =
         build_argument_error_msg(1, "not valid character data (an iodata term)")

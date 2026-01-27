@@ -807,12 +807,14 @@ describe("Erlang_Unicode", () => {
     it("normalizes combining characters to NFKC", () => {
       const input = Type.bitstring("a\u030a");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("å"));
     });
 
     it("handles already normalized text", () => {
       const input = Type.bitstring("åäö");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("åäö"));
     });
 
@@ -834,12 +836,14 @@ describe("Erlang_Unicode", () => {
     it("handles empty binary", () => {
       const input = Type.bitstring("");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
     it("handles empty list", () => {
       const input = Type.list();
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
@@ -903,21 +907,27 @@ describe("Erlang_Unicode", () => {
     it("normalizes compatibility characters", () => {
       // NFKC normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
       const input = Type.bitstring("\u210C"); // ℌ SCRIPT CAPITAL H
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("H"));
     });
 
     it("normalizes ligatures", () => {
       // NFKC normalizes ligatures like ﬁ (U+FB01) to fi (U+0066 U+0069)
       const input = Type.bitstring("\uFB01"); // ﬁ LATIN SMALL LIGATURE FI
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("fi"));
     });
 
     it("normalizes width variants", () => {
       // NFKC normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
       const input = Type.bitstring("\uFF21"); // Ａ FULLWIDTH LATIN CAPITAL LETTER A
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("A"));
     });
 
@@ -1002,6 +1012,7 @@ describe("Erlang_Unicode", () => {
     it("returns error tuple for truncated UTF-8 sequence", () => {
       // First two bytes of a 3-byte sequence (incomplete)
       const incompleteBinary = Bitstring.fromBytes([0xe4, 0xb8]);
+
       const input = Type.list([Type.bitstring("a"), incompleteBinary]);
 
       const result = fun(input);
@@ -1010,6 +1021,22 @@ describe("Erlang_Unicode", () => {
         Type.atom("error"),
         Type.bitstring("a"),
         incompleteBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple for single invalid binary not wrapped in a list", () => {
+      const input = Bitstring.fromBytes([255, 255]);
+
+      const result = fun(input);
+
+      const expectedRest = Bitstring.fromBytes([255, 255]);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring(""),
+        expectedRest,
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -1041,6 +1068,19 @@ describe("Erlang_Unicode", () => {
 
     it("raises ArgumentError when input list contains invalid types", () => {
       const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on negative integer code point", () => {
+      const input = Type.list([Type.integer(-1)]);
 
       assertBoxedError(
         () => fun(input),
