@@ -724,6 +724,14 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("consecutive slashes in middle of path", () => {
+      const filename = Type.bitstring("foo//bar");
+      const result = dirname(filename);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("empty string", () => {
       const filename = Type.bitstring("");
       const result = dirname(filename);

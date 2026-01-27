@@ -322,8 +322,11 @@ const Erlang_Filename = {
 
       if (lastSlashIndex === 0) return "/"; // Root-relative path - dirname is root
 
-      // Multi-component path - return everything before last slash
-      return text.substring(0, lastSlashIndex);
+      // Multi-component path - return everything before last slash, trimming any consecutive slashes group
+      const prefix = text.substring(0, lastSlashIndex);
+      const trimmedPrefix = prefix.replace(/\/+$/, "");
+
+      return trimmedPrefix.length === 0 ? "/" : trimmedPrefix;
     };
 
     // Handle trailing slashes: the trimmed directory path IS the parent directory

@@ -335,6 +335,10 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.dirname("..") == "."
     end
 
+    test "consecutive slashes in middle of path" do
+      assert :filename.dirname("foo//bar") == "foo"
+    end
+
     test "empty string" do
       assert :filename.dirname("") == "."
     end
