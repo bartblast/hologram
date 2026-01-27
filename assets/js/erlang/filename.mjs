@@ -329,8 +329,8 @@ const Erlang_Filename = {
       return trimmedPrefix.length === 0 ? "/" : trimmedPrefix;
     };
 
-    // Handle trailing slashes: the trimmed directory path IS the parent directory
-    // (trailing slash indicates the argument itself is a directory, not a filename)
+    // Handle trailing slashes: strip them and return the resulting path.
+    // A trailing slash indicates the path already refers to a directory.
     const computeDirnameWithTrailingSlashes = (trimmedText) => {
       if (trimmedText.length === 0) return "/"; // Original was all slashes
 
