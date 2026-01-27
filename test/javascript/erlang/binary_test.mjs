@@ -2523,6 +2523,22 @@ describe("Erlang_Binary", () => {
 
         assertBoxedStrictEqual(result, subject);
       });
+
+      it("supports negative scope length within range", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("t");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(1), Type.integer(-1)]),
+          ]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("xest"));
+      });
     });
 
     describe("with compiled pattern", () => {
@@ -2643,6 +2659,22 @@ describe("Erlang_Binary", () => {
         );
       });
 
+      it("raises ArgumentError for improper list options", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("t");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.improperList([
+          Type.atom("global"),
+          Type.atom("bad"),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
       it("raises ArgumentError when scope extends beyond subject", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("st");
@@ -2651,6 +2683,24 @@ describe("Erlang_Binary", () => {
           Type.tuple([
             Type.atom("scope"),
             Type.tuple([Type.integer(0), Type.integer(100)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope start plus negative length is below zero", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("t");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.integer(-1)]),
           ]),
         ]);
 

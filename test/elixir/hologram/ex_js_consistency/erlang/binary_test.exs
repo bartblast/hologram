@@ -1074,6 +1074,10 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert result == "hello world"
     end
 
+    test "supports negative scope length within range" do
+      assert :binary.replace("test", "t", "x", scope: {1, -1}) == "xest"
+    end
+
     # With compiled pattern
 
     test "works with compiled Boyer-Moore pattern" do
@@ -1120,6 +1124,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    {:binary, :replace, ["test", "es", "x", :invalid]}
     end
 
+    test "raises ArgumentError for improper list options" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["test", "t", "x", [:global | :bad]]}
+    end
+
     test "raises ArgumentError when scope start exceeds subject length" do
       assert_error ArgumentError,
                    build_argument_error_msg(4, "invalid options"),
@@ -1130,6 +1140,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(4, "invalid options"),
                    {:binary, :replace, ["test", "st", "x", [scope: {0, 100}]]}
+    end
+
+    test "raises ArgumentError when scope start plus negative length is below zero" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["test", "t", "x", [scope: {0, -1}]]}
     end
 
     test "raises ArgumentError when replacement is an atom" do
