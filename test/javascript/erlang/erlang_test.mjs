@@ -10,7 +10,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import { defineModule1Fixture as defineErlangModule1Fixture } from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -1418,7 +1418,7 @@ describe("Erlang", () => {
 
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(false), right: Type.atom("abc") },
+        vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
       const result = andalso(
@@ -1432,7 +1432,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is true", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(true), right: Type.atom("abc") },
+        vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
       const result = andalso(
@@ -1458,7 +1458,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: { left: Type.nil(), right: Type.boolean(true) },
+        vars: {left: Type.nil(), right: Type.boolean(true)},
       });
 
       assertBoxedError(
@@ -3072,7 +3072,7 @@ describe("Erlang", () => {
         );
       });
     });
-    
+
     describe("floats", () => {
       it("decodes NEW_FLOAT_EXT (IEEE 754 double)", () => {
         // :erlang.term_to_binary(3.14159) with NEW_FLOAT_EXT tag
@@ -7455,7 +7455,7 @@ describe("Erlang", () => {
 
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(true), right: Type.atom("abc") },
+        vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
       const result = orelse(
@@ -7469,7 +7469,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is false", () => {
       const context = contextFixture({
-        vars: { left: Type.boolean(false), right: Type.atom("abc") },
+        vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
       const result = orelse(
@@ -7495,7 +7495,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: { left: Type.nil(), right: Type.boolean(true) },
+        vars: {left: Type.nil(), right: Type.boolean(true)},
       });
 
       assertBoxedError(

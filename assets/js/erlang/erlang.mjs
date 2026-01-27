@@ -990,9 +990,9 @@ const Erlang = {
         newOffset: currentOffset,
       };
     };
-    
+
     // Map decoder
- 
+
     const decodeMap = (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
       const entries = [];
