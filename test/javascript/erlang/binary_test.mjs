@@ -2729,6 +2729,43 @@ describe("Erlang_Binary", () => {
         );
       });
 
+      it("raises ArgumentError when insert_replaced is an improper list", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+        const improperPositions = Type.improperList([
+          Type.integer(1),
+          Type.integer(2),
+        ]);
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), improperPositions]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced list contains negative integer", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("insert_replaced"),
+            Type.list([Type.integer(1), Type.integer(-1)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
       it("raises ArgumentError when scope start is negative", () => {
         const subject = Bitstring.fromText("hello");
         const pattern = Bitstring.fromText("l");

@@ -1123,6 +1123,8 @@ const Erlang_Binary = {
             if (insertData.value < 0n) raiseInvalidOptions();
             insertReplaced = insertData;
           } else if (Type.isList(insertData)) {
+            // Reject improper lists to match top-level options validation
+            if (Type.isImproperList(insertData)) raiseInvalidOptions();
             const allIntegers = insertData.data.every((item) =>
               Type.isInteger(item),
             );

@@ -1180,6 +1180,18 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    {:binary, :replace, ["hello", "l", "[]", [insert_replaced: [1, :invalid]]]}
     end
 
+    test "raises ArgumentError when insert_replaced is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "[]", [insert_replaced: [1 | 2]]]}
+    end
+
+    test "raises ArgumentError when insert_replaced list contains negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "[]", [insert_replaced: [1, -1]]]}
+    end
+
     test "raises ArgumentError when scope start is negative" do
       assert_error ArgumentError,
                    build_argument_error_msg(4, "invalid options"),
