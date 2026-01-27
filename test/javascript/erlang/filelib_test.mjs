@@ -158,10 +158,10 @@ describe("Erlang_Filelib", () => {
     });
 
     it("cwd with empty list is normalized to dot", () => {
-      const filename = Type.bitstring("dir");
+      const filename = Type.charlist("dir");
       const cwd = Type.list([]);
       const result = safeRelativePath(filename, cwd);
-      const expected = Type.bitstring("dir");
+      const expected = Type.charlist("dir");
 
       assert.deepStrictEqual(result, expected);
     });
