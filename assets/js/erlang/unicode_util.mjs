@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -700,17 +701,9 @@ const Erlang_UnicodeUtil = {
   
   // Start gc/1
   "gc/1": (arg) => {
-    const segmenter =
-      typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
-        ? new Intl.Segmenter(undefined, {granularity: "grapheme"})
-        : null;
+    const segmenter = ERTS.graphemeSegmenter;
 
     const firstSegment = (text) => {
-      if (!segmenter) {
-        const codepoints = Array.from(text);
-        return codepoints.length === 0 ? "" : codepoints[0];
-      }
-
       const iterator = segmenter.segment(text)[Symbol.iterator]();
       const {done, value} = iterator.next();
       return done ? "" : value.segment;
