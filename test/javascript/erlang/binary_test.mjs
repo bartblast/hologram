@@ -2444,20 +2444,20 @@ describe("Erlang_Binary", () => {
       });
 
       it("handles scope with global", () => {
-        const subject = Bitstring.fromText("a-b-c-d");
-        const pattern = Bitstring.fromText("-");
+        const subject = Bitstring.fromText("abc def abc ghi abc");
+        const pattern = Bitstring.fromText("abc");
         const replacement = Bitstring.fromText("X");
         const options = Type.list([
-          Type.atom("global"),
           Type.tuple([
             Type.atom("scope"),
-            Type.tuple([Type.integer(1), Type.integer(5)]),
+            Type.tuple([Type.integer(0), Type.integer(15)]),
           ]),
+          Type.atom("global"),
         ]);
 
         const result = replace(subject, pattern, replacement, options);
 
-        assertBoxedStrictEqual(result, Bitstring.fromText("aXbXcXd"));
+        assertBoxedStrictEqual(result, Bitstring.fromText("X def X ghi abc"));
       });
 
       it("returns original subject when scope length is zero", () => {

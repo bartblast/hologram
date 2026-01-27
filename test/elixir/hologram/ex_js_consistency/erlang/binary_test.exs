@@ -1063,9 +1063,8 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     test "handles scope with global" do
-      # Note: Erlang doesn't allow :global and :scope options together
-      # They result in an error, so we test them separately
-      :ok
+      assert :binary.replace("abc def abc ghi abc", "abc", "X", [{:scope, {0, 15}}, :global]) ==
+               "X def X ghi abc"
     end
 
     test "returns original subject when scope length is zero" do
