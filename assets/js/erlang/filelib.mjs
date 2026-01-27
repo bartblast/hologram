@@ -2,6 +2,7 @@
 
 import Bitstring from "../bitstring.mjs";
 import Erlang_Filename from "./filename.mjs";
+import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 // IMPORTANT!
@@ -10,7 +11,27 @@ import Type from "../type.mjs";
 
 const Erlang_Filelib = {
   // Start safe_relative_path/2
-  "safe_relative_path/2": (filename, _cwd) => {
+  "safe_relative_path/2": (filename, cwd) => {
+    // Validate cwd type (must be binary, charlist, or atom - filename_all())
+    const isCwdBinary = Type.isBinary(cwd);
+    const isCwdCharlist = Type.isList(cwd);
+    const isCwdAtom = Type.isAtom(cwd);
+
+    if (!isCwdBinary && !isCwdCharlist && !isCwdAtom) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg("safe_relative_path/2", [
+          filename,
+          cwd,
+        ]),
+      );
+    }
+
+    // Note: In OTP, cwd is used to build absolute paths for each segment in order
+    // to call :file.read_link/1 and detect symlinks that would escape the relative
+    // root (see srp_segment/4 in filelib.erl). This is not applicable in a browser
+    // environment, so only pure path sanitization (removing ".", resolving "..",
+    // rejecting absolute paths) is performed here.
+
     const DIR_SEPARATOR_BYTE = 47;
     const isBinaryInput = Type.isBinary(filename);
 

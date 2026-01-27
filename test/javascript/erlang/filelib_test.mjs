@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
@@ -234,6 +235,26 @@ describe("Erlang_Filelib", () => {
       assert.strictEqual(result.bytes[0], 0xff);
       assert.strictEqual(result.bytes[1], 0xfe);
       assert.strictEqual(result.bytes.length, 2);
+    });
+
+    it("cwd with invalid type", () => {
+      const filename = Type.bitstring("dir");
+      const cwd = Type.integer(123);
+
+      assertBoxedError(
+        () => safeRelativePath(filename, cwd),
+        "FunctionClauseError",
+        /safe_relative_path\/2/,
+      );
+    });
+
+    it("cwd with valid atom type", () => {
+      const filename = Type.bitstring("dir");
+      const cwd = Type.atom("ok");
+      const result = safeRelativePath(filename, cwd);
+      const expected = Type.bitstring("dir");
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 });
