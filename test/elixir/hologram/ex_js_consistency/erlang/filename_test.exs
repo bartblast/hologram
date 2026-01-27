@@ -299,8 +299,12 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
   end
 
   describe "dirname/1" do
-    test "path with multiple components" do
+    test "relative path with multiple components" do
       assert :filename.dirname("foo/bar/baz.erl") == "foo/bar"
+    end
+
+    test "absolute path with multiple components" do
+      assert :filename.dirname("/foo/bar") == "/foo"
     end
 
     test "single filename without path" do
@@ -329,14 +333,6 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
 
     test "double dots" do
       assert :filename.dirname("..") == "."
-    end
-
-    test "absolute path with multiple components" do
-      assert :filename.dirname("/foo/bar") == "/foo"
-    end
-
-    test "deep relative path" do
-      assert :filename.dirname("a/b/c/d/e") == "a/b/c/d"
     end
 
     test "empty string" do

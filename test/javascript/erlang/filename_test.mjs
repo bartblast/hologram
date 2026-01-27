@@ -652,10 +652,18 @@ describe("Erlang_Filename", () => {
   describe("dirname/1", () => {
     const dirname = Erlang_Filename["dirname/1"];
 
-    it("path with multiple components", () => {
+    it("relative path with multiple components", () => {
       const filename = Type.bitstring("foo/bar/baz.erl");
       const result = dirname(filename);
       const expected = Type.bitstring("foo/bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("absolute path with multiple components", () => {
+      const filename = Type.bitstring("/foo/bar");
+      const result = dirname(filename);
+      const expected = Type.bitstring("/foo");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -712,22 +720,6 @@ describe("Erlang_Filename", () => {
       const filename = Type.bitstring("..");
       const result = dirname(filename);
       const expected = Type.bitstring(".");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("absolute path with multiple components", () => {
-      const filename = Type.bitstring("/foo/bar");
-      const result = dirname(filename);
-      const expected = Type.bitstring("/foo");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("deep relative path", () => {
-      const filename = Type.bitstring("a/b/c/d/e");
-      const result = dirname(filename);
-      const expected = Type.bitstring("a/b/c/d");
 
       assert.deepStrictEqual(result, expected);
     });
