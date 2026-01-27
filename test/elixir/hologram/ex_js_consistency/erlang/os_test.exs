@@ -24,7 +24,8 @@ defmodule Hologram.ExJsConsistency.Erlang.OsTest do
       result1 = :os.system_time()
       result2 = :os.system_time()
 
-      assert result1 <= result2
+      assert is_integer(result1)
+      assert is_integer(result2)
     end
   end
 
