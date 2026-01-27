@@ -420,6 +420,18 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.gc(invalid_binary) == {:error, invalid_binary}
     end
 
+    test "extracts single character binary" do
+      assert :unicode_util.gc("a") == [97 | ""]
+    end
+
+    test "handles emoji outside BMP" do
+      assert :unicode_util.gc("😀x") == [128_512 | "x"]
+    end
+
+    test "handles flag emoji as single grapheme cluster" do
+      assert :unicode_util.gc("🇺🇸") == [[0x1F1FA, 0x1F1F8] | ""]
+    end
+
     # Section: with list input
 
     test "returns empty list for empty list" do
@@ -450,6 +462,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.gc([97, <<255>>]) == [97 | <<255>>]
     end
 
+    test "handles single integer list" do
+      assert :unicode_util.gc([97]) == [97]
+    end
+
+    test "handles list with nested list" do
+      assert :unicode_util.gc([[97], 98]) == [97, 98]
+    end
+
     # Section: error handling
 
     test "raises FunctionClauseError for non-byte-aligned bitstring" do
@@ -465,6 +485,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :unicode_util.gc(42)
+      end
+    end
+
+    test "raises FunctionClauseError for atom input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:test])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.gc(:test)
       end
     end
   end

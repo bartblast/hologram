@@ -867,6 +867,36 @@ describe("Erlang_UnicodeUtil", () => {
           Type.tuple([Type.atom("error"), invalid]),
         );
       });
+
+      it("extracts single character binary", () => {
+        const result = gc(Type.bitstring("a"));
+
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([Type.integer(97), Type.bitstring("")]),
+        );
+      });
+
+      it("handles emoji outside BMP", () => {
+        const result = gc(Type.bitstring("😀x"));
+
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([Type.integer(128512), Type.bitstring("x")]),
+        );
+      });
+
+      it("handles flag emoji as single grapheme cluster", () => {
+        const result = gc(Type.bitstring("🇺🇸"));
+
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([
+            Type.list([Type.integer(0x1f1fa), Type.integer(0x1f1f8)]),
+            Type.bitstring(""),
+          ]),
+        );
+      });
     });
 
     describe("with list input", () => {
@@ -939,6 +969,23 @@ describe("Erlang_UnicodeUtil", () => {
           Type.improperList([Type.integer(97), invalid]),
         );
       });
+
+      it("handles single integer list", () => {
+        const result = gc(Type.list([Type.integer(97)]));
+
+        assert.deepStrictEqual(result, Type.list([Type.integer(97)]));
+      });
+
+      it("handles list with nested list", () => {
+        const result = gc(
+          Type.list([Type.list([Type.integer(97)]), Type.integer(98)]),
+        );
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Type.integer(97), Type.integer(98)]),
+        );
+      });
     });
 
     describe("error handling", () => {
@@ -956,6 +1003,18 @@ describe("Erlang_UnicodeUtil", () => {
 
       it("raises FunctionClauseError for integer input", () => {
         const input = Type.integer(42);
+
+        assertBoxedError(
+          () => gc(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            input,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for atom input", () => {
+        const input = Type.atom("test");
 
         assertBoxedError(
           () => gc(input),

@@ -696,9 +696,10 @@ const Erlang_UnicodeUtil = {
       Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
     );
   },
+
   // End cp/1
   // Deps: [:unicode_util._cpl/2, :unicode_util._is_cp/1]
-  
+
   // Start gc/1
   "gc/1": (arg) => {
     const segmenter = ERTS.graphemeSegmenter;
