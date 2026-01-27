@@ -22,6 +22,7 @@ import Erlang_Rand from "../../../assets/js/erlang/rand.mjs";
 import Erlang_Re from "../../../assets/js/erlang/re.mjs";
 import Erlang_Sets from "../../../assets/js/erlang/sets.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
+import Erlang_Uri_String from "../../../assets/js/erlang/uri_string.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -264,6 +265,7 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang_Re = Erlang_Re;
   globalThis.Erlang_Sets = Erlang_Sets;
   globalThis.Erlang_Unicode = Erlang_Unicode;
+  globalThis.Erlang_Uri_String = Erlang_Uri_String;
   globalThis.Elixir_Code = Elixir_Code;
   globalThis.Elixir_Enum = defineElixirEnumModule();
 
