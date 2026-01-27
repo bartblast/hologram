@@ -148,6 +148,61 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "intersect_with/3" do
+    test "combines values with function" do
+      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1, b: 3}, %{a: 2, c: 4}) ==
+               %{
+                 a: 3
+               }
+    end
+
+    test "handles multiple common keys" do
+      assert :maps.intersect_with(
+               fn _k, v1, v2 -> v1 + v2 end,
+               %{:a => 1, "a" => 2, 1 => 3},
+               %{:a => 10, "a" => 20, 1 => 30}
+             ) ==
+               %{:a => 11, "a" => 22, 1 => 33}
+    end
+
+    test "returns an empty map when no keys are common" do
+      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1, b: 3}, %{c: 2, d: 4}) ==
+               %{}
+    end
+
+    test "returns an empty map when map1 is empty" do
+      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{}, %{a: 2}) == %{}
+    end
+
+    test "returns an empty map when map2 is empty" do
+      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1}, %{}) == %{}
+    end
+
+    test "raises when map1 is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, :abc, %{})
+      end
+    end
+
+    test "raises when map2 is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{}, :abc)
+      end
+    end
+
+    test "raises when function is not a 3 arity function" do
+      assert_error ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   fn -> :maps.intersect_with(fn v1, v2 -> v1 + v2 end, %{}, %{}) end
+    end
+
+    test "raises when function is not a function" do
+      assert_error ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   fn -> :maps.intersect_with(:abc, %{}, %{}) end
+    end
+  end
+
   describe "is_key/2" do
     test "returns true if the given map has the given key" do
       assert :maps.is_key(:b, %{a: 1, b: 2}) == true

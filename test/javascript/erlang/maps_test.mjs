@@ -319,6 +319,188 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("intersect_with/3", () => {
+    const intersect_with = Erlang_Maps["intersect_with/3"];
+
+    const fun = Type.anonymousFunction(
+      3,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("key"),
+            Type.variablePattern("value1"),
+            Type.variablePattern("value2"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Erlang["+/2"](context.vars.value1, context.vars.value2);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("combines values with function", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(1)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(2)],
+      ]);
+
+      const result = intersect_with(fun, map1, map2);
+      const expected = Type.map([[Type.atom("a"), Type.integer(3)]]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple common keys", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.bitstring("a"), Type.integer(2)],
+        [Type.integer(1), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(10)],
+        [Type.bitstring("a"), Type.integer(20)],
+        [Type.integer(1), Type.integer(30)],
+      ]);
+
+      const result = intersect_with(fun, map1, map2);
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(11)],
+        [Type.bitstring("a"), Type.integer(22)],
+        [Type.integer("1"), Type.integer(33)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns an empty map when no keys are common", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("c"), Type.integer(2)],
+        [Type.atom("d"), Type.integer(4)],
+      ]);
+
+      const result = intersect_with(fun, map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("returns an empty map when map1 is empty", () => {
+      const map1 = Type.map([]);
+      const map2 = Type.map([[Type.atom("a"), Type.integer(2)]]);
+
+      const result = intersect_with(fun, map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("returns an empty map when map2 is empty", () => {
+      const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      const map2 = Type.map([]);
+
+      const result = intersect_with(fun, map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("raises when map1 is not a map", () => {
+      const map1 = Type.atom("abc");
+      const map2 = Type.map([]);
+
+      assertBoxedError(
+        () => intersect_with(fun, map1, map2),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+
+    it("raises when map2 is not a map", () => {
+      const map1 = Type.map([]);
+      const map2 = Type.atom("abc");
+
+      assertBoxedError(
+        () => intersect_with(fun, map1, map2),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+
+    it("raises when function is not a 3 arity function", () => {
+      const badFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("value1"),
+              Type.variablePattern("value2"),
+            ],
+            guards: [],
+            body: (context) =>
+              Erlang["+/2"](context.vars.value1, context.vars.value2),
+          },
+        ],
+        contextFixture(),
+      );
+      const map1 = Type.map([]);
+      const map2 = Type.map([]);
+
+      assertBoxedError(
+        () => intersect_with(badFun, map1, map2),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+      );
+    });
+
+    it("raises when function is not a function", () => {
+      const notAFun = Type.atom("abc");
+      const map1 = Type.map([]);
+      const map2 = Type.map([]);
+
+      assertBoxedError(
+        () => intersect_with(notAFun, map1, map2),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+      );
+    });
+
+    it("doesn't mutate the inputs", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(1)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(2)],
+      ]);
+
+      intersect_with(fun, map1, map2);
+
+      assert.deepStrictEqual(
+        map1,
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(1)],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        map2,
+        Type.map([
+          [Type.atom("a"), Type.integer(2)],
+          [Type.atom("c"), Type.integer(2)],
+        ]),
+      );
+    });
+  });
+
   describe("is_key/2", () => {
     const is_key = Erlang_Maps["is_key/2"];
 
