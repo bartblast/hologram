@@ -1,8 +1,8 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
-import Type from "../type.mjs";
 import Erlang_Filename from "./filename.mjs";
+import Type from "../type.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
