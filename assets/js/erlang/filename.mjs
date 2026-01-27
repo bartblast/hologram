@@ -208,6 +208,7 @@ const Erlang_Filename = {
     // Extension matches - remove it and return the result
     // Important: Erlang's basename/2 returns binary when extension is binary, regardless of filename type
     const partLength = bnameBytes.length - extBytes.length;
+
     // TODO: Once :erlang.binary_part/3 can be used with slices, replace this with:
     // const resultBinary = Erlang["binary_part/3"](bnameAsBinary, Type.integer(0), Type.integer(partLength))
     const resultBytes = bnameBytes.slice(0, partLength);

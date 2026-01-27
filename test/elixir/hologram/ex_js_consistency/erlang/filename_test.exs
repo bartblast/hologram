@@ -99,10 +99,6 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
   end
 
   describe "basename/2" do
-    test "removes matching extension from basename" do
-      assert :filename.basename("src/core/main.erl", ".erl") == "main"
-    end
-
     test "removes matching extension from simple filename" do
       assert :filename.basename("file.txt", ".txt") == "file"
     end
@@ -166,10 +162,6 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
 
     test "returns basename when extension is longer than basename" do
       assert :filename.basename("a.b", ".longer") == "a.b"
-    end
-
-    test "handles mixed binary and charlist" do
-      assert :filename.basename("path/to/file.erl", ~c".erl") == "file"
     end
 
     test "handles extension with no dot" do
@@ -254,6 +246,29 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert :filename.basename(~c"file.txt", ~c"") == ~c"file.txt"
     end
 
+    test "empty list input" do
+      assert :filename.basename([], ~c".txt") == []
+    end
+
+    test "binary with invalid UTF-8 bytes" do
+      # <<0xFF, 0xFE, ".txt">>
+      filename = <<0xFF, 0xFE, ".txt">>
+
+      # Should preserve raw bytes for the invalid UTF-8
+      expected = <<0xFF, 0xFE>>
+
+      assert :filename.basename(filename, ".txt") == expected
+    end
+
+    test "iolist with invalid UTF-8 bytes" do
+      # [0xFF, 0xFE, ?., ?t, ?x, ?t] - charlist with invalid UTF-8
+      filename = [0xFF, 0xFE, ?., ?t, ?x, ?t]
+
+      expected = [0xFF, 0xFE]
+
+      assert :filename.basename(filename, ~c".txt") == expected
+    end
+
     test "raises FunctionClauseError if filename is invalid" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
@@ -264,6 +279,22 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
                    fn -> :filename.basename("file.txt", 123) end
+    end
+
+    test "raises FunctionClauseError if filename is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
+                   fn -> :filename.basename(arg, ".txt") end
+    end
+
+    test "raises FunctionClauseError if extension is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
+                   fn -> :filename.basename("file.txt", arg) end
     end
   end
 

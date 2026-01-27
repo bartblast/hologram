@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedStrictEqual,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
@@ -220,22 +221,13 @@ describe("Erlang_Filename", () => {
   describe("basename/2", () => {
     const basename = Erlang_Filename["basename/2"];
 
-    it("removes matching extension from basename", () => {
-      const filename = Type.bitstring("src/core/main.erl");
-      const ext = Type.bitstring(".erl");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("main");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
     it("removes matching extension from simple filename", () => {
       const filename = Type.bitstring("file.txt");
       const ext = Type.bitstring(".txt");
       const result = basename(filename, ext);
       const expected = Type.bitstring("file");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("removes matching extension from path", () => {
@@ -244,7 +236,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("file");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("removes multi-part extension", () => {
@@ -253,7 +245,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("file");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("removes partial extension when multiple exist", () => {
@@ -262,7 +254,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("file.tar");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("returns basename when extension does not match", () => {
@@ -271,7 +263,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("noextension");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("returns basename when extension partially matches", () => {
@@ -280,7 +272,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("file.txt");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("handles root path", () => {
@@ -289,7 +281,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("handles empty filename", () => {
@@ -298,7 +290,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("removes extension from double-dotted filename", () => {
@@ -307,7 +299,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("file.txt");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("removes extension that equals the entire basename", () => {
@@ -316,7 +308,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("handles charlist filename and extension", () => {
@@ -357,18 +349,19 @@ describe("Erlang_Filename", () => {
 
     it("handles iolist filename", () => {
       const filename = Type.list([
-        Type.bitstring("path/to/"),
+        Type.charlist("path/to/"),
         Type.integer(102), // 'f'
         Type.integer(105), // 'i'
         Type.integer(108), // 'l'
         Type.integer(101), // 'e'
-        Type.bitstring(".txt"),
+        Type.charlist(".txt"),
       ]);
+
       const ext = Type.bitstring(".txt");
       const result = basename(filename, ext);
       const expected = Type.bitstring("file");
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("returns basename when extension is longer than basename", () => {
@@ -377,16 +370,7 @@ describe("Erlang_Filename", () => {
       const result = basename(filename, ext);
       const expected = Type.bitstring("a.b");
 
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles mixed binary and charlist", () => {
-      const filename = Type.bitstring("path/to/file.erl");
-      const ext = Type.charlist(".erl");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file");
-
-      assert.deepStrictEqual(result, expected);
+      assertBoxedStrictEqual(result, expected);
     });
 
     it("handles extension with no dot", () => {
@@ -394,6 +378,216 @@ describe("Erlang_Filename", () => {
       const ext = Type.bitstring("txt");
       const result = basename(filename, ext);
       const expected = Type.bitstring("file.");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles empty extension - returns full basename", () => {
+      const filename = Type.bitstring("file.txt");
+      const ext = Type.bitstring("");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("file.txt");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles path with trailing slash", () => {
+      const filename = Type.bitstring("path/to/dir/");
+      const ext = Type.bitstring(".txt");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("dir");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles multiple consecutive slashes", () => {
+      const filename = Type.bitstring("path//to//file.txt");
+      const ext = Type.bitstring(".txt");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("file");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles only slashes", () => {
+      const filename = Type.bitstring("///");
+      const ext = Type.bitstring("x");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles hidden file with extension", () => {
+      const filename = Type.bitstring(".hidden.txt");
+      const ext = Type.bitstring(".txt");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring(".hidden");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles file with only dot as name", () => {
+      const filename = Type.bitstring(".");
+      const ext = Type.bitstring(".");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles file with double dots", () => {
+      const filename = Type.bitstring("..");
+      const ext = Type.bitstring(".");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring(".");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles long extension", () => {
+      const filename = Type.bitstring("archive.tar.gz.bak");
+      const ext = Type.bitstring(".tar.gz.bak");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("archive");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("matches binary/charlist mismatch - binary filename, charlist ext", () => {
+      const filename = Type.bitstring("file.erl");
+      const ext = Type.charlist(".erl");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("file");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("matches charlist filename, binary ext", () => {
+      const filename = Type.charlist("file.erl");
+      const ext = Type.bitstring(".erl");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("file");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("returns basename when extension equals basename", () => {
+      const filename = Type.bitstring("file");
+      const ext = Type.bitstring("file");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles iolist with mixed types", () => {
+      const filename = Type.list([
+        Type.charlist("path/to/"),
+        Type.integer(102), // 'f'
+        Type.integer(105), // 'i'
+        Type.integer(108), // 'l'
+        Type.integer(101), // 'e'
+        Type.charlist(".erl"),
+      ]);
+
+      const ext = Type.charlist(".erl");
+      const result = basename(filename, ext);
+      const expected = Type.charlist("file");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles case-sensitive extension matching", () => {
+      const filename = Type.bitstring("file.TXT");
+      const ext = Type.bitstring(".txt");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("file.TXT");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles multi-byte UTF-8 characters in filename", () => {
+      const filename = Type.bitstring("文件.txt");
+      const ext = Type.bitstring(".txt");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("文件");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles multi-byte UTF-8 characters in extension", () => {
+      const filename = Type.bitstring("file.日本");
+      const ext = Type.bitstring(".日本");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("file");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("handles path with dot in directory name but not matching extension", () => {
+      const filename = Type.bitstring("path.dir/file.txt");
+      const ext = Type.bitstring(".dir");
+      const result = basename(filename, ext);
+      const expected = Type.bitstring("file.txt");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("returns charlist when basename/1 returns charlist and no match", () => {
+      const filename = Type.charlist("path/to/noextension");
+      const ext = Type.charlist(".txt");
+      const result = basename(filename, ext);
+      const expectedBasename = Erlang_Filename["basename/1"](filename);
+
+      assert.deepStrictEqual(result, expectedBasename);
+    });
+
+    it("handles empty charlist extension", () => {
+      const filename = Type.charlist("file.txt");
+      const ext = Type.charlist("");
+      const result = basename(filename, ext);
+      const expected = Type.charlist("file.txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list input", () => {
+      const filename = Type.list();
+      const ext = Type.charlist(".txt");
+      const result = basename(filename, ext);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("binary with invalid UTF-8 bytes", () => {
+      // <<0xFF, 0xFE, ".txt">>
+      const filename = Bitstring.fromBytes([0xff, 0xfe, 46, 116, 120, 116]);
+
+      const ext = Type.bitstring(".txt");
+
+      const result = basename(filename, ext);
+      const expected = Bitstring.fromBytes([0xff, 0xfe]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("iolist with invalid UTF-8 bytes", () => {
+      // [0xFF, 0xFE, ?., ?t, ?x, ?t] - charlist with invalid UTF-8
+      const filename = Type.list([
+        Type.integer(0xff),
+        Type.integer(0xfe),
+        Type.integer(46), // '.'
+        Type.integer(116), // 't'
+        Type.integer(120), // 'x'
+        Type.integer(116), // 't'
+      ]);
+
+      const ext = Type.charlist(".txt");
+      const result = basename(filename, ext);
+
+      const expected = Type.list([Type.integer(0xff), Type.integer(0xfe)]);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -426,173 +620,32 @@ describe("Erlang_Filename", () => {
       );
     });
 
-    it("handles empty extension - returns full basename", () => {
+    it("raises FunctionClauseError if filename is a non-binary bitstring", () => {
+      const filename = Type.bitstring([1, 0, 1]);
+      const ext = Type.bitstring(".txt");
+
+      assertBoxedError(
+        () => basename(filename, ext),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          filename,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if extension is a non-binary bitstring", () => {
       const filename = Type.bitstring("file.txt");
-      const ext = Type.bitstring("");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file.txt");
+      const ext = Type.bitstring([1, 0, 1]);
 
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles path with trailing slash", () => {
-      const filename = Type.bitstring("path/to/dir/");
-      const ext = Type.bitstring(".txt");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("dir");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles multiple consecutive slashes", () => {
-      const filename = Type.bitstring("path//to//file.txt");
-      const ext = Type.bitstring(".txt");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles only slashes", () => {
-      const filename = Type.bitstring("///");
-      const ext = Type.bitstring("x");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles hidden file with extension", () => {
-      const filename = Type.bitstring(".hidden.txt");
-      const ext = Type.bitstring(".txt");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring(".hidden");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles file with only dot as name", () => {
-      const filename = Type.bitstring(".");
-      const ext = Type.bitstring(".");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles file with double dots", () => {
-      const filename = Type.bitstring("..");
-      const ext = Type.bitstring(".");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring(".");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles long extension", () => {
-      const filename = Type.bitstring("archive.tar.gz.bak");
-      const ext = Type.bitstring(".tar.gz.bak");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("archive");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("matches binary/charlist mismatch - binary filename, charlist ext", () => {
-      const filename = Type.bitstring("file.erl");
-      const ext = Type.charlist(".erl");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("matches charlist filename, binary ext", () => {
-      const filename = Type.charlist("file.erl");
-      const ext = Type.bitstring(".erl");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("returns basename when extension equals basename", () => {
-      const filename = Type.bitstring("file");
-      const ext = Type.bitstring("file");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles iolist with mixed types", () => {
-      const filename = Type.list([
-        Type.bitstring("path/to/"),
-        Type.integer(102), // 'f'
-        Type.integer(105), // 'i'
-        Type.integer(108), // 'l'
-        Type.integer(101), // 'e'
-        Type.bitstring(".erl"),
-      ]);
-      const ext = Type.charlist(".erl");
-      const result = basename(filename, ext);
-      const expected = Type.charlist("file");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles case-sensitive extension matching", () => {
-      const filename = Type.bitstring("file.TXT");
-      const ext = Type.bitstring(".txt");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file.TXT");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles multi-byte UTF-8 characters in filename", () => {
-      const filename = Type.bitstring("文件.txt");
-      const ext = Type.bitstring(".txt");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("文件");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles multi-byte UTF-8 characters in extension", () => {
-      const filename = Type.bitstring("file.日本");
-      const ext = Type.bitstring(".日本");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles path with dot in directory name but not matching extension", () => {
-      const filename = Type.bitstring("path.dir/file.txt");
-      const ext = Type.bitstring(".dir");
-      const result = basename(filename, ext);
-      const expected = Type.bitstring("file.txt");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("returns charlist when basename/1 returns charlist and no match", () => {
-      const filename = Type.charlist("path/to/noextension");
-      const ext = Type.charlist(".txt");
-      const result = basename(filename, ext);
-      const expectedBasename = Erlang_Filename["basename/1"](filename);
-
-      assert.deepStrictEqual(result, expectedBasename);
-    });
-
-    it("handles empty charlist extension", () => {
-      const filename = Type.charlist("file.txt");
-      const ext = Type.charlist("");
-      const result = basename(filename, ext);
-      const expected = Type.charlist("file.txt");
-
-      assert.deepStrictEqual(result, expected);
+      assertBoxedError(
+        () => basename(filename, ext),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          ext,
+          Type.list(),
+        ]),
+      );
     });
   });
 
