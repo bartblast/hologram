@@ -2266,14 +2266,14 @@ describe("Erlang_Binary", () => {
       });
 
       it("handles empty replacement with :global", () => {
-        const subject = Bitstring.fromText("a1b2c3");
+        const subject = Bitstring.fromText("a1b1c1");
         const pattern = Bitstring.fromText("1");
         const replacement = Bitstring.fromText("");
         const options = Type.list([Type.atom("global")]);
 
         const result = replace(subject, pattern, replacement, options);
 
-        assertBoxedStrictEqual(result, Bitstring.fromText("ab2c3"));
+        assertBoxedStrictEqual(result, Bitstring.fromText("abc"));
       });
     });
 

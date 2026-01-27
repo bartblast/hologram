@@ -972,7 +972,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     test "handles empty replacement with :global" do
-      assert :binary.replace("a1b2c3", "1", "", [:global]) == "ab2c3"
+      assert :binary.replace("a1b1c1", "1", "", [:global]) == "abc"
     end
 
     # With insert_replaced option
