@@ -802,7 +802,7 @@ const Erlang_UnicodeUtil = {
           Type.isBinary(tail) &&
           (tailBinaryTextForEmptyCheck === null ||
             tailBinaryTextForEmptyCheck.length === 0);
-            
+
         const tailStartsWithEmptyBinary =
           Type.isList(tail) &&
           tail.data.length > 0 &&
