@@ -509,6 +509,175 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
   end
 
+  describe "matches/2" do
+    test "delegates to matches/3 with empty options" do
+      assert :binary.matches("the rain in spain", "ai") == [{5, 2}, {14, 2}]
+    end
+  end
+
+  describe "matches/3" do
+    # Finding patterns
+
+    test "returns all non-overlapping matches" do
+      assert :binary.matches("banana bandana", "ana", []) == [{1, 3}, {11, 3}]
+    end
+
+    test "prefers longer match when starting at same position" do
+      assert :binary.matches("abcde", ["bcde", "bc", "de"], []) == [{1, 4}]
+    end
+
+    test "returns non-overlapping repeated matches" do
+      assert :binary.matches("aaaa", "aa", []) == [{0, 2}, {2, 2}]
+    end
+
+    test "works with compiled pattern" do
+      compiled = :binary.compile_pattern("ai")
+
+      assert :binary.matches("the rain in spain", compiled, []) == [{5, 2}, {14, 2}]
+    end
+
+    test "works with bytes-based binary" do
+      assert :binary.matches(<<1, 2, 3, 2, 3, 4>>, <<2, 3>>, []) == [{1, 2}, {3, 2}]
+    end
+
+    test "returns empty list when no matches" do
+      assert :binary.matches("hello", "xyz", []) == []
+    end
+
+    test "returns empty list when subject is empty" do
+      assert :binary.matches("", "a", []) == []
+    end
+
+    test "returns empty list when pattern is longer than subject" do
+      assert :binary.matches("ab", "abcdef", []) == []
+    end
+
+    test "works with compiled Aho-Corasick pattern" do
+      compiled = :binary.compile_pattern(["ab", "bc"])
+
+      assert :binary.matches("zabcbc", compiled, []) == [{1, 2}, {4, 2}]
+    end
+
+    # Scope option
+
+    test "finds matches only within scope" do
+      assert :binary.matches("the rain in spain", "ai", scope: {4, 6}) == [{5, 2}]
+    end
+
+    test "returns empty list when scope length is zero" do
+      assert :binary.matches("abc", "a", scope: {0, 0}) == []
+    end
+
+    test "supports negative scope length" do
+      subject = "hello world"
+      opts = [scope: {byte_size(subject), -5}]
+
+      assert :binary.matches(subject, "wo", opts) == [{6, 2}]
+    end
+
+    # Input validation
+
+    test "raises ArgumentError if subject is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:binary, :matches, [:not_binary, "a", []]}
+    end
+
+    test "raises ArgumentError if subject is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
+                   {:binary, :matches, [<<1::1, 0::1, 1::1>>, "a", []]}
+    end
+
+    test "raises ArgumentError when pattern is invalid" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :matches, ["abc", "", []]}
+    end
+
+    test "raises ArgumentError with empty pattern list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :matches, ["test", [], []]}
+    end
+
+    test "raises ArgumentError if pattern list contains non-binary element" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :matches, ["test", ["ok", :bad], []]}
+    end
+
+    test "raises ArgumentError with missing compiled pattern data" do
+      invalid_pattern = {:bm, make_ref()}
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.matches("abc", invalid_pattern, []) end
+    end
+
+    # Options validation
+
+    test "raises ArgumentError if options is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :matches, ["abc", "a", :bad]}
+    end
+
+    test "raises ArgumentError for improper list options" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :matches, ["abc", "a", [:scope | :tail]]}
+    end
+
+    test "raises ArgumentError when unsupported option provided" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :matches, ["abc", "a", [:global]]}
+    end
+
+    test "raises ArgumentError with malformed scope" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :matches, ["abc", "a", [scope: :bad]]}
+    end
+
+    test "raises ArgumentError when scope is out of range" do
+      assert_error ArgumentError,
+                   binary_match_invalid_scope_error_msg(),
+                   {:binary, :matches, ["abc", "a", [scope: {10, 1}]]}
+    end
+
+    test "raises ArgumentError when scope extends beyond subject" do
+      assert_error ArgumentError,
+                   binary_match_invalid_scope_error_msg(),
+                   {:binary, :matches, ["abc", "a", [scope: {0, 10}]]}
+    end
+
+    test "raises ArgumentError when scope start is negative" do
+      assert_error ArgumentError,
+                   binary_match_invalid_scope_error_msg(),
+                   {:binary, :matches, ["abc", "a", [scope: {-1, 2}]]}
+    end
+
+    test "raises ArgumentError when scope start plus negative length is below zero" do
+      assert_error ArgumentError,
+                   binary_match_invalid_scope_error_msg(),
+                   {:binary, :matches, ["abc", "a", [scope: {0, -1}]]}
+    end
+
+    test "raises ArgumentError when scope length is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :matches, ["abc", "a", [scope: {0, :bad}]]}
+    end
+
+    test "raises ArgumentError when scope elements are not integers" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :matches, ["abc", "a", [scope: {:bad, 1}]]}
+    end
+  end
+
   describe "split/2" do
     # Verifies default options (no :global) - splits only on first match
     test "delegates to split/3 with empty options" do
