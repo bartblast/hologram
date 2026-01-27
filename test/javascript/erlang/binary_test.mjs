@@ -2345,8 +2345,14 @@ describe("Erlang_Binary", () => {
         ]);
 
         const result = replace(subject, pattern, replacement, options);
+        const expectedBinary = Bitstring.fromText("xa-xa-xa");
+        const expectedPositions = [0n, 2n, 4n];
 
-        assertBoxedStrictEqual(result, Bitstring.fromText("xa-xa-xa"));
+        const matches = Erlang_Binary["matches/2"](subject, pattern);
+        const positions = matches.data.map((match) => match.data[0].value);
+
+        assertBoxedStrictEqual(result, expectedBinary);
+        assert.deepStrictEqual(positions, expectedPositions);
       });
     });
 
