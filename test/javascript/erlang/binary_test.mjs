@@ -1451,6 +1451,25 @@ describe("Erlang_Binary", () => {
           Type.list([Bitstring.fromText("abc"), Bitstring.fromText("ef")]),
         );
       });
+
+      it("accepts negative scope length (reverse part)", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText(" ");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(11), Type.integer(-6)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText("hello"), Bitstring.fromText("world")]),
+        );
+      });
     });
 
     describe("overlapping patterns", () => {
@@ -1670,24 +1689,6 @@ describe("Erlang_Binary", () => {
         const scope = Type.tuple([
           Type.atom("scope"),
           Type.tuple([Type.integer(1), Type.integer(3)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError for negative scope length", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(0), Type.integer(-1)]),
         ]);
 
         const options = Type.list([scope]);
