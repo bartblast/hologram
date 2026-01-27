@@ -2433,7 +2433,7 @@ describe("Erlang_Binary", () => {
         assertBoxedStrictEqual(result, Bitstring.fromText("abc def X"));
       });
 
-      it("returns original subject when pattern outside scope", () => {
+      it("replaces pattern within scope", () => {
         const subject = Bitstring.fromText("abc def abc");
         const pattern = Bitstring.fromText("abc");
         const replacement = Bitstring.fromText("X");
