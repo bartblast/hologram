@@ -1728,6 +1728,7 @@ describe("Erlang_Filename", () => {
     it("handles invalid UTF-8 bytewise (raw filename)", () => {
       // Invalid UTF-8 bytes: <<255, 254, 253>>
       const invalidUtf8 = Bitstring.fromBytes(new Uint8Array([255, 254, 253]));
+
       const result = rootname(invalidUtf8);
 
       // Should return unchanged since no extension
@@ -1739,10 +1740,12 @@ describe("Erlang_Filename", () => {
       const invalidUtf8WithExt = Bitstring.fromBytes(
         new Uint8Array([255, 254, 46, 253]),
       );
+
       const result = rootname(invalidUtf8WithExt);
 
       // Should remove ".253" (last dot and everything after)
       const expected = new Uint8Array([255, 254]);
+
       assert.deepStrictEqual(result.bytes, expected);
     });
 
@@ -1751,6 +1754,7 @@ describe("Erlang_Filename", () => {
       const invalidUtf8Hidden = Bitstring.fromBytes(
         new Uint8Array([47, 46, 255, 254]),
       );
+
       const result = rootname(invalidUtf8Hidden);
 
       // Should not remove extension after slash
@@ -1958,6 +1962,7 @@ describe("Erlang_Filename", () => {
         Type.bitstring("foo"),
         Type.bitstring(".erl"),
       ]);
+
       const ext = Type.bitstring(".erl");
       const result = rootname(filename, ext);
       const expected = Type.bitstring("foo");
@@ -1977,24 +1982,27 @@ describe("Erlang_Filename", () => {
     it("handles invalid UTF-8 filename bytewise (raw filename)", () => {
       // Invalid UTF-8 bytes: <<255, 254, 253>>
       const invalidUtf8 = Bitstring.fromBytes(new Uint8Array([255, 254, 253]));
+
       const ext = Bitstring.fromBytes(new Uint8Array([253])); // <<253>>
+
       const result = rootname(invalidUtf8, ext);
 
       // Should remove the last byte (253)
       const expected = new Uint8Array([255, 254]);
+
       assert.deepStrictEqual(result.bytes, expected);
     });
 
     it("handles invalid UTF-8 extension bytewise", () => {
       const filename = Type.bitstring("foo.erl");
+
       // Invalid UTF-8 extension
       const invalidExt = Bitstring.fromBytes(new Uint8Array([255, 254]));
+
       const result = rootname(filename, invalidExt);
 
       // Should not remove anything (extension doesn't match)
-      // Compare bytes since the text property might have been nulled
-      Bitstring.maybeSetBytesFromText(filename);
-      assert.deepStrictEqual(result.bytes, filename.bytes);
+      assertBoxedStrictEqual(result, filename);
     });
 
     it("handles both filename and extension as invalid UTF-8", () => {
@@ -2002,12 +2010,15 @@ describe("Erlang_Filename", () => {
       const invalidFilename = Bitstring.fromBytes(
         new Uint8Array([255, 254, 46, 253]),
       );
+
       // Extension: <<46, 253>> ('.' 0xFD)
       const invalidExt = Bitstring.fromBytes(new Uint8Array([46, 253]));
+
       const result = rootname(invalidFilename, invalidExt);
 
       // Should remove the matching extension
       const expected = new Uint8Array([255, 254]);
+
       assert.deepStrictEqual(result.bytes, expected);
     });
 
@@ -2016,8 +2027,10 @@ describe("Erlang_Filename", () => {
       const invalidFilename = Bitstring.fromBytes(
         new Uint8Array([47, 255, 254]),
       );
+
       // Extension: <<255, 254>> (0xFF 0xFE)
       const invalidExt = Bitstring.fromBytes(new Uint8Array([255, 254]));
+
       const result = rootname(invalidFilename, invalidExt);
 
       // Should not remove (extension is right after slash)
@@ -2083,20 +2096,6 @@ describe("Erlang_Filename", () => {
       );
     });
 
-    it("raises FunctionClauseError if the second argument is not a bitstring or atom or list", () => {
-      const arg1 = Type.bitstring("foo.erl");
-      const arg2 = Type.integer(123);
-
-      assertBoxedError(
-        () => rootname(arg1, arg2),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
-          arg2,
-          Type.list(),
-        ]),
-      );
-    });
-
     it("raises FunctionClauseError if the first argument is a non-binary bitstring", () => {
       const arg1 = Type.bitstring([1, 0, 1]);
       const arg2 = Type.bitstring(".erl");
@@ -2106,6 +2105,20 @@ describe("Erlang_Filename", () => {
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
           arg1,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a bitstring or atom or list", () => {
+      const arg1 = Type.bitstring("foo.erl");
+      const arg2 = Type.integer(123);
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg2,
           Type.list(),
         ]),
       );

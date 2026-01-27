@@ -70,6 +70,7 @@ const Erlang_Filename = {
 
     const removeSpecificExtension = (filenameBytes, extBytes, slashByte) => {
       const beforeExtIndex = filenameBytes.length - extBytes.length;
+
       return beforeExtIndex > 0 &&
         filenameBytes[beforeExtIndex - 1] === slashByte
         ? filenameBytes
@@ -663,7 +664,7 @@ const Erlang_Filename = {
     return formatResult(resultBinary, flattened);
   },
   // End rootname/1
-  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1, :filename._rootname_raw/2]
+  // Deps: [:erlang.iolist_to_binary/1, :filename._rootname_raw/2, :filename.flatten/1]
 
   // Start rootname/2
   "rootname/2": (filename, ext) => {
@@ -686,6 +687,7 @@ const Erlang_Filename = {
     const processInvalidUtf8Extension = (filenameBinary, extBinary) => {
       ensureBytesAvailable(filenameBinary);
       ensureBytesAvailable(extBinary);
+
       return Erlang_Filename["_rootname_raw/2"](filenameBinary, extBinary);
     };
 
@@ -694,11 +696,13 @@ const Erlang_Filename = {
 
     const removeIfNotAfterSlash = (filenameText, extText) => {
       const doesNotMatch = !endsWithExt(filenameText, extText);
+
       if (doesNotMatch) {
         return filenameText;
       }
 
       const beforeExt = removeExtension(filenameText, extText);
+
       return isExtensionAfterSlash(beforeExt) ? filenameText : beforeExt;
     };
 
@@ -713,9 +717,9 @@ const Erlang_Filename = {
     const flattenedExt = Erlang_Filename["flatten/1"](ext);
 
     const filenameBinary = toBinary(flattenedFilename);
-    const extBinary = toBinary(flattenedExt);
-
     Bitstring.maybeSetTextFromBytes(filenameBinary);
+
+    const extBinary = toBinary(flattenedExt);
     Bitstring.maybeSetTextFromBytes(extBinary);
 
     // rootname/2 always returns a binary, regardless of input type
@@ -729,7 +733,7 @@ const Erlang_Filename = {
     return result;
   },
   // End rootname/2
-  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1, :filename._rootname_raw/2]
+  // Deps: [:erlang.iolist_to_binary/1, :filename._rootname_raw/2, :filename.flatten/1]
 
   // Start split/1
   "split/1": (filename) => {

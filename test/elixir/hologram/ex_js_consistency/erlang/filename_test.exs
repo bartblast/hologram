@@ -753,6 +753,7 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     test "handles invalid UTF-8 bytewise (raw filename)" do
       # Invalid UTF-8 bytes: <<255, 254, 253>>
       invalid_utf8 = <<255, 254, 253>>
+
       result = :filename.rootname(invalid_utf8)
 
       # Should return unchanged since no extension
@@ -762,6 +763,7 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     test "removes extension from invalid UTF-8 filename" do
       # Invalid UTF-8 with extension: <<255, 254, 46, 253>> (0xFF 0xFE '.' 0xFD)
       invalid_utf8_with_ext = <<255, 254, 46, 253>>
+
       result = :filename.rootname(invalid_utf8_with_ext)
 
       # Should remove ".253" (last dot and everything after)
@@ -771,6 +773,7 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     test "preserves invalid UTF-8 hidden file" do
       # Invalid UTF-8 starting with slash-dot: <<47, 46, 255, 254>> ('/' '.' 0xFF 0xFE)
       invalid_utf8_hidden = <<47, 46, 255, 254>>
+
       result = :filename.rootname(invalid_utf8_hidden)
 
       # Should not remove extension after slash
@@ -882,7 +885,9 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     test "handles invalid UTF-8 filename bytewise (raw filename)" do
       # Invalid UTF-8 bytes: <<255, 254, 253>>
       invalid_utf8 = <<255, 254, 253>>
+
       ext = <<253>>
+
       result = :filename.rootname(invalid_utf8, ext)
 
       # Should remove the last byte (253)
@@ -891,8 +896,10 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
 
     test "handles invalid UTF-8 extension bytewise" do
       filename = "foo.erl"
+
       # Invalid UTF-8 extension
       invalid_ext = <<255, 254>>
+
       result = :filename.rootname(filename, invalid_ext)
 
       # Should not remove anything (extension doesn't match)
@@ -902,8 +909,10 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     test "handles both filename and extension as invalid UTF-8" do
       # Filename: <<255, 254, 46, 253>> (0xFF 0xFE '.' 0xFD)
       invalid_filename = <<255, 254, 46, 253>>
+
       # Extension: <<46, 253>> ('.' 0xFD)
       invalid_ext = <<46, 253>>
+
       result = :filename.rootname(invalid_filename, invalid_ext)
 
       # Should remove the matching extension
@@ -913,8 +922,10 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     test "does not remove invalid UTF-8 extension after slash" do
       # Filename: <<47, 255, 254>> ('/' 0xFF 0xFE)
       invalid_filename = <<47, 255, 254>>
+
       # Extension: <<255, 254>> (0xFF 0xFE)
       invalid_ext = <<255, 254>>
+
       result = :filename.rootname(invalid_filename, invalid_ext)
 
       # Should not remove (extension is right after slash)
@@ -947,18 +958,18 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
                    fn -> :filename.rootname(123, ".erl") end
     end
 
-    test "raises FunctionClauseError if the second argument is not a bitstring or atom or list" do
-      assert_error FunctionClauseError,
-                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
-                   fn -> :filename.rootname("foo.erl", 123) end
-    end
-
     test "raises FunctionClauseError if the first argument is a non-binary bitstring" do
       arg = <<1::1, 0::1, 1::1>>
 
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":filename.do_flatten/2", [arg, []]),
                    fn -> :filename.rootname(arg, ".erl") end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a bitstring or atom or list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.rootname("foo.erl", 123) end
     end
 
     test "raises FunctionClauseError if the second argument is a non-binary bitstring" do
