@@ -1147,7 +1147,10 @@ const Erlang_Binary = {
     // Helper closes over isReplacementFunction and replacement for clarity
     const buildReplacementBytes = (matchedBitstring, insertPositionsOpt) => {
       if (isReplacementFunction) {
-        const replacementResult = replacement(matchedBitstring);
+        const replacementResult = Interpreter.callAnonymousFunction(
+          replacement,
+          [matchedBitstring],
+        );
 
         if (!Type.isBinary(replacementResult)) {
           Interpreter.raiseArgumentError(
@@ -1188,7 +1191,7 @@ const Erlang_Binary = {
 
     // Validate replacement is either binary or function
     const isReplacementBinary = Type.isBinary(replacement);
-    const isReplacementFunction = typeof replacement === "function";
+    const isReplacementFunction = Type.isAnonymousFunction(replacement);
 
     if (!isReplacementBinary && !isReplacementFunction) {
       Interpreter.raiseArgumentError(

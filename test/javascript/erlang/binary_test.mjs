@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedStrictEqual,
   defineGlobalErlangAndElixirModules,
+  contextFixture,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
@@ -2360,9 +2361,20 @@ describe("Erlang_Binary", () => {
       it("uses function for replacement", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
-        const replacement = (matched) => {
-          return Bitstring.fromText("[" + matched.text + "]");
-        };
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("matched")],
+              guards: [],
+              body: (context) => {
+                const matched = context.vars.matched;
+                return Bitstring.fromText("[" + matched.text + "]");
+              },
+            },
+          ],
+          contextFixture(),
+        );
         const options = Type.list();
 
         const result = replace(subject, pattern, replacement, options);
@@ -2374,10 +2386,20 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("abcabc");
         const pattern = Bitstring.fromText("ab");
         let callCount = 0;
-        const replacement = (_matched) => {
-          callCount++;
-          return Bitstring.fromText("X");
-        };
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("_matched")],
+              guards: [],
+              body: (_context) => {
+                callCount++;
+                return Bitstring.fromText("X");
+              },
+            },
+          ],
+          contextFixture(),
+        );
         const options = Type.list([Type.atom("global")]);
 
         const result = replace(subject, pattern, replacement, options);
@@ -2390,10 +2412,20 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromBytes([1, 2, 3]);
         const pattern = Bitstring.fromBytes([2]);
         let receivedMatch = null;
-        const replacement = (matched) => {
-          receivedMatch = matched;
-          return Bitstring.fromBytes([9]);
-        };
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("matched")],
+              guards: [],
+              body: (context) => {
+                receivedMatch = context.vars.matched;
+                return Bitstring.fromBytes([9]);
+              },
+            },
+          ],
+          contextFixture(),
+        );
         const options = Type.list();
 
         const result = replace(subject, pattern, replacement, options);
@@ -2405,7 +2437,17 @@ describe("Erlang_Binary", () => {
       it("raises error if function returns non-binary", () => {
         const subject = Bitstring.fromText("hello");
         const pattern = Bitstring.fromText("l");
-        const replacement = () => Type.atom("not_binary");
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("_matched")],
+              guards: [],
+              body: (_context) => Type.atom("not_binary"),
+            },
+          ],
+          contextFixture(),
+        );
         const options = Type.list();
 
         assertBoxedError(
