@@ -1588,6 +1588,544 @@ describe("Erlang_Filename", () => {
     });
   });
 
+  describe("rootname/1", () => {
+    const rootname = Erlang_Filename["rootname/1"];
+
+    it("path with extension", () => {
+      const filename = Type.bitstring("/jam.src/foo.erl");
+      const result = rootname(filename);
+      const expected = Type.bitstring("/jam.src/foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path without extension", () => {
+      const filename = Type.bitstring("/jam.src/kalle");
+      const result = rootname(filename);
+      const expected = Type.bitstring("/jam.src/kalle");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filename with extension", () => {
+      const filename = Type.bitstring("foo.erl");
+      const result = rootname(filename);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filename without extension", () => {
+      const filename = Type.bitstring("foo");
+      const result = rootname(filename);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filename starting with dot", () => {
+      const filename = Type.bitstring(".foo");
+      const result = rootname(filename);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filename with multiple extensions", () => {
+      const filename = Type.bitstring("foo.bar.baz");
+      const result = rootname(filename);
+      const expected = Type.bitstring("foo.bar");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("path with hidden file", () => {
+      const filename = Type.bitstring("path/to/.hidden");
+      const result = rootname(filename);
+      const expected = Type.bitstring("path/to/.hidden");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("root path", () => {
+      const filename = Type.bitstring("/");
+      const result = rootname(filename);
+      const expected = Type.bitstring("/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty string", () => {
+      const emptyString = Type.bitstring("");
+      const result = rootname(emptyString);
+
+      assert.deepStrictEqual(result, emptyString);
+    });
+
+    it("path ending with dot", () => {
+      const filename = Type.bitstring("foo.");
+      const result = rootname(filename);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("hidden file in root", () => {
+      const filename = Type.bitstring("/.bashrc");
+      const result = rootname(filename);
+      const expected = Type.bitstring("/.bashrc");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("hidden file in subdirectory", () => {
+      const filename = Type.bitstring("/foo/.bashrc");
+      const result = rootname(filename);
+      const expected = Type.bitstring("/foo/.bashrc");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("hidden file with extension", () => {
+      const filename = Type.bitstring(".bashrc.bak");
+      const result = rootname(filename);
+      const expected = Type.bitstring(".bashrc");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("hidden file in subdirectory with extension", () => {
+      const filename = Type.bitstring("/foo/.bashrc.bak");
+      const result = rootname(filename);
+      const expected = Type.bitstring("/foo/.bashrc");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list input", () => {
+      const emptyList = Type.list();
+      const result = rootname(emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("non-empty iolist input", () => {
+      const filename = Type.list([
+        Type.bitstring("path/to/"),
+        Type.integer(102), // 'f'
+        Type.integer(105), // 'i'
+        Type.integer(108), // 'l'
+        Type.integer(101), // 'e'
+        Type.bitstring(".txt"),
+      ]);
+
+      const result = rootname(filename);
+      const expected = Type.charlist("path/to/file");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles invalid UTF-8 bytewise (raw filename)", () => {
+      // Invalid UTF-8 bytes: <<255, 254, 253>>
+      const invalidUtf8 = Bitstring.fromBytes(new Uint8Array([255, 254, 253]));
+      const result = rootname(invalidUtf8);
+
+      // Should return unchanged since no extension
+      assert.deepStrictEqual(result.bytes, invalidUtf8.bytes);
+    });
+
+    it("removes extension from invalid UTF-8 filename", () => {
+      // Invalid UTF-8 with extension: <<255, 254, 46, 253>> (0xFF 0xFE '.' 0xFD)
+      const invalidUtf8WithExt = Bitstring.fromBytes(
+        new Uint8Array([255, 254, 46, 253]),
+      );
+      const result = rootname(invalidUtf8WithExt);
+
+      // Should remove ".253" (last dot and everything after)
+      const expected = new Uint8Array([255, 254]);
+      assert.deepStrictEqual(result.bytes, expected);
+    });
+
+    it("preserves invalid UTF-8 hidden file", () => {
+      // Invalid UTF-8 starting with slash-dot: <<47, 46, 255, 254>> ('/' '.' 0xFF 0xFE)
+      const invalidUtf8Hidden = Bitstring.fromBytes(
+        new Uint8Array([47, 46, 255, 254]),
+      );
+      const result = rootname(invalidUtf8Hidden);
+
+      // Should not remove extension after slash
+      assert.deepStrictEqual(result.bytes, invalidUtf8Hidden.bytes);
+    });
+
+    it("filename with trailing slash", () => {
+      const filename = Type.bitstring("foo.txt/");
+      const result = rootname(filename);
+      const expected = Type.bitstring("foo.txt/");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filename with double dots as extension", () => {
+      const filename = Type.bitstring("foo..txt");
+      const result = rootname(filename);
+      const expected = Type.bitstring("foo.");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filename is just double dots", () => {
+      const filename = Type.bitstring("..");
+      const result = rootname(filename);
+      const expected = Type.bitstring(".");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filename is three dots", () => {
+      const filename = Type.bitstring("...");
+      const result = rootname(filename);
+      const expected = Type.bitstring("..");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input", () => {
+      const filename = Type.atom("/jam.src/foo.erl");
+      const result = rootname(filename);
+      const expected = Type.charlist("/jam.src/foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("iolist with invalid UTF-8 bytes", () => {
+      // Charlist with invalid UTF-8: [47, 102, 111, 111, 46, 0xFF, 0xFE]
+      // "/foo." + [0xFF, 0xFE]
+      const filename = Type.list([
+        Type.integer(47), // '/'
+        Type.integer(102), // 'f'
+        Type.integer(111), // 'o'
+        Type.integer(111), // 'o'
+        Type.integer(46), // '.'
+        Type.integer(0xff),
+        Type.integer(0xfe),
+      ]);
+
+      const result = rootname(filename);
+
+      // Should return the root without the extension [0xFF, 0xFE]
+      // Result: [47, 102, 111, 111]
+      const expected = Type.list([
+        Type.integer(47), // '/'
+        Type.integer(102), // 'f'
+        Type.integer(111), // 'o'
+        Type.integer(111), // 'o'
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
+      const arg = Type.integer(123);
+
+      assertBoxedError(
+        () => rootname(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => rootname(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg,
+          Type.list(),
+        ]),
+      );
+    });
+  });
+
+  describe("rootname/2", () => {
+    const rootname = Erlang_Filename["rootname/2"];
+
+    it("removes matching extension", () => {
+      const filename = Type.bitstring("/jam.src/foo.erl");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("/jam.src/foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("does not remove non-matching extension", () => {
+      const filename = Type.bitstring("/jam.src/kalle.jam");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("/jam.src/kalle.jam");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("removes partial extension match", () => {
+      const filename = Type.bitstring("/jam.src/kalle.old.erl");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("/jam.src/kalle.old");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("removes extension from filename only", () => {
+      const filename = Type.bitstring("foo.erl");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("does not remove if filename does not match extension", () => {
+      const filename = Type.bitstring("foo.beam");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo.beam");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("removes extension when filename equals extension", () => {
+      const filename = Type.bitstring(".bashrc");
+      const ext = Type.bitstring(".bashrc");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("does not remove extension after slash in root", () => {
+      const filename = Type.bitstring("/.erl");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("/.erl");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("does not remove extension after slash in subdirectory", () => {
+      const filename = Type.bitstring("/path/.erl");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("/path/.erl");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty extension", () => {
+      const filename = Type.bitstring("foo.erl");
+      const ext = Type.bitstring("");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo.erl");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty filename", () => {
+      const filename = Type.bitstring("");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list filename input", () => {
+      const emptyList = Type.list();
+      const ext = Type.bitstring(".erl");
+      const result = rootname(emptyList, ext);
+      const expected = Type.bitstring("");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("iolist filename input", () => {
+      const filename = Type.list([
+        Type.bitstring("foo"),
+        Type.bitstring(".erl"),
+      ]);
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("iolist extension input", () => {
+      const filename = Type.bitstring("foo.erl");
+      const ext = Type.list([Type.bitstring("."), Type.bitstring("erl")]);
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles invalid UTF-8 filename bytewise (raw filename)", () => {
+      // Invalid UTF-8 bytes: <<255, 254, 253>>
+      const invalidUtf8 = Bitstring.fromBytes(new Uint8Array([255, 254, 253]));
+      const ext = Bitstring.fromBytes(new Uint8Array([253])); // <<253>>
+      const result = rootname(invalidUtf8, ext);
+
+      // Should remove the last byte (253)
+      const expected = new Uint8Array([255, 254]);
+      assert.deepStrictEqual(result.bytes, expected);
+    });
+
+    it("handles invalid UTF-8 extension bytewise", () => {
+      const filename = Type.bitstring("foo.erl");
+      // Invalid UTF-8 extension
+      const invalidExt = Bitstring.fromBytes(new Uint8Array([255, 254]));
+      const result = rootname(filename, invalidExt);
+
+      // Should not remove anything (extension doesn't match)
+      // Compare bytes since the text property might have been nulled
+      Bitstring.maybeSetBytesFromText(filename);
+      assert.deepStrictEqual(result.bytes, filename.bytes);
+    });
+
+    it("handles both filename and extension as invalid UTF-8", () => {
+      // Filename: <<255, 254, 46, 253>> (0xFF 0xFE '.' 0xFD)
+      const invalidFilename = Bitstring.fromBytes(
+        new Uint8Array([255, 254, 46, 253]),
+      );
+      // Extension: <<46, 253>> ('.' 0xFD)
+      const invalidExt = Bitstring.fromBytes(new Uint8Array([46, 253]));
+      const result = rootname(invalidFilename, invalidExt);
+
+      // Should remove the matching extension
+      const expected = new Uint8Array([255, 254]);
+      assert.deepStrictEqual(result.bytes, expected);
+    });
+
+    it("does not remove invalid UTF-8 extension after slash", () => {
+      // Filename: <<47, 255, 254>> ('/' 0xFF 0xFE)
+      const invalidFilename = Bitstring.fromBytes(
+        new Uint8Array([47, 255, 254]),
+      );
+      // Extension: <<255, 254>> (0xFF 0xFE)
+      const invalidExt = Bitstring.fromBytes(new Uint8Array([255, 254]));
+      const result = rootname(invalidFilename, invalidExt);
+
+      // Should not remove (extension is right after slash)
+      assert.deepStrictEqual(result.bytes, invalidFilename.bytes);
+    });
+
+    it("extension without leading dot", () => {
+      const filename = Type.bitstring("foo.erl");
+      const ext = Type.bitstring("erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo.");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("extension longer than filename", () => {
+      const filename = Type.bitstring("foo");
+      const ext = Type.bitstring("foobar");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("extension with double dots", () => {
+      const filename = Type.bitstring("foo.erl");
+      const ext = Type.bitstring("..erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo.erl");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom filename input", () => {
+      const filename = Type.atom("foo.erl");
+      const ext = Type.bitstring(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom extension input", () => {
+      const filename = Type.bitstring("foo.erl");
+      const ext = Type.atom(".erl");
+      const result = rootname(filename, ext);
+      const expected = Type.bitstring("foo");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a bitstring or atom or list", () => {
+      const arg1 = Type.integer(123);
+      const arg2 = Type.bitstring(".erl");
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg1,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a bitstring or atom or list", () => {
+      const arg1 = Type.bitstring("foo.erl");
+      const arg2 = Type.integer(123);
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg2,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is a non-binary bitstring", () => {
+      const arg1 = Type.bitstring([1, 0, 1]);
+      const arg2 = Type.bitstring(".erl");
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg1,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is a non-binary bitstring", () => {
+      const arg1 = Type.bitstring("foo.erl");
+      const arg2 = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => rootname(arg1, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          arg2,
+          Type.list(),
+        ]),
+      );
+    });
+  });
+
   describe("split/1", () => {
     const split = Erlang_Filename["split/1"];
 
