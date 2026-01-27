@@ -708,6 +708,14 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("multi-component path with trailing slash", () => {
+      const filename = Type.bitstring("foo/bar/baz/");
+      const result = dirname(filename);
+      const expected = Type.bitstring("foo/bar/baz");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("single dot", () => {
       const filename = Type.bitstring(".");
       const result = dirname(filename);
