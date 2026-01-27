@@ -997,7 +997,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
 
     test "works with :global and insert_replaced" do
-      subject = "abaaba"
+      subject = "a-a-a"
 
       result =
         :binary.replace(
@@ -1007,8 +1007,8 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
           [:global, {:insert_replaced, 1}]
         )
 
-      expected_binary = "xabxaxabxa"
-      expected_positions = [0, 2, 3, 5]
+      expected_binary = "xa-xa-xa"
+      expected_positions = [0, 2, 4]
 
       assert result == expected_binary
 

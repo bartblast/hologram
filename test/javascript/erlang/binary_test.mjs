@@ -2336,9 +2336,9 @@ describe("Erlang_Binary", () => {
       });
 
       it("works with :global and insert_replaced", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("[]");
+        const subject = Bitstring.fromText("a-a-a");
+        const pattern = Bitstring.fromText("a");
+        const replacement = Bitstring.fromText("x");
         const options = Type.list([
           Type.atom("global"),
           Type.tuple([Type.atom("insert_replaced"), Type.integer(1)]),
@@ -2346,7 +2346,7 @@ describe("Erlang_Binary", () => {
 
         const result = replace(subject, pattern, replacement, options);
 
-        assertBoxedStrictEqual(result, Bitstring.fromText("he[l][l]o"));
+        assertBoxedStrictEqual(result, Bitstring.fromText("xa-xa-xa"));
       });
     });
 
