@@ -98,6 +98,175 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     end
   end
 
+  describe "basename/2" do
+    test "removes matching extension from basename" do
+      assert :filename.basename("src/core/main.erl", ".erl") == "main"
+    end
+
+    test "removes matching extension from simple filename" do
+      assert :filename.basename("file.txt", ".txt") == "file"
+    end
+
+    test "removes matching extension from path" do
+      assert :filename.basename("/path/to/file.txt", ".txt") == "file"
+    end
+
+    test "removes multi-part extension" do
+      assert :filename.basename("file.tar.gz", ".tar.gz") == "file"
+    end
+
+    test "removes partial extension when multiple exist" do
+      assert :filename.basename("file.tar.gz", ".gz") == "file.tar"
+    end
+
+    test "returns basename when extension does not match" do
+      assert :filename.basename("noextension", ".txt") == "noextension"
+    end
+
+    test "returns basename when extension partially matches" do
+      assert :filename.basename("file.txt", "x") == "file.txt"
+    end
+
+    test "handles root path" do
+      assert :filename.basename("/", "x") == ""
+    end
+
+    test "handles empty filename" do
+      assert :filename.basename("", ".txt") == ""
+    end
+
+    test "removes extension from double-dotted filename" do
+      assert :filename.basename("file.txt.txt", ".txt") == "file.txt"
+    end
+
+    test "removes extension that equals the entire basename" do
+      assert :filename.basename(".hidden", ".hidden") == ""
+    end
+
+    test "handles charlist filename and extension" do
+      assert :filename.basename(~c"file.txt", ~c".txt") == ~c"file"
+    end
+
+    test "handles charlist with path" do
+      assert :filename.basename(~c"path/to/file.erl", ~c".erl") == ~c"file"
+    end
+
+    test "handles atom filename and extension" do
+      assert :filename.basename(:"file.txt", :".txt") == ~c"file"
+    end
+
+    test "returns empty list for root with charlist" do
+      assert :filename.basename(~c"/", ~c"x") == []
+    end
+
+    test "handles iolist filename" do
+      assert :filename.basename([~c"path/to/", ?f, ?i, ?l, ?e, ~c".txt"], ".txt") ==
+               "file"
+    end
+
+    test "returns basename when extension is longer than basename" do
+      assert :filename.basename("a.b", ".longer") == "a.b"
+    end
+
+    test "handles mixed binary and charlist" do
+      assert :filename.basename("path/to/file.erl", ~c".erl") == "file"
+    end
+
+    test "handles extension with no dot" do
+      assert :filename.basename("file.txt", "txt") == "file."
+    end
+
+    test "handles empty extension - returns full basename" do
+      assert :filename.basename("file.txt", "") == "file.txt"
+    end
+
+    test "handles path with trailing slash" do
+      assert :filename.basename("path/to/dir/", ".txt") == "dir"
+    end
+
+    test "handles multiple consecutive slashes" do
+      assert :filename.basename("path//to//file.txt", ".txt") == "file"
+    end
+
+    test "handles only slashes" do
+      assert :filename.basename("///", "x") == ""
+    end
+
+    test "handles hidden file with extension" do
+      assert :filename.basename(".hidden.txt", ".txt") == ".hidden"
+    end
+
+    test "handles file with only dot as name" do
+      assert :filename.basename(".", ".") == ""
+    end
+
+    test "handles file with double dots" do
+      assert :filename.basename("..", ".") == "."
+    end
+
+    test "handles long extension" do
+      assert :filename.basename("archive.tar.gz.bak", ".tar.gz.bak") == "archive"
+    end
+
+    test "matches binary/charlist mismatch - binary filename, charlist ext" do
+      assert :filename.basename("file.erl", ~c".erl") == "file"
+    end
+
+    test "matches charlist filename, binary ext" do
+      assert :filename.basename(~c"file.erl", ".erl") == "file"
+    end
+
+    test "returns basename when extension equals basename" do
+      assert :filename.basename("file", "file") == ""
+    end
+
+    test "handles iolist with mixed types" do
+      assert :filename.basename(
+               [~c"path/to/", ?f, ?i, ?l, ?e, ~c".erl"],
+               ~c".erl"
+             ) == ~c"file"
+    end
+
+    test "handles case-sensitive extension matching" do
+      assert :filename.basename("file.TXT", ".txt") == "file.TXT"
+    end
+
+    test "handles multi-byte UTF-8 characters in filename" do
+      assert :filename.basename("文件.txt", ".txt") == "文件"
+    end
+
+    test "handles multi-byte UTF-8 characters in extension" do
+      assert :filename.basename("file.日本", ".日本") == "file"
+    end
+
+    test "handles path with dot in directory name but not matching extension" do
+      assert :filename.basename("path.dir/file.txt", ".dir") == "file.txt"
+    end
+
+    test "returns charlist when basename/1 returns charlist and no match" do
+      result = :filename.basename(~c"path/to/noextension", ~c".txt")
+      expected = :filename.basename(~c"path/to/noextension")
+
+      assert result == expected
+    end
+
+    test "handles empty charlist extension" do
+      assert :filename.basename(~c"file.txt", ~c"") == ~c"file.txt"
+    end
+
+    test "raises FunctionClauseError if filename is invalid" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.basename(123, ".txt") end
+    end
+
+    test "raises FunctionClauseError if extension is invalid" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn -> :filename.basename("file.txt", 123) end
+    end
+  end
+
   describe "extension/1" do
     test "file with extension" do
       assert :filename.extension("foo.erl") == ".erl"
