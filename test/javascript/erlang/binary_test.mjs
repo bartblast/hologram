@@ -2145,4 +2145,664 @@ describe("Erlang_Binary", () => {
       });
     });
   });
+
+  describe("replace/3", () => {
+    const replace = Erlang_Binary["replace/3"];
+
+    it("delegates to replace/4 with empty options list", () => {
+      const subject = Bitstring.fromText("hello world");
+      const pattern = Bitstring.fromText("world");
+      const replacement = Bitstring.fromText("universe");
+      const result = replace(subject, pattern, replacement);
+
+      assertBoxedStrictEqual(result, Bitstring.fromText("hello universe"));
+    });
+  });
+
+  describe("replace/4", () => {
+    const replace = Erlang_Binary["replace/4"];
+
+    describe("basic replacement", () => {
+      it("replaces first occurrence of pattern", () => {
+        const subject = Bitstring.fromText("hello world world");
+        const pattern = Bitstring.fromText("world");
+        const replacement = Bitstring.fromText("universe");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(
+          result,
+          Bitstring.fromText("hello universe world"),
+        );
+      });
+
+      it("returns original subject when pattern not found", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("xyz");
+        const replacement = Bitstring.fromText("abc");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, subject);
+      });
+
+      it("replaces single pattern with multiple patterns in list", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Type.list([
+          Bitstring.fromText("world"),
+          Bitstring.fromText("hello"),
+        ]);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("X world"));
+      });
+
+      it("works with empty replacement", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const replacement = Bitstring.fromText("");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hello "));
+      });
+
+      it("works with bytes-based binaries", () => {
+        const subject = Bitstring.fromBytes([1, 2, 3, 4, 5]);
+        const pattern = Bitstring.fromBytes([3, 4]);
+        const replacement = Bitstring.fromBytes([9, 9]);
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assert.deepStrictEqual(Array.from(result.bytes), [1, 2, 9, 9, 5]);
+      });
+    });
+
+    describe("with :global option", () => {
+      it("replaces all occurrences with :global", () => {
+        const subject = Bitstring.fromText("hello world world");
+        const pattern = Bitstring.fromText("world");
+        const replacement = Bitstring.fromText("universe");
+        const options = Type.list([Type.atom("global")]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(
+          result,
+          Bitstring.fromText("hello universe universe"),
+        );
+      });
+
+      it("replaces with multiple patterns globally", () => {
+        const subject = Bitstring.fromText("hello-world_test");
+        const pattern = Type.list([
+          Bitstring.fromText("-"),
+          Bitstring.fromText("_"),
+        ]);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([Type.atom("global")]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("helloXworldXtest"));
+      });
+
+      it("handles consecutive patterns with :global", () => {
+        const subject = Bitstring.fromText("a--b--c");
+        const pattern = Bitstring.fromText("-");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([Type.atom("global")]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("aXXbXXc"));
+      });
+
+      it("handles empty replacement with :global", () => {
+        const subject = Bitstring.fromText("a1b2c3");
+        const pattern = Bitstring.fromText("1");
+        const replacement = Bitstring.fromText("");
+        const options = Type.list([Type.atom("global")]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("ab2c3"));
+      });
+    });
+
+    describe("with insert_replaced option", () => {
+      it("inserts matched part at single position", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("bcd");
+        const replacement = Bitstring.fromText("[");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(1)]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        // "bcd" is matched and inserted at position 1 in "["
+        // Result should be "[bcd"
+        assertBoxedStrictEqual(result, Bitstring.fromText("a[bcd" + "e"));
+      });
+
+      it("inserts matched part at beginning", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(0)]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hello world[]"));
+      });
+
+      it("inserts matched part at end", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(2)]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hello []world"));
+      });
+
+      it("inserts matched part at multiple positions", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("cd");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("insert_replaced"),
+            Type.list([Type.integer(1), Type.integer(1)]),
+          ]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("ab[cdcd]e"));
+      });
+
+      it("works with :global and insert_replaced", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.atom("global"),
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(1)]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("he[l][l]o"));
+      });
+    });
+
+    describe("with replacement function", () => {
+      it("uses function for replacement", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const replacement = (matched) => {
+          return Bitstring.fromText("[" + matched.text + "]");
+        };
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hello [world]"));
+      });
+
+      it("calls function for each match with :global", () => {
+        const subject = Bitstring.fromText("abcabc");
+        const pattern = Bitstring.fromText("ab");
+        let callCount = 0;
+        const replacement = (_matched) => {
+          callCount++;
+          return Bitstring.fromText("X");
+        };
+        const options = Type.list([Type.atom("global")]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assert.equal(callCount, 2);
+        assertBoxedStrictEqual(result, Bitstring.fromText("XcXc"));
+      });
+
+      it("function receives matched binary", () => {
+        const subject = Bitstring.fromBytes([1, 2, 3]);
+        const pattern = Bitstring.fromBytes([2]);
+        let receivedMatch = null;
+        const replacement = (matched) => {
+          receivedMatch = matched;
+          return Bitstring.fromBytes([9]);
+        };
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assert.deepStrictEqual(Array.from(receivedMatch.bytes), [2]);
+        assert.deepStrictEqual(Array.from(result.bytes), [1, 9, 3]);
+      });
+
+      it("raises error if function returns non-binary", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = () => Type.atom("not_binary");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+    });
+
+    describe("with scope option", () => {
+      it("respects scope when replacing", () => {
+        const subject = Bitstring.fromText("abc def abc");
+        const pattern = Bitstring.fromText("abc");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(8), Type.integer(3)]),
+          ]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("abc def X"));
+      });
+
+      it("returns original subject when pattern outside scope", () => {
+        const subject = Bitstring.fromText("abc def abc");
+        const pattern = Bitstring.fromText("abc");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.integer(3)]),
+          ]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("X def abc"));
+      });
+
+      it("handles scope with global", () => {
+        const subject = Bitstring.fromText("a-b-c-d");
+        const pattern = Bitstring.fromText("-");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([
+          Type.atom("global"),
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(1), Type.integer(5)]),
+          ]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("aXbXcXd"));
+      });
+
+      it("returns original subject when scope length is zero", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const replacement = Bitstring.fromText("universe");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.integer(0)]),
+          ]),
+        ]);
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, subject);
+      });
+    });
+
+    describe("with compiled pattern", () => {
+      it("works with compiled Boyer-Moore pattern", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const compiled = Erlang_Binary["compile_pattern/1"](pattern);
+        const replacement = Bitstring.fromText("universe");
+        const options = Type.list();
+
+        const result = replace(subject, compiled, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hello universe"));
+      });
+
+      it("works with compiled Aho-Corasick pattern", () => {
+        const subject = Bitstring.fromText("hello-world");
+        const pattern = Type.list([
+          Bitstring.fromText("-"),
+          Bitstring.fromText("o"),
+        ]);
+        const compiled = Erlang_Binary["compile_pattern/1"](pattern);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([Type.atom("global")]);
+
+        const result = replace(subject, compiled, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hellXXwXrld"));
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises ArgumentError if subject is not a binary", () => {
+        const subject = Type.atom("test");
+        const pattern = Bitstring.fromText("test");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        );
+      });
+
+      it("raises ArgumentError if subject is non-binary bitstring", () => {
+        const subject = Type.bitstring([1, 0, 1]);
+        const pattern = Bitstring.fromText("test");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "is a bitstring (expected a binary)",
+          ),
+        );
+      });
+
+      it("raises ArgumentError when pattern is empty", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced position exceeds replacement length", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(10)]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError for invalid options", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("es");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.atom("invalid");
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope start exceeds subject length", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("t");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(10), Type.integer(1)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope extends beyond subject", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("st");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.integer(100)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when replacement is an atom", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Type.atom("invalid");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError when replacement is an integer", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Type.integer(123);
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError when replacement is a list", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Type.list([Type.integer(1)]);
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is a list with non-binary element", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Type.list([
+          Bitstring.fromText("l"),
+          Type.atom("invalid"),
+        ]);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is an empty list", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Type.list([]);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced has negative position", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(-1)]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced value is an atom", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.atom("invalid")]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced list contains non-integer", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("insert_replaced"),
+            Type.list([Type.integer(1), Type.atom("invalid")]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope start is negative", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(-1), Type.integer(5)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+    });
+
+    describe("edge cases", () => {
+      it("works with empty subject", () => {
+        const subject = Bitstring.fromText("");
+        const pattern = Bitstring.fromText("x");
+        const replacement = Bitstring.fromText("y");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText(""));
+      });
+
+      it("works when pattern equals entire subject", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("hello");
+        const replacement = Bitstring.fromText("world");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("world"));
+      });
+
+      it("works when replacement is longer than pattern", () => {
+        const subject = Bitstring.fromText("hi");
+        const pattern = Bitstring.fromText("i");
+        const replacement = Bitstring.fromText("ello world");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hello world"));
+      });
+
+      it("works when replacement is shorter than pattern", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("hello");
+        const replacement = Bitstring.fromText("hi");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("hi world"));
+      });
+
+      it("works with single character subject", () => {
+        const subject = Bitstring.fromText("a");
+        const pattern = Bitstring.fromText("a");
+        const replacement = Bitstring.fromText("b");
+        const options = Type.list();
+
+        const result = replace(subject, pattern, replacement, options);
+
+        assertBoxedStrictEqual(result, Bitstring.fromText("b"));
+      });
+    });
+  });
 });
