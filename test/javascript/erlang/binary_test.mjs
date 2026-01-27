@@ -1128,6 +1128,7 @@ describe("Erlang_Binary", () => {
 
       it("works with compiled Aho-Corasick pattern", () => {
         const subject = Bitstring.fromText("zabcbc");
+
         const pattern = Type.list([
           Bitstring.fromText("ab"),
           Bitstring.fromText("bc"),
@@ -1318,6 +1319,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError for improper list options", () => {
         const subject = Bitstring.fromText("abc");
         const pattern = Bitstring.fromText("a");
+
         const options = Type.improperList([
           Type.atom("scope"),
           Type.atom("tail"),
