@@ -149,57 +149,65 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
   end
 
   describe "intersect_with/3" do
-    test "combines values with function" do
-      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1, b: 3}, %{a: 2, c: 4}) ==
-               %{
-                 a: 3
-               }
+    setup do
+      [combiner: fn _k, v1, v2 -> v1 + v2 end]
     end
 
-    test "handles multiple common keys" do
-      assert :maps.intersect_with(
-               fn _k, v1, v2 -> v1 + v2 end,
-               %{:a => 1, "a" => 2, 1 => 3},
-               %{:a => 10, "a" => 20, 1 => 30}
-             ) ==
-               %{:a => 11, "a" => 22, 1 => 33}
+    test "combines values with function", %{combiner: combiner} do
+      map1 = %{a: 1, b: 3}
+      map2 = %{a: 2, c: 4}
+
+      assert :maps.intersect_with(combiner, map1, map2) == %{a: 3}
     end
 
-    test "returns an empty map when no keys are common" do
-      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1, b: 3}, %{c: 2, d: 4}) ==
-               %{}
+    test "handles multiple common keys", %{combiner: combiner} do
+      map1 = %{:a => 1, "a" => 2, 1 => 3}
+      map2 = %{:a => 10, "a" => 20, 1 => 30}
+
+      assert :maps.intersect_with(combiner, map1, map2) == %{:a => 11, "a" => 22, 1 => 33}
     end
 
-    test "returns an empty map when map1 is empty" do
-      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{}, %{a: 2}) == %{}
+    test "returns an empty map when no keys are common", %{combiner: combiner} do
+      map1 = %{a: 1, b: 3}
+      map2 = %{c: 2, d: 4}
+
+      assert :maps.intersect_with(combiner, map1, map2) == %{}
     end
 
-    test "returns an empty map when map2 is empty" do
-      assert :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{a: 1}, %{}) == %{}
+    test "returns an empty map when map1 is empty", %{combiner: combiner} do
+      assert :maps.intersect_with(combiner, %{}, %{a: 2}) == %{}
     end
 
-    test "raises when map1 is not a map" do
-      assert_error BadMapError, "expected a map, got: :abc", fn ->
-        :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, :abc, %{})
-      end
+    test "returns an empty map when map2 is empty", %{combiner: combiner} do
+      assert :maps.intersect_with(combiner, %{a: 1}, %{}) == %{}
     end
 
-    test "raises when map2 is not a map" do
-      assert_error BadMapError, "expected a map, got: :abc", fn ->
-        :maps.intersect_with(fn _k, v1, v2 -> v1 + v2 end, %{}, :abc)
-      end
+    test "returns an empty map when both maps are empty", %{combiner: combiner} do
+      assert :maps.intersect_with(combiner, %{}, %{}) == %{}
     end
 
-    test "raises when function is not a 3 arity function" do
+    test "raises ArgumentError if the first argument is not an anonymous function" do
+      assert_error ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   fn -> :maps.intersect_with(:abc, %{}, %{}) end
+    end
+
+    test "raises ArgumentError if the first argument is an anonymous function with arity different than 3" do
       assert_error ArgumentError,
                    "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
                    fn -> :maps.intersect_with(fn v1, v2 -> v1 + v2 end, %{}, %{}) end
     end
 
-    test "raises when function is not a function" do
-      assert_error ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
-                   fn -> :maps.intersect_with(:abc, %{}, %{}) end
+    test "raises BadMapError if the second argument is not a map", %{combiner: combiner} do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect_with(combiner, :abc, %{})
+      end
+    end
+
+    test "raises BadMapError if the third argument is not a map", %{combiner: combiner} do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect_with(combiner, %{}, :abc)
+      end
     end
   end
 
