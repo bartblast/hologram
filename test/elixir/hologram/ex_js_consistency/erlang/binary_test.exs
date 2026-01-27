@@ -536,6 +536,10 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.matches("the rain in spain", compiled, []) == [{5, 2}, {14, 2}]
     end
 
+    test "works with bytes-based binary" do
+      assert :binary.matches(<<1, 2, 3, 2, 3, 4>>, <<2, 3>>, []) == [{1, 2}, {3, 2}]
+    end
+
     test "returns empty list when no matches" do
       assert :binary.matches("hello", "xyz", []) == []
     end
@@ -546,6 +550,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "returns empty list when pattern is longer than subject" do
       assert :binary.matches("ab", "abcdef", []) == []
+    end
+
+    test "works with compiled Aho-Corasick pattern" do
+      compiled = :binary.compile_pattern(["ab", "bc"])
+
+      assert :binary.matches("zabcbc", compiled, []) == [{1, 2}, {4, 2}]
     end
 
     # Scope option
@@ -563,12 +573,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       opts = [scope: {byte_size(subject), -5}]
 
       assert :binary.matches(subject, "wo", opts) == [{6, 2}]
-    end
-
-    test "works with compiled Aho-Corasick pattern" do
-      compiled = :binary.compile_pattern(["ab", "bc"])
-
-      assert :binary.matches("zabcbc", compiled, []) == [{1, 2}, {4, 2}]
     end
 
     # Input validation
@@ -589,6 +593,18 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a valid pattern"),
                    {:binary, :matches, ["abc", "", []]}
+    end
+
+    test "raises ArgumentError with empty pattern list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :matches, ["test", [], []]}
+    end
+
+    test "raises ArgumentError if pattern list contains non-binary element" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :matches, ["test", ["ok", :bad], []]}
     end
 
     test "raises ArgumentError with missing compiled pattern data" do
@@ -647,6 +663,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    binary_match_invalid_scope_error_msg(),
                    {:binary, :matches, ["abc", "a", [scope: {0, -1}]]}
+    end
+
+    test "raises ArgumentError when scope length is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   {:binary, :matches, ["abc", "a", [scope: {0, :bad}]]}
     end
 
     test "raises ArgumentError when scope elements are not integers" do

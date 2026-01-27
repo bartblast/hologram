@@ -1078,25 +1078,6 @@ describe("Erlang_Binary", () => {
         );
       });
 
-      it("works with compiled Aho-Corasick pattern", () => {
-        const subject = Bitstring.fromText("zabcbc");
-        const pattern = Type.list([
-          Bitstring.fromText("ab"),
-          Bitstring.fromText("bc"),
-        ]);
-
-        const compiled = Erlang_Binary["compile_pattern/1"](pattern);
-        const result = matches(subject, compiled, Type.list());
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Type.tuple([Type.integer(1), Type.integer(2)]),
-            Type.tuple([Type.integer(4), Type.integer(2)]),
-          ]),
-        );
-      });
-
       it("prefers longer match when starting at same position", () => {
         const subject = Bitstring.fromText("abcde");
 
@@ -1130,6 +1111,40 @@ describe("Erlang_Binary", () => {
         );
       });
 
+      it("works with bytes-based binary", () => {
+        const subject = Bitstring.fromBytes([1, 2, 3, 2, 3, 4]);
+        const pattern = Bitstring.fromBytes([2, 3]);
+
+        const result = matches(subject, pattern, Type.list());
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.tuple([Type.integer(1), Type.integer(2)]),
+            Type.tuple([Type.integer(3), Type.integer(2)]),
+          ]),
+        );
+      });
+
+      it("works with compiled Aho-Corasick pattern", () => {
+        const subject = Bitstring.fromText("zabcbc");
+        const pattern = Type.list([
+          Bitstring.fromText("ab"),
+          Bitstring.fromText("bc"),
+        ]);
+
+        const compiled = Erlang_Binary["compile_pattern/1"](pattern);
+        const result = matches(subject, compiled, Type.list());
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Type.tuple([Type.integer(1), Type.integer(2)]),
+            Type.tuple([Type.integer(4), Type.integer(2)]),
+          ]),
+        );
+      });
+
       it("returns empty list when no matches", () => {
         const subject = Bitstring.fromText("hello");
         const pattern = Bitstring.fromText("xyz");
@@ -1148,7 +1163,7 @@ describe("Erlang_Binary", () => {
         assert.deepStrictEqual(result, Type.list());
       });
 
-      it("returns empty list when pattern longer than subject", () => {
+      it("returns empty list when pattern is longer than subject", () => {
         const subject = Bitstring.fromText("ab");
         const pattern = Bitstring.fromText("abcdef");
 
@@ -1242,6 +1257,28 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError when pattern is invalid", () => {
         const subject = Bitstring.fromText("abc");
         const pattern = Bitstring.fromText("");
+
+        assertBoxedError(
+          () => matches(subject, pattern, Type.list()),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError with empty pattern list", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list();
+
+        assertBoxedError(
+          () => matches(subject, pattern, Type.list()),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError if pattern list contains non-binary element", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list([Bitstring.fromText("ok"), Type.atom("bad")]);
 
         assertBoxedError(
           () => matches(subject, pattern, Type.list()),
@@ -1382,6 +1419,24 @@ describe("Erlang_Binary", () => {
           Type.tuple([
             Type.atom("scope"),
             Type.tuple([Type.integer(0), Type.integer(-1)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => matches(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope length is not an integer", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("a");
+
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.atom("bad")]),
           ]),
         ]);
 
