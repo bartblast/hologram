@@ -10,48 +10,6 @@ import Erlang from "./erlang.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Filename = {
-  // Start _do_flatten/2
-  "_do_flatten/2": (filename, tail) => {
-    if (Type.isList(filename)) {
-      const flattenElement = (acc, elem) => {
-        if (Type.isList(elem)) {
-          return Erlang_Filename["_do_flatten/2"](elem, acc);
-        }
-
-        if (Type.isAtom(elem)) {
-          const atomAsCharlist = Erlang["atom_to_list/1"](elem);
-          const combined = [...atomAsCharlist.data, ...acc.data];
-          return Type.list(combined);
-        }
-
-        const combined = [elem, ...acc.data];
-        return Type.list(combined);
-      };
-
-      return filename.data.reduceRight(flattenElement, tail);
-    }
-
-    if (Type.isAtom(filename)) {
-      const atomAsCharlist = Erlang["atom_to_list/1"](filename);
-      const combined = [...atomAsCharlist.data, ...tail.data];
-      return Type.list(combined);
-    }
-
-    if (Type.isBinary(filename)) {
-      const combined = [filename, ...tail.data];
-      return Type.list(combined);
-    }
-
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
-        filename,
-        tail,
-      ]),
-    );
-  },
-  // End _do_flatten/2
-  // Deps: [:erlang.atom_to_list/1]
-
   // Start _dirname_raw/1
   "_dirname_raw/1": (filenameBinary) => {
     // Helpers
@@ -127,6 +85,48 @@ const Erlang_Filename = {
     return result;
   },
   // End _dirname_raw/1
+
+  // Start _do_flatten/2
+  "_do_flatten/2": (filename, tail) => {
+    if (Type.isList(filename)) {
+      const flattenElement = (acc, elem) => {
+        if (Type.isList(elem)) {
+          return Erlang_Filename["_do_flatten/2"](elem, acc);
+        }
+
+        if (Type.isAtom(elem)) {
+          const atomAsCharlist = Erlang["atom_to_list/1"](elem);
+          const combined = [...atomAsCharlist.data, ...acc.data];
+          return Type.list(combined);
+        }
+
+        const combined = [elem, ...acc.data];
+        return Type.list(combined);
+      };
+
+      return filename.data.reduceRight(flattenElement, tail);
+    }
+
+    if (Type.isAtom(filename)) {
+      const atomAsCharlist = Erlang["atom_to_list/1"](filename);
+      const combined = [...atomAsCharlist.data, ...tail.data];
+      return Type.list(combined);
+    }
+
+    if (Type.isBinary(filename)) {
+      const combined = [filename, ...tail.data];
+      return Type.list(combined);
+    }
+
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+        filename,
+        tail,
+      ]),
+    );
+  },
+  // End _do_flatten/2
+  // Deps: [:erlang.atom_to_list/1]
 
   // Start basename/1
   "basename/1": (filename) => {
