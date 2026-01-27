@@ -929,7 +929,9 @@ describe("Erlang_UnicodeUtil", () => {
           Type.list([Type.integer(97), Type.bitstring("")]),
         );
       });
+    });
 
+    describe("error handling", () => {
       it("raises FunctionClauseError for non-byte-aligned bitstring", () => {
         const bitstring = Type.bitstring([1, 0, 1]);
 
@@ -941,9 +943,7 @@ describe("Erlang_UnicodeUtil", () => {
           ]),
         );
       });
-    });
 
-    describe("error handling", () => {
       it("raises FunctionClauseError for integer input", () => {
         const input = Type.integer(42);
 
