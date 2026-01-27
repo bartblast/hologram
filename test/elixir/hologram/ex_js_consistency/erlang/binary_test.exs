@@ -522,12 +522,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.matches("banana bandana", "ana", []) == [{1, 3}, {11, 3}]
     end
 
-    test "prefers longer match when starting at same position" do
-      assert :binary.matches("abcde", ["bcde", "bc", "de"], []) == [{1, 4}]
-    end
-
     test "returns non-overlapping repeated matches" do
       assert :binary.matches("aaaa", "aa", []) == [{0, 2}, {2, 2}]
+    end
+
+    test "prefers longer match when starting at same position" do
+      assert :binary.matches("abcde", ["bcde", "bc", "de"], []) == [{1, 4}]
     end
 
     test "works with compiled pattern" do
@@ -540,6 +540,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.matches(<<1, 2, 3, 2, 3, 4>>, <<2, 3>>, []) == [{1, 2}, {3, 2}]
     end
 
+    test "works with compiled Aho-Corasick pattern" do
+      compiled = :binary.compile_pattern(["ab", "bc"])
+
+      assert :binary.matches("zabcbc", compiled, []) == [{1, 2}, {4, 2}]
+    end
+
     test "returns empty list when no matches" do
       assert :binary.matches("hello", "xyz", []) == []
     end
@@ -550,12 +556,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "returns empty list when pattern is longer than subject" do
       assert :binary.matches("ab", "abcdef", []) == []
-    end
-
-    test "works with compiled Aho-Corasick pattern" do
-      compiled = :binary.compile_pattern(["ab", "bc"])
-
-      assert :binary.matches("zabcbc", compiled, []) == [{1, 2}, {4, 2}]
     end
 
     # Scope option

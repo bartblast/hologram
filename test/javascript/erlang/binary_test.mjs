@@ -1234,7 +1234,7 @@ describe("Erlang_Binary", () => {
         const pattern = Bitstring.fromText("a");
 
         assertBoxedError(
-          () => matches(Type.atom("bad"), pattern, Type.list()),
+          () => matches(Type.atom("not_binary"), pattern, Type.list()),
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(1, "not a binary"),
         );
