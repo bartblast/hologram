@@ -17,7 +17,7 @@ const Erlang_Elixir_Utils = {
 
         if (text === false) {
           Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(str),
+            Interpreter.buildArgumentErrorMsg(1, Interpreter.inspect(str)),
           );
         }
 
@@ -40,7 +40,7 @@ const Erlang_Elixir_Utils = {
 
             if (text === false) {
               Interpreter.raiseArgumentError(
-                Interpreter.buildArgumentErrorMsg(elem),
+                Interpreter.buildArgumentErrorMsg(1, Interpreter.inspect(elem)),
               );
             }
 
@@ -61,7 +61,10 @@ const Erlang_Elixir_Utils = {
 
               if (text === false) {
                 Interpreter.raiseArgumentError(
-                  Interpreter.buildArgumentErrorMsg(firstElem),
+                  Interpreter.buildArgumentErrorMsg(
+                    1,
+                    Interpreter.inspect(firstElem),
+                  ),
                 );
               }
 

@@ -9,7 +9,7 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
 
   @moduletag :consistency
 
-  if Version.match?(System.version(), "> 1.17.0") do
+  if Version.match?(System.version(), ">= 1.17.0") do
     describe "jaro_similarity/2" do
       test "returns 1.0 for identical strings" do
         assert :elixir_utils.jaro_similarity("hello", "hello") == 1.0

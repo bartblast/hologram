@@ -247,7 +247,10 @@ describe("Erlang_Elixir_Utils", () => {
       invalidUtf8.bytes = new Uint8Array([255, 254, 253]);
       invalidUtf8.text = null;
 
-      const expectedMessage = Interpreter.buildArgumentErrorMsg(invalidUtf8);
+      const expectedMessage = Interpreter.buildArgumentErrorMsg(
+        1,
+        Interpreter.inspect(invalidUtf8),
+      );
 
       assertBoxedError(
         () => jaroSimilarity(invalidUtf8, Type.bitstring("test")),
