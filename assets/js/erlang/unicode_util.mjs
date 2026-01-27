@@ -794,13 +794,23 @@ const Erlang_UnicodeUtil = {
 
         // Check if we've reached a definitive boundary
         const tailIsEmptyList = Type.isList(tail) && tail.data.length === 0;
+        const tailBinaryTextForEmptyCheck = Type.isBinary(tail)
+          ? Bitstring.toText(tail)
+          : null;
+
         const tailIsEmptyBinary =
-          Type.isBinary(tail) && Bitstring.toText(tail).length === 0;
+          Type.isBinary(tail) &&
+          (tailBinaryTextForEmptyCheck === null ||
+            tailBinaryTextForEmptyCheck.length === 0);
+            
         const tailStartsWithEmptyBinary =
           Type.isList(tail) &&
           tail.data.length > 0 &&
           Type.isBinary(tail.data[0]) &&
-          Bitstring.toText(tail.data[0]).length === 0;
+          (() => {
+            const text = Bitstring.toText(tail.data[0]);
+            return text === false || text.length === 0;
+          })();
 
         // When we've consumed exactly one grapheme and the tail starts with a binary,
         // check if that binary starts with a combining character. If it starts with a
@@ -812,17 +822,21 @@ const Erlang_UnicodeUtil = {
           Type.isBinary(tail.data[0]);
 
         const tailBinaryText = shouldCheckCombining
-          ? Bitstring.toText(tail.data[0])
+          ? (() => {
+              const text = Bitstring.toText(tail.data[0]);
+              return text === false ? null : text;
+            })()
           : null;
 
-        const hasValidBinaryText = tailBinaryText && tailBinaryText.length > 0;
+        const hasValidBinaryText =
+          typeof tailBinaryText === "string" && tailBinaryText.length > 0;
 
         // Test if the next character combines with a base character.
         // If "a" + nextChar segments as just "a", then nextChar doesn't combine.
         const tailStartsWithNonCombiningChar =
           hasValidBinaryText &&
           (() => {
-            const nextChar = tailBinaryText[0];
+            const nextChar = Array.from(tailBinaryText)[0];
             const testText = "a" + nextChar;
             const testSegment = firstSegment(testText);
             return testSegment === "a";
@@ -859,8 +873,18 @@ const Erlang_UnicodeUtil = {
         if (Type.isBitstring(adjustedTail))
           return Type.improperList([cluster, adjustedTail]);
 
-        if (Type.isList(adjustedTail))
-          return Type.list([cluster, ...adjustedTail.data]);
+        if (Type.isList(adjustedTail)) {
+          const tailData = adjustedTail.data;
+          const singleInvalidBinary =
+            tailData.length === 1 &&
+            Type.isBinary(tailData[0]) &&
+            Bitstring.toText(tailData[0]) === false;
+
+          if (singleInvalidBinary)
+            return Type.improperList([cluster, tailData[0]]);
+
+          return Type.list([cluster, ...tailData]);
+        }
 
         return Type.list([cluster]);
       };

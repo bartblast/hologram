@@ -929,6 +929,16 @@ describe("Erlang_UnicodeUtil", () => {
           Type.list([Type.integer(97), Type.bitstring("")]),
         );
       });
+
+      it("treats invalid UTF-8 tail binary as boundary", () => {
+        const invalid = Bitstring.fromBytes(new Uint8Array([255]));
+        const result = gc(Type.list([Type.integer(97), invalid]));
+
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([Type.integer(97), invalid]),
+        );
+      });
     });
 
     describe("error handling", () => {
