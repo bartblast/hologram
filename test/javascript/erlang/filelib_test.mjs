@@ -92,6 +92,42 @@ describe("Erlang_Filelib", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("just .", () => {
+      const filename = Type.bitstring(".");
+      const cwd = Type.bitstring("/home/user");
+      const result = safeRelativePath(filename, cwd);
+      const expected = Type.list([]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("just ..", () => {
+      const filename = Type.bitstring("..");
+      const cwd = Type.bitstring("/home/user");
+      const result = safeRelativePath(filename, cwd);
+      const expected = Type.atom("unsafe");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(".. in the middle resolving to sibling", () => {
+      const filename = Type.bitstring("a/../b");
+      const cwd = Type.bitstring("/home/user");
+      const result = safeRelativePath(filename, cwd);
+      const expected = Type.bitstring("b");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input", () => {
+      const filename = Type.atom("dir");
+      const cwd = Type.bitstring("/home/user");
+      const result = safeRelativePath(filename, cwd);
+      const expected = Type.charlist("dir");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("charlist relative path", () => {
       // "dir"
       const filename = Type.list([

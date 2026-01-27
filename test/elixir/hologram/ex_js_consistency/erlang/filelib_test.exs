@@ -42,6 +42,22 @@ defmodule Hologram.ExJsConsistency.Erlang.FilelibTest do
       assert :filelib.safe_relative_path("", "/home/user") == []
     end
 
+    test "just ." do
+      assert :filelib.safe_relative_path(".", "/home") == []
+    end
+
+    test "just .." do
+      assert :filelib.safe_relative_path("..", "/home") == :unsafe
+    end
+
+    test ".. in the middle resolving to sibling" do
+      assert :filelib.safe_relative_path("a/../b", "/home") == "b"
+    end
+
+    test "atom input" do
+      assert :filelib.safe_relative_path(:dir, "/home") == ~c"dir"
+    end
+
     test "charlist relative path" do
       assert :filelib.safe_relative_path(~c"dir", ~c"/") == ~c"dir"
     end
