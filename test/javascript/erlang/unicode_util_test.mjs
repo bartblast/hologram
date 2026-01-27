@@ -921,6 +921,15 @@ describe("Erlang_UnicodeUtil", () => {
         );
       });
 
+      it("handles integer followed by empty binary", () => {
+        const result = gc(Type.list([Type.integer(97), Type.bitstring("")]));
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Type.integer(97), Type.bitstring("")]),
+        );
+      });
+
       it("raises FunctionClauseError for non-byte-aligned bitstring", () => {
         const bitstring = Type.bitstring([1, 0, 1]);
 

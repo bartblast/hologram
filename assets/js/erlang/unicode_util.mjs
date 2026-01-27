@@ -774,7 +774,15 @@ const Erlang_UnicodeUtil = {
         const {codepoint, tail, error, empty} = extractHead(remaining);
 
         if (error) return error;
-        if (empty) return Type.list();
+
+        if (empty) {
+          if (collectedCodepoints.length > 0) {
+            const cluster = buildCluster(collectedCodepoints);
+            return Type.list([cluster]);
+          }
+
+          return Type.list();
+        }
 
         const newCollectedText =
           collectedText + String.fromCodePoint(codepoint);

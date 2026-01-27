@@ -442,6 +442,10 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.gc(["e̊", 120]) == [[101, 778], "", 120]
     end
 
+    test "handles integer followed by empty binary" do
+      assert :unicode_util.gc([97, <<>>]) == [97, <<>>]
+    end
+
     test "raises FunctionClauseError for non-byte-aligned bitstring" do
       expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
 
