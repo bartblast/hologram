@@ -15,4 +15,5 @@ export default class ERTS {
   static nodeTable = NodeTable;
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
+  static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
 }

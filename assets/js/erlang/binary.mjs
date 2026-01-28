@@ -2,8 +2,6 @@
 
 import Bitstring from "../bitstring.mjs";
 import Erlang from "./erlang.mjs";
-// TODO: consider
-// import Erlang_Lists from "./lists.mjs";
 import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -711,12 +709,11 @@ const Erlang_Binary = {
 
   // Start replace/4
   "replace/4": (subject, pattern, replacement, options) => {
-    // Helpers (alphabetical): describe steps, flatten branching
-    const utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+    // Helpers (alphabetical)
 
     const bytesToBitstring = (bytes) => {
       try {
-        const text = utf8Decoder.decode(bytes);
+        const text = ERTS.utf8Decoder.decode(bytes);
         return Bitstring.fromText(text);
       } catch {
         return Bitstring.fromBytes(bytes);
@@ -809,8 +806,7 @@ const Erlang_Binary = {
       }
 
       try {
-        const decoder = new TextDecoder("utf-8", {fatal: true});
-        const text = decoder.decode(new Uint8Array(resultBytes));
+        const text = ERTS.utf8Decoder.decode(new Uint8Array(resultBytes));
         return Bitstring.fromText(text);
       } catch {
         return Bitstring.fromBytes(new Uint8Array(resultBytes));
@@ -1161,8 +1157,7 @@ const Erlang_Binary = {
     // Helper: Convert byte slice to bitstring (text-based if valid UTF-8)
     const bytesToBitstring = (bytes) => {
       try {
-        const decoder = new TextDecoder("utf-8", {fatal: true});
-        const text = decoder.decode(bytes);
+        const text = ERTS.utf8Decoder.decode(bytes);
         return Bitstring.fromText(text);
       } catch {
         return Bitstring.fromBytes(bytes);
