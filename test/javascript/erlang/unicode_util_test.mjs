@@ -628,6 +628,7 @@ describe("Erlang_UnicodeUtil", () => {
         );
       });
 
+      // Tests O(n) optimization: avoids O(n²) slicing behavior when processing long lists
       it("handles very long list of integers", () => {
         const longList = Array.from({length: 100}, (_, i) =>
           Type.integer(i + 1),
