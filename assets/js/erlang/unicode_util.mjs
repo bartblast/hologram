@@ -181,7 +181,7 @@ const Erlang_UnicodeUtil = {
     return Erlang_UnicodeUtil["_cpl_cont/2"](firstElement, tail);
   },
   // End _cpl_1_cont/1
-  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._is_cp/1, :unicode_util._cpl_cont/2]
+  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._cpl_cont/2, :unicode_util._is_cp/1]
 
   // Start _cpl_1_cont2/1
   "_cpl_1_cont2/1": (restList) => {
@@ -642,7 +642,7 @@ const Erlang_UnicodeUtil = {
     );
   },
   // End cp/1
-  // Deps: [:unicode_util._is_cp/1, :unicode_util._cpl/2]
+  // Deps: [:unicode_util._cpl/2, :unicode_util._is_cp/1]
 };
 
 export default Erlang_UnicodeUtil;
