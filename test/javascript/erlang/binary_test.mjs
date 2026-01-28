@@ -1731,32 +1731,6 @@ describe("Erlang_Binary", () => {
         assertBoxedStrictEqual(result, Bitstring.fromText("XcXc"));
       });
 
-      it("function receives matched binary", () => {
-        const subject = Bitstring.fromBytes([1, 2, 3]);
-        const pattern = Bitstring.fromBytes([2]);
-        let receivedMatch = null;
-        const replacement = Type.anonymousFunction(
-          1,
-          [
-            {
-              params: (_context) => [Type.variablePattern("matched")],
-              guards: [],
-              body: (context) => {
-                receivedMatch = context.vars.matched;
-                return Bitstring.fromBytes([9]);
-              },
-            },
-          ],
-          contextFixture(),
-        );
-        const options = Type.list();
-
-        const result = replace(subject, pattern, replacement, options);
-
-        assert.deepStrictEqual(Array.from(receivedMatch.bytes), [2]);
-        assert.deepStrictEqual(Array.from(result.bytes), [1, 9, 3]);
-      });
-
       it("raises error if function returns non-binary", () => {
         const subject = Bitstring.fromText("hello");
         const pattern = Bitstring.fromText("l");

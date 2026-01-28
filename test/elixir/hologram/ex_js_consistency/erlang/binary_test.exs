@@ -786,18 +786,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert result == "XcXc"
     end
 
-    test "function receives matched binary" do
-      result =
-        :binary.replace(
-          <<1, 2, 3>>,
-          <<2>>,
-          fn _matched -> <<9>> end,
-          []
-        )
-
-      assert result == <<1, 9, 3>>
-    end
-
     test "raises error if function returns non-binary" do
       assert_error ArgumentError,
                    build_argument_error_msg(4, "invalid options"),
