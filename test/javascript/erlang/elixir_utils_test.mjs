@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedStrictEqual,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
@@ -26,12 +27,14 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("hello"),
         Type.bitstring("hello"),
       );
-      assert.strictEqual(result.value, 1.0);
+
+      assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
     it("returns 1.0 when both inputs are empty", () => {
       const result = jaroSimilarity(Type.bitstring(""), Type.bitstring(""));
-      assert.strictEqual(result.value, 1.0);
+
+      assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
     it("returns 0.0 for completely different inputs", () => {
@@ -39,7 +42,8 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("abc"),
         Type.bitstring("xyz"),
       );
-      assert.strictEqual(result.value, 0.0);
+
+      assertBoxedStrictEqual(result, Type.float(0.0));
     });
 
     it("returns 0.0 when first input is empty", () => {
@@ -47,7 +51,8 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring(""),
         Type.bitstring("hello"),
       );
-      assert.strictEqual(result.value, 0.0);
+
+      assertBoxedStrictEqual(result, Type.float(0.0));
     });
 
     it("returns 0.0 when second input is empty", () => {
@@ -55,7 +60,8 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("hello"),
         Type.bitstring(""),
       );
-      assert.strictEqual(result.value, 0.0);
+
+      assertBoxedStrictEqual(result, Type.float(0.0));
     });
 
     it("returns 0.0 for identical single characters", () => {
@@ -63,17 +69,20 @@ describe("Erlang_Elixir_Utils", () => {
       // Elixir will eventually switch to :string.jaro_similarity/2
       // when it requires Erlang/OTP 27+.
       const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("a"));
-      assert.strictEqual(result.value, 0.0);
+
+      assertBoxedStrictEqual(result, Type.float(0.0));
     });
 
     it("returns 0.0 for different single characters", () => {
       const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("b"));
-      assert.strictEqual(result.value, 0.0);
+
+      assertBoxedStrictEqual(result, Type.float(0.0));
     });
 
     it("returns 0.0 for completely transposed two-character string", () => {
       const result = jaroSimilarity(Type.bitstring("ab"), Type.bitstring("ba"));
-      assert.strictEqual(result.value, 0.0);
+
+      assertBoxedStrictEqual(result, Type.float(0.0));
     });
 
     it("returns similarity score with partial transposition", () => {
@@ -81,7 +90,8 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("abcd"),
         Type.bitstring("abdc"),
       );
-      assert.strictEqual(result.value, 0.9166666666666666);
+
+      assertBoxedStrictEqual(result, Type.float(0.9166666666666666));
     });
 
     it("handles slight deviations", () => {
@@ -89,19 +99,22 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("martha"),
         Type.bitstring("marhta"),
       );
-      assert.strictEqual(result1.value, 0.9444444444444445);
+
+      assertBoxedStrictEqual(result1, Type.float(0.9444444444444445));
 
       const result2 = jaroSimilarity(
         Type.bitstring("dwayne"),
         Type.bitstring("duane"),
       );
-      assert.strictEqual(result2.value, 0.8222222222222223);
+
+      assertBoxedStrictEqual(result2, Type.float(0.8222222222222223));
 
       const result3 = jaroSimilarity(
         Type.bitstring("dixon"),
         Type.bitstring("dicksonx"),
       );
-      assert.strictEqual(result3.value, 0.7666666666666666);
+
+      assertBoxedStrictEqual(result3, Type.float(0.7666666666666666));
     });
 
     it("is case sensitive", () => {
@@ -109,15 +122,17 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("Hello"),
         Type.bitstring("hello"),
       );
-      assert.strictEqual(result.value, 0.8666666666666667);
+
+      assertBoxedStrictEqual(result, Type.float(0.8666666666666667));
     });
 
-    it("handles unicode characters", () => {
+    it("handles Unicode characters", () => {
       const result = jaroSimilarity(
         Type.bitstring("café"),
         Type.bitstring("cafe"),
       );
-      assert.strictEqual(result.value, 0.8333333333333334);
+
+      assertBoxedStrictEqual(result, Type.float(0.8333333333333334));
     });
 
     it("handles emoji characters", () => {
@@ -125,7 +140,8 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("hello😀"),
         Type.bitstring("hello😀"),
       );
-      assert.strictEqual(result.value, 1.0);
+
+      assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
     it("works with strings, charlists, and integer lists producing same results", () => {
@@ -133,10 +149,12 @@ describe("Erlang_Elixir_Utils", () => {
         Type.bitstring("abc"),
         Type.bitstring("abd"),
       );
+
       const charResult = jaroSimilarity(
         Type.charlist("abc"),
         Type.charlist("abd"),
       );
+
       const intResult = jaroSimilarity(
         Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
         Type.list([Type.integer(97), Type.integer(98), Type.integer(100)]),
@@ -159,7 +177,8 @@ describe("Erlang_Elixir_Utils", () => {
           Type.bitstring("c"),
         ]),
       );
-      assert.strictEqual(result.value, 1.0);
+
+      assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
     it("handles lists with mixed integers and strings", () => {
@@ -167,7 +186,8 @@ describe("Erlang_Elixir_Utils", () => {
         Type.list([Type.integer(97), Type.bitstring("b"), Type.integer(99)]),
         Type.list([Type.integer(97), Type.bitstring("b"), Type.integer(99)]),
       );
-      assert.strictEqual(result.value, 1.0);
+
+      assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
     it("handles lists with multi-character strings", () => {
@@ -175,7 +195,8 @@ describe("Erlang_Elixir_Utils", () => {
         Type.list([Type.bitstring("ab"), Type.bitstring("cd")]),
         Type.list([Type.bitstring("ab"), Type.bitstring("cd")]),
       );
-      assert.strictEqual(result.value, 1.0);
+
+      assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
     it("handles nested lists", () => {
@@ -191,10 +212,11 @@ describe("Erlang_Elixir_Utils", () => {
           Type.list([Type.integer(99)]),
         ]),
       );
-      assert.strictEqual(result.value, 1.0);
+
+      assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
-    // Error handling tests
+    // Error case tests
     // - Top-level invalid argument raises :unicode_util.cp/1 error
     // - Single-element list with invalid type raises :unicode_util.cp/1 error
     // - Multi-element list with invalid type raises :unicode_util.cpl/2 error (with remaining elements)
@@ -257,6 +279,7 @@ describe("Erlang_Elixir_Utils", () => {
 
     it("raises FunctionClauseError when first argument is single-element list with invalid element", () => {
       const emptyMap = Type.map();
+
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [emptyMap],
@@ -270,7 +293,8 @@ describe("Erlang_Elixir_Utils", () => {
     });
 
     it("raises FunctionClauseError when second argument is single-element list with invalid element", () => {
-      const emptyMap = Type.map([]);
+      const emptyMap = Type.map();
+
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [emptyMap],
