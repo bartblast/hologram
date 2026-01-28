@@ -13,12 +13,11 @@ const Erlang_Elixir_Utils = {
   // Start jaro_similarity/2
   "jaro_similarity/2": (str1, str2) => {
     const extractCodePoints = (str) => {
-      const cp = Erlang_UnicodeUtil["cp/1"];
       const codePoints = [];
       let current = str;
 
       while (true) {
-        const result = cp(current);
+        const result = Erlang_UnicodeUtil["cp/1"](current);
 
         if (Type.isList(result) && result.data.length === 0) {
           break;
@@ -26,6 +25,7 @@ const Erlang_Elixir_Utils = {
 
         if (Type.isTuple(result) && result.data.length === 2) {
           const [atom, value] = result.data;
+
           if (Type.isAtom(atom) && atom.value === "error") {
             Interpreter.raiseArgumentError(
               `argument error: ${Interpreter.inspect(value)}`,
@@ -65,7 +65,9 @@ const Erlang_Elixir_Utils = {
       return Type.float(0.0);
     }
 
-    // Known issue in :elixir_utils.jaro_similarity/2 that will be fixed when Elixir requires Erlang/OTP 27+ and switches to :string.jaro_similarity/2
+    // Known issue in :elixir_utils.jaro_similarity/2.
+    // Elixir will eventually switch to :string.jaro_similarity/2
+    // when it requires Erlang/OTP 27+.
     if (len1 === 1 && len2 === 1) {
       return Type.float(0.0);
     }
@@ -84,6 +86,7 @@ const Erlang_Elixir_Utils = {
           matches1[i] = true;
           matches2[j] = true;
           matchCount++;
+
           break;
         }
       }
@@ -99,9 +102,11 @@ const Erlang_Elixir_Utils = {
     for (let i = 0; i < len1; i++) {
       if (matches1[i]) {
         while (!matches2[k]) k++;
+
         if (codePoints1[i] !== codePoints2[k]) {
           transpositions++;
         }
+
         k++;
       }
     }

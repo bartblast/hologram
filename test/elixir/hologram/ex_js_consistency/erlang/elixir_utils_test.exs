@@ -60,7 +60,7 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
         assert :elixir_utils.jaro_similarity("Hello", "hello") == 0.8666666666666667
       end
 
-      test "handles unicode characters" do
+      test "handles Unicode characters" do
         assert :elixir_utils.jaro_similarity("café", "cafe") == 0.8333333333333334
       end
 
