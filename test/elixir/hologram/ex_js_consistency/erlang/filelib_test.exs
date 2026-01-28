@@ -114,6 +114,12 @@ defmodule Hologram.ExJsConsistency.Erlang.FilelibTest do
       end
     end
 
+    test "filename with invalid type" do
+      assert_raise FunctionClauseError, fn ->
+        :filelib.safe_relative_path(123, "/home")
+      end
+    end
+
     test "cwd with valid atom type" do
       assert :filelib.safe_relative_path("dir", :ok) == "dir"
     end

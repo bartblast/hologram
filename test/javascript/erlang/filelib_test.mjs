@@ -94,7 +94,7 @@ describe("Erlang_Filelib", () => {
 
     it("just .", () => {
       const filename = Type.bitstring(".");
-      const cwd = Type.bitstring("/home/user");
+      const cwd = Type.bitstring("/home");
       const result = safeRelativePath(filename, cwd);
       const expected = Type.list([]);
 
@@ -103,7 +103,7 @@ describe("Erlang_Filelib", () => {
 
     it("just ..", () => {
       const filename = Type.bitstring("..");
-      const cwd = Type.bitstring("/home/user");
+      const cwd = Type.bitstring("/home");
       const result = safeRelativePath(filename, cwd);
       const expected = Type.atom("unsafe");
 
@@ -112,7 +112,7 @@ describe("Erlang_Filelib", () => {
 
     it(".. in the middle resolving to sibling", () => {
       const filename = Type.bitstring("a/../b");
-      const cwd = Type.bitstring("/home/user");
+      const cwd = Type.bitstring("/home");
       const result = safeRelativePath(filename, cwd);
       const expected = Type.bitstring("b");
 
@@ -121,7 +121,7 @@ describe("Erlang_Filelib", () => {
 
     it("atom input", () => {
       const filename = Type.atom("dir");
-      const cwd = Type.bitstring("/home/user");
+      const cwd = Type.bitstring("/home");
       const result = safeRelativePath(filename, cwd);
       const expected = Type.charlist("dir");
 
@@ -276,6 +276,17 @@ describe("Erlang_Filelib", () => {
     it("cwd with invalid type", () => {
       const filename = Type.bitstring("dir");
       const cwd = Type.integer(123);
+
+      assertBoxedError(
+        () => safeRelativePath(filename, cwd),
+        "FunctionClauseError",
+        /safe_relative_path\/2/,
+      );
+    });
+
+    it("filename with invalid type", () => {
+      const filename = Type.integer(123);
+      const cwd = Type.bitstring("/home");
 
       assertBoxedError(
         () => safeRelativePath(filename, cwd),
