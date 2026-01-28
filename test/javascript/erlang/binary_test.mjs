@@ -1470,683 +1470,6 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("split/2", () => {
-    const split = Erlang_Binary["split/2"];
-
-    it("delegates to split/3 with empty options", () => {
-      const subject = Bitstring.fromText("hello world world");
-      const pattern = Bitstring.fromText(" ");
-      const result = split(subject, pattern);
-
-      // Verifies default options (no :global) - splits only on first match
-      assert.deepStrictEqual(
-        result,
-        Type.list([
-          Bitstring.fromText("hello"),
-          Bitstring.fromText("world world"),
-        ]),
-      );
-    });
-  });
-
-  describe("split/3", () => {
-    const split = Erlang_Binary["split/3"];
-
-    describe("with :global option", () => {
-      it("splits on all occurrences with :global", () => {
-        const subject = Bitstring.fromText("hello world world");
-        const pattern = Bitstring.fromText(" ");
-        const options = Type.list([Type.atom("global")]);
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("hello"),
-            Bitstring.fromText("world"),
-            Bitstring.fromText("world"),
-          ]),
-        );
-      });
-
-      it("splits with multiple patterns globally", () => {
-        const subject = Bitstring.fromText("hello-world_test");
-
-        const pattern = Type.list([
-          Bitstring.fromText("-"),
-          Bitstring.fromText("_"),
-        ]);
-
-        const options = Type.list([Type.atom("global")]);
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("hello"),
-            Bitstring.fromText("world"),
-            Bitstring.fromText("test"),
-          ]),
-        );
-      });
-
-      it("handles consecutive patterns with :global", () => {
-        const subject = Bitstring.fromText("a--b--c");
-        const pattern = Bitstring.fromText("-");
-        const options = Type.list([Type.atom("global")]);
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("a"),
-            Bitstring.fromText(""),
-            Bitstring.fromText("b"),
-            Bitstring.fromText(""),
-            Bitstring.fromText("c"),
-          ]),
-        );
-      });
-
-      it("handles pattern at start, middle, and end", () => {
-        const subject = Bitstring.fromText("-a-");
-        const pattern = Bitstring.fromText("-");
-        const options = Type.list([Type.atom("global")]);
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText(""),
-            Bitstring.fromText("a"),
-            Bitstring.fromText(""),
-          ]),
-        );
-      });
-
-      it("handles invalid UTF-8 sequences in result with :global", () => {
-        // Create binary with invalid UTF-8: [65, 255, 66] where 255 is invalid
-        const subject = Bitstring.fromBytes(
-          new Uint8Array([65, 32, 255, 32, 66]),
-        );
-
-        const pattern = Bitstring.fromText(" ");
-        const options = Type.list([Type.atom("global")]);
-        const result = split(subject, pattern, options);
-
-        // First part: [65] - valid UTF-8 "A"
-        const firstPart = result.data[0];
-        assert.strictEqual(firstPart.type, "bitstring");
-        assert.strictEqual(firstPart.text, "A");
-
-        // Second part: [255] - invalid UTF-8, should be bytes-based
-        const secondPart = result.data[1];
-        assert.strictEqual(secondPart.type, "bitstring");
-        assert.strictEqual(secondPart.text, null);
-        assert.deepStrictEqual(Array.from(secondPart.bytes), [255]);
-
-        // Third part: [66] - valid UTF-8 "B"
-        const thirdPart = result.data[2];
-        assert.strictEqual(thirdPart.type, "bitstring");
-        assert.strictEqual(thirdPart.text, "B");
-      });
-    });
-
-    describe("without :global option", () => {
-      it("splits only on first occurrence without :global", () => {
-        const subject = Bitstring.fromText("hello-world-test");
-        const pattern = Bitstring.fromText("-");
-        const options = Type.list();
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("hello"),
-            Bitstring.fromText("world-test"),
-          ]),
-        );
-      });
-
-      it("splits with multi-byte pattern", () => {
-        const subject = Bitstring.fromText("aaabbbccc");
-        const pattern = Bitstring.fromText("bb");
-        const options = Type.list();
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([Bitstring.fromText("aaa"), Bitstring.fromText("bccc")]),
-        );
-      });
-
-      it("returns list with original binary when pattern not found", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("x");
-        const options = Type.list();
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("test")]));
-      });
-
-      it("splits with multiple patterns", () => {
-        const subject = Bitstring.fromText("hello-world_test");
-
-        const pattern = Type.list([
-          Bitstring.fromText("-"),
-          Bitstring.fromText("_"),
-        ]);
-
-        const options = Type.list();
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("hello"),
-            Bitstring.fromText("world_test"),
-          ]),
-        );
-      });
-
-      it("handles empty subject", () => {
-        const subject = Bitstring.fromText("");
-        const pattern = Bitstring.fromText("x");
-        const options = Type.list();
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("")]));
-      });
-    });
-
-    describe("compiled pattern behavior", () => {
-      beforeEach(() => {
-        ERTS.binaryPatternRegistry.patterns.clear();
-      });
-
-      it("splits using compiled Boyer-Moore pattern", () => {
-        const subject = Bitstring.fromText("hello world");
-        const pattern = Bitstring.fromText("world");
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
-        const options = Type.list();
-
-        const result = split(subject, compiledPattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([Bitstring.fromText("hello "), Bitstring.fromText("")]),
-        );
-      });
-
-      it("splits using compiled Aho-Corasick pattern", () => {
-        const subject = Bitstring.fromText("hello-world");
-
-        const pattern = Type.list([
-          Bitstring.fromText("-"),
-          Bitstring.fromText("o"),
-        ]);
-
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
-        const options = Type.list([Type.atom("global")]);
-        const result = split(subject, compiledPattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("hell"),
-            Bitstring.fromText(""),
-            Bitstring.fromText("w"),
-            Bitstring.fromText("rld"),
-          ]),
-        );
-      });
-
-      it("raises ArgumentError when compiled pattern data is missing", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("ell");
-        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
-        const patternRef = compiledPattern.data[1];
-        const patternKey = Type.encodeMapKey(patternRef);
-        ERTS.binaryPatternRegistry.patterns.delete(patternKey);
-
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, compiledPattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-    });
-
-    describe("options: :trim and :trim_all", () => {
-      it("applies :trim to remove trailing empties only", () => {
-        const subject = Bitstring.fromText("-a-");
-        const pattern = Bitstring.fromText("-");
-        const options = Type.list([Type.atom("global"), Type.atom("trim")]);
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([Bitstring.fromText(""), Bitstring.fromText("a")]),
-        );
-      });
-
-      it("applies :trim_all to remove all empty parts", () => {
-        const subject = Bitstring.fromText("-a-");
-        const pattern = Bitstring.fromText("-");
-        const options = Type.list([Type.atom("global"), Type.atom("trim_all")]);
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("a")]));
-      });
-
-      it("returns empty list when empty subject with :trim", () => {
-        const subject = Bitstring.fromText("");
-        const pattern = Bitstring.fromText(" ");
-        const options = Type.list([Type.atom("global"), Type.atom("trim")]);
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(result, Type.list());
-      });
-    });
-
-    describe("options: scope", () => {
-      it("respects scope option when a match exists in the range", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(1), Type.integer(1)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([Bitstring.fromText("a"), Bitstring.fromText("c")]),
-        );
-      });
-
-      it("returns original binary when scope excludes the pattern", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(0), Type.integer(1)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("abc")]));
-      });
-
-      it("returns original binary when scope length is zero", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(1), Type.integer(0)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("abc")]));
-      });
-
-      it("works with scope and multiple patterns", () => {
-        const subject = Bitstring.fromText("hello-world");
-
-        const pattern = Type.list([
-          Bitstring.fromText("-"),
-          Bitstring.fromText("o"),
-        ]);
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(0), Type.integer(11)]),
-        ]);
-
-        const options = Type.list([scope, Type.atom("global")]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("hell"),
-            Bitstring.fromText(""),
-            Bitstring.fromText("w"),
-            Bitstring.fromText("rld"),
-          ]),
-        );
-      });
-
-      it("works with scope and :trim option", () => {
-        const subject = Bitstring.fromText("a-b--");
-        const pattern = Bitstring.fromText("-");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(0), Type.integer(5)]),
-        ]);
-
-        const options = Type.list([
-          scope,
-          Type.atom("global"),
-          Type.atom("trim"),
-        ]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([Bitstring.fromText("a"), Bitstring.fromText("b")]),
-        );
-      });
-
-      it("collects trailing bytes after loop exits naturally with global split", () => {
-        const subject = Bitstring.fromText("a-b-c-");
-        const pattern = Bitstring.fromText("-");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(0), Type.integer(5)]),
-        ]);
-
-        const options = Type.list([scope, Type.atom("global")]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText("a"),
-            Bitstring.fromText("b"),
-            Bitstring.fromText("c-"),
-          ]),
-        );
-      });
-
-      it("collects trailing bytes when scope is exhausted in global split", () => {
-        const subject = Bitstring.fromText("abcdef");
-        const pattern = Bitstring.fromText("d");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(1), Type.integer(3)]),
-        ]);
-
-        const options = Type.list([scope, Type.atom("global")]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([Bitstring.fromText("abc"), Bitstring.fromText("ef")]),
-        );
-      });
-
-      it("accepts negative scope length (reverse part)", () => {
-        const subject = Bitstring.fromText("hello world");
-        const pattern = Bitstring.fromText(" ");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(11), Type.integer(-6)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([Bitstring.fromText("hello"), Bitstring.fromText("world")]),
-        );
-      });
-    });
-
-    describe("overlapping patterns", () => {
-      it("with overlapping patterns, matches first found", () => {
-        const subject = Bitstring.fromText("abcabc");
-
-        const pattern = Type.list([
-          Bitstring.fromText("ab"),
-          Bitstring.fromText("abc"),
-        ]);
-
-        const options = Type.list([Type.atom("global")]);
-
-        const result = split(subject, pattern, options);
-
-        assert.deepStrictEqual(
-          result,
-          Type.list([
-            Bitstring.fromText(""),
-            Bitstring.fromText(""),
-            Bitstring.fromText(""),
-          ]),
-        );
-      });
-    });
-
-    describe("error cases", () => {
-      it("raises ArgumentError when subject is not bitstring", () => {
-        const subject = Type.atom("test");
-        const pattern = Bitstring.fromText(" ");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-        );
-      });
-
-      it("raises ArgumentError when subject is non-binary bitstring", () => {
-        const subject = Type.bitstring([1, 0, 1]);
-        const pattern = Bitstring.fromText(" ");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "is a bitstring (expected a binary)",
-          ),
-        );
-      });
-
-      it("raises ArgumentError when pattern is not bitstring", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Type.integer(123);
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is non-binary bitstring", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Type.bitstring([1, 0, 1]);
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is empty string", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is empty list", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Type.list();
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is list with non-bitstring", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Type.list([Bitstring.fromText("a"), Type.atom("b")]);
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is list with non-binary bitstring", () => {
-        const subject = Bitstring.fromText("test");
-
-        const pattern = Type.list([
-          Bitstring.fromText("a"),
-          Type.bitstring([1, 0, 1]),
-        ]);
-
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is list with empty string", () => {
-        const subject = Bitstring.fromText("test");
-
-        const pattern = Type.list([
-          Bitstring.fromText("a"),
-          Bitstring.fromText(""),
-        ]);
-
-        const options = Type.list();
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when options is not a list", () => {
-        const subject = Bitstring.fromText("hello world");
-        const pattern = Bitstring.fromText(" ");
-        const options = Type.atom("invalid");
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError for improper list options", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const options = Type.improperList([
-          Type.atom("test"),
-          Type.atom("tail"),
-        ]);
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError for negative scope start", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(-1), Type.integer(2)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError for scope start beyond subject length", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(10), Type.integer(5)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError for scope extending beyond subject length", () => {
-        const subject = Bitstring.fromText("abc");
-        const pattern = Bitstring.fromText("b");
-
-        const scope = Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(1), Type.integer(3)]),
-        ]);
-
-        const options = Type.list([scope]);
-
-        assertBoxedError(
-          () => split(subject, pattern, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-        );
-      });
-    });
-  });
-
   describe("replace/3", () => {
     const replace = Erlang_Binary["replace/3"];
 
@@ -2937,6 +2260,683 @@ describe("Erlang_Binary", () => {
         const result = replace(subject, pattern, replacement, options);
 
         assertBoxedStrictEqual(result, Bitstring.fromText("b"));
+      });
+    });
+  });
+
+  describe("split/2", () => {
+    const split = Erlang_Binary["split/2"];
+
+    it("delegates to split/3 with empty options", () => {
+      const subject = Bitstring.fromText("hello world world");
+      const pattern = Bitstring.fromText(" ");
+      const result = split(subject, pattern);
+
+      // Verifies default options (no :global) - splits only on first match
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Bitstring.fromText("hello"),
+          Bitstring.fromText("world world"),
+        ]),
+      );
+    });
+  });
+
+  describe("split/3", () => {
+    const split = Erlang_Binary["split/3"];
+
+    describe("with :global option", () => {
+      it("splits on all occurrences with :global", () => {
+        const subject = Bitstring.fromText("hello world world");
+        const pattern = Bitstring.fromText(" ");
+        const options = Type.list([Type.atom("global")]);
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("hello"),
+            Bitstring.fromText("world"),
+            Bitstring.fromText("world"),
+          ]),
+        );
+      });
+
+      it("splits with multiple patterns globally", () => {
+        const subject = Bitstring.fromText("hello-world_test");
+
+        const pattern = Type.list([
+          Bitstring.fromText("-"),
+          Bitstring.fromText("_"),
+        ]);
+
+        const options = Type.list([Type.atom("global")]);
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("hello"),
+            Bitstring.fromText("world"),
+            Bitstring.fromText("test"),
+          ]),
+        );
+      });
+
+      it("handles consecutive patterns with :global", () => {
+        const subject = Bitstring.fromText("a--b--c");
+        const pattern = Bitstring.fromText("-");
+        const options = Type.list([Type.atom("global")]);
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("a"),
+            Bitstring.fromText(""),
+            Bitstring.fromText("b"),
+            Bitstring.fromText(""),
+            Bitstring.fromText("c"),
+          ]),
+        );
+      });
+
+      it("handles pattern at start, middle, and end", () => {
+        const subject = Bitstring.fromText("-a-");
+        const pattern = Bitstring.fromText("-");
+        const options = Type.list([Type.atom("global")]);
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText(""),
+            Bitstring.fromText("a"),
+            Bitstring.fromText(""),
+          ]),
+        );
+      });
+
+      it("handles invalid UTF-8 sequences in result with :global", () => {
+        // Create binary with invalid UTF-8: [65, 255, 66] where 255 is invalid
+        const subject = Bitstring.fromBytes(
+          new Uint8Array([65, 32, 255, 32, 66]),
+        );
+
+        const pattern = Bitstring.fromText(" ");
+        const options = Type.list([Type.atom("global")]);
+        const result = split(subject, pattern, options);
+
+        // First part: [65] - valid UTF-8 "A"
+        const firstPart = result.data[0];
+        assert.strictEqual(firstPart.type, "bitstring");
+        assert.strictEqual(firstPart.text, "A");
+
+        // Second part: [255] - invalid UTF-8, should be bytes-based
+        const secondPart = result.data[1];
+        assert.strictEqual(secondPart.type, "bitstring");
+        assert.strictEqual(secondPart.text, null);
+        assert.deepStrictEqual(Array.from(secondPart.bytes), [255]);
+
+        // Third part: [66] - valid UTF-8 "B"
+        const thirdPart = result.data[2];
+        assert.strictEqual(thirdPart.type, "bitstring");
+        assert.strictEqual(thirdPart.text, "B");
+      });
+    });
+
+    describe("without :global option", () => {
+      it("splits only on first occurrence without :global", () => {
+        const subject = Bitstring.fromText("hello-world-test");
+        const pattern = Bitstring.fromText("-");
+        const options = Type.list();
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("hello"),
+            Bitstring.fromText("world-test"),
+          ]),
+        );
+      });
+
+      it("splits with multi-byte pattern", () => {
+        const subject = Bitstring.fromText("aaabbbccc");
+        const pattern = Bitstring.fromText("bb");
+        const options = Type.list();
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText("aaa"), Bitstring.fromText("bccc")]),
+        );
+      });
+
+      it("returns list with original binary when pattern not found", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("x");
+        const options = Type.list();
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("test")]));
+      });
+
+      it("splits with multiple patterns", () => {
+        const subject = Bitstring.fromText("hello-world_test");
+
+        const pattern = Type.list([
+          Bitstring.fromText("-"),
+          Bitstring.fromText("_"),
+        ]);
+
+        const options = Type.list();
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("hello"),
+            Bitstring.fromText("world_test"),
+          ]),
+        );
+      });
+
+      it("handles empty subject", () => {
+        const subject = Bitstring.fromText("");
+        const pattern = Bitstring.fromText("x");
+        const options = Type.list();
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("")]));
+      });
+    });
+
+    describe("compiled pattern behavior", () => {
+      beforeEach(() => {
+        ERTS.binaryPatternRegistry.patterns.clear();
+      });
+
+      it("splits using compiled Boyer-Moore pattern", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText("world");
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const options = Type.list();
+
+        const result = split(subject, compiledPattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText("hello "), Bitstring.fromText("")]),
+        );
+      });
+
+      it("splits using compiled Aho-Corasick pattern", () => {
+        const subject = Bitstring.fromText("hello-world");
+
+        const pattern = Type.list([
+          Bitstring.fromText("-"),
+          Bitstring.fromText("o"),
+        ]);
+
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const options = Type.list([Type.atom("global")]);
+        const result = split(subject, compiledPattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("hell"),
+            Bitstring.fromText(""),
+            Bitstring.fromText("w"),
+            Bitstring.fromText("rld"),
+          ]),
+        );
+      });
+
+      it("raises ArgumentError when compiled pattern data is missing", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("ell");
+        const compiledPattern = Erlang_Binary["compile_pattern/1"](pattern);
+        const patternRef = compiledPattern.data[1];
+        const patternKey = Type.encodeMapKey(patternRef);
+        ERTS.binaryPatternRegistry.patterns.delete(patternKey);
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, compiledPattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+    });
+
+    describe("options: :trim and :trim_all", () => {
+      it("applies :trim to remove trailing empties only", () => {
+        const subject = Bitstring.fromText("-a-");
+        const pattern = Bitstring.fromText("-");
+        const options = Type.list([Type.atom("global"), Type.atom("trim")]);
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText(""), Bitstring.fromText("a")]),
+        );
+      });
+
+      it("applies :trim_all to remove all empty parts", () => {
+        const subject = Bitstring.fromText("-a-");
+        const pattern = Bitstring.fromText("-");
+        const options = Type.list([Type.atom("global"), Type.atom("trim_all")]);
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("a")]));
+      });
+
+      it("returns empty list when empty subject with :trim", () => {
+        const subject = Bitstring.fromText("");
+        const pattern = Bitstring.fromText(" ");
+        const options = Type.list([Type.atom("global"), Type.atom("trim")]);
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(result, Type.list());
+      });
+    });
+
+    describe("options: scope", () => {
+      it("respects scope option when a match exists in the range", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("b");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(1), Type.integer(1)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText("a"), Bitstring.fromText("c")]),
+        );
+      });
+
+      it("returns original binary when scope excludes the pattern", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("b");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(0), Type.integer(1)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("abc")]));
+      });
+
+      it("returns original binary when scope length is zero", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("b");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(1), Type.integer(0)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(result, Type.list([Bitstring.fromText("abc")]));
+      });
+
+      it("works with scope and multiple patterns", () => {
+        const subject = Bitstring.fromText("hello-world");
+
+        const pattern = Type.list([
+          Bitstring.fromText("-"),
+          Bitstring.fromText("o"),
+        ]);
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(0), Type.integer(11)]),
+        ]);
+
+        const options = Type.list([scope, Type.atom("global")]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("hell"),
+            Bitstring.fromText(""),
+            Bitstring.fromText("w"),
+            Bitstring.fromText("rld"),
+          ]),
+        );
+      });
+
+      it("works with scope and :trim option", () => {
+        const subject = Bitstring.fromText("a-b--");
+        const pattern = Bitstring.fromText("-");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(0), Type.integer(5)]),
+        ]);
+
+        const options = Type.list([
+          scope,
+          Type.atom("global"),
+          Type.atom("trim"),
+        ]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText("a"), Bitstring.fromText("b")]),
+        );
+      });
+
+      it("collects trailing bytes after loop exits naturally with global split", () => {
+        const subject = Bitstring.fromText("a-b-c-");
+        const pattern = Bitstring.fromText("-");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(0), Type.integer(5)]),
+        ]);
+
+        const options = Type.list([scope, Type.atom("global")]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText("a"),
+            Bitstring.fromText("b"),
+            Bitstring.fromText("c-"),
+          ]),
+        );
+      });
+
+      it("collects trailing bytes when scope is exhausted in global split", () => {
+        const subject = Bitstring.fromText("abcdef");
+        const pattern = Bitstring.fromText("d");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(1), Type.integer(3)]),
+        ]);
+
+        const options = Type.list([scope, Type.atom("global")]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText("abc"), Bitstring.fromText("ef")]),
+        );
+      });
+
+      it("accepts negative scope length (reverse part)", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText(" ");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(11), Type.integer(-6)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([Bitstring.fromText("hello"), Bitstring.fromText("world")]),
+        );
+      });
+    });
+
+    describe("overlapping patterns", () => {
+      it("with overlapping patterns, matches first found", () => {
+        const subject = Bitstring.fromText("abcabc");
+
+        const pattern = Type.list([
+          Bitstring.fromText("ab"),
+          Bitstring.fromText("abc"),
+        ]);
+
+        const options = Type.list([Type.atom("global")]);
+
+        const result = split(subject, pattern, options);
+
+        assert.deepStrictEqual(
+          result,
+          Type.list([
+            Bitstring.fromText(""),
+            Bitstring.fromText(""),
+            Bitstring.fromText(""),
+          ]),
+        );
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises ArgumentError when subject is not bitstring", () => {
+        const subject = Type.atom("test");
+        const pattern = Bitstring.fromText(" ");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        );
+      });
+
+      it("raises ArgumentError when subject is non-binary bitstring", () => {
+        const subject = Type.bitstring([1, 0, 1]);
+        const pattern = Bitstring.fromText(" ");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "is a bitstring (expected a binary)",
+          ),
+        );
+      });
+
+      it("raises ArgumentError when pattern is not bitstring", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.integer(123);
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is non-binary bitstring", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.bitstring([1, 0, 1]);
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is empty string", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is empty list", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list();
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is list with non-bitstring", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Type.list([Bitstring.fromText("a"), Type.atom("b")]);
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is list with non-binary bitstring", () => {
+        const subject = Bitstring.fromText("test");
+
+        const pattern = Type.list([
+          Bitstring.fromText("a"),
+          Type.bitstring([1, 0, 1]),
+        ]);
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is list with empty string", () => {
+        const subject = Bitstring.fromText("test");
+
+        const pattern = Type.list([
+          Bitstring.fromText("a"),
+          Bitstring.fromText(""),
+        ]);
+
+        const options = Type.list();
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when options is not a list", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText(" ");
+        const options = Type.atom("invalid");
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError for improper list options", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("b");
+
+        const options = Type.improperList([
+          Type.atom("test"),
+          Type.atom("tail"),
+        ]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError for negative scope start", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("b");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(-1), Type.integer(2)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError for scope start beyond subject length", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("b");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(10), Type.integer(5)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError for scope extending beyond subject length", () => {
+        const subject = Bitstring.fromText("abc");
+        const pattern = Bitstring.fromText("b");
+
+        const scope = Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(1), Type.integer(3)]),
+        ]);
+
+        const options = Type.list([scope]);
+
+        assertBoxedError(
+          () => split(subject, pattern, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        );
       });
     });
   });

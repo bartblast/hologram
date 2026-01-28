@@ -697,240 +697,6 @@ const Erlang_Binary = {
   // End matches/3
   // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
 
-  // Start split/2
-  "split/2": (subject, pattern) => {
-    return Erlang_Binary["split/3"](subject, pattern, Type.list());
-  },
-  // End split/2
-  // Deps: [:binary.split/3]
-
-  // Start split/3
-  "split/3": (subject, pattern, options) => {
-    // Helper: Apply trimming options to the split parts
-    const applyTrim = (parts) => {
-      if (parts.length === 0) {
-        return parts;
-      }
-
-      if (trimAll) {
-        return parts.filter((part) => !Bitstring.isEmpty(part));
-      }
-
-      if (!trim) {
-        return parts;
-      }
-
-      let end = parts.length;
-      while (end > 0 && Bitstring.isEmpty(parts[end - 1])) {
-        end--;
-      }
-
-      return parts.slice(0, end);
-    };
-
-    // Helper: Convert byte slice to bitstring (text-based if valid UTF-8)
-    const bytesToBitstring = (bytes) => {
-      try {
-        const decoder = new TextDecoder("utf-8", {fatal: true});
-        const text = decoder.decode(bytes);
-        return Bitstring.fromText(text);
-      } catch {
-        return Bitstring.fromBytes(bytes);
-      }
-    };
-
-    // Validate subject is a binary
-    if (!Type.isBinary(subject)) {
-      const msg = Type.isBitstring(subject)
-        ? "is a bitstring (expected a binary)"
-        : "not a binary";
-
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
-    }
-
-    // Ensure subject bytes are available after validation
-    Bitstring.maybeSetBytesFromText(subject);
-
-    const {global, trim, trimAll, scopeStart, scopeLength} = Erlang_Binary[
-      "_parse_search_opts/2"
-    ](options, 3);
-
-    // Validate scope start is within subject bounds
-    if (scopeStart > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
-    }
-
-    // Validate that if scopeLength is specified, scopeStart + scopeLength >= 0
-    if (scopeLength !== null && scopeStart + scopeLength < 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
-    }
-
-    // Validate pattern before compiling (to raise with correct arg position)
-    const raiseInvalidPattern = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-      );
-    };
-
-    const isCompiledPattern = Type.isCompiledPattern(pattern);
-
-    if (!isCompiledPattern) {
-      const isValidBinary = Type.isBinary(pattern);
-
-      const isValidList =
-        Type.isList(pattern) &&
-        pattern.data.length > 0 &&
-        pattern.data.every((p) => Type.isBinary(p));
-
-      // Check if pattern is valid before compiling
-      if (!isValidBinary && !isValidList) {
-        raiseInvalidPattern();
-      }
-
-      // Check for empty patterns
-      if (isValidBinary) {
-        Bitstring.maybeSetBytesFromText(pattern);
-
-        if (pattern.bytes.length === 0) {
-          raiseInvalidPattern();
-        }
-      } else if (isValidList) {
-        for (const p of pattern.data) {
-          Bitstring.maybeSetBytesFromText(p);
-
-          if (p.bytes.length === 0) {
-            raiseInvalidPattern();
-          }
-        }
-      }
-    }
-
-    // Pre-compile pattern once before loop to avoid recompilation on each match
-    const compiledPattern = isCompiledPattern
-      ? pattern
-      : Erlang_Binary["compile_pattern/1"](pattern);
-
-    const effectiveLength =
-      scopeLength === null ? subject.bytes.length - scopeStart : scopeLength;
-
-    // Validate scope doesn't extend beyond subject
-    if (scopeStart + effectiveLength > subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
-      );
-    }
-
-    const scopeEnd = scopeStart + effectiveLength;
-
-    // For negative scopeLength, ensure slice bounds are in correct order
-    const actualStart = Math.min(scopeStart, scopeEnd);
-    const actualEnd = Math.max(scopeStart, scopeEnd);
-
-    // No search range available - return unsplit subject
-    if (actualStart >= subject.bytes.length) {
-      const parts = [bytesToBitstring(subject.bytes)];
-      return Type.list(applyTrim(parts));
-    }
-
-    // Main split logic using match/3
-
-    const results = [];
-    let cursor = 0; // position in full subject where next segment starts
-    let searchPos = actualStart; // current search position
-    let foundMatch = true; // track if loop exited naturally vs via break
-
-    while (searchPos < actualEnd) {
-      const remainingLength = actualEnd - searchPos;
-
-      const matchOptions = Type.list([
-        Type.tuple([
-          Type.atom("scope"),
-          Type.tuple([Type.integer(searchPos), Type.integer(remainingLength)]),
-        ]),
-      ]);
-
-      // Use match/3 to find next occurrence with pre-compiled pattern
-      const matchResult = Erlang_Binary["match/3"](
-        subject,
-        compiledPattern,
-        matchOptions,
-      );
-
-      // No more matches found
-      if (Type.isAtom(matchResult) && matchResult.value === "nomatch") {
-        const remaining =
-          cursor < subject.bytes.length
-            ? bytesToBitstring(subject.bytes.slice(cursor))
-            : Bitstring.fromText("");
-
-        results.push(remaining);
-        foundMatch = false;
-
-        break;
-      }
-
-      // Extract match position and length
-      const matchPos = matchResult.data[0].value;
-      const matchLen = matchResult.data[1].value;
-      const matchStart = Number(matchPos);
-      const matchLength = Number(matchLen);
-
-      // Add part before match (if any)
-      if (matchStart > cursor) {
-        const beforeMatch = bytesToBitstring(
-          subject.bytes.slice(cursor, matchStart),
-        );
-
-        results.push(beforeMatch);
-      } else if (matchStart === cursor) {
-        // Empty part before match
-        results.push(Bitstring.fromText(""));
-      }
-
-      // Update cursor to position after match
-      cursor = matchStart + matchLength;
-      searchPos = cursor;
-
-      if (!global) {
-        // For non-global split, append remaining and stop
-        const remaining =
-          cursor < subject.bytes.length
-            ? bytesToBitstring(subject.bytes.slice(cursor))
-            : Bitstring.fromText("");
-
-        results.push(remaining);
-        foundMatch = false;
-
-        break;
-      }
-    }
-
-    // Collect any remaining bytes after the last match (for global splits that exited naturally)
-    if (global && foundMatch && cursor < subject.bytes.length) {
-      const remaining = bytesToBitstring(subject.bytes.slice(cursor));
-      results.push(remaining);
-    }
-
-    // Add trailing empty when global split ends at subject boundary
-    if (global && cursor === subject.bytes.length && results.length > 0) {
-      results.push(Bitstring.fromText(""));
-    }
-
-    if (results.length === 0) {
-      results.push(bytesToBitstring(subject.bytes));
-    }
-
-    const trimmedResults = applyTrim(results);
-
-    return Type.list(trimmedResults);
-  },
-  // End split/3
-  // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
-
   // Start replace/3
   "replace/3": (subject, pattern, replacement) => {
     return Erlang_Binary["replace/4"](
@@ -1359,7 +1125,241 @@ const Erlang_Binary = {
     return result;
   },
   // End replace/4
-  // Deps: [:binary.split/3, :erlang.iolist_to_binary/1, :binary.compile_pattern/1, :binary.match/3]
+  // Deps: [:erlang.iolist_to_binary/1, :binary.compile_pattern/1, :binary.match/3, :binary.split/3]
+
+  // Start split/2
+  "split/2": (subject, pattern) => {
+    return Erlang_Binary["split/3"](subject, pattern, Type.list());
+  },
+  // End split/2
+  // Deps: [:binary.split/3]
+
+  // Start split/3
+  "split/3": (subject, pattern, options) => {
+    // Helper: Apply trimming options to the split parts
+    const applyTrim = (parts) => {
+      if (parts.length === 0) {
+        return parts;
+      }
+
+      if (trimAll) {
+        return parts.filter((part) => !Bitstring.isEmpty(part));
+      }
+
+      if (!trim) {
+        return parts;
+      }
+
+      let end = parts.length;
+      while (end > 0 && Bitstring.isEmpty(parts[end - 1])) {
+        end--;
+      }
+
+      return parts.slice(0, end);
+    };
+
+    // Helper: Convert byte slice to bitstring (text-based if valid UTF-8)
+    const bytesToBitstring = (bytes) => {
+      try {
+        const decoder = new TextDecoder("utf-8", {fatal: true});
+        const text = decoder.decode(bytes);
+        return Bitstring.fromText(text);
+      } catch {
+        return Bitstring.fromBytes(bytes);
+      }
+    };
+
+    // Validate subject is a binary
+    if (!Type.isBinary(subject)) {
+      const msg = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    }
+
+    // Ensure subject bytes are available after validation
+    Bitstring.maybeSetBytesFromText(subject);
+
+    const {global, trim, trimAll, scopeStart, scopeLength} = Erlang_Binary[
+      "_parse_search_opts/2"
+    ](options, 3);
+
+    // Validate scope start is within subject bounds
+    if (scopeStart > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    // Validate that if scopeLength is specified, scopeStart + scopeLength >= 0
+    if (scopeLength !== null && scopeStart + scopeLength < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    // Validate pattern before compiling (to raise with correct arg position)
+    const raiseInvalidPattern = () => {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+      );
+    };
+
+    const isCompiledPattern = Type.isCompiledPattern(pattern);
+
+    if (!isCompiledPattern) {
+      const isValidBinary = Type.isBinary(pattern);
+
+      const isValidList =
+        Type.isList(pattern) &&
+        pattern.data.length > 0 &&
+        pattern.data.every((p) => Type.isBinary(p));
+
+      // Check if pattern is valid before compiling
+      if (!isValidBinary && !isValidList) {
+        raiseInvalidPattern();
+      }
+
+      // Check for empty patterns
+      if (isValidBinary) {
+        Bitstring.maybeSetBytesFromText(pattern);
+
+        if (pattern.bytes.length === 0) {
+          raiseInvalidPattern();
+        }
+      } else if (isValidList) {
+        for (const p of pattern.data) {
+          Bitstring.maybeSetBytesFromText(p);
+
+          if (p.bytes.length === 0) {
+            raiseInvalidPattern();
+          }
+        }
+      }
+    }
+
+    // Pre-compile pattern once before loop to avoid recompilation on each match
+    const compiledPattern = isCompiledPattern
+      ? pattern
+      : Erlang_Binary["compile_pattern/1"](pattern);
+
+    const effectiveLength =
+      scopeLength === null ? subject.bytes.length - scopeStart : scopeLength;
+
+    // Validate scope doesn't extend beyond subject
+    if (scopeStart + effectiveLength > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    const scopeEnd = scopeStart + effectiveLength;
+
+    // For negative scopeLength, ensure slice bounds are in correct order
+    const actualStart = Math.min(scopeStart, scopeEnd);
+    const actualEnd = Math.max(scopeStart, scopeEnd);
+
+    // No search range available - return unsplit subject
+    if (actualStart >= subject.bytes.length) {
+      const parts = [bytesToBitstring(subject.bytes)];
+      return Type.list(applyTrim(parts));
+    }
+
+    // Main split logic using match/3
+
+    const results = [];
+    let cursor = 0; // position in full subject where next segment starts
+    let searchPos = actualStart; // current search position
+    let foundMatch = true; // track if loop exited naturally vs via break
+
+    while (searchPos < actualEnd) {
+      const remainingLength = actualEnd - searchPos;
+
+      const matchOptions = Type.list([
+        Type.tuple([
+          Type.atom("scope"),
+          Type.tuple([Type.integer(searchPos), Type.integer(remainingLength)]),
+        ]),
+      ]);
+
+      // Use match/3 to find next occurrence with pre-compiled pattern
+      const matchResult = Erlang_Binary["match/3"](
+        subject,
+        compiledPattern,
+        matchOptions,
+      );
+
+      // No more matches found
+      if (Type.isAtom(matchResult) && matchResult.value === "nomatch") {
+        const remaining =
+          cursor < subject.bytes.length
+            ? bytesToBitstring(subject.bytes.slice(cursor))
+            : Bitstring.fromText("");
+
+        results.push(remaining);
+        foundMatch = false;
+
+        break;
+      }
+
+      // Extract match position and length
+      const matchPos = matchResult.data[0].value;
+      const matchLen = matchResult.data[1].value;
+      const matchStart = Number(matchPos);
+      const matchLength = Number(matchLen);
+
+      // Add part before match (if any)
+      if (matchStart > cursor) {
+        const beforeMatch = bytesToBitstring(
+          subject.bytes.slice(cursor, matchStart),
+        );
+
+        results.push(beforeMatch);
+      } else if (matchStart === cursor) {
+        // Empty part before match
+        results.push(Bitstring.fromText(""));
+      }
+
+      // Update cursor to position after match
+      cursor = matchStart + matchLength;
+      searchPos = cursor;
+
+      if (!global) {
+        // For non-global split, append remaining and stop
+        const remaining =
+          cursor < subject.bytes.length
+            ? bytesToBitstring(subject.bytes.slice(cursor))
+            : Bitstring.fromText("");
+
+        results.push(remaining);
+        foundMatch = false;
+
+        break;
+      }
+    }
+
+    // Collect any remaining bytes after the last match (for global splits that exited naturally)
+    if (global && foundMatch && cursor < subject.bytes.length) {
+      const remaining = bytesToBitstring(subject.bytes.slice(cursor));
+      results.push(remaining);
+    }
+
+    // Add trailing empty when global split ends at subject boundary
+    if (global && cursor === subject.bytes.length && results.length > 0) {
+      results.push(Bitstring.fromText(""));
+    }
+
+    if (results.length === 0) {
+      results.push(bytesToBitstring(subject.bytes));
+    }
+
+    const trimmedResults = applyTrim(results);
+
+    return Type.list(trimmedResults);
+  },
+  // End split/3
+  // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
 };
 
 export default Erlang_Binary;

@@ -678,252 +678,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     end
   end
 
-  describe "split/2" do
-    # Verifies default options (no :global) - splits only on first match
-    test "delegates to split/3 with empty options" do
-      assert :binary.split("hello world world", " ") == ["hello", "world world"]
-    end
-  end
-
-  describe "split/3" do
-    # With :global option
-
-    test "splits on all occurrences with :global" do
-      assert :binary.split("hello world world", " ", [:global]) == [
-               "hello",
-               "world",
-               "world"
-             ]
-    end
-
-    test "splits with multiple patterns globally" do
-      assert :binary.split("hello-world_test", ["-", "_"], [:global]) == [
-               "hello",
-               "world",
-               "test"
-             ]
-    end
-
-    test "handles consecutive patterns with :global" do
-      assert :binary.split("a--b--c", "-", [:global]) == ["a", "", "b", "", "c"]
-    end
-
-    test "handles pattern at start, middle, and end" do
-      assert :binary.split("-a-", "-", [:global]) == ["", "a", ""]
-    end
-
-    test "handles invalid UTF-8 sequences in result with :global" do
-      # Create binary with invalid UTF-8: <<65, 255, 66>> where 255 is invalid standalone
-      subject = <<65, 32, 255, 32, 66>>
-      result = :binary.split(subject, " ", [:global])
-
-      assert length(result) == 3
-      assert Enum.at(result, 0) == <<65>>
-      assert Enum.at(result, 1) == <<255>>
-      assert Enum.at(result, 2) == <<66>>
-    end
-
-    # Without :global option
-
-    test "splits only on first occurrence without :global" do
-      assert :binary.split("hello-world-test", "-", []) == ["hello", "world-test"]
-    end
-
-    test "splits with multi-byte pattern" do
-      assert :binary.split("aaabbbccc", "bb", []) == ["aaa", "bccc"]
-    end
-
-    test "returns list with original binary when pattern not found" do
-      assert :binary.split("test", "x", []) == ["test"]
-    end
-
-    test "splits with multiple patterns" do
-      assert :binary.split("hello-world_test", ["-", "_"], []) == ["hello", "world_test"]
-    end
-
-    test "handles empty subject" do
-      assert :binary.split("", "x", []) == [""]
-    end
-
-    # Compiled pattern behavior
-
-    test "splits using compiled Boyer-Moore pattern" do
-      compiled_pattern = :binary.compile_pattern("world")
-
-      assert :binary.split("hello world", compiled_pattern, []) == [
-               "hello ",
-               ""
-             ]
-    end
-
-    test "splits using compiled Aho-Corasick pattern" do
-      compiled_pattern = :binary.compile_pattern(["-", "o"])
-
-      assert :binary.split("hello-world", compiled_pattern, [:global]) == [
-               "hell",
-               "",
-               "w",
-               "rld"
-             ]
-    end
-
-    test "raises ArgumentError when compiled pattern data is missing" do
-      invalid_pattern = {:bm, make_ref()}
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("hello", invalid_pattern, []) end
-    end
-
-    # Options: :trim and :trim_all
-
-    test "applies :trim to remove trailing empties only" do
-      assert :binary.split("-a-", "-", [:global, :trim]) == ["", "a"]
-    end
-
-    test "applies :trim_all to remove all empty parts" do
-      assert :binary.split("-a-", "-", [:global, :trim_all]) == ["a"]
-    end
-
-    test "returns empty list when empty subject with :trim" do
-      assert :binary.split("", " ", [:global, :trim]) == []
-    end
-
-    # Options: scope
-
-    test "respects scope option when a match exists in the range" do
-      assert :binary.split("abc", "b", scope: {1, 1}) == ["a", "c"]
-    end
-
-    test "returns original binary when scope excludes the pattern" do
-      assert :binary.split("abc", "b", scope: {0, 1}) == ["abc"]
-    end
-
-    test "returns original binary when scope length is zero" do
-      assert :binary.split("abc", "b", scope: {1, 0}) == ["abc"]
-    end
-
-    test "works with scope and multiple patterns" do
-      assert :binary.split("hello-world", ["-", "o"], [{:scope, {0, 11}}, :global]) == [
-               "hell",
-               "",
-               "w",
-               "rld"
-             ]
-    end
-
-    test "works with scope and :trim option" do
-      assert :binary.split("a-b--", "-", [{:scope, {0, 5}}, :global, :trim]) == ["a", "b"]
-    end
-
-    test "collects trailing bytes after loop exits naturally with global split" do
-      assert :binary.split("a-b-c-", "-", [{:scope, {0, 5}}, :global]) == ["a", "b", "c-"]
-    end
-
-    test "collects trailing bytes when scope is exhausted in global split" do
-      assert :binary.split("abcdef", "d", [{:scope, {1, 3}}, :global]) == ["abc", "ef"]
-    end
-
-    test "accepts negative scope length (reverse part)" do
-      subject = "hello world"
-      opts = [scope: {byte_size(subject), -6}]
-
-      assert :binary.split(subject, " ", opts) == ["hello", "world"]
-    end
-
-    # Overlapping patterns
-
-    test "with overlapping patterns, matches first found" do
-      assert :binary.split("abcabc", ["ab", "abc"], [:global]) == ["", "", ""]
-    end
-
-    # Error cases
-
-    test "raises ArgumentError when subject is not bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a binary"),
-                   fn -> :binary.split(:test, " ", []) end
-    end
-
-    test "raises ArgumentError when subject is non-binary bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
-                   fn -> :binary.split(<<1::1, 0::1, 1::1>>, " ", []) end
-    end
-
-    test "raises ArgumentError when pattern is not bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", 123, []) end
-    end
-
-    test "raises ArgumentError when pattern is non-binary bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", <<1::1, 0::1, 1::1>>, []) end
-    end
-
-    test "raises ArgumentError when pattern is empty string" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", "", []) end
-    end
-
-    test "raises ArgumentError when pattern is empty list" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", [], []) end
-    end
-
-    test "raises ArgumentError when pattern is list with non-bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", ["a", :b], []) end
-    end
-
-    test "raises ArgumentError when pattern is list with non-binary bitstring" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", ["a", <<1::1, 0::1, 1::1>>], []) end
-    end
-
-    test "raises ArgumentError when pattern is list with empty string" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "not a valid pattern"),
-                   fn -> :binary.split("test", ["a", ""], []) end
-    end
-
-    test "raises ArgumentError when options is not a list" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   fn -> :binary.split("hello world", " ", :invalid) end
-    end
-
-    test "raises ArgumentError for improper list options" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   fn -> :binary.split("abc", "b", [:test | :tail]) end
-    end
-
-    test "raises ArgumentError for negative scope start" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   fn -> :binary.split("abc", "b", scope: {-1, 2}) end
-    end
-
-    test "raises ArgumentError for scope start beyond subject length" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   fn -> :binary.split("abc", "b", scope: {10, 5}) end
-    end
-
-    test "raises ArgumentError for scope extending beyond subject length" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid options"),
-                   fn -> :binary.split("abc", "b", scope: {1, 3}) end
-    end
-  end
-
   describe "replace/3" do
     test "delegates to replace/4 with empty options list" do
       assert :binary.replace("hello world", "world", "universe") == "hello universe"
@@ -1234,6 +988,252 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "works with single character subject" do
       assert :binary.replace("a", "a", "b", []) == "b"
+    end
+  end
+
+  describe "split/2" do
+    # Verifies default options (no :global) - splits only on first match
+    test "delegates to split/3 with empty options" do
+      assert :binary.split("hello world world", " ") == ["hello", "world world"]
+    end
+  end
+
+  describe "split/3" do
+    # With :global option
+
+    test "splits on all occurrences with :global" do
+      assert :binary.split("hello world world", " ", [:global]) == [
+               "hello",
+               "world",
+               "world"
+             ]
+    end
+
+    test "splits with multiple patterns globally" do
+      assert :binary.split("hello-world_test", ["-", "_"], [:global]) == [
+               "hello",
+               "world",
+               "test"
+             ]
+    end
+
+    test "handles consecutive patterns with :global" do
+      assert :binary.split("a--b--c", "-", [:global]) == ["a", "", "b", "", "c"]
+    end
+
+    test "handles pattern at start, middle, and end" do
+      assert :binary.split("-a-", "-", [:global]) == ["", "a", ""]
+    end
+
+    test "handles invalid UTF-8 sequences in result with :global" do
+      # Create binary with invalid UTF-8: <<65, 255, 66>> where 255 is invalid standalone
+      subject = <<65, 32, 255, 32, 66>>
+      result = :binary.split(subject, " ", [:global])
+
+      assert length(result) == 3
+      assert Enum.at(result, 0) == <<65>>
+      assert Enum.at(result, 1) == <<255>>
+      assert Enum.at(result, 2) == <<66>>
+    end
+
+    # Without :global option
+
+    test "splits only on first occurrence without :global" do
+      assert :binary.split("hello-world-test", "-", []) == ["hello", "world-test"]
+    end
+
+    test "splits with multi-byte pattern" do
+      assert :binary.split("aaabbbccc", "bb", []) == ["aaa", "bccc"]
+    end
+
+    test "returns list with original binary when pattern not found" do
+      assert :binary.split("test", "x", []) == ["test"]
+    end
+
+    test "splits with multiple patterns" do
+      assert :binary.split("hello-world_test", ["-", "_"], []) == ["hello", "world_test"]
+    end
+
+    test "handles empty subject" do
+      assert :binary.split("", "x", []) == [""]
+    end
+
+    # Compiled pattern behavior
+
+    test "splits using compiled Boyer-Moore pattern" do
+      compiled_pattern = :binary.compile_pattern("world")
+
+      assert :binary.split("hello world", compiled_pattern, []) == [
+               "hello ",
+               ""
+             ]
+    end
+
+    test "splits using compiled Aho-Corasick pattern" do
+      compiled_pattern = :binary.compile_pattern(["-", "o"])
+
+      assert :binary.split("hello-world", compiled_pattern, [:global]) == [
+               "hell",
+               "",
+               "w",
+               "rld"
+             ]
+    end
+
+    test "raises ArgumentError when compiled pattern data is missing" do
+      invalid_pattern = {:bm, make_ref()}
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("hello", invalid_pattern, []) end
+    end
+
+    # Options: :trim and :trim_all
+
+    test "applies :trim to remove trailing empties only" do
+      assert :binary.split("-a-", "-", [:global, :trim]) == ["", "a"]
+    end
+
+    test "applies :trim_all to remove all empty parts" do
+      assert :binary.split("-a-", "-", [:global, :trim_all]) == ["a"]
+    end
+
+    test "returns empty list when empty subject with :trim" do
+      assert :binary.split("", " ", [:global, :trim]) == []
+    end
+
+    # Options: scope
+
+    test "respects scope option when a match exists in the range" do
+      assert :binary.split("abc", "b", scope: {1, 1}) == ["a", "c"]
+    end
+
+    test "returns original binary when scope excludes the pattern" do
+      assert :binary.split("abc", "b", scope: {0, 1}) == ["abc"]
+    end
+
+    test "returns original binary when scope length is zero" do
+      assert :binary.split("abc", "b", scope: {1, 0}) == ["abc"]
+    end
+
+    test "works with scope and multiple patterns" do
+      assert :binary.split("hello-world", ["-", "o"], [{:scope, {0, 11}}, :global]) == [
+               "hell",
+               "",
+               "w",
+               "rld"
+             ]
+    end
+
+    test "works with scope and :trim option" do
+      assert :binary.split("a-b--", "-", [{:scope, {0, 5}}, :global, :trim]) == ["a", "b"]
+    end
+
+    test "collects trailing bytes after loop exits naturally with global split" do
+      assert :binary.split("a-b-c-", "-", [{:scope, {0, 5}}, :global]) == ["a", "b", "c-"]
+    end
+
+    test "collects trailing bytes when scope is exhausted in global split" do
+      assert :binary.split("abcdef", "d", [{:scope, {1, 3}}, :global]) == ["abc", "ef"]
+    end
+
+    test "accepts negative scope length (reverse part)" do
+      subject = "hello world"
+      opts = [scope: {byte_size(subject), -6}]
+
+      assert :binary.split(subject, " ", opts) == ["hello", "world"]
+    end
+
+    # Overlapping patterns
+
+    test "with overlapping patterns, matches first found" do
+      assert :binary.split("abcabc", ["ab", "abc"], [:global]) == ["", "", ""]
+    end
+
+    # Error cases
+
+    test "raises ArgumentError when subject is not bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   fn -> :binary.split(:test, " ", []) end
+    end
+
+    test "raises ArgumentError when subject is non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
+                   fn -> :binary.split(<<1::1, 0::1, 1::1>>, " ", []) end
+    end
+
+    test "raises ArgumentError when pattern is not bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", 123, []) end
+    end
+
+    test "raises ArgumentError when pattern is non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", <<1::1, 0::1, 1::1>>, []) end
+    end
+
+    test "raises ArgumentError when pattern is empty string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", "", []) end
+    end
+
+    test "raises ArgumentError when pattern is empty list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", [], []) end
+    end
+
+    test "raises ArgumentError when pattern is list with non-bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", ["a", :b], []) end
+    end
+
+    test "raises ArgumentError when pattern is list with non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", ["a", <<1::1, 0::1, 1::1>>], []) end
+    end
+
+    test "raises ArgumentError when pattern is list with empty string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   fn -> :binary.split("test", ["a", ""], []) end
+    end
+
+    test "raises ArgumentError when options is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   fn -> :binary.split("hello world", " ", :invalid) end
+    end
+
+    test "raises ArgumentError for improper list options" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   fn -> :binary.split("abc", "b", [:test | :tail]) end
+    end
+
+    test "raises ArgumentError for negative scope start" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   fn -> :binary.split("abc", "b", scope: {-1, 2}) end
+    end
+
+    test "raises ArgumentError for scope start beyond subject length" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   fn -> :binary.split("abc", "b", scope: {10, 5}) end
+    end
+
+    test "raises ArgumentError for scope extending beyond subject length" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid options"),
+                   fn -> :binary.split("abc", "b", scope: {1, 3}) end
     end
   end
 end
