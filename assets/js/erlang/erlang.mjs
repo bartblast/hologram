@@ -667,6 +667,81 @@ const Erlang = {
   // End ceil/1
   // Deps: []
 
+  // Start convert_time_unit/3
+  "convert_time_unit/3": (time, fromUnit, toUnit) => {
+    // Helpers
+
+    const resolveTimeUnit = (unit, argumentIndex) => {
+      // For the JavaScript port we deliberately standardize :native and :perf_counter
+      // to nanosecond resolution (1_000_000_000) regardless of platform. Real Erlang
+      // is platform-dependent, so this is an intentional design/compatibility decision
+      // to keep behavior predictable across environments.
+      const NATIVE_TIME_UNIT = 1_000_000_000n;
+      const PERF_COUNTER_TIME_UNIT = 1_000_000_000n;
+
+      const isPositiveIntegerUnit = Type.isInteger(unit) && unit.value > 0n;
+
+      if (isPositiveIntegerUnit) return unit.value;
+
+      if (!Type.isAtom(unit)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
+        );
+      }
+
+      switch (unit.value) {
+        case "native":
+          return NATIVE_TIME_UNIT;
+
+        case "perf_counter":
+          return PERF_COUNTER_TIME_UNIT;
+
+        case "nanosecond":
+        case "nano_seconds":
+          return 1_000_000_000n;
+
+        case "microsecond":
+        case "micro_seconds":
+          return 1_000_000n;
+
+        case "millisecond":
+        case "milli_seconds":
+          return 1_000n;
+
+        case "second":
+        case "seconds":
+          return 1n;
+
+        default:
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              argumentIndex,
+              "invalid time unit",
+            ),
+          );
+      }
+    };
+
+    // Main logic
+
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    const fromUnitValue = resolveTimeUnit(fromUnit, 2);
+    const toUnitValue = resolveTimeUnit(toUnit, 3);
+    const numerator = toUnitValue * time.value;
+    const adjustedNumerator =
+      time.value < 0n ? numerator - (fromUnitValue - 1n) : numerator;
+    const result = adjustedNumerator / fromUnitValue;
+
+    return Type.integer(result);
+  },
+  // End convert_time_unit/3
+  // Deps: []
+
   // Start div/2
   "div/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
