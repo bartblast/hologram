@@ -786,6 +786,7 @@ describe("Erlang_Filename", () => {
         Type.integer(111),
         Type.integer(111),
       ]); // "foo"
+
       const result = dirname(filename);
       const expected = Type.list([Type.integer(46)]); // "."
 
@@ -799,6 +800,7 @@ describe("Erlang_Filename", () => {
         Type.integer(97),
         Type.integer(114),
       ]); // "foo/bar"
+
       const result = dirname(filename);
       const expected = Type.charlist("foo");
 
@@ -834,6 +836,7 @@ describe("Erlang_Filename", () => {
         Type.integer(47),
         Type.integer(254),
       ]);
+
       const result = dirname(filename);
       const expected = Type.list([Type.integer(255)]);
 

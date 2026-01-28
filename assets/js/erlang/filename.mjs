@@ -415,6 +415,7 @@ const Erlang_Filename = {
       // Comparing trimmed length to original length tells us if trailing slashes existed
       const match = text.match(/^(.*?)\/*$/);
       const trimmedText = match[1];
+
       // If trimmed text is shorter, there were trailing slashes that were stripped
       const hasTrailingSlashes = trimmedText.length < text.length;
 
@@ -478,7 +479,7 @@ const Erlang_Filename = {
     return isBinaryInput ? resultBinary : Bitstring.toCodepoints(resultBinary);
   },
   // End dirname/1
-  // Deps: [:erlang.iolist_to_binary/1, :filename.flatten/1, :filename._dirname_raw/1]
+  // Deps: [:erlang.iolist_to_binary/1, :filename._dirname_raw/1, :filename.flatten/1]
 
   // Start extension/1
   "extension/1": (filename) => {
