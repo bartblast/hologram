@@ -9,227 +9,516 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_UnicodeUtil = {
-  // Start cp/1
-  "cp/1": (arg) => {
-    // Constants
-    const MAX_UNICODE_CODEPOINT = 0x10ffff;
-    const SURROGATE_MIN = 0xd800; // 55296
-    const SURROGATE_MAX = 0xdfff; // 57343
-    const BMP_MAX = 0xffff;
+  // Start _cpl/2
+  "_cpl/2": (list, restList) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
 
-    // Helper functions
+    // [C] when is_integer(C)
+    if (isCP(list)) {
+      return Type.improperList([
+        list,
+        Erlang_UnicodeUtil["_cpl_1_cont/1"](restList),
+      ]);
+    }
 
-    const errorTuple = (binary) => Type.tuple([Type.atom("error"), binary]);
+    if (Type.isList(list) && list.data.length > 0) {
+      const firstElement = list.data[0];
 
-    const isSurrogatePair = (codepoint) =>
-      codepoint >= SURROGATE_MIN && codepoint <= SURROGATE_MAX;
-
-    const extractCodepointFromText = (text) => {
-      const firstCodePoint = text.codePointAt(0);
-      const charLength = firstCodePoint > BMP_MAX ? 2 : 1;
-      const restOfString = text.slice(charLength);
-
-      if (isSurrogatePair(firstCodePoint)) {
-        return {error: true};
+      // [C|T] when is_integer(C)
+      if (isCP(firstElement)) {
+        const tail = Type.list(list.data.slice(1));
+        const tailResult = Erlang_UnicodeUtil["_cpl/2"](tail, restList);
+        // Recursively process tail, then merge result with current first element
+        if (Type.isList(tailResult) && tailResult.isProper) {
+          // Tail returned a proper list; prepend firstElement to it
+          return Type.list([firstElement, ...tailResult.data]);
+        }
+        // Tail returned an improper list or non-list; create improper list with firstElement and tail result
+        return Type.improperList([firstElement, tailResult]);
       }
 
-      return {firstCodePoint, restOfString};
-    };
+      // [L]
+      if (list.data.length === 1) {
+        return Erlang_UnicodeUtil["_cpl_cont/2"](firstElement, restList);
+      }
 
-    const validateByteAligned = (bitstring, context) => {
-      if (bitstring.leftoverBitCount !== 0) {
-        Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            context,
-          ]),
+      // [L|T]
+      const newRestList = Type.list([
+        Type.list(list.data.slice(1)),
+        ...restList.data,
+      ]);
+      return Erlang_UnicodeUtil["_cpl_cont/2"](firstElement, newRestList);
+    }
+
+    // []
+    if (Type.isList(list) && list.data.length === 0) {
+      // When we've exhausted the nested list, check if there's more to process
+      // If restList starts with a binary, don't extract from it - just return restList
+      // Otherwise, continue processing (e.g., for nested empty lists)
+      if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
+        // If next element in restList is binary, return it as-is (don't extract from it)
+        return restList;
+      }
+      // Continue processing restList for non-binary elements or nested structures
+      return Erlang_UnicodeUtil["cp/1"](restList);
+    }
+
+    // Binary handling: <<C/utf8, T/binary>>
+    if (Type.isBinary(list)) {
+      const text = Bitstring.toText(list);
+
+      // Invalid UTF-8
+      if (text === false) {
+        const errorPayload = Erlang_UnicodeUtil["_merge_lcr/2"](list, restList);
+        return Type.tuple([Type.atom("error"), errorPayload]);
+      }
+
+      if (text.length === 0) {
+        return Erlang_UnicodeUtil["cp/1"](restList);
+      }
+
+      const codepoint = text.codePointAt(0);
+      const charLength = codepoint > 0xffff ? 2 : 1;
+      const restText = text.slice(charLength);
+      const restBinary = Bitstring.fromText(restText);
+
+      // If restList is improper with single element (the tail), create improper result
+      if (!restList.isProper && restList.data.length === 1) {
+        return Type.improperList([
+          Type.integer(codepoint),
+          restBinary,
+          restList.data[0],
+        ]);
+      }
+
+      return Type.list([Type.integer(codepoint), restBinary, ...restList.data]);
+    }
+
+    // Non-byte-aligned bitstring
+    if (Type.isBitstring(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
+          list,
+          restList,
+        ]),
+      );
+    }
+
+    // Should not reach here
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
+        list,
+        restList,
+      ]),
+    );
+  },
+  // End _cpl/2
+  // Deps: [:unicode_util._merge_lcr/2, :unicode_util._is_cp/1, :unicode_util._cpl_1_cont/1, :unicode_util.cp/1, :unicode_util._cpl/2, :unicode_util._cpl_cont/2]
+
+  // Start _cpl_1_cont/1
+  "_cpl_1_cont/1": (restList) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+
+    if (!Type.isList(restList)) {
+      return restList;
+    }
+
+    if (restList.data.length === 0) {
+      return restList;
+    }
+
+    const firstElement = restList.data[0];
+    const tail = Type.list(restList.data.slice(1));
+
+    // [C|T] when is_integer(C)
+    if (isCP(firstElement)) {
+      return Type.improperList([
+        firstElement,
+        Erlang_UnicodeUtil["_cpl_1_cont2/1"](tail),
+      ]);
+    }
+
+    // [L|T]
+    return Erlang_UnicodeUtil["_cpl_cont/2"](firstElement, tail);
+  },
+  // End _cpl_1_cont/1
+  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._is_cp/1, :unicode_util._cpl_cont/2]
+
+  // Start _cpl_1_cont2/1
+  "_cpl_1_cont2/1": (restList) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+
+    if (!Type.isList(restList)) {
+      return restList;
+    }
+
+    if (restList.data.length === 0) {
+      return restList;
+    }
+
+    const firstElement = restList.data[0];
+    const tail = Type.list(restList.data.slice(1));
+
+    // [C|T] when is_integer(C)
+    if (isCP(firstElement)) {
+      return Type.improperList([
+        firstElement,
+        Erlang_UnicodeUtil["_cpl_1_cont3/1"](tail),
+      ]);
+    }
+
+    // [L]
+    if (restList.data.length === 1) {
+      return Erlang_UnicodeUtil["_cpl_1_cont2/1"](
+        Type.list([firstElement, ...tail.data]),
+      );
+    }
+
+    // [L|T]
+    return Erlang_UnicodeUtil["_cpl_cont2/2"](firstElement, tail);
+  },
+  // End _cpl_1_cont2/1
+  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._cpl_1_cont3/1, :unicode_util._cpl_cont2/2, :unicode_util._is_cp/1]
+
+  // Start _cpl_1_cont3/1
+  "_cpl_1_cont3/1": (restList) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+
+    if (!Type.isList(restList)) {
+      return restList;
+    }
+
+    if (restList.data.length === 0) {
+      return restList;
+    }
+
+    const firstElement = restList.data[0];
+
+    // [C|_]=T when is_integer(C)
+    if (isCP(firstElement)) {
+      return restList;
+    }
+
+    // [L]
+    if (restList.data.length === 1) {
+      return Erlang_UnicodeUtil["_cpl_1_cont3/1"](firstElement);
+    }
+
+    // [L|T]
+    const tail = Type.list(restList.data.slice(1));
+    return Erlang_UnicodeUtil["_cpl_cont3/2"](firstElement, tail);
+  },
+  // End _cpl_1_cont3/1
+  // Deps: [:unicode_util._cpl_1_cont3/1, :unicode_util._cpl_cont3/2, :unicode_util._is_cp/1]
+
+  // Start _cpl_cont/2
+  "_cpl_cont/2": (list, restList) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+
+    if (Type.isList(list) && list.data.length > 0) {
+      const firstElement = list.data[0];
+
+      // [C|T] when is_integer(C) and valid codepoint
+      if (isCP(firstElement)) {
+        const tail = Type.list(list.data.slice(1));
+        const tailResult = Erlang_UnicodeUtil["_cpl_cont/2"](tail, restList);
+        // Recursively process tail, then merge result with current first element
+        if (Type.isList(tailResult) && tailResult.isProper) {
+          // Tail returned a proper list; prepend firstElement to it
+          return Type.list([firstElement, ...tailResult.data]);
+        }
+        // Tail returned an improper list or non-list; create improper list with firstElement and tail result
+        return Type.improperList([firstElement, tailResult]);
+      }
+
+      // [L]
+      if (list.data.length === 1) {
+        return Erlang_UnicodeUtil["_cpl/2"](firstElement, restList);
+      }
+
+      // [L|T]
+      const newRestList = Type.list([
+        Type.list(list.data.slice(1)),
+        ...restList.data,
+      ]);
+      return Erlang_UnicodeUtil["_cpl/2"](firstElement, newRestList);
+    }
+
+    // []
+    if (Type.isList(list) && list.data.length === 0) {
+      return Erlang_UnicodeUtil["cp/1"](restList);
+    }
+
+    // Binary handling: <<C/utf8, T/binary>>
+    if (Type.isBinary(list)) {
+      const text = Bitstring.toText(list);
+
+      // Invalid UTF-8: return error tuple
+      if (text === false) {
+        const errorPayload = Erlang_UnicodeUtil["_merge_lcr/2"](list, restList);
+        return Type.tuple([Type.atom("error"), errorPayload]);
+      }
+
+      if (text.length === 0) {
+        return Erlang_UnicodeUtil["cp/1"](restList);
+      }
+
+      const codepoint = text.codePointAt(0);
+      // Calculate character length in UTF-16 code units (surrogate pairs are 2 units)
+      const charLength = codepoint > 0xffff ? 2 : 1;
+      const restText = text.slice(charLength);
+      const restBinary = Bitstring.fromText(restText);
+
+      // If restList is improper (has a non-list tail), propagate improper structure
+      if (!restList.isProper && restList.data.length === 1) {
+        // Append extracted codepoint and remaining binary, then the original tail
+        return Type.improperList([
+          Type.integer(codepoint),
+          restBinary,
+          restList.data[0],
+        ]);
+      }
+
+      // Proper list: prepend extracted codepoint and remaining binary to restList elements
+      return Type.list([Type.integer(codepoint), restBinary, ...restList.data]);
+    }
+
+    // Non-byte-aligned bitstring
+    if (Type.isBitstring(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl_cont/2", [
+          list,
+          restList,
+        ]),
+      );
+    }
+
+    // Should not reach here
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl_cont/2", [
+        list,
+        restList,
+      ]),
+    );
+  },
+  // End _cpl_cont/2
+  // Deps: [:unicode_util._merge_lcr/2, :unicode_util._is_cp/1, :unicode_util.cp/1, :unicode_util._cpl/2, :unicode_util._cpl_cont/2]
+
+  // Start _cpl_cont2/2
+  "_cpl_cont2/2": (list, restList) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+
+    if (Type.isList(list) && list.data.length > 0) {
+      const firstElement = list.data[0];
+
+      // [C|T] when is_integer(C)
+      if (isCP(firstElement)) {
+        const tail = Type.list(list.data.slice(1));
+        return Type.improperList([
+          firstElement,
+          Erlang_UnicodeUtil["_cpl_cont2/2"](tail, restList),
+        ]);
+      }
+
+      // [L]
+      if (list.data.length === 1) {
+        return Erlang_UnicodeUtil["_cpl_1_cont2/1"](
+          Type.list([firstElement, ...restList.data]),
         );
       }
-    };
 
-    const isErrorResult = (result) =>
-      result && typeof result === "object" && "isError" in result;
+      // [L|T]
+      const newRestList = Type.list([
+        Type.list(list.data.slice(1)),
+        ...restList.data,
+      ]);
+      return Erlang_UnicodeUtil["_cpl_cont2/2"](firstElement, newRestList);
+    }
 
-    const isCodepointResult = (result) =>
-      result && typeof result === "object" && "codepoint" in result;
+    return restList;
+  },
+  // End _cpl_cont2/2
+  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._cpl_cont2/2, :unicode_util._is_cp/1]
 
-    const isNestedResult = (result) =>
-      result && typeof result === "object" && "isNestedResult" in result;
+  // Start _cpl_cont3/2
+  "_cpl_cont3/2": (list, restList) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
 
-    // Handle binary input
-    if (Type.isBinary(arg)) {
-      const text = Bitstring.toText(arg);
+    if (Type.isList(list) && list.data.length > 0) {
+      const firstElement = list.data[0];
 
-      // Check for invalid UTF-8
-      if (text === false) {
-        return errorTuple(arg);
+      // [C|T] when is_integer(C)
+      if (isCP(firstElement)) {
+        const tail = Type.list(list.data.slice(1));
+        return Type.improperList([
+          firstElement,
+          Erlang_UnicodeUtil["_cpl_cont3/2"](tail, restList),
+        ]);
       }
 
-      // Empty binary returns empty list
+      // [L]
+      if (list.data.length === 1) {
+        return Erlang_UnicodeUtil["_cpl_1_cont3/1"](
+          Type.list([firstElement, ...restList.data]),
+        );
+      }
+
+      // [L|T]
+      const newRestList = Type.list([
+        Type.list(list.data.slice(1)),
+        ...restList.data,
+      ]);
+      return Erlang_UnicodeUtil["_cpl_cont3/2"](firstElement, newRestList);
+    }
+
+    return restList;
+  },
+  // End _cpl_cont3/2
+  // Deps: [:unicode_util._cpl_1_cont3/1, :unicode_util._cpl_cont3/2, :unicode_util._is_cp/1]
+
+  // Start _is_cp/1
+  "_is_cp/1": (value) => {
+    if (!Type.isInteger(value)) {
+      return false;
+    }
+    const codepoint = Number(value.value);
+    return codepoint >= 0 && codepoint <= 0x10ffff;
+  },
+  // End _is_cp/1
+  // Deps: []
+
+  // Start _merge_lcr/2
+  "_merge_lcr/2": (binary, restList) => {
+    // Combine an invalid binary with a rest list for error reporting
+    // If rest list is empty or not a list, return just the binary
+    if (!Type.isList(restList) || restList.data.length === 0) {
+      return binary;
+    }
+
+    // Prepend binary to rest list elements
+    return Type.list([binary, ...restList.data]);
+  },
+  // End _merge_lcr/2
+  // Deps: []
+
+  // Start cp/1
+  "cp/1": (string) => {
+    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+
+    // [C|_] when is_integer(C)
+    if (Type.isList(string) && string.data.length > 0 && isCP(string.data[0])) {
+      return string;
+    }
+
+    // [List]
+    if (Type.isList(string) && string.data.length === 1) {
+      return Erlang_UnicodeUtil["cp/1"](string.data[0]);
+    }
+
+    // [List|R] - proper list with multiple elements
+    if (Type.isList(string) && string.isProper && string.data.length > 1) {
+      const restList = Type.list(string.data.slice(1));
+      return Erlang_UnicodeUtil["_cpl/2"](string.data[0], restList);
+    }
+
+    // [List|Tail] - improper list (tail is not a list)
+    if (Type.isList(string) && !string.isProper && string.data.length === 2) {
+      const head = string.data[0];
+      const tail = string.data[1];
+
+      // If head is empty list, continue with tail
+      if (Type.isList(head) && head.data.length === 0) {
+        return Erlang_UnicodeUtil["cp/1"](tail);
+      }
+
+      // If head is empty binary, continue with tail
+      if (Type.isBinary(head) && Bitstring.isEmpty(head)) {
+        return Erlang_UnicodeUtil["cp/1"](tail);
+      }
+
+      // If tail is empty list, treat as proper list [head]
+      if (Type.isList(tail) && tail.data.length === 0) {
+        return Erlang_UnicodeUtil["cp/1"](head);
+      }
+
+      // For other cases, process head element and combine result with tail
+      // Case: head is a binary - extract first codepoint from it
+      if (Type.isBinary(head)) {
+        const text = Bitstring.toText(head);
+        if (text === false) {
+          return Type.tuple([Type.atom("error"), head]);
+        }
+        if (text.length === 0) {
+          return Erlang_UnicodeUtil["cp/1"](tail);
+        }
+        const codepoint = text.codePointAt(0);
+        const charLength = codepoint > 0xffff ? 2 : 1;
+        const restText = text.slice(charLength);
+        const restBinary = Bitstring.fromText(restText);
+
+        // Create improper list: [codepoint | [restBinary | tail]]
+        return Type.improperList([Type.integer(codepoint), restBinary, tail]);
+      }
+
+      // Case: head is a list - recursively process it, then append tail
+      if (Type.isList(head)) {
+        const headResult = Erlang_UnicodeUtil["cp/1"](head);
+        // If head processing yielded empty list, continue with tail
+        if (Type.isList(headResult) && headResult.data.length === 0) {
+          return Erlang_UnicodeUtil["cp/1"](tail);
+        }
+        // If head processing yielded a list (proper or improper), append tail
+        if (Type.isList(headResult)) {
+          return Type.improperList([...headResult.data, tail]);
+        }
+      }
+
+      // Fallback - shouldn't reach here
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
+      );
+    }
+
+    // []
+    if (Type.isList(string) && string.data.length === 0) {
+      return Type.list();
+    }
+
+    // <<C/utf8, R/binary>>
+    if (Type.isBinary(string)) {
+      const text = Bitstring.toText(string);
+
+      // Invalid UTF-8
+      if (text === false) {
+        return Type.tuple([Type.atom("error"), string]);
+      }
+
       if (text.length === 0) {
         return Type.list();
       }
 
-      // Extract first codepoint
-      const extraction = extractCodepointFromText(text);
-      if (extraction.error) {
-        return errorTuple(arg);
-      }
+      const codepoint = text.codePointAt(0);
+      // Calculate character length in UTF-16 code units (surrogate pairs are 2 units)
+      const charLength = codepoint > 0xffff ? 2 : 1;
+      const restText = text.slice(charLength);
+      const restBinary = Bitstring.fromText(restText);
 
-      // Return [codepoint | rest_binary]
-      return Type.improperList([
-        Type.integer(extraction.firstCodePoint),
-        Type.bitstring(extraction.restOfString),
-      ]);
+      // Return improper list: [codepoint | restBinary] - codepoint followed by remaining binary
+      return Type.improperList([Type.integer(codepoint), restBinary]);
     }
 
-    // Handle list input
-    if (Type.isList(arg)) {
-      // Empty list returns empty list
-      if (arg.data.length === 0) {
-        return Type.list();
-      }
-
-      const processListElement = (element) => {
-        // Handle integer element
-        if (Type.isInteger(element)) {
-          const codepoint = Number(element.value);
-
-          // Validate codepoint range
-          if (codepoint < 0 || codepoint > MAX_UNICODE_CODEPOINT) {
-            Interpreter.raiseFunctionClauseError(
-              Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-                element,
-              ]),
-            );
-          }
-
-          return element;
-        }
-
-        // Handle bitstring element
-        if (Type.isBitstring(element)) {
-          validateByteAligned(element, element);
-
-          const text = Bitstring.toText(element);
-
-          // Check for invalid UTF-8
-          if (text === false) {
-            return {isError: true, binary: element};
-          }
-
-          // Empty binary, continue processing
-          if (text.length === 0) {
-            return null; // Signal to skip this element
-          }
-
-          // Extract first codepoint from binary
-          const extraction = extractCodepointFromText(text);
-          if (extraction.error) {
-            return {isError: true, binary: element};
-          }
-
-          // Return codepoint and rest (always include rest, even if empty)
-          return {
-            codepoint: Type.integer(extraction.firstCodePoint),
-            rest: Type.bitstring(extraction.restOfString),
-          };
-        }
-
-        // Handle nested list element
-        if (Type.isList(element)) {
-          // Recursively process nested list
-          const result = Erlang_UnicodeUtil["cp/1"](element);
-
-          // If nested list is empty, return null to skip
-          if (result.data.length === 0) {
-            return null;
-          }
-
-          // If result is improper list, mark it so the tail can be handled specially
-          return {
-            isNestedResult: true,
-            elements: result.data,
-            isImproper: Type.isImproperList(result),
-          };
-        }
-
-        // Invalid element type
-        Interpreter.raiseFunctionClauseError(
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            element,
-          ]),
-        );
-      };
-
-      // Process first element
-      const firstElement = arg.data[0];
-      const processedFirst = processListElement(firstElement);
-
-      // If error tuple, return it
-      if (isErrorResult(processedFirst)) {
-        return errorTuple(processedFirst.binary);
-      }
-
-      // If first element is null (empty), try next elements
-      if (processedFirst === null) {
-        const restList = Type.list(arg.data.slice(1));
-        return Erlang_UnicodeUtil["cp/1"](restList);
-      }
-
-      // Handle codepoint result from binary
-      if (isCodepointResult(processedFirst)) {
-        if (arg.data.length === 1) {
-          return Type.improperList([
-            processedFirst.codepoint,
-            processedFirst.rest,
-          ]);
-        }
-
-        return Type.list([
-          processedFirst.codepoint,
-          processedFirst.rest,
-          ...arg.data.slice(1),
-        ]);
-      }
-
-      // Handle nested list result
-      if (isNestedResult(processedFirst)) {
-        const result = [];
-
-        if (processedFirst.isImproper) {
-          const elements = processedFirst.elements;
-          const tail = elements[elements.length - 1];
-
-          result.push(...elements.slice(0, -1));
-
-          // Only add tail if it's not an empty binary
-          if (!Type.isBitstring(tail) || tail.text.length > 0) {
-            result.push(tail);
-          }
-        } else {
-          result.push(...processedFirst.elements);
-        }
-
-        result.push(...arg.data.slice(1));
-        return Type.list(result);
-      }
-
-      // Handle regular integer
-      return Type.list([processedFirst, ...arg.data.slice(1)]);
+    // <<>>
+    if (Type.isBitstring(string) && Bitstring.isEmpty(string)) {
+      return Type.list();
     }
 
-    // Handle non-byte-aligned bitstring
-    if (Type.isBitstring(arg)) {
-      validateByteAligned(arg, arg);
-    }
-
-    // Invalid input type
+    // All other cases: invalid input type (including non-byte-aligned bitstrings)
     Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [arg]),
+      Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
     );
   },
   // End cp/1
-  // Deps: []
+  // Deps: [:unicode_util._is_cp/1, :unicode_util._cpl/2]
 };
 
 export default Erlang_UnicodeUtil;
