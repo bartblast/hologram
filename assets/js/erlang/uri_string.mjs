@@ -13,7 +13,7 @@ const Erlang_Uri_String = {
   "parse/1": (uriString) => {
     // Helpers
 
-    // Collects parsed pieces into a map
+    // Collects parsed pieces into a map.
     const buildResultMap = (uri) => {
       const pairs = [];
 
@@ -72,7 +72,7 @@ const Erlang_Uri_String = {
     };
 
     // TODO: use generic helper
-    // Validates and decodes an Erlang charlist into a JavaScript string; raises on invalid input (matches OTP failures).
+    // Validates and decodes an Erlang charlist into a JavaScript string; raises on invalid input.
     const decodeListToString = (list) => {
       let text = "";
 
@@ -106,7 +106,7 @@ const Erlang_Uri_String = {
       return text;
     };
 
-    // Ensures a binary is valid UTF-8; otherwise raises FunctionClauseError (OTP raises in parse_scheme_start/2).
+    // Ensures a binary is valid UTF-8; otherwise raises FunctionClauseError.
     const ensureUtf8Binary = (binary) => {
       Bitstring.maybeSetTextFromBytes(binary);
 
@@ -123,6 +123,14 @@ const Erlang_Uri_String = {
     };
 
     const isError = (value) => Type.isTuple(value);
+
+    const invalidUriError = (payloadChar = 58) =>
+      Type.tuple([
+        Type.atom("error"),
+        Type.atom("invalid_uri"),
+        // OTP uses charlist(":") as the invalid_uri payload; ?: = 58
+        Type.list([Type.integer(payloadChar)]),
+      ]);
 
     // Parses the authority portion (//userinfo@host:port), including IPv6 [host] and empty ports.
     const parseAuthority = (state) => {
@@ -144,10 +152,9 @@ const Erlang_Uri_String = {
         : withoutSlashes;
 
       // Check for multiple @ symbols in the authority portion (before /, ?, or #).
-      // Extract the authority portion (everything before /, ?, or #).
-
       const authorityEndIndex = afterUserinfo.search(/[/?#]/);
 
+      // Extract the authority portion (everything before /, ?, or #).
       const authorityPortion =
         authorityEndIndex === -1
           ? afterUserinfo
@@ -159,12 +166,7 @@ const Erlang_Uri_String = {
       // - Bare authority (e.g., //a@b@c/path)   -> '@'
       if (authorityPortion.includes("@")) {
         const payloadChar = state.uri.scheme ? 58 /* ':' */ : 64; /* '@' */
-
-        return Type.tuple([
-          Type.atom("error"),
-          Type.atom("invalid_uri"),
-          Type.list([Type.integer(payloadChar)]),
-        ]);
+        return invalidUriError(payloadChar);
       }
 
       const hasBracketHost = afterUserinfo.startsWith("[");
@@ -174,12 +176,7 @@ const Erlang_Uri_String = {
         : -1;
 
       if (hasBracketHost && closeBracketIndex === -1) {
-        // OTP uses charlist(":") as the invalid_uri payload.
-        return Type.tuple([
-          Type.atom("error"),
-          Type.atom("invalid_uri"),
-          Type.list([Type.integer(58)]),
-        ]);
+        return invalidUriError();
       }
 
       if (hasBracketHost) {
@@ -202,12 +199,7 @@ const Erlang_Uri_String = {
       const fragment = state.remaining.slice(1);
 
       if (fragment.includes("#")) {
-        // OTP uses charlist(":") as the invalid_uri payload.
-        return Type.tuple([
-          Type.atom("error"),
-          Type.atom("invalid_uri"),
-          Type.list([Type.integer(58)]),
-        ]);
+        return invalidUriError();
       }
 
       return {uri: {...state.uri, fragment}, remaining: ""};
@@ -245,12 +237,7 @@ const Erlang_Uri_String = {
         portRemainder.startsWith("#");
 
       if (portStr === "" && !isDelimiterStart) {
-        // OTP uses charlist(":") as the invalid_uri payload.
-        return Type.tuple([
-          Type.atom("error"),
-          Type.atom("invalid_uri"),
-          Type.list([Type.integer(58)]),
-        ]);
+        return invalidUriError();
       }
 
       if (portStr === "") {
@@ -263,12 +250,7 @@ const Erlang_Uri_String = {
       }
 
       if (!isDelimiterStart) {
-        // OTP uses charlist(":") as the invalid_uri payload.
-        return Type.tuple([
-          Type.atom("error"),
-          Type.atom("invalid_uri"),
-          Type.list([Type.integer(58)]),
-        ]);
+        return invalidUriError();
       }
 
       const port = parseInt(portStr, 10);
@@ -286,9 +268,6 @@ const Erlang_Uri_String = {
 
       const withoutQuestion = state.remaining.slice(1);
       const queryEndMatch = withoutQuestion.match(/^([^#]*)(.*)/s);
-
-      if (!queryEndMatch) return state;
-
       const query = queryEndMatch[1];
 
       return {uri: {...state.uri, query}, remaining: queryEndMatch[2]};

@@ -61,6 +61,27 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("full URI with all components (empty list)", () => {
+      const uri = Type.list([]);
+      const result = parse(uri);
+      const expected = Type.map([[Type.atom("path"), Type.list([])]]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("invalid URI with list input returns error tuple", () => {
+      const uri = Type.charlist("http://[::1");
+      const result = parse(uri);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.atom("invalid_uri"),
+        Type.charlist(":"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("URI without userinfo", () => {
       const uri = Type.bitstring(
         "foo://example.com:8042/over/there?name=ferret#nose",
@@ -549,8 +570,8 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
-      const arg = Type.bitstring([1, 0, 1]);
+    it("raises FunctionClauseError if the argument is not a bitstring or list", () => {
+      const arg = Type.integer(123);
 
       assertBoxedError(
         () => parse(arg),
@@ -559,8 +580,8 @@ describe("Erlang_Uri_String", () => {
       );
     });
 
-    it("raises FunctionClauseError if the argument is not a binary or list", () => {
-      const arg = Type.integer(123);
+    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
 
       assertBoxedError(
         () => parse(arg),
@@ -591,6 +612,22 @@ describe("Erlang_Uri_String", () => {
         Interpreter.buildArgumentErrorMsg(
           1,
           "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a list containing a negative integer", () => {
+      const arg = Type.list([Type.integer(-1)]);
+
+      assertBoxedError(
+        () => parse(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":uri_string.parse_scheme_start/2",
+          [
+            Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
+            Type.map(),
+          ],
         ),
       );
     });

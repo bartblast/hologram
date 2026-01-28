@@ -36,6 +36,17 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
+    test "full URI with all components (empty list)" do
+      assert :uri_string.parse([]) ==
+               %{
+                 path: []
+               }
+    end
+
+    test "invalid URI with list input returns error tuple" do
+      assert :uri_string.parse(~c"http://[::1") == {:error, :invalid_uri, ~c":"}
+    end
+
     test "URI without userinfo" do
       assert :uri_string.parse("foo://example.com:8042/over/there?name=ferret#nose") ==
                %{
@@ -340,6 +351,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                {:error, :invalid_uri, ~c":"}
     end
 
+    test "raises FunctionClauseError if the argument is not a bitstring or list" do
+      expected_msg = build_function_clause_error_msg(":uri_string.parse/1", [123])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse(123) end
+    end
+
     test "raises FunctionClauseError if the argument is a non-binary bitstring" do
       arg = <<1::1, 0::1, 1::1>>
       expected_msg = build_function_clause_error_msg(":uri_string.parse/1", [arg])
@@ -347,14 +366,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
       assert_error FunctionClauseError,
                    expected_msg,
                    fn -> :uri_string.parse(arg) end
-    end
-
-    test "raises FunctionClauseError if the argument is not a binary or list" do
-      expected_msg = build_function_clause_error_msg(":uri_string.parse/1", [123])
-
-      assert_error FunctionClauseError,
-                   expected_msg,
-                   fn -> :uri_string.parse(123) end
     end
 
     test "raises FunctionClauseError if the argument is a binary with invalid UTF-8" do
@@ -372,6 +383,18 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not valid character data (an iodata term)"),
                    fn -> :uri_string.parse([:a]) end
+    end
+
+    test "raises FunctionClauseError if the argument is a list containing a negative integer" do
+      expected_msg =
+        build_function_clause_error_msg(":uri_string.parse_scheme_start/2", [
+          {:error, "", [-1]},
+          %{}
+        ])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse([-1]) end
     end
 
     test "raises FunctionClauseError if the argument is a list containing an out-of-range integer" do
