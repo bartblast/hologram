@@ -713,13 +713,12 @@ describe("Erlang_UnicodeUtil", () => {
       });
 
       it("handles binary containing null character", () => {
-        // Note: Null character is represented as codepoint 0
-        const input = Type.list([Type.integer(0), Type.bitstring("ab")]);
+        const input = Bitstring.fromBytes([0, 97, 98]);
         const result = cp(input);
 
         assert.deepStrictEqual(
           result,
-          Type.list([Type.integer(0), Type.bitstring("ab")]),
+          Type.improperList([Type.integer(0), Type.bitstring("ab")]),
         );
       });
 
@@ -738,22 +737,23 @@ describe("Erlang_UnicodeUtil", () => {
       });
 
       it("handles UTF-8 two-byte character (¢)", () => {
-        // ¢ is codepoint 162, test that it's extracted correctly from list
-        const input = Type.list([Type.integer(162), Type.bitstring("test")]);
+        const input = Bitstring.fromBytes([0xc2, 0xa2, 99]);
         const result = cp(input);
 
         assert.deepStrictEqual(
           result,
-          Type.list([Type.integer(162), Type.bitstring("test")]),
+          Type.improperList([Type.integer(162), Type.bitstring("c")]),
         );
       });
 
       it("handles UTF-8 three-byte character (€)", () => {
-        // € is codepoint 8364, test in list context
-        const input = Type.list([Type.integer(8364)]);
+        const input = Bitstring.fromBytes([0xe2, 0x82, 0xac]);
         const result = cp(input);
 
-        assert.deepStrictEqual(result, Type.list([Type.integer(8364)]));
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([Type.integer(8364), Type.bitstring("")]),
+        );
       });
 
       it("returns error tuple for overlong UTF-8 encoding", () => {
