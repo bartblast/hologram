@@ -22,32 +22,71 @@ const Erlang_UnicodeUtil = {
     }
 
     if (Type.isList(list) && list.data.length > 0) {
-      const firstElement = list.data[0];
+      // Inline optimized index-based logic to avoid O(n²) slicing behavior
+      const result = [];
+      let idx = 0;
 
-      // [C|T] when is_integer(C)
-      if (isCP(firstElement)) {
-        const tail = Type.list(list.data.slice(1));
-        const tailResult = Erlang_UnicodeUtil["_cpl/2"](tail, restList);
-        // Recursively process tail, then merge result with current first element
-        if (Type.isList(tailResult) && tailResult.isProper) {
-          // Tail returned a proper list; prepend firstElement to it
-          return Type.list([firstElement, ...tailResult.data]);
+      // Fast path: collect consecutive codepoints iteratively
+      while (idx < list.data.length && isCP(list.data[idx])) {
+        result.push(list.data[idx]);
+        idx++;
+      }
+
+      // If we collected all remaining elements as codepoints
+      if (idx >= list.data.length) {
+        if (result.length === 0) {
+          // When we've exhausted the nested list, check if restList starts with a binary
+          if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
+            return restList;
+          }
+          return Erlang_UnicodeUtil["cp/1"](restList);
         }
-        // Tail returned an improper list or non-list; create improper list with firstElement and tail result
-        return Type.improperList([firstElement, tailResult]);
+        // Merge collected codepoints with restList
+        if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
+          if (restList.data.length === 1) {
+            return Type.improperList([...result, restList.data[0]]);
+          }
+          return Type.list([...result, ...restList.data]);
+        }
+        const restListResult = Erlang_UnicodeUtil["cp/1"](restList);
+        if (Type.isList(restListResult) && restListResult.isProper) {
+          return Type.list([...result, ...restListResult.data]);
+        }
+        return Type.improperList([...result, restListResult]);
       }
 
-      // [L]
-      if (list.data.length === 1) {
-        return Erlang_UnicodeUtil["_cpl_cont/2"](firstElement, restList);
+      // If we collected some codepoints but hit a non-codepoint element
+      const firstElement = list.data[idx];
+
+      if (idx === list.data.length - 1) {
+        const contResult = Erlang_UnicodeUtil["_cpl_cont/2"](
+          firstElement,
+          restList,
+        );
+        if (result.length === 0) {
+          return contResult;
+        }
+        if (Type.isList(contResult) && contResult.isProper) {
+          return Type.list([...result, ...contResult.data]);
+        }
+        return Type.improperList([...result, contResult]);
       }
 
-      // [L|T]
-      const newRestList = Type.list([
-        Type.list(list.data.slice(1)),
-        ...restList.data,
-      ]);
-      return Erlang_UnicodeUtil["_cpl_cont/2"](firstElement, newRestList);
+      const newRestList =
+        restList.data.length === 0
+          ? Type.list([Type.list(list.data.slice(idx + 1))])
+          : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+      const contResult = Erlang_UnicodeUtil["_cpl_cont/2"](
+        firstElement,
+        newRestList,
+      );
+      if (result.length === 0) {
+        return contResult;
+      }
+      if (Type.isList(contResult) && contResult.isProper) {
+        return Type.list([...result, ...contResult.data]);
+      }
+      return Type.improperList([...result, contResult]);
     }
 
     // []
@@ -113,7 +152,7 @@ const Erlang_UnicodeUtil = {
     );
   },
   // End _cpl/2
-  // Deps: [:unicode_util._merge_lcr/2, :unicode_util._is_cp/1, :unicode_util._cpl_1_cont/1, :unicode_util.cp/1, :unicode_util._cpl/2, :unicode_util._cpl_cont/2]
+  // Deps: [:unicode_util._cpl_1_cont/1, :unicode_util._cpl_cont/2, :unicode_util._is_cp/1, :unicode_util._merge_lcr/2, :unicode_util.cp/1]
 
   // Start _cpl_1_cont/1
   "_cpl_1_cont/1": (restList) => {
@@ -213,35 +252,64 @@ const Erlang_UnicodeUtil = {
 
   // Start _cpl_cont/2
   "_cpl_cont/2": (list, restList) => {
-    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
-
     if (Type.isList(list) && list.data.length > 0) {
-      const firstElement = list.data[0];
+      // Inline optimized index-based logic to avoid O(n²) slicing behavior
+      const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+      const result = [];
+      let idx = 0;
 
-      // [C|T] when is_integer(C) and valid codepoint
-      if (isCP(firstElement)) {
-        const tail = Type.list(list.data.slice(1));
-        const tailResult = Erlang_UnicodeUtil["_cpl_cont/2"](tail, restList);
-        // Recursively process tail, then merge result with current first element
-        if (Type.isList(tailResult) && tailResult.isProper) {
-          // Tail returned a proper list; prepend firstElement to it
-          return Type.list([firstElement, ...tailResult.data]);
+      // Fast path: collect consecutive codepoints iteratively
+      while (idx < list.data.length && isCP(list.data[idx])) {
+        result.push(list.data[idx]);
+        idx++;
+      }
+
+      // If we collected all remaining elements as codepoints
+      if (idx >= list.data.length) {
+        if (result.length === 0) {
+          if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
+            return restList;
+          }
+          return Erlang_UnicodeUtil["cp/1"](restList);
         }
-        // Tail returned an improper list or non-list; create improper list with firstElement and tail result
-        return Type.improperList([firstElement, tailResult]);
+        if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
+          if (restList.data.length === 1) {
+            return Type.improperList([...result, restList.data[0]]);
+          }
+          return Type.list([...result, ...restList.data]);
+        }
+        const restListResult = Erlang_UnicodeUtil["cp/1"](restList);
+        if (Type.isList(restListResult) && restListResult.isProper) {
+          return Type.list([...result, ...restListResult.data]);
+        }
+        return Type.improperList([...result, restListResult]);
       }
 
-      // [L]
-      if (list.data.length === 1) {
-        return Erlang_UnicodeUtil["_cpl/2"](firstElement, restList);
+      const firstElement = list.data[idx];
+
+      if (idx === list.data.length - 1) {
+        const cplResult = Erlang_UnicodeUtil["_cpl/2"](firstElement, restList);
+        if (result.length === 0) {
+          return cplResult;
+        }
+        if (Type.isList(cplResult) && cplResult.isProper) {
+          return Type.list([...result, ...cplResult.data]);
+        }
+        return Type.improperList([...result, cplResult]);
       }
 
-      // [L|T]
-      const newRestList = Type.list([
-        Type.list(list.data.slice(1)),
-        ...restList.data,
-      ]);
-      return Erlang_UnicodeUtil["_cpl/2"](firstElement, newRestList);
+      const newRestList =
+        restList.data.length === 0
+          ? Type.list([Type.list(list.data.slice(idx + 1))])
+          : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+      const cplResult = Erlang_UnicodeUtil["_cpl/2"](firstElement, newRestList);
+      if (result.length === 0) {
+        return cplResult;
+      }
+      if (Type.isList(cplResult) && cplResult.isProper) {
+        return Type.list([...result, ...cplResult.data]);
+      }
+      return Type.improperList([...result, cplResult]);
     }
 
     // []
@@ -302,37 +370,66 @@ const Erlang_UnicodeUtil = {
     );
   },
   // End _cpl_cont/2
-  // Deps: [:unicode_util._merge_lcr/2, :unicode_util._is_cp/1, :unicode_util.cp/1, :unicode_util._cpl/2, :unicode_util._cpl_cont/2]
+  // Deps: [:unicode_util._cpl/2, :unicode_util._is_cp/1, :unicode_util._merge_lcr/2, :unicode_util.cp/1]
 
   // Start _cpl_cont2/2
   "_cpl_cont2/2": (list, restList) => {
-    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
-
     if (Type.isList(list) && list.data.length > 0) {
-      const firstElement = list.data[0];
+      // Inline optimized index-based logic to avoid O(n²) slicing behavior
+      const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+      const result = [];
+      let idx = 0;
 
-      // [C|T] when is_integer(C)
-      if (isCP(firstElement)) {
-        const tail = Type.list(list.data.slice(1));
-        return Type.improperList([
-          firstElement,
-          Erlang_UnicodeUtil["_cpl_cont2/2"](tail, restList),
-        ]);
+      // Fast path: collect consecutive codepoints iteratively
+      while (idx < list.data.length && isCP(list.data[idx])) {
+        result.push(list.data[idx]);
+        idx++;
       }
 
-      // [L]
-      if (list.data.length === 1) {
-        return Erlang_UnicodeUtil["_cpl_1_cont2/1"](
+      if (idx >= list.data.length) {
+        if (result.length === 0) {
+          return restList;
+        }
+        // For improper list continuation, chain codepoints
+        let current = restList;
+        for (let i = result.length - 1; i >= 0; i--) {
+          current = Type.improperList([result[i], current]);
+        }
+        return current;
+      }
+
+      const firstElement = list.data[idx];
+
+      if (idx === list.data.length - 1) {
+        const cont2Result = Erlang_UnicodeUtil["_cpl_1_cont2/1"](
           Type.list([firstElement, ...restList.data]),
         );
+        if (result.length === 0) {
+          return cont2Result;
+        }
+        let current = cont2Result;
+        for (let i = result.length - 1; i >= 0; i--) {
+          current = Type.improperList([result[i], current]);
+        }
+        return current;
       }
 
-      // [L|T]
-      const newRestList = Type.list([
-        Type.list(list.data.slice(1)),
-        ...restList.data,
-      ]);
-      return Erlang_UnicodeUtil["_cpl_cont2/2"](firstElement, newRestList);
+      const newRestList =
+        restList.data.length === 0
+          ? Type.list([Type.list(list.data.slice(idx + 1))])
+          : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+      const cont2Result = Erlang_UnicodeUtil["_cpl_cont2/2"](
+        firstElement,
+        newRestList,
+      );
+      if (result.length === 0) {
+        return cont2Result;
+      }
+      let current = cont2Result;
+      for (let i = result.length - 1; i >= 0; i--) {
+        current = Type.improperList([result[i], current]);
+      }
+      return current;
     }
 
     return restList;
@@ -342,33 +439,62 @@ const Erlang_UnicodeUtil = {
 
   // Start _cpl_cont3/2
   "_cpl_cont3/2": (list, restList) => {
-    const isCP = Erlang_UnicodeUtil["_is_cp/1"];
-
     if (Type.isList(list) && list.data.length > 0) {
-      const firstElement = list.data[0];
+      // Inline optimized index-based logic to avoid O(n²) slicing behavior
+      const isCP = Erlang_UnicodeUtil["_is_cp/1"];
+      const result = [];
+      let idx = 0;
 
-      // [C|T] when is_integer(C)
-      if (isCP(firstElement)) {
-        const tail = Type.list(list.data.slice(1));
-        return Type.improperList([
-          firstElement,
-          Erlang_UnicodeUtil["_cpl_cont3/2"](tail, restList),
-        ]);
+      // Fast path: collect consecutive codepoints iteratively
+      while (idx < list.data.length && isCP(list.data[idx])) {
+        result.push(list.data[idx]);
+        idx++;
       }
 
-      // [L]
-      if (list.data.length === 1) {
-        return Erlang_UnicodeUtil["_cpl_1_cont3/1"](
+      if (idx >= list.data.length) {
+        if (result.length === 0) {
+          return restList;
+        }
+        // For improper list continuation, chain codepoints
+        let current = restList;
+        for (let i = result.length - 1; i >= 0; i--) {
+          current = Type.improperList([result[i], current]);
+        }
+        return current;
+      }
+
+      const firstElement = list.data[idx];
+
+      if (idx === list.data.length - 1) {
+        const cont3Result = Erlang_UnicodeUtil["_cpl_1_cont3/1"](
           Type.list([firstElement, ...restList.data]),
         );
+        if (result.length === 0) {
+          return cont3Result;
+        }
+        let current = cont3Result;
+        for (let i = result.length - 1; i >= 0; i--) {
+          current = Type.improperList([result[i], current]);
+        }
+        return current;
       }
 
-      // [L|T]
-      const newRestList = Type.list([
-        Type.list(list.data.slice(1)),
-        ...restList.data,
-      ]);
-      return Erlang_UnicodeUtil["_cpl_cont3/2"](firstElement, newRestList);
+      const newRestList =
+        restList.data.length === 0
+          ? Type.list([Type.list(list.data.slice(idx + 1))])
+          : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+      const cont3Result = Erlang_UnicodeUtil["_cpl_cont3/2"](
+        firstElement,
+        newRestList,
+      );
+      if (result.length === 0) {
+        return cont3Result;
+      }
+      let current = cont3Result;
+      for (let i = result.length - 1; i >= 0; i--) {
+        current = Type.improperList([result[i], current]);
+      }
+      return current;
     }
 
     return restList;
