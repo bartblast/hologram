@@ -2891,13 +2891,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.convert_time_unit(42, :millisecond, :millisecond) == 42
     end
 
+    test "handles same unit conversion with negative value (identity)" do
+      assert :erlang.convert_time_unit(-42, :millisecond, :millisecond) == -42
+    end
+
     test "supports native time unit" do
-      # For the JS port we assume native = nanoseconds (platform-independent)
+      # :native is the time unit of :erlang.monotonic_time/0. It's technically
+      # platform-dependent, but is nanoseconds on all major platforms (Linux,
+      # macOS, Windows). The JS port standardizes on nanoseconds.
       assert :erlang.convert_time_unit(1, :second, :native) == 1_000_000_000
     end
 
     test "supports perf_counter time unit" do
-      # 2_000_000 perf_counter units (nanoseconds) = 2 milliseconds
+      # :perf_counter is the time unit of :os.perf_counter/0 (high-resolution OS timer
+      # used for micro-benchmarking). Like :native, it's technically platform-dependent
+      # but is nanoseconds on all major platforms. 2_000_000 nanoseconds = 2 milliseconds.
       assert :erlang.convert_time_unit(2_000_000, :perf_counter, :millisecond) == 2
     end
 
@@ -2916,7 +2924,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "handles large integer values" do
-      large_value = 9_007_199_254_740_991
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      large_value = 9_007_199_254_740_992
+
       assert :erlang.convert_time_unit(large_value, :second, :second) == large_value
     end
 
@@ -2942,6 +2952,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "invalid time unit"),
                    {:erlang, :convert_time_unit, [1, -1, :second]}
+    end
+
+    test "raises ArgumentError if fromUnit is zero" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid time unit"),
+                   {:erlang, :convert_time_unit, [1, 0, :second]}
     end
 
     test "raises ArgumentError if toUnit is a float" do

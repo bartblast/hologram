@@ -4425,6 +4425,16 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
+    it("handles same unit conversion with negative value (identity)", () => {
+      const result = testedFun(
+        Type.integer(-42),
+        Type.atom("millisecond"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(-42));
+    });
+
     it("supports native time unit", () => {
       const result = testedFun(
         Type.integer(1),
@@ -4479,7 +4489,9 @@ describe("Erlang", () => {
     });
 
     it("handles large integer values", () => {
-      const largeValue = Type.integer(9_007_199_254_740_991n);
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      const largeValue = Type.integer(9_007_199_254_740_992n);
+
       const result = testedFun(
         largeValue,
         Type.atom("second"),
@@ -4518,6 +4530,14 @@ describe("Erlang", () => {
     it("raises ArgumentError if fromUnit is a negative integer", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.integer(-1), Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is zero", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), integer0, Type.atom("second")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
       );

@@ -672,10 +672,12 @@ const Erlang = {
     // Helpers
 
     const resolveTimeUnit = (unit, argumentIndex) => {
-      // For the JavaScript port we deliberately standardize :native and :perf_counter
-      // to nanosecond resolution (1_000_000_000) regardless of platform. Real Erlang
-      // is platform-dependent, so this is an intentional design/compatibility decision
-      // to keep behavior predictable across environments.
+      // :native - the time unit used by :erlang.monotonic_time/0
+      // :perf_counter - the time unit used by :os.perf_counter/0 (high-resolution OS timer)
+      //
+      // Both are technically platform-dependent in Erlang/OTP, but in practice they're
+      // nanoseconds on all major platforms (Linux, macOS, Windows). We standardize on
+      // nanoseconds to match typical Erlang behavior while keeping JS behavior predictable.
       const NATIVE_TIME_UNIT = 1_000_000_000n;
       const PERF_COUNTER_TIME_UNIT = 1_000_000_000n;
 
@@ -690,12 +692,6 @@ const Erlang = {
       }
 
       switch (unit.value) {
-        case "native":
-          return NATIVE_TIME_UNIT;
-
-        case "perf_counter":
-          return PERF_COUNTER_TIME_UNIT;
-
         case "nanosecond":
         case "nano_seconds":
           return 1_000_000_000n;
@@ -711,6 +707,12 @@ const Erlang = {
         case "second":
         case "seconds":
           return 1n;
+
+        case "native":
+          return NATIVE_TIME_UNIT;
+
+        case "perf_counter":
+          return PERF_COUNTER_TIME_UNIT;
 
         default:
           Interpreter.raiseArgumentError(
@@ -733,8 +735,10 @@ const Erlang = {
     const fromUnitValue = resolveTimeUnit(fromUnit, 2);
     const toUnitValue = resolveTimeUnit(toUnit, 3);
     const numerator = toUnitValue * time.value;
+
     const adjustedNumerator =
       time.value < 0n ? numerator - (fromUnitValue - 1n) : numerator;
+
     const result = adjustedNumerator / fromUnitValue;
 
     return Type.integer(result);
