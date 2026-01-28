@@ -12,7 +12,7 @@ import Type from "../type.mjs";
 const Erlang_Elixir_Utils = {
   // Start jaro_similarity/2
   "jaro_similarity/2": (str1, str2) => {
-    const extractCodePoints = (str, argPosition) => {
+    const extractCodePoints = (str) => {
       const cp = Erlang_UnicodeUtil["cp/1"];
       const codePoints = [];
       let current = str;
@@ -28,10 +28,7 @@ const Erlang_Elixir_Utils = {
           const [atom, value] = result.data;
           if (Type.isAtom(atom) && atom.value === "error") {
             Interpreter.raiseArgumentError(
-              Interpreter.buildArgumentErrorMsg(
-                argPosition,
-                Interpreter.inspect(value),
-              ),
+              `argument error: ${Interpreter.inspect(value)}`,
             );
           }
         }
@@ -55,8 +52,8 @@ const Erlang_Elixir_Utils = {
       return codePoints;
     };
 
-    const codePoints1 = extractCodePoints(str1, 1);
-    const codePoints2 = extractCodePoints(str2, 2);
+    const codePoints1 = extractCodePoints(str1);
+    const codePoints2 = extractCodePoints(str2);
     const len1 = codePoints1.length;
     const len2 = codePoints2.length;
 
