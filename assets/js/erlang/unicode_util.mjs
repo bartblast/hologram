@@ -215,7 +215,7 @@ const Erlang_UnicodeUtil = {
     return Erlang_UnicodeUtil["_cpl_cont2/2"](firstElement, tail);
   },
   // End _cpl_1_cont2/1
-  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._cpl_1_cont3/1, :unicode_util._cpl_cont2/2, :unicode_util._is_cp/1]
+  // Deps: [:unicode_util._cpl_1_cont3/1, :unicode_util._cpl_cont2/2, :unicode_util._is_cp/1]
 
   // Start _cpl_1_cont3/1
   "_cpl_1_cont3/1": (restList) => {
@@ -246,7 +246,7 @@ const Erlang_UnicodeUtil = {
     return Erlang_UnicodeUtil["_cpl_cont3/2"](firstElement, tail);
   },
   // End _cpl_1_cont3/1
-  // Deps: [:unicode_util._cpl_1_cont3/1, :unicode_util._cpl_cont3/2, :unicode_util._is_cp/1]
+  // Deps: [:unicode_util._cpl_cont3/2, :unicode_util._is_cp/1]
 
   // Start _cpl_cont/2
   "_cpl_cont/2": (list, restList) => {
@@ -433,7 +433,7 @@ const Erlang_UnicodeUtil = {
     return restList;
   },
   // End _cpl_cont2/2
-  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._cpl_cont2/2, :unicode_util._is_cp/1]
+  // Deps: [:unicode_util._cpl_1_cont2/1, :unicode_util._is_cp/1]
 
   // Start _cpl_cont3/2
   "_cpl_cont3/2": (list, restList) => {
@@ -498,7 +498,7 @@ const Erlang_UnicodeUtil = {
     return restList;
   },
   // End _cpl_cont3/2
-  // Deps: [:unicode_util._cpl_1_cont3/1, :unicode_util._cpl_cont3/2, :unicode_util._is_cp/1]
+  // Deps: [:unicode_util._cpl_1_cont3/1, :unicode_util._is_cp/1]
 
   // Start _is_cp/1
   "_is_cp/1": (value) => {
