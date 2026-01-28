@@ -930,6 +930,436 @@ const Erlang_Binary = {
   },
   // End split/3
   // Deps: [:binary._parse_search_opts/2, :binary.compile_pattern/1, :binary.match/3]
+
+  // Start replace/3
+  "replace/3": (subject, pattern, replacement) => {
+    return Erlang_Binary["replace/4"](
+      subject,
+      pattern,
+      replacement,
+      Type.list(),
+    );
+  },
+  // End replace/3
+  // Deps: [:binary.replace/4]
+
+  // Start replace/4
+  "replace/4": (subject, pattern, replacement, options) => {
+    // Helpers (alphabetical): describe steps, flatten branching
+    const utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+
+    const bytesToBitstring = (bytes) => {
+      try {
+        const text = utf8Decoder.decode(bytes);
+        return Bitstring.fromText(text);
+      } catch {
+        return Bitstring.fromBytes(bytes);
+      }
+    };
+
+    const compilePatternOrRaise = (pat, argPos) => {
+      const isCompiled = Type.isCompiledPattern(pat);
+      try {
+        return isCompiled ? pat : Erlang_Binary["compile_pattern/1"](pat);
+      } catch (error) {
+        if (error.struct) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(argPos, "not a valid pattern"),
+          );
+        }
+        throw error;
+      }
+    };
+
+    const computeScopeBounds = (subjectBin, start, length, argPos) => {
+      if (start > subjectBin.bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(argPos, "invalid options"),
+        );
+      }
+
+      if (length !== null && start + length < 0) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(argPos, "invalid options"),
+        );
+      }
+
+      const effectiveLength =
+        length === null ? subjectBin.bytes.length - start : length;
+
+      if (start + effectiveLength > subjectBin.bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(argPos, "invalid options"),
+        );
+      }
+
+      const scopeEnd = start + effectiveLength;
+      return {
+        actualStart: Math.min(start, scopeEnd),
+        actualEnd: Math.max(start, scopeEnd),
+        effectiveLength,
+      };
+    };
+
+    const getCompiledData = (compiledPat) => {
+      const type = compiledPat.data[0].value;
+      const ref = compiledPat.data[1];
+      const data = ERTS.binaryPatternRegistry.get(ref);
+      if (!data || data.type !== type) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      }
+      return {type, data};
+    };
+
+    const insertReplacedAtPositions = (
+      replacementBin,
+      matchedBin,
+      insertPositions,
+    ) => {
+      const positions = Type.isList(insertPositions)
+        ? insertPositions.data.map((p) => Number(p.value))
+        : [Number(insertPositions.value)];
+
+      Bitstring.maybeSetBytesFromText(replacementBin);
+      Bitstring.maybeSetBytesFromText(matchedBin);
+
+      const repBytes = replacementBin.bytes;
+      const replacementLength = repBytes.length;
+
+      for (const pos of positions) {
+        if (pos > replacementLength) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          );
+        }
+      }
+
+      positions.sort((a, b) => b - a);
+      let resultBytes = [...repBytes];
+      for (const pos of positions) {
+        resultBytes.splice(pos, 0, ...matchedBin.bytes);
+      }
+
+      try {
+        const decoder = new TextDecoder("utf-8", {fatal: true});
+        const text = decoder.decode(new Uint8Array(resultBytes));
+        return Bitstring.fromText(text);
+      } catch {
+        return Bitstring.fromBytes(new Uint8Array(resultBytes));
+      }
+    };
+
+    const interleaveReplacement = (partsList, replacementBin) => {
+      Bitstring.maybeSetBytesFromText(replacementBin);
+      const items = [];
+      const len = partsList.data.length;
+      for (let i = 0; i < len; i++) {
+        items.push(partsList.data[i]);
+        if (i < len - 1) items.push(replacementBin);
+      }
+      return Erlang["iolist_to_binary/1"](Type.list(items));
+    };
+
+    const parseReplaceOpts = (opts, argPosition) => {
+      const raiseInvalidOptions = () => {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(argPosition, "invalid options"),
+        );
+      };
+
+      if (!Type.isList(opts) || Type.isImproperList(opts)) {
+        raiseInvalidOptions();
+      }
+
+      let global = false;
+      let scopeStart = 0;
+      let scopeLength = null; // null means "until end"
+      let insertReplaced = null;
+
+      opts.data.forEach((option) => {
+        if (Type.isAtom(option)) {
+          if (option.value === "global") {
+            global = true;
+            return;
+          }
+          raiseInvalidOptions();
+        }
+
+        const isScopeTuple =
+          Type.isTuple(option) &&
+          option.data.length === 2 &&
+          Type.isAtom(option.data[0]) &&
+          option.data[0].value === "scope";
+
+        if (isScopeTuple) {
+          const scopeData = option.data[1];
+          const isValidScope =
+            Type.isTuple(scopeData) &&
+            scopeData.data.length === 2 &&
+            Type.isInteger(scopeData.data[0]) &&
+            Type.isInteger(scopeData.data[1]);
+          if (!isValidScope) raiseInvalidOptions();
+
+          const startValue = scopeData.data[0].value;
+          const lengthValue = scopeData.data[1].value;
+          if (startValue < 0n) raiseInvalidOptions();
+
+          scopeStart = Number(startValue);
+          scopeLength = Number(lengthValue);
+          return;
+        }
+
+        const isInsertTuple =
+          Type.isTuple(option) &&
+          option.data.length === 2 &&
+          Type.isAtom(option.data[0]) &&
+          option.data[0].value === "insert_replaced";
+
+        if (isInsertTuple) {
+          const insertData = option.data[1];
+          if (Type.isInteger(insertData)) {
+            if (insertData.value < 0n) raiseInvalidOptions();
+            insertReplaced = insertData;
+          } else if (Type.isList(insertData)) {
+            // Reject improper lists to match top-level options validation
+            if (Type.isImproperList(insertData)) raiseInvalidOptions();
+            const allIntegers = insertData.data.every((item) =>
+              Type.isInteger(item),
+            );
+            if (!allIntegers) raiseInvalidOptions();
+            const hasNegative = insertData.data.some((item) => item.value < 0n);
+            if (hasNegative) raiseInvalidOptions();
+            insertReplaced = insertData;
+          } else {
+            raiseInvalidOptions();
+          }
+          return;
+        }
+
+        raiseInvalidOptions();
+      });
+
+      return {global, scopeStart, scopeLength, insertReplaced};
+    };
+
+    // Helper closes over isReplacementFunction and replacement for clarity
+    const buildReplacementBytes = (matchedBitstring, insertPositionsOpt) => {
+      if (isReplacementFunction) {
+        const replacementResult = Interpreter.callAnonymousFunction(
+          replacement,
+          [matchedBitstring],
+        );
+
+        if (!Type.isBinary(replacementResult)) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+          );
+        }
+
+        Bitstring.maybeSetBytesFromText(replacementResult);
+        return replacementResult.bytes;
+      }
+
+      if (insertPositionsOpt !== null) {
+        const withInserted = insertReplacedAtPositions(
+          replacement,
+          matchedBitstring,
+          insertPositionsOpt,
+        );
+
+        Bitstring.maybeSetBytesFromText(withInserted);
+        return withInserted.bytes;
+      }
+
+      Bitstring.maybeSetBytesFromText(replacement);
+      return replacement.bytes;
+    };
+
+    // Validate subject is a binary
+    if (!Type.isBinary(subject)) {
+      const msg = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    }
+
+    // Ensure subject bytes are available
+    Bitstring.maybeSetBytesFromText(subject);
+
+    // Validate replacement is either binary or function
+    const isReplacementBinary = Type.isBinary(replacement);
+    const isReplacementFunction = Type.isAnonymousFunction(replacement);
+
+    if (!isReplacementBinary && !isReplacementFunction) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+      );
+    }
+
+    // Parse options
+    const {
+      global,
+      scopeStart,
+      scopeLength,
+      insertReplaced: insertPositionsOpt,
+    } = parseReplaceOpts(options, 4);
+
+    const {actualStart, actualEnd, effectiveLength} = computeScopeBounds(
+      subject,
+      scopeStart,
+      scopeLength,
+      4,
+    );
+
+    // Validate pattern before checking scope length - pattern errors take priority
+    const compiledPattern = compilePatternOrRaise(pattern, 2);
+    const {type: patternType, data: compiledData} =
+      getCompiledData(compiledPattern);
+
+    // After pattern validation passes, check if search range is available
+    if (scopeLength === 0) {
+      return subject;
+    }
+
+    // Fast-path: static binary replacement without insert_replaced
+    if (!isReplacementFunction && insertPositionsOpt === null) {
+      const splitOpts = [];
+      if (global) splitOpts.push(Type.atom("global"));
+      if (effectiveLength !== subject.bytes.length || scopeStart !== 0) {
+        splitOpts.push(
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([
+              Type.integer(actualStart),
+              Type.integer(actualEnd - actualStart),
+            ]),
+          ]),
+        );
+      }
+      const parts = Erlang_Binary["split/3"](
+        subject,
+        compiledPattern,
+        Type.list(splitOpts),
+      );
+      return interleaveReplacement(parts, replacement);
+    }
+
+    // Build replacement segments
+    const resultSegments = [];
+
+    // Add the part before the scope (if any)
+    if (actualStart > 0) {
+      resultSegments.push(subject.bytes.subarray(0, actualStart));
+    }
+
+    // Build replacement segments within the scope
+    const scopedSegments = [];
+    const scopedBytes = subject.bytes.subarray(actualStart, actualEnd);
+    const scopedSubject = Bitstring.fromBytes(scopedBytes);
+
+    let cursor = 0; // position within scoped bytes
+    let foundAny = false;
+
+    while (cursor < scopedBytes.length) {
+      let match;
+
+      if (patternType === "bm") {
+        match = Erlang_Binary["_boyer_moore_search/4"](
+          scopedSubject,
+          compiledData.patternBytes,
+          compiledData.badShift,
+          cursor,
+        );
+      } else {
+        match = Erlang_Binary["_aho_corasick_search/3"](
+          scopedSubject,
+          compiledData.rootNode,
+          cursor,
+        );
+      }
+
+      if (match === null) {
+        break;
+      }
+
+      const matchStartScoped = match.index;
+      const matchLength = match.length;
+      const absMatchStart = actualStart + matchStartScoped;
+
+      foundAny = true;
+
+      if (matchStartScoped > cursor) {
+        scopedSegments.push(
+          subject.bytes.subarray(actualStart + cursor, absMatchStart),
+        );
+      }
+
+      const matchedBytes = subject.bytes.subarray(
+        absMatchStart,
+        absMatchStart + matchLength,
+      );
+      const matchedBitstring = bytesToBitstring(matchedBytes);
+      Bitstring.maybeSetBytesFromText(matchedBitstring);
+
+      const replacementBytes = buildReplacementBytes(
+        matchedBitstring,
+        insertPositionsOpt,
+      );
+
+      scopedSegments.push(replacementBytes);
+
+      cursor = matchStartScoped + matchLength;
+
+      if (!global) {
+        if (cursor < scopedBytes.length) {
+          scopedSegments.push(
+            subject.bytes.subarray(actualStart + cursor, actualEnd),
+          );
+        }
+
+        break;
+      }
+    }
+
+    if (foundAny && global && cursor < scopedBytes.length) {
+      scopedSegments.push(
+        subject.bytes.subarray(actualStart + cursor, actualEnd),
+      );
+    } else if (!foundAny) {
+      scopedSegments.push(subject.bytes.subarray(actualStart, actualEnd));
+    }
+
+    // Add the scoped segments to result
+    for (const segment of scopedSegments) {
+      resultSegments.push(segment);
+    }
+
+    // Add the part after the scope (if any)
+    if (actualEnd < subject.bytes.length) {
+      resultSegments.push(subject.bytes.subarray(actualEnd));
+    }
+
+    // Build final result from all segments
+    const resultBytes = new Uint8Array(
+      resultSegments.reduce((sum, seg) => sum + seg.length, 0),
+    );
+
+    let offset = 0;
+
+    for (const segment of resultSegments) {
+      resultBytes.set(segment, offset);
+      offset += segment.length;
+    }
+
+    const result = bytesToBitstring(resultBytes);
+    Bitstring.maybeSetBytesFromText(result);
+    return result;
+  },
+  // End replace/4
+  // Deps: [:binary.split/3, :erlang.iolist_to_binary/1, :binary.compile_pattern/1, :binary.match/3]
 };
 
 export default Erlang_Binary;

@@ -923,4 +923,317 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    fn -> :binary.split("abc", "b", scope: {1, 3}) end
     end
   end
+
+  describe "replace/3" do
+    test "delegates to replace/4 with empty options list" do
+      assert :binary.replace("hello world", "world", "universe") == "hello universe"
+    end
+  end
+
+  describe "replace/4" do
+    # Basic replacement
+
+    test "replaces first occurrence of pattern" do
+      assert :binary.replace("hello world world", "world", "universe", []) ==
+               "hello universe world"
+    end
+
+    test "returns original subject when pattern not found" do
+      assert :binary.replace("hello world", "xyz", "abc", []) == "hello world"
+    end
+
+    test "replaces single pattern with multiple patterns in list" do
+      assert :binary.replace("hello world", ["world", "hello"], "X", []) == "X world"
+    end
+
+    test "works with empty replacement" do
+      assert :binary.replace("hello world", "world", "", []) == "hello "
+    end
+
+    test "works with bytes-based binaries" do
+      assert :binary.replace(<<1, 2, 3, 4, 5>>, <<3, 4>>, <<9, 9>>, []) ==
+               <<1, 2, 9, 9, 5>>
+    end
+
+    # With :global option
+
+    test "replaces all occurrences with :global" do
+      assert :binary.replace("hello world world", "world", "universe", [:global]) ==
+               "hello universe universe"
+    end
+
+    test "replaces with multiple patterns globally" do
+      assert :binary.replace("hello-world_test", ["-", "_"], "X", [:global]) ==
+               "helloXworldXtest"
+    end
+
+    test "handles consecutive patterns with :global" do
+      assert :binary.replace("a--b--c", "-", "X", [:global]) == "aXXbXXc"
+    end
+
+    test "handles empty replacement with :global" do
+      assert :binary.replace("a1b1c1", "1", "", [:global]) == "abc"
+    end
+
+    # With insert_replaced option
+
+    test "inserts matched part at single position" do
+      assert :binary.replace("abcde", "bcd", "[", insert_replaced: 1) == "a[bcde"
+    end
+
+    test "inserts matched part at beginning" do
+      assert :binary.replace("hello world", "world", "[]", insert_replaced: 0) ==
+               "hello world[]"
+    end
+
+    test "inserts matched part at end" do
+      assert :binary.replace("hello world", "world", "[]", insert_replaced: 2) ==
+               "hello []world"
+    end
+
+    test "inserts matched part at multiple positions" do
+      assert :binary.replace("abcde", "cd", "[]", insert_replaced: [1, 1]) ==
+               "ab[cdcd]e"
+    end
+
+    test "works with :global and insert_replaced" do
+      subject = "a-a-a"
+
+      result =
+        :binary.replace(
+          subject,
+          "a",
+          "x",
+          [:global, {:insert_replaced, 1}]
+        )
+
+      expected_binary = "xa-xa-xa"
+      expected_positions = [0, 2, 4]
+
+      assert result == expected_binary
+
+      assert {result, expected_positions} ==
+               {expected_binary,
+                subject
+                |> :binary.matches("a")
+                |> Enum.map(&elem(&1, 0))}
+    end
+
+    # With replacement function
+
+    test "uses function for replacement" do
+      assert :binary.replace("hello world", "world", fn m -> "[" <> m <> "]" end, []) ==
+               "hello [world]"
+    end
+
+    test "calls function for each match with :global" do
+      result = :binary.replace("abcabc", "ab", fn _m -> "X" end, [:global])
+
+      assert result == "XcXc"
+    end
+
+    test "function receives matched binary" do
+      result =
+        :binary.replace(
+          <<1, 2, 3>>,
+          <<2>>,
+          fn _matched -> <<9>> end,
+          []
+        )
+
+      assert result == <<1, 9, 3>>
+    end
+
+    test "raises error if function returns non-binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   fn ->
+                     :binary.replace("hello", "l", fn _matched -> :not_binary end, [])
+                   end
+    end
+
+    # With scope option
+
+    test "respects scope when replacing" do
+      assert :binary.replace("abc def abc", "abc", "X", scope: {8, 3}) == "abc def X"
+    end
+
+    test "replaces pattern within scope" do
+      assert :binary.replace("abc def abc", "abc", "X", scope: {0, 3}) == "X def abc"
+    end
+
+    test "handles scope with global" do
+      assert :binary.replace("abc def abc ghi abc", "abc", "X", [{:scope, {0, 15}}, :global]) ==
+               "X def X ghi abc"
+    end
+
+    test "returns original subject when scope length is zero" do
+      result =
+        :binary.replace("hello world", "world", "universe", scope: {0, 0})
+
+      assert result == "hello world"
+    end
+
+    test "supports negative scope length within range" do
+      assert :binary.replace("test", "t", "x", scope: {1, -1}) == "xest"
+    end
+
+    # With compiled pattern
+
+    test "works with compiled Boyer-Moore pattern" do
+      compiled = :binary.compile_pattern("world")
+
+      assert :binary.replace("hello world", compiled, "universe", []) == "hello universe"
+    end
+
+    test "works with compiled Aho-Corasick pattern" do
+      compiled = :binary.compile_pattern(["-", "o"])
+
+      assert :binary.replace("hello-world", compiled, "X", [:global]) == "hellXXwXrld"
+    end
+
+    # Error cases
+
+    test "raises ArgumentError if subject is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:binary, :replace, [:test, "test", "x", []]}
+    end
+
+    test "raises ArgumentError if subject is non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
+                   {:binary, :replace, [<<1::1, 0::1, 1::1>>, "test", "x", []]}
+    end
+
+    test "raises ArgumentError when pattern is empty" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :replace, ["test", "", "x", []]}
+    end
+
+    test "raises ArgumentError when insert_replaced position exceeds replacement length" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "X", [insert_replaced: 10]]}
+    end
+
+    test "raises ArgumentError for invalid options" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["test", "es", "x", :invalid]}
+    end
+
+    test "raises ArgumentError for improper list options" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["test", "t", "x", [:global | :bad]]}
+    end
+
+    test "raises ArgumentError when scope start exceeds subject length" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["test", "t", "x", [scope: {10, 1}]]}
+    end
+
+    test "raises ArgumentError when scope extends beyond subject" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["test", "st", "x", [scope: {0, 100}]]}
+    end
+
+    test "raises ArgumentError when scope start plus negative length is below zero" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["test", "t", "x", [scope: {0, -1}]]}
+    end
+
+    test "raises ArgumentError when replacement is an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a valid replacement"),
+                   {:binary, :replace, ["hello", "l", :invalid, []]}
+    end
+
+    test "raises ArgumentError when replacement is an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a valid replacement"),
+                   {:binary, :replace, ["hello", "l", 123, []]}
+    end
+
+    test "raises ArgumentError when replacement is a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a valid replacement"),
+                   {:binary, :replace, ["hello", "l", [1], []]}
+    end
+
+    test "raises ArgumentError when pattern is a list with non-binary element" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :replace, ["hello", ["l", :invalid], "X", []]}
+    end
+
+    test "raises ArgumentError when pattern is an empty list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a valid pattern"),
+                   {:binary, :replace, ["hello", [], "X", []]}
+    end
+
+    test "raises ArgumentError when insert_replaced has negative position" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "[]", [insert_replaced: -1]]}
+    end
+
+    test "raises ArgumentError when insert_replaced value is an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "[]", [insert_replaced: :invalid]]}
+    end
+
+    test "raises ArgumentError when insert_replaced list contains non-integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "[]", [insert_replaced: [1, :invalid]]]}
+    end
+
+    test "raises ArgumentError when insert_replaced is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "[]", [insert_replaced: [1 | 2]]]}
+    end
+
+    test "raises ArgumentError when insert_replaced list contains negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "[]", [insert_replaced: [1, -1]]]}
+    end
+
+    test "raises ArgumentError when scope start is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(4, "invalid options"),
+                   {:binary, :replace, ["hello", "l", "X", [scope: {-1, 5}]]}
+    end
+
+    # Edge cases
+
+    test "works with empty subject" do
+      assert :binary.replace("", "x", "y", []) == ""
+    end
+
+    test "works when pattern equals entire subject" do
+      assert :binary.replace("hello", "hello", "world", []) == "world"
+    end
+
+    test "works when replacement is longer than pattern" do
+      assert :binary.replace("hi", "i", "ello world", []) == "hello world"
+    end
+
+    test "works when replacement is shorter than pattern" do
+      assert :binary.replace("hello world", "hello", "hi", []) == "hi world"
+    end
+
+    test "works with single character subject" do
+      assert :binary.replace("a", "a", "b", []) == "b"
+    end
+  end
 end
