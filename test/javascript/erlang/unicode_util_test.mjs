@@ -300,93 +300,6 @@ describe("Erlang_UnicodeUtil", () => {
       });
     });
 
-    describe("error handling", () => {
-      it("raises FunctionClauseError for integer input", () => {
-        const input = Type.integer(42);
-
-        assertBoxedError(
-          () => cp(input),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
-        );
-      });
-
-      it("raises FunctionClauseError for atom input", () => {
-        const input = Type.atom("test");
-
-        assertBoxedError(
-          () => cp(input),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
-        );
-      });
-
-      it("raises FunctionClauseError for float input", () => {
-        const input = Type.float(3.14);
-
-        assertBoxedError(
-          () => cp(input),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            input,
-          ]),
-        );
-      });
-
-      it("raises FunctionClauseError for non-byte-aligned bitstring (direct)", () => {
-        const bitstring = Type.bitstring([1, 0, 1]);
-
-        assertBoxedError(
-          () => cp(bitstring),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            bitstring,
-          ]),
-        );
-      });
-
-      it("raises FunctionClauseError for list with atom", () => {
-        const input = Type.list([Type.atom("invalid")]);
-
-        assertBoxedError(
-          () => cp(input),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.atom("invalid"),
-          ]),
-        );
-      });
-
-      it("raises FunctionClauseError for list with atom head and tail", () => {
-        const input = Type.list([Type.atom("a"), Type.atom("b")]);
-
-        assertBoxedError(
-          () => cp(input),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
-            Type.atom("a"),
-            Type.list([Type.atom("b")]),
-          ]),
-        );
-      });
-
-      it("raises FunctionClauseError for list with float", () => {
-        const input = Type.list([Type.float(3.14)]);
-
-        assertBoxedError(
-          () => cp(input),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
-            Type.float(3.14),
-          ]),
-        );
-      });
-    });
-
     describe("with improper lists", () => {
       it("handles improper list with integer tail", () => {
         const input = Type.improperList([Type.integer(97), Type.integer(98)]);
@@ -806,6 +719,93 @@ describe("Erlang_UnicodeUtil", () => {
         assert.deepStrictEqual(
           result,
           Type.tuple([Type.atom("error"), invalidBinary]),
+        );
+      });
+    });
+
+    describe("error handling", () => {
+      it("raises FunctionClauseError for integer input", () => {
+        const input = Type.integer(42);
+
+        assertBoxedError(
+          () => cp(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            input,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for atom input", () => {
+        const input = Type.atom("test");
+
+        assertBoxedError(
+          () => cp(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            input,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for float input", () => {
+        const input = Type.float(3.14);
+
+        assertBoxedError(
+          () => cp(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            input,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for non-byte-aligned bitstring (direct)", () => {
+        const bitstring = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () => cp(bitstring),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            bitstring,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for list with atom", () => {
+        const input = Type.list([Type.atom("invalid")]);
+
+        assertBoxedError(
+          () => cp(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.atom("invalid"),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for list with atom head and tail", () => {
+        const input = Type.list([Type.atom("a"), Type.atom("b")]);
+
+        assertBoxedError(
+          () => cp(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cpl/2", [
+            Type.atom("a"),
+            Type.list([Type.atom("b")]),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for list with float", () => {
+        const input = Type.list([Type.float(3.14)]);
+
+        assertBoxedError(
+          () => cp(input),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.float(3.14),
+          ]),
         );
       });
     });

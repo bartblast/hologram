@@ -150,64 +150,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.cp([[], []]) == []
     end
 
-    # Section: error handling
-
-    test "raises FunctionClauseError for integer input" do
-      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [42])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :unicode_util.cp(42)
-      end
-    end
-
-    test "raises FunctionClauseError for atom input" do
-      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:test])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :unicode_util.cp(:test)
-      end
-    end
-
-    test "raises FunctionClauseError for float input" do
-      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [3.14])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :unicode_util.cp(3.14)
-      end
-    end
-
-    test "raises FunctionClauseError for non-byte-aligned bitstring (direct)" do
-      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :unicode_util.cp(<<1::1, 0::1, 1::1>>)
-      end
-    end
-
-    test "raises FunctionClauseError for list with atom" do
-      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:invalid])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :unicode_util.cp([:invalid])
-      end
-    end
-
-    test "raises FunctionClauseError for list with atom head and tail" do
-      expected_msg = build_function_clause_error_msg(":unicode_util.cpl/2", [:a, [:b]])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :unicode_util.cp([:a, :b])
-      end
-    end
-
-    test "raises FunctionClauseError for list with float" do
-      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [3.14])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :unicode_util.cp([3.14])
-      end
-    end
-
     # Section: with improper lists
 
     test "handles improper list with integer tail" do
@@ -396,6 +338,64 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       invalid_binary = <<255, 255>>
 
       assert :unicode_util.cp([[invalid_binary]]) == {:error, invalid_binary}
+    end
+
+    # Section: error handling
+
+    test "raises FunctionClauseError for integer input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [42])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.cp(42)
+      end
+    end
+
+    test "raises FunctionClauseError for atom input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:test])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.cp(:test)
+      end
+    end
+
+    test "raises FunctionClauseError for float input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [3.14])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.cp(3.14)
+      end
+    end
+
+    test "raises FunctionClauseError for non-byte-aligned bitstring (direct)" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.cp(<<1::1, 0::1, 1::1>>)
+      end
+    end
+
+    test "raises FunctionClauseError for list with atom" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:invalid])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.cp([:invalid])
+      end
+    end
+
+    test "raises FunctionClauseError for list with atom head and tail" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cpl/2", [:a, [:b]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.cp([:a, :b])
+      end
+    end
+
+    test "raises FunctionClauseError for list with float" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [3.14])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.cp([3.14])
+      end
     end
   end
 end
