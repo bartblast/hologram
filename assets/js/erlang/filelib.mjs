@@ -45,7 +45,9 @@ const Erlang_Filelib = {
     const buildBinaryResult = (bytes) => {
       const resultBinary = Bitstring.fromBytes(bytes);
       Bitstring.maybeSetTextFromBytes(resultBinary);
+
       if (resultBinary.text === false) return resultBinary;
+
       return Type.bitstring(resultBinary.text);
     };
 
@@ -54,30 +56,28 @@ const Erlang_Filelib = {
         if (Type.isInteger(byte)) return byte;
         return Type.integer(byte);
       });
+
       return Type.list(chars);
     };
 
     const extendArray = (arr, elem) => {
       if (Type.isList(elem)) return [...arr, ...elem.data];
-
       if (!Type.isBinary(elem)) return arr;
 
       Bitstring.maybeSetBytesFromText(elem);
-
       if (!elem.bytes) return arr;
 
       return [...arr, ...elem.bytes];
     };
 
     const isAbsolutePath = (part) => partToString(part) === "/";
-
     const isCurrentDir = (part) => partToString(part) === ".";
-
     const isParentDir = (part) => partToString(part) === "..";
 
     const toNumber = (elem) => {
       if (typeof elem === "bigint") return Number(elem);
       if (elem.value !== undefined) return Number(elem.value);
+
       return Number(elem);
     };
 
@@ -125,6 +125,7 @@ const Erlang_Filelib = {
         // Parent directory marker
         if (isParentDir(part)) {
           const canGoUp = result.parts.length > 0;
+
           return canGoUp
             ? {...result, parts: result.parts.slice(0, -1)}
             : {...result, isUnsafe: true};
@@ -147,6 +148,7 @@ const Erlang_Filelib = {
     const joinedBytes = sanitizedParts.parts.reduce((bytes, part, index) => {
       const withPart = extendArray(bytes, part);
       const isLastPart = index === sanitizedParts.parts.length - 1;
+
       return isLastPart ? withPart : [...withPart, DIR_SEPARATOR_BYTE];
     }, []);
 

@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedStrictEqual,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
@@ -135,8 +136,11 @@ describe("Erlang_Filelib", () => {
         Type.integer(105),
         Type.integer(114),
       ]);
+
       const cwd = Type.list([Type.integer(47)]);
+
       const result = safeRelativePath(filename, cwd);
+
       // "dir"
       const expected = Type.list([
         Type.integer(100),
@@ -157,7 +161,9 @@ describe("Erlang_Filelib", () => {
         Type.integer(46),
         Type.integer(46),
       ]);
+
       const cwd = Type.list([Type.integer(47)]);
+
       const result = safeRelativePath(filename, cwd);
       const expected = Type.list([]);
 
@@ -177,7 +183,9 @@ describe("Erlang_Filelib", () => {
         Type.integer(46),
         Type.integer(46),
       ]);
+
       const cwd = Type.list([Type.integer(47)]);
+
       const result = safeRelativePath(filename, cwd);
       const expected = Type.atom("unsafe");
 
@@ -249,6 +257,7 @@ describe("Erlang_Filelib", () => {
 
     it("mixed binary and charlist", () => {
       const filename = Type.bitstring("dir");
+
       const cwd = Type.list([
         Type.integer(47), // "/"
         Type.integer(104), // "h"
@@ -256,6 +265,7 @@ describe("Erlang_Filelib", () => {
         Type.integer(109), // "m"
         Type.integer(101), // "e"
       ]);
+
       const result = safeRelativePath(filename, cwd);
       const expected = Type.bitstring("dir");
 
@@ -268,9 +278,7 @@ describe("Erlang_Filelib", () => {
       const result = safeRelativePath(invalidUtf8, cwd);
 
       // Erlang returns invalid UTF-8 bytes as-is
-      assert.strictEqual(result.bytes[0], 0xff);
-      assert.strictEqual(result.bytes[1], 0xfe);
-      assert.strictEqual(result.bytes.length, 2);
+      assertBoxedStrictEqual(result, Bitstring.fromBytes([0xff, 0xfe]));
     });
 
     it("cwd with invalid type", () => {

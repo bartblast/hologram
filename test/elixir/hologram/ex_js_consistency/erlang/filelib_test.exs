@@ -105,6 +105,7 @@ defmodule Hologram.ExJsConsistency.Erlang.FilelibTest do
 
     test "invalid utf-8 bytes" do
       result = :filelib.safe_relative_path(<<0xFF, 0xFE>>, "/home")
+
       assert result == <<0xFF, 0xFE>>
     end
 
