@@ -118,7 +118,7 @@ const Erlang_Elixir_Utils = {
     return Type.float(similarity);
   },
   // End jaro_similarity/2
-  // Deps: [:unicode_utl.cp/1]
+  // Deps: [:unicode_util.cp/1]
 };
 
 export default Erlang_Elixir_Utils;
