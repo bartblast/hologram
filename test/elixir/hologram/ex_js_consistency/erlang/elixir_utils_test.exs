@@ -127,9 +127,11 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
       test "raises ArgumentError for invalid UTF-8 bytes" do
         invalid_utf8 = <<255, 254, 253>>
 
-        assert_raise ArgumentError, fn ->
-          :elixir_utils.jaro_similarity(invalid_utf8, "test")
-        end
+        assert_error ArgumentError,
+                     "argument error: #{inspect(invalid_utf8)}",
+                     fn ->
+                       :elixir_utils.jaro_similarity(invalid_utf8, "test")
+                     end
       end
     end
   end
