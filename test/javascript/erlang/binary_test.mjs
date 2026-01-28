@@ -1938,15 +1938,13 @@ describe("Erlang_Binary", () => {
         );
       });
 
-      it("raises ArgumentError when scope start exceeds subject length", () => {
+      it("raises ArgumentError for improper list options", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("t");
         const replacement = Bitstring.fromText("x");
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(10), Type.integer(1)]),
-          ]),
+        const options = Type.improperList([
+          Type.atom("global"),
+          Type.atom("bad"),
         ]);
 
         assertBoxedError(
@@ -1956,13 +1954,15 @@ describe("Erlang_Binary", () => {
         );
       });
 
-      it("raises ArgumentError for improper list options", () => {
+      it("raises ArgumentError when scope start exceeds subject length", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("t");
         const replacement = Bitstring.fromText("x");
-        const options = Type.improperList([
-          Type.atom("global"),
-          Type.atom("bad"),
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(10), Type.integer(1)]),
+          ]),
         ]);
 
         assertBoxedError(
