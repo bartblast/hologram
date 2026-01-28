@@ -64,6 +64,15 @@ const Erlang_Elixir_Aliases = {
   },
   // End concat/1
   // Deps: []
+
+  // Start safe_concat/1
+  // Note: there's no atom table limitation in the client-side Hologram runtime,
+  // safe_concat/1 can simply delegate directly to concat/1.
+  "safe_concat/1": (segments) => {
+    return Erlang_Elixir_Aliases["concat/1"](segments);
+  },
+  // End safe_concat/1
+  // Deps: [:elixir_aliases.concat/1]
 };
 
 export default Erlang_Elixir_Aliases;

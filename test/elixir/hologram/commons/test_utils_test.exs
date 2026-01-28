@@ -15,6 +15,11 @@ defmodule Hologram.Commons.TestUtilsTest do
     assert result == expected
   end
 
+  test "build_bad_function_error_msg/1" do
+    assert build_bad_function_error_msg(%{b: 2, a: 1}) ==
+             "expected a function, got: %{a: 1, b: 2}"
+  end
+
   describe "build_function_clause_error_msg/3" do
     # no args / no attempted clauses
     test "basic case" do

@@ -268,6 +268,21 @@ const Erlang = {
   // End andalso/2
   // Deps: []
 
+  // Start apply/2
+  "apply/2": (fun, args) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseBadFunctionError(fun);
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Interpreter.callAnonymousFunction(fun, args.data);
+  },
+  // End apply/2
+  // Deps: []
+
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
   // Start apply/3
@@ -650,6 +665,85 @@ const Erlang = {
     return Type.integer(Math.ceil(number.value));
   },
   // End ceil/1
+  // Deps: []
+
+  // Start convert_time_unit/3
+  "convert_time_unit/3": (time, fromUnit, toUnit) => {
+    // Helpers
+
+    const resolveTimeUnit = (unit, argumentIndex) => {
+      // :native - the time unit used by :erlang.monotonic_time/0
+      // :perf_counter - the time unit used by :os.perf_counter/0 (high-resolution OS timer)
+      //
+      // Both are technically platform-dependent in Erlang/OTP, but in practice they're
+      // nanoseconds on all major platforms (Linux, macOS, Windows). We standardize on
+      // nanoseconds to match typical Erlang behavior while keeping JS behavior predictable.
+      const NATIVE_TIME_UNIT = 1_000_000_000n;
+      const PERF_COUNTER_TIME_UNIT = 1_000_000_000n;
+
+      const isPositiveIntegerUnit = Type.isInteger(unit) && unit.value > 0n;
+
+      if (isPositiveIntegerUnit) return unit.value;
+
+      if (!Type.isAtom(unit)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
+        );
+      }
+
+      switch (unit.value) {
+        case "nanosecond":
+        case "nano_seconds":
+          return 1_000_000_000n;
+
+        case "microsecond":
+        case "micro_seconds":
+          return 1_000_000n;
+
+        case "millisecond":
+        case "milli_seconds":
+          return 1_000n;
+
+        case "second":
+        case "seconds":
+          return 1n;
+
+        case "native":
+          return NATIVE_TIME_UNIT;
+
+        case "perf_counter":
+          return PERF_COUNTER_TIME_UNIT;
+
+        default:
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              argumentIndex,
+              "invalid time unit",
+            ),
+          );
+      }
+    };
+
+    // Main logic
+
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    const fromUnitValue = resolveTimeUnit(fromUnit, 2);
+    const toUnitValue = resolveTimeUnit(toUnit, 3);
+    const numerator = toUnitValue * time.value;
+
+    const adjustedNumerator =
+      time.value < 0n ? numerator - (fromUnitValue - 1n) : numerator;
+
+    const result = adjustedNumerator / fromUnitValue;
+
+    return Type.integer(result);
+  },
+  // End convert_time_unit/3
   // Deps: []
 
   // Start div/2
@@ -1421,6 +1515,47 @@ const Erlang = {
   // End list_to_ref/1
   // Deps: []
 
+  // Start list_to_tuple/1
+  "list_to_tuple/1": (list) => {
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+    return Type.tuple(list.data);
+  },
+  // End list_to_tuple/1
+  // Deps: []
+
+  // Start localtime/0
+  "localtime/0": () => {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1; // JavaScript months are 0-indexed
+    const day = now.getDate();
+
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const second = now.getSeconds();
+
+    const date = Type.tuple([
+      Type.integer(year),
+      Type.integer(month),
+      Type.integer(day),
+    ]);
+
+    const time = Type.tuple([
+      Type.integer(hour),
+      Type.integer(minute),
+      Type.integer(second),
+    ]);
+
+    return Type.tuple([date, time]);
+  },
+  // End localtime/0
+  // Deps: []
+
   // Start make_ref/0
   "make_ref/0": () => {
     const node = ERTS.nodeTable.CLIENT_NODE;
@@ -1523,6 +1658,21 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // End orelse/2
+  // Deps: []
+
+  // Start pid_to_list/1
+  "pid_to_list/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    const pidText = `<${pid.segments.join(".")}>`;
+
+    return Bitstring.toCodepoints(Type.bitstring(pidText));
+  },
+  // End pid_to_list/1
   // Deps: []
 
   // Start rem/2
@@ -1654,6 +1804,59 @@ const Erlang = {
     return isProper ? Type.list(data) : Type.improperList(data);
   },
   // End tl/1
+  // Deps: []
+
+  // Start time_offset/0
+  "time_offset/0": () => {
+    return Erlang["time_offset/1"](Type.atom("native"));
+  },
+  // End time_offset/0
+  // Deps: [:erlang.time_offset/1]
+
+  // Start time_offset/1
+  "time_offset/1": (unit) => {
+    let unitValue;
+
+    if (Type.isAtom(unit)) {
+      switch (unit.value) {
+        case "native":
+          unitValue = 1_000_000n;
+          break;
+        case "second":
+          unitValue = 1_000_000_000n;
+          break;
+        case "millisecond":
+          unitValue = 1_000_000n;
+          break;
+        case "microsecond":
+          unitValue = 1_000n;
+          break;
+        case "nanosecond":
+          unitValue = 1n;
+          break;
+        default:
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+          );
+      }
+    } else if (Type.isInteger(unit) && unit.value >= 1n) {
+      unitValue = unit.value;
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    }
+
+    const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
+    const monoTimeNs =
+      BigInt(Math.round(performance.timeOrigin + performance.now())) *
+      1_000_000n;
+    const offsetNs = systemTimeNs - monoTimeNs;
+
+    const quotient = offsetNs / unitValue;
+    return Type.integer(quotient);
+  },
+  // End time_offset/1
   // Deps: []
 
   // Start trunc/1

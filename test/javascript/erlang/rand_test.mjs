@@ -16,6 +16,18 @@ defineGlobalErlangAndElixirModules();
 // Always update both together.
 
 describe("Erlang_Rand", () => {
+  describe("uniform/0", () => {
+    const uniform = Erlang_Rand["uniform/0"];
+
+    it("returns a float in range [0.0, 1.0)", () => {
+      const result = uniform();
+
+      assert.isTrue(Type.isFloat(result));
+      assert.isAtLeast(result.value, 0.0);
+      assert.isBelow(result.value, 1.0);
+    });
+  });
+
   describe("uniform/1", () => {
     const uniform = Erlang_Rand["uniform/1"];
 

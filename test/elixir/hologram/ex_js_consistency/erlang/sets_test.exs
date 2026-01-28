@@ -9,6 +9,62 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   @moduletag :consistency
 
+  describe "add_element/2" do
+    test "adds a new element to the set" do
+      set = :sets.from_list([1, 3], [{:version, 2}])
+
+      result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "returns the same set if element is already present" do
+      set = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      result = :sets.add_element(2, set)
+      expected = :sets.from_list([1, 2, 3], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "adds element to empty set" do
+      set = :sets.from_list([], [{:version, 2}])
+
+      result = :sets.add_element(1, set)
+      expected = :sets.from_list([1], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set = :sets.from_list([1.0], [{:version, 2}])
+
+      result = :sets.add_element(1, set)
+      expected = :sets.from_list([1, 1.0], [{:version, 2}])
+
+      assert result == expected
+    end
+
+    test "doesn't mutate the original set" do
+      set = :sets.from_list([1, 2], [{:version, 2}])
+
+      :sets.add_element(3, set)
+
+      expected = :sets.from_list([1, 2], [{:version, 2}])
+
+      assert set == expected
+    end
+
+    test "raises FunctionClauseError if argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.add_element/2", [:elem, :not_a_set])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.add_element(:elem, :not_a_set)
+      end
+    end
+  end
+
   describe "del_element/2" do
     test "removes an existing element from the set" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
@@ -237,6 +293,68 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "is_disjoint/2" do
+    setup do
+      [
+        empty_set: :sets.new(version: 2),
+        set_123: :sets.from_list([1, 2, 3], version: 2)
+      ]
+    end
+
+    test "returns true if sets have no common elements" do
+      set1 = :sets.from_list([1, 2], version: 2)
+      set2 = :sets.from_list([3], version: 2)
+
+      assert :sets.is_disjoint(set1, set2) == true
+    end
+
+    test "returns false if sets have common elements" do
+      set1 = :sets.from_list([1, 2], version: 2)
+      set2 = :sets.from_list([2, 3], version: 2)
+
+      assert :sets.is_disjoint(set1, set2) == false
+    end
+
+    test "returns true if both sets are empty", %{empty_set: empty_set} do
+      assert :sets.is_disjoint(empty_set, empty_set) == true
+    end
+
+    test "returns true if first set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_disjoint(empty_set, set_123) == true
+    end
+
+    test "returns true if second set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.is_disjoint(set_123, empty_set) == true
+    end
+
+    test "returns false if sets are identical", %{set_123: set_123} do
+      assert :sets.is_disjoint(set_123, set_123) == false
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set_int = :sets.from_list([1], version: 2)
+      set_float = :sets.from_list([1.0], version: 2)
+
+      assert :sets.is_disjoint(set_int, set_float) == true
+    end
+
+    test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
+      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_disjoint(:abc, set_123)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
+      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.is_disjoint(set_123, :abc)
+      end
+    end
+  end
+
   describe "is_element/2" do
     test "returns true if element is in the set" do
       set = :sets.from_list([1, 2, 3], [{:version, 2}])
@@ -373,6 +491,28 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     test "raises CaseClauseError for invalid versions" do
       assert_error CaseClauseError, "no case clause matching: :abc", fn ->
         :sets.new(version: :abc)
+      end
+    end
+  end
+
+  describe "size/1" do
+    test "returns zero if given an empty set" do
+      set = :sets.new(version: 2)
+
+      assert :sets.size(set) == 0
+    end
+
+    test "returns count for non-empty set" do
+      set = :sets.from_list([1, 2, 3], version: 2)
+
+      assert :sets.size(set) == 3
+    end
+
+    test "raises FunctionClauseError if the argument is not a set" do
+      expected_msg = build_function_clause_error_msg(":sets.size/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.size(:abc)
       end
     end
   end
