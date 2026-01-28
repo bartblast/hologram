@@ -79,6 +79,7 @@ describe("Erlang_UnicodeUtil", () => {
       it("returns error tuple for surrogate pair", () => {
         // Create invalid UTF-8 with surrogate pair codepoint
         const input = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(result, Type.tuple([Type.atom("error"), input]));
@@ -132,6 +133,7 @@ describe("Erlang_UnicodeUtil", () => {
       it("does not validate surrogate pair codepoint in list", () => {
         // Erlang does not validate surrogate pairs in integer lists
         const input = Type.list([Type.integer(55296)]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(result, Type.list([Type.integer(55296)]));
@@ -175,7 +177,6 @@ describe("Erlang_UnicodeUtil", () => {
 
       it("extracts codepoint from multi-character binary", () => {
         const input = Type.list([Type.bitstring("hello"), Type.integer(97)]);
-
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -313,6 +314,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.integer(97),
           Type.bitstring("bc"),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(result, input);
@@ -323,6 +325,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.bitstring("ab"),
           Type.bitstring("cd"),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -393,6 +396,7 @@ describe("Erlang_UnicodeUtil", () => {
         const input = Type.list([
           Type.improperList([Type.integer(97), Type.integer(98)]),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -405,6 +409,7 @@ describe("Erlang_UnicodeUtil", () => {
         const input = Type.list([
           Type.improperList([Type.integer(97), Type.atom("atom")]),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -417,6 +422,7 @@ describe("Erlang_UnicodeUtil", () => {
         const input = Type.list([
           Type.improperList([Type.bitstring("ab"), Type.list()]),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -430,6 +436,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.list([Type.integer(97), Type.integer(98)]),
           Type.bitstring("cd"),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -478,6 +485,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.bitstring("cd"),
           Type.integer(97),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -497,6 +505,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.bitstring("cd"),
           Type.bitstring("ef"),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -517,6 +526,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.integer(99),
           Type.bitstring("d"),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -543,9 +553,10 @@ describe("Erlang_UnicodeUtil", () => {
 
       // Tests O(n) optimization: avoids O(n²) slicing behavior when processing long lists
       it("handles very long list of integers", () => {
-        const longList = Array.from({length: 100}, (_, i) =>
-          Type.integer(i + 1),
+        const longList = Array.from({length: 100}, (_elem, index) =>
+          Type.integer(index + 1),
         );
+
         const input = Type.list(longList);
         const result = cp(input);
 
@@ -559,6 +570,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.integer(99),
           Type.integer(100),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(
@@ -576,6 +588,7 @@ describe("Erlang_UnicodeUtil", () => {
         const input = Type.list([
           Type.list([Type.list([Type.list([Type.integer(97)])])]),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(result, Type.list([Type.integer(97)]));
@@ -587,6 +600,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.list([Type.bitstring("")]),
           Type.integer(97),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(result, Type.list([Type.integer(97)]));
@@ -597,6 +611,7 @@ describe("Erlang_UnicodeUtil", () => {
           Type.list([Type.bitstring(""), Type.list()]),
           Type.integer(97),
         ]);
+
         const result = cp(input);
 
         assert.deepStrictEqual(result, Type.list([Type.integer(97)]));
@@ -693,6 +708,7 @@ describe("Erlang_UnicodeUtil", () => {
         const invalidBinary = Bitstring.fromBytes([
           0xf8, 0x80, 0x80, 0x80, 0x80,
         ]);
+
         const result = cp(invalidBinary);
 
         assert.deepStrictEqual(

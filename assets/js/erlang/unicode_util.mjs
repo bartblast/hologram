@@ -39,19 +39,25 @@ const Erlang_UnicodeUtil = {
           if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
             return restList;
           }
+
           return Erlang_UnicodeUtil["cp/1"](restList);
         }
+
         // Merge collected codepoints with restList
         if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
           if (restList.data.length === 1) {
             return Type.improperList([...result, restList.data[0]]);
           }
+
           return Type.list([...result, ...restList.data]);
         }
+
         const restListResult = Erlang_UnicodeUtil["cp/1"](restList);
+
         if (Type.isList(restListResult) && restListResult.isProper) {
           return Type.list([...result, ...restListResult.data]);
         }
+
         return Type.improperList([...result, restListResult]);
       }
 
@@ -63,12 +69,15 @@ const Erlang_UnicodeUtil = {
           firstElement,
           restList,
         );
+
         if (result.length === 0) {
           return contResult;
         }
+
         if (Type.isList(contResult) && contResult.isProper) {
           return Type.list([...result, ...contResult.data]);
         }
+
         return Type.improperList([...result, contResult]);
       }
 
@@ -76,16 +85,20 @@ const Erlang_UnicodeUtil = {
         restList.data.length === 0
           ? Type.list([Type.list(list.data.slice(idx + 1))])
           : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+
       const contResult = Erlang_UnicodeUtil["_cpl_cont/2"](
         firstElement,
         newRestList,
       );
+
       if (result.length === 0) {
         return contResult;
       }
+
       if (Type.isList(contResult) && contResult.isProper) {
         return Type.list([...result, ...contResult.data]);
       }
+
       return Type.improperList([...result, contResult]);
     }
 
@@ -98,6 +111,7 @@ const Erlang_UnicodeUtil = {
         // If next element in restList is binary, return it as-is (don't extract from it)
         return restList;
       }
+
       // Continue processing restList for non-binary elements or nested structures
       return Erlang_UnicodeUtil["cp/1"](restList);
     }
@@ -243,6 +257,7 @@ const Erlang_UnicodeUtil = {
 
     // [L|T]
     const tail = Type.list(restList.data.slice(1));
+
     return Erlang_UnicodeUtil["_cpl_cont3/2"](firstElement, tail);
   },
   // End _cpl_1_cont3/1
@@ -268,18 +283,24 @@ const Erlang_UnicodeUtil = {
           if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
             return restList;
           }
+
           return Erlang_UnicodeUtil["cp/1"](restList);
         }
+
         if (restList.data.length > 0 && Type.isBinary(restList.data[0])) {
           if (restList.data.length === 1) {
             return Type.improperList([...result, restList.data[0]]);
           }
+
           return Type.list([...result, ...restList.data]);
         }
+
         const restListResult = Erlang_UnicodeUtil["cp/1"](restList);
+
         if (Type.isList(restListResult) && restListResult.isProper) {
           return Type.list([...result, ...restListResult.data]);
         }
+
         return Type.improperList([...result, restListResult]);
       }
 
@@ -287,12 +308,15 @@ const Erlang_UnicodeUtil = {
 
       if (idx === list.data.length - 1) {
         const cplResult = Erlang_UnicodeUtil["_cpl/2"](firstElement, restList);
+
         if (result.length === 0) {
           return cplResult;
         }
+
         if (Type.isList(cplResult) && cplResult.isProper) {
           return Type.list([...result, ...cplResult.data]);
         }
+
         return Type.improperList([...result, cplResult]);
       }
 
@@ -300,13 +324,17 @@ const Erlang_UnicodeUtil = {
         restList.data.length === 0
           ? Type.list([Type.list(list.data.slice(idx + 1))])
           : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+
       const cplResult = Erlang_UnicodeUtil["_cpl/2"](firstElement, newRestList);
+
       if (result.length === 0) {
         return cplResult;
       }
+
       if (Type.isList(cplResult) && cplResult.isProper) {
         return Type.list([...result, ...cplResult.data]);
       }
+
       return Type.improperList([...result, cplResult]);
     }
 
@@ -329,9 +357,10 @@ const Erlang_UnicodeUtil = {
         return Erlang_UnicodeUtil["cp/1"](restList);
       }
 
-      const codepoint = text.codePointAt(0);
       // Calculate character length in UTF-16 code units (surrogate pairs are 2 units)
+      const codepoint = text.codePointAt(0);
       const charLength = codepoint > 0xffff ? 2 : 1;
+
       const restText = text.slice(charLength);
       const restBinary = Bitstring.fromText(restText);
 
@@ -388,11 +417,13 @@ const Erlang_UnicodeUtil = {
         if (result.length === 0) {
           return restList;
         }
+
         // For improper list continuation, chain codepoints
         let current = restList;
         for (let i = result.length - 1; i >= 0; i--) {
           current = Type.improperList([result[i], current]);
         }
+
         return current;
       }
 
@@ -402,13 +433,17 @@ const Erlang_UnicodeUtil = {
         const cont2Result = Erlang_UnicodeUtil["_cpl_1_cont2/1"](
           Type.list([firstElement, ...restList.data]),
         );
+
         if (result.length === 0) {
           return cont2Result;
         }
+
         let current = cont2Result;
+
         for (let i = result.length - 1; i >= 0; i--) {
           current = Type.improperList([result[i], current]);
         }
+
         return current;
       }
 
@@ -416,17 +451,22 @@ const Erlang_UnicodeUtil = {
         restList.data.length === 0
           ? Type.list([Type.list(list.data.slice(idx + 1))])
           : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+
       const cont2Result = Erlang_UnicodeUtil["_cpl_cont2/2"](
         firstElement,
         newRestList,
       );
+
       if (result.length === 0) {
         return cont2Result;
       }
+
       let current = cont2Result;
+
       for (let i = result.length - 1; i >= 0; i--) {
         current = Type.improperList([result[i], current]);
       }
+
       return current;
     }
 
@@ -453,11 +493,13 @@ const Erlang_UnicodeUtil = {
         if (result.length === 0) {
           return restList;
         }
+
         // For improper list continuation, chain codepoints
         let current = restList;
         for (let i = result.length - 1; i >= 0; i--) {
           current = Type.improperList([result[i], current]);
         }
+
         return current;
       }
 
@@ -467,13 +509,17 @@ const Erlang_UnicodeUtil = {
         const cont3Result = Erlang_UnicodeUtil["_cpl_1_cont3/1"](
           Type.list([firstElement, ...restList.data]),
         );
+
         if (result.length === 0) {
           return cont3Result;
         }
+
         let current = cont3Result;
+
         for (let i = result.length - 1; i >= 0; i--) {
           current = Type.improperList([result[i], current]);
         }
+
         return current;
       }
 
@@ -481,17 +527,22 @@ const Erlang_UnicodeUtil = {
         restList.data.length === 0
           ? Type.list([Type.list(list.data.slice(idx + 1))])
           : Type.list([Type.list(list.data.slice(idx + 1)), ...restList.data]);
+
       const cont3Result = Erlang_UnicodeUtil["_cpl_cont3/2"](
         firstElement,
         newRestList,
       );
+
       if (result.length === 0) {
         return cont3Result;
       }
+
       let current = cont3Result;
+
       for (let i = result.length - 1; i >= 0; i--) {
         current = Type.improperList([result[i], current]);
       }
+
       return current;
     }
 
@@ -505,7 +556,9 @@ const Erlang_UnicodeUtil = {
     if (!Type.isInteger(value)) {
       return false;
     }
+
     const codepoint = Number(value.value);
+
     return codepoint >= 0 && codepoint <= 0x10ffff;
   },
   // End _is_cp/1
@@ -569,12 +622,15 @@ const Erlang_UnicodeUtil = {
       // Case: head is a binary - extract first codepoint from it
       if (Type.isBinary(head)) {
         const text = Bitstring.toText(head);
+
         if (text === false) {
           return Type.tuple([Type.atom("error"), head]);
         }
+
         if (text.length === 0) {
           return Erlang_UnicodeUtil["cp/1"](tail);
         }
+
         const codepoint = text.codePointAt(0);
         const charLength = codepoint > 0xffff ? 2 : 1;
         const restText = text.slice(charLength);
@@ -587,20 +643,17 @@ const Erlang_UnicodeUtil = {
       // Case: head is a list - recursively process it, then append tail
       if (Type.isList(head)) {
         const headResult = Erlang_UnicodeUtil["cp/1"](head);
+
         // If head processing yielded empty list, continue with tail
         if (Type.isList(headResult) && headResult.data.length === 0) {
           return Erlang_UnicodeUtil["cp/1"](tail);
         }
+
         // If head processing yielded a list (proper or improper), append tail
         if (Type.isList(headResult)) {
           return Type.improperList([...headResult.data, tail]);
         }
       }
-
-      // Fallback - shouldn't reach here
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
-      );
     }
 
     // []
@@ -621,9 +674,10 @@ const Erlang_UnicodeUtil = {
         return Type.list();
       }
 
-      const codepoint = text.codePointAt(0);
       // Calculate character length in UTF-16 code units (surrogate pairs are 2 units)
+      const codepoint = text.codePointAt(0);
       const charLength = codepoint > 0xffff ? 2 : 1;
+
       const restText = text.slice(charLength);
       const restBinary = Bitstring.fromText(restText);
 
