@@ -208,9 +208,7 @@ const Erlang_UnicodeUtil = {
 
     // [L]
     if (restList.data.length === 1) {
-      return Erlang_UnicodeUtil["_cpl_1_cont2/1"](
-        Type.list([firstElement, ...tail.data]),
-      );
+      return Erlang_UnicodeUtil["_cpl_1_cont2/1"](firstElement);
     }
 
     // [L|T]
