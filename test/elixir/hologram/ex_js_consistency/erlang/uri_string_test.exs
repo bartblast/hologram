@@ -198,6 +198,34 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
+    test "scheme with empty path" do
+      assert :uri_string.parse("foo:") ==
+               %{
+                 path: "",
+                 scheme: "foo"
+               }
+    end
+
+    test "URI with empty query" do
+      assert :uri_string.parse("http://example.com?") ==
+               %{
+                 host: "example.com",
+                 path: "",
+                 query: "",
+                 scheme: "http"
+               }
+    end
+
+    test "URI with empty fragment" do
+      assert :uri_string.parse("http://example.com#") ==
+               %{
+                 host: "example.com",
+                 path: "",
+                 fragment: "",
+                 scheme: "http"
+               }
+    end
+
     test "mailto URI" do
       assert :uri_string.parse("mailto:john@example.com") ==
                %{
@@ -244,24 +272,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
-    test "invalid UTF-8 binary raises FunctionClauseError" do
-      assert_error FunctionClauseError,
-                   ~r/parse_scheme_start/,
-                   fn -> :uri_string.parse(<<255, 255, 255, 255>>) end
-    end
-
-    test "charlist with non-integer raises ArgumentError" do
-      assert_error ArgumentError,
-                   ~r/not valid character data/,
-                   fn -> :uri_string.parse([:a]) end
-    end
-
-    test "charlist with out-of-range integer raises FunctionClauseError" do
-      assert_error FunctionClauseError,
-                   ~r/parse_scheme_start/,
-                   fn -> :uri_string.parse([1_200_000]) end
-    end
-
     test "URI with IPv6 host and port" do
       assert :uri_string.parse("http://[::1]:8080/") ==
                %{
@@ -281,6 +291,26 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                }
     end
 
+    test "double query keeps full query text" do
+      assert :uri_string.parse("http://h/p?x?y") ==
+               %{
+                 host: "h",
+                 path: "/p",
+                 query: "x?y",
+                 scheme: "http"
+               }
+    end
+
+    test "single @ in userinfo, multiple in path is valid" do
+      assert :uri_string.parse("http://user@host/path@with@at") ==
+               %{
+                 host: "host",
+                 path: "/path@with@at",
+                 scheme: "http",
+                 userinfo: "user"
+               }
+    end
+
     test "missing closing bracket returns invalid_uri" do
       assert :uri_string.parse("http://[::1") == {:error, :invalid_uri, ~c":"}
     end
@@ -297,24 +327,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
       assert :uri_string.parse("http://h/p#f#x") == {:error, :invalid_uri, ~c":"}
     end
 
-    test "double query keeps full query text" do
-      assert :uri_string.parse("http://h/p?x?y") ==
-               %{
-                 host: "h",
-                 path: "/p",
-                 query: "x?y",
-                 scheme: "http"
-               }
-    end
-
-    test "raises FunctionClauseError for non-binary/non-list input" do
-      expected_msg = build_function_clause_error_msg(":uri_string.parse/1", [123])
-
-      assert_error FunctionClauseError,
-                   expected_msg,
-                   fn -> :uri_string.parse(123) end
-    end
-
     test "multiple @ symbols in authority (bare //) returns invalid_uri" do
       assert :uri_string.parse("//a@b@c/path") == {:error, :invalid_uri, ~c"@"}
     end
@@ -328,14 +340,50 @@ defmodule Hologram.ExJsConsistency.Erlang.UriStringTest do
                {:error, :invalid_uri, ~c":"}
     end
 
-    test "single @ in userinfo, multiple in path is valid" do
-      assert :uri_string.parse("http://user@host/path@with@at") ==
-               %{
-                 host: "host",
-                 path: "/path@with@at",
-                 scheme: "http",
-                 userinfo: "user"
-               }
+    test "raises FunctionClauseError if the argument is a non-binary bitstring" do
+      arg = <<1::1, 0::1, 1::1>>
+      expected_msg = build_function_clause_error_msg(":uri_string.parse/1", [arg])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse(arg) end
+    end
+
+    test "raises FunctionClauseError if the argument is not a binary or list" do
+      expected_msg = build_function_clause_error_msg(":uri_string.parse/1", [123])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse(123) end
+    end
+
+    test "raises FunctionClauseError if the argument is a binary with invalid UTF-8" do
+      arg = <<255, 255, 255, 255>>
+
+      expected_msg =
+        build_function_clause_error_msg(":uri_string.parse_scheme_start/2", [arg, %{}])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse(arg) end
+    end
+
+    test "raises ArgumentError if the argument is a list containing a non-integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn -> :uri_string.parse([:a]) end
+    end
+
+    test "raises FunctionClauseError if the argument is a list containing an out-of-range integer" do
+      expected_msg =
+        build_function_clause_error_msg(":uri_string.parse_scheme_start/2", [
+          {:error, "", [1_200_000]},
+          %{}
+        ])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn -> :uri_string.parse([1_200_000]) end
     end
   end
 end

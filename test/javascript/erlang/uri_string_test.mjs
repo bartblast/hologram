@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Uri_String from "../../../assets/js/erlang/uri_string.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -24,6 +25,7 @@ describe("Erlang_Uri_String", () => {
       const uri = Type.bitstring(
         "foo://user@example.com:8042/over/there?name=ferret#nose",
       );
+
       const result = parse(uri);
 
       const expected = Type.map([
@@ -43,6 +45,7 @@ describe("Erlang_Uri_String", () => {
       const uri = Type.charlist(
         "foo://user@example.com:8042/over/there?name=ferret#nose",
       );
+
       const result = parse(uri);
 
       const expected = Type.map([
@@ -62,6 +65,7 @@ describe("Erlang_Uri_String", () => {
       const uri = Type.bitstring(
         "foo://example.com:8042/over/there?name=ferret#nose",
       );
+
       const result = parse(uri);
 
       const expected = Type.map([
@@ -80,6 +84,7 @@ describe("Erlang_Uri_String", () => {
       const uri = Type.bitstring(
         "foo://user@example.com/over/there?name=ferret#nose",
       );
+
       const result = parse(uri);
 
       const expected = Type.map([
@@ -114,6 +119,7 @@ describe("Erlang_Uri_String", () => {
       const uri = Type.bitstring(
         "foo://user@example.com:8042/over/there?name=ferret",
       );
+
       const result = parse(uri);
 
       const expected = Type.map([
@@ -286,8 +292,47 @@ describe("Erlang_Uri_String", () => {
     it("empty URI string", () => {
       const uri = Type.bitstring("");
       const result = parse(uri);
-
       const expected = Type.map([[Type.atom("path"), Type.bitstring("")]]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("scheme with empty path", () => {
+      const uri = Type.bitstring("foo:");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("path"), Type.bitstring("")],
+        [Type.atom("scheme"), Type.bitstring("foo")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("URI with empty query", () => {
+      const uri = Type.bitstring("http://example.com?");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("example.com")],
+        [Type.atom("path"), Type.bitstring("")],
+        [Type.atom("query"), Type.bitstring("")],
+        [Type.atom("scheme"), Type.bitstring("http")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("URI with empty fragment", () => {
+      const uri = Type.bitstring("http://example.com#");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("example.com")],
+        [Type.atom("path"), Type.bitstring("")],
+        [Type.atom("fragment"), Type.bitstring("")],
+        [Type.atom("scheme"), Type.bitstring("http")],
+      ]);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -358,40 +403,6 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("invalid UTF-8 binary raises FunctionClauseError", () => {
-      const invalid = Type.bitstring([255, 255, 255, 255]);
-
-      assertBoxedError(
-        () => parse(invalid),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [
-          invalid,
-        ]),
-      );
-    });
-
-    it("charlist with non-integer raises ArgumentError", () => {
-      const invalid = Type.list([Type.atom("a")]);
-
-      assertBoxedError(
-        () => parse(invalid),
-        "ArgumentError",
-        /not valid character data/, // matches OTP-style message
-      );
-    });
-
-    it("charlist with out-of-range integer raises FunctionClauseError", () => {
-      const invalid = Type.list([Type.integer(1_200_000)]);
-
-      assertBoxedError(
-        () => parse(invalid),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [
-          invalid,
-        ]),
-      );
-    });
-
     it("URI with IPv6 host and port", () => {
       const uri = Type.bitstring("http://[::1]:8080/");
       const result = parse(uri);
@@ -414,6 +425,34 @@ describe("Erlang_Uri_String", () => {
         [Type.atom("host"), Type.bitstring("")],
         [Type.atom("path"), Type.bitstring("")],
         [Type.atom("port"), Type.integer(80)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("double query keeps full query text", () => {
+      const uri = Type.bitstring("http://h/p?x?y");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("h")],
+        [Type.atom("path"), Type.bitstring("/p")],
+        [Type.atom("query"), Type.bitstring("x?y")],
+        [Type.atom("scheme"), Type.bitstring("http")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single @ in userinfo, multiple in path is valid", () => {
+      const uri = Type.bitstring("http://user@host/path@with@at");
+      const result = parse(uri);
+
+      const expected = Type.map([
+        [Type.atom("host"), Type.bitstring("host")],
+        [Type.atom("path"), Type.bitstring("/path@with@at")],
+        [Type.atom("scheme"), Type.bitstring("http")],
+        [Type.atom("userinfo"), Type.bitstring("user")],
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -471,32 +510,6 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("double query keeps full query text", () => {
-      const uri = Type.bitstring("http://h/p?x?y");
-      const result = parse(uri);
-
-      const expected = Type.map([
-        [Type.atom("host"), Type.bitstring("h")],
-        [Type.atom("path"), Type.bitstring("/p")],
-        [Type.atom("query"), Type.bitstring("x?y")],
-        [Type.atom("scheme"), Type.bitstring("http")],
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("raises FunctionClauseError for non-binary/non-list input", () => {
-      const invalidInput = Type.integer(123);
-
-      assertBoxedError(
-        () => parse(invalidInput),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [
-          invalidInput,
-        ]),
-      );
-    });
-
     it("multiple @ symbols in authority (bare //) returns invalid_uri", () => {
       const uri = Type.bitstring("//a@b@c/path");
       const result = parse(uri);
@@ -536,20 +549,66 @@ describe("Erlang_Uri_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    // Duplicate of the bare // case above removed for clarity.
+    it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
 
-    it("single @ in userinfo, multiple in path is valid", () => {
-      const uri = Type.bitstring("http://user@host/path@with@at");
-      const result = parse(uri);
+      assertBoxedError(
+        () => parse(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [arg]),
+      );
+    });
 
-      const expected = Type.map([
-        [Type.atom("host"), Type.bitstring("host")],
-        [Type.atom("path"), Type.bitstring("/path@with@at")],
-        [Type.atom("scheme"), Type.bitstring("http")],
-        [Type.atom("userinfo"), Type.bitstring("user")],
-      ]);
+    it("raises FunctionClauseError if the argument is not a binary or list", () => {
+      const arg = Type.integer(123);
 
-      assert.deepStrictEqual(result, expected);
+      assertBoxedError(
+        () => parse(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":uri_string.parse/1", [arg]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a binary with invalid UTF-8", () => {
+      const arg = Bitstring.fromBytes(new Uint8Array([255, 255, 255, 255]));
+
+      assertBoxedError(
+        () => parse(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":uri_string.parse_scheme_start/2",
+          [arg, Type.map()],
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a list containing a non-integer", () => {
+      const arg = Type.list([Type.atom("a")]);
+
+      assertBoxedError(
+        () => parse(arg),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is a list containing an out-of-range integer", () => {
+      const arg = Type.list([Type.integer(1_200_000)]);
+
+      assertBoxedError(
+        () => parse(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":uri_string.parse_scheme_start/2",
+          [
+            Type.tuple([Type.atom("error"), Type.bitstring(""), arg]),
+            Type.map(),
+          ],
+        ),
+      );
     });
   });
 });
