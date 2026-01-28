@@ -8,9 +8,9 @@ import Type from "../type.mjs";
 
 const Erlang_Os = {
   // Start system_time/0
-  // Returns the current system time in nanoseconds.
-  // Uses Date.now() which returns milliseconds since Unix epoch.
+  // Returns the current system time in native time unit (nanoseconds).
   "system_time/0": () => {
+    // Date.now() returns milliseconds since Unix epoch.
     return Type.integer(BigInt(Date.now()) * 1_000_000n);
   },
   // End system_time/0
