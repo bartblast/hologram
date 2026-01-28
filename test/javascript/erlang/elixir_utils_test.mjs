@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Elixir_Utils from "../../../assets/js/erlang/elixir_utils.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -58,9 +59,9 @@ describe("Erlang_Elixir_Utils", () => {
     });
 
     it("returns 0.0 for identical single characters", () => {
-      // Known issue in :elixir_utils.jaro_similarity/2
-      // will be fixed when Elixir requires Erlang/OTP 27+
-      // and switches to :string.jaro_similarity/2
+      // Known issue in :elixir_utils.jaro_similarity/2.
+      // Elixir will eventually switch to :string.jaro_similarity/2
+      // when it requires Erlang/OTP 27+.
       const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("a"));
       assert.strictEqual(result.value, 0.0);
     });
@@ -198,7 +199,7 @@ describe("Erlang_Elixir_Utils", () => {
     // - Single-element list with invalid type raises :unicode_util.cp/1 error
     // - Multi-element list with invalid type raises :unicode_util.cpl/2 error (with remaining elements)
 
-    it("raises FunctionClauseError for invalid arguments", () => {
+    it("raises FunctionClauseError when first argument is not bitstring or list", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
         [Type.integer(123)],
@@ -211,7 +212,64 @@ describe("Erlang_Elixir_Utils", () => {
       );
     });
 
-    it("raises FunctionClauseError for single-element list with invalid type", () => {
+    it("raises FunctionClauseError when second argument is not bitstring or list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":unicode_util.cp/1",
+        [Type.integer(123)],
+      );
+
+      assertBoxedError(
+        () => jaroSimilarity(Type.bitstring("hello"), Type.integer(123)),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError when first argument is non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":unicode_util.cp/1",
+        [arg],
+      );
+
+      assertBoxedError(
+        () => jaroSimilarity(arg, Type.bitstring("hello")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError when second argument is non-binary bitstring", () => {
+      const arg = Type.bitstring([1, 0, 1]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":unicode_util.cp/1",
+        [arg],
+      );
+
+      assertBoxedError(
+        () => jaroSimilarity(Type.bitstring("hello"), arg),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError when first argument is single-element list with invalid element", () => {
+      const emptyMap = Type.map();
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":unicode_util.cp/1",
+        [emptyMap],
+      );
+
+      assertBoxedError(
+        () => jaroSimilarity(Type.list([emptyMap]), Type.bitstring("hello")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError when second argument is single-element list with invalid element", () => {
       const emptyMap = Type.map([]);
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":unicode_util.cp/1",
@@ -219,13 +277,13 @@ describe("Erlang_Elixir_Utils", () => {
       );
 
       assertBoxedError(
-        () => jaroSimilarity(Type.list([emptyMap]), Type.list([emptyMap])),
+        () => jaroSimilarity(Type.bitstring("hello"), Type.list([emptyMap])),
         "FunctionClauseError",
         expectedMessage,
       );
     });
 
-    it("raises FunctionClauseError for multi-element list with invalid type", () => {
+    it("raises FunctionClauseError when first argument is multi-element list with invalid element", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":unicode_util.cpl/2",
         [Type.atom("a"), Type.list([Type.atom("b")])],
@@ -235,6 +293,23 @@ describe("Erlang_Elixir_Utils", () => {
         () =>
           jaroSimilarity(
             Type.list([Type.atom("a"), Type.atom("b")]),
+            Type.bitstring("hello"),
+          ),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError when second argument is multi-element list with invalid element", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":unicode_util.cpl/2",
+        [Type.atom("a"), Type.list([Type.atom("b")])],
+      );
+
+      assertBoxedError(
+        () =>
+          jaroSimilarity(
+            Type.bitstring("hello"),
             Type.list([Type.atom("a"), Type.atom("b")]),
           ),
         "FunctionClauseError",
@@ -243,11 +318,8 @@ describe("Erlang_Elixir_Utils", () => {
     });
 
     it("raises ArgumentError for invalid UTF-8 bytes", () => {
-      const invalidUtf8 = Type.bitstring("");
-      invalidUtf8.bytes = new Uint8Array([255, 254, 253]);
-      invalidUtf8.text = null;
-
-      const expectedMessage = `argument error: ${Interpreter.inspect(invalidUtf8)}`;
+      const invalidUtf8 = Bitstring.fromBytes([255, 254, 253]);
+      const expectedMessage = "argument error: <<255, 254, 253>>";
 
       assertBoxedError(
         () => jaroSimilarity(invalidUtf8, Type.bitstring("test")),

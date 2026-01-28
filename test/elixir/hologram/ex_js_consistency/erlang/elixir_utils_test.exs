@@ -32,9 +32,9 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
       end
 
       test "returns 0.0 for identical single characters" do
-        # Known issue in :elixir_utils.jaro_similarity/2
-        # will be fixed when Elixir requires Erlang/OTP 27+
-        # and switches to :string.jaro_similarity/2
+        # Known issue in :elixir_utils.jaro_similarity/2.
+        # Elixir will eventually switch to :string.jaro_similarity/2
+        # when it requires Erlang/OTP 27+.
         assert :elixir_utils.jaro_similarity("a", "a") == 0.0
       end
 
@@ -86,21 +86,19 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
       end
 
       test "handles lists with multi-character strings" do
-        result = :elixir_utils.jaro_similarity(["ab", "cd"], ["ab", "cd"])
-        assert result == 1.0
+        assert :elixir_utils.jaro_similarity(["ab", "cd"], ["ab", "cd"]) == 1.0
       end
 
       test "handles nested lists" do
-        result = :elixir_utils.jaro_similarity([97, 98, [99]], [97, 98, [99]])
-        assert result == 1.0
+        assert :elixir_utils.jaro_similarity([97, 98, [99]], [97, 98, [99]]) == 1.0
       end
 
-      # Error handling tests
+      # Error case tests
       # - Top-level invalid argument raises :unicode_util.cp/1 error
       # - Single-element list with invalid type raises :unicode_util.cp/1 error
       # - Multi-element list with invalid type raises :unicode_util.cpl/2 error (with remaining elements)
 
-      test "raises FunctionClauseError for invalid arguments" do
+      test "raises FunctionClauseError when first argument is not bitstring or list" do
         assert_error FunctionClauseError,
                      build_function_clause_error_msg(":unicode_util.cp/1", [123]),
                      fn ->
@@ -108,29 +106,67 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
                      end
       end
 
-      test "raises FunctionClauseError for single-element list with invalid type" do
+      test "raises FunctionClauseError when second argument is not bitstring or list" do
         assert_error FunctionClauseError,
-                     build_function_clause_error_msg(":unicode_util.cp/1", [%{}]),
+                     build_function_clause_error_msg(":unicode_util.cp/1", [123]),
                      fn ->
-                       :elixir_utils.jaro_similarity([%{}], [%{}])
+                       :elixir_utils.jaro_similarity("hello", 123)
                      end
       end
 
-      test "raises FunctionClauseError for multi-element list with invalid type" do
+      test "raises FunctionClauseError when first argument is non-binary bitstring" do
+        arg = <<1::1, 0::1, 1::1>>
+
+        assert_error FunctionClauseError,
+                     build_function_clause_error_msg(":unicode_util.cp/1", [arg]),
+                     fn -> :elixir_utils.jaro_similarity(arg, "hello") end
+      end
+
+      test "raises FunctionClauseError when second argument is non-binary bitstring" do
+        arg = <<1::1, 0::1, 1::1>>
+
+        assert_error FunctionClauseError,
+                     build_function_clause_error_msg(":unicode_util.cp/1", [arg]),
+                     fn -> :elixir_utils.jaro_similarity("hello", arg) end
+      end
+
+      test "raises FunctionClauseError when first argument is single-element list with invalid element" do
+        assert_error FunctionClauseError,
+                     build_function_clause_error_msg(":unicode_util.cp/1", [%{}]),
+                     fn ->
+                       :elixir_utils.jaro_similarity([%{}], "hello")
+                     end
+      end
+
+      test "raises FunctionClauseError when second argument is single-element list with invalid element" do
+        assert_error FunctionClauseError,
+                     build_function_clause_error_msg(":unicode_util.cp/1", [%{}]),
+                     fn ->
+                       :elixir_utils.jaro_similarity("hello", [%{}])
+                     end
+      end
+
+      test "raises FunctionClauseError when first argument is multi-element list with invalid element" do
         assert_error FunctionClauseError,
                      build_function_clause_error_msg(":unicode_util.cpl/2", [:a, [:b]]),
                      fn ->
-                       :elixir_utils.jaro_similarity([:a, :b], [:a, :b])
+                       :elixir_utils.jaro_similarity([:a, :b], "hello")
+                     end
+      end
+
+      test "raises FunctionClauseError when second argument is multi-element list with invalid element" do
+        assert_error FunctionClauseError,
+                     build_function_clause_error_msg(":unicode_util.cpl/2", [:a, [:b]]),
+                     fn ->
+                       :elixir_utils.jaro_similarity("hello", [:a, :b])
                      end
       end
 
       test "raises ArgumentError for invalid UTF-8 bytes" do
-        invalid_utf8 = <<255, 254, 253>>
-
         assert_error ArgumentError,
-                     "argument error: #{inspect(invalid_utf8)}",
+                     "argument error: <<255, 254, 253>>",
                      fn ->
-                       :elixir_utils.jaro_similarity(invalid_utf8, "test")
+                       :elixir_utils.jaro_similarity(<<255, 254, 253>>, "test")
                      end
       end
     end
