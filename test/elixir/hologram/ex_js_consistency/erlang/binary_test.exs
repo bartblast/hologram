@@ -729,7 +729,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert :binary.replace("a1b1c1", "1", "", [:global]) == "abc"
     end
 
-    # With insert_replaced option
+    # With :insert_replaced option
 
     test "inserts matched part at single position" do
       assert :binary.replace("abcde", "bcd", "[", insert_replaced: 1) == "a[bcde"
@@ -750,7 +750,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                "ab[cdcd]e"
     end
 
-    test "works with :global and insert_replaced" do
+    test "works with :global and :insert_replaced" do
       subject = "a-a-a"
 
       result =
@@ -794,7 +794,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    end
     end
 
-    # With scope option
+    # With :scope option
 
     test "respects scope when replacing" do
       assert :binary.replace("abc def abc", "abc", "X", scope: {8, 3}) == "abc def X"
@@ -832,6 +832,28 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       compiled = :binary.compile_pattern(["-", "o"])
 
       assert :binary.replace("hello-world", compiled, "X", [:global]) == "hellXXwXrld"
+    end
+
+    # Edge cases
+
+    test "works with empty subject" do
+      assert :binary.replace("", "x", "y", []) == ""
+    end
+
+    test "works when pattern equals entire subject" do
+      assert :binary.replace("hello", "hello", "world", []) == "world"
+    end
+
+    test "works when replacement is longer than pattern" do
+      assert :binary.replace("hi", "i", "ello world", []) == "hello world"
+    end
+
+    test "works when replacement is shorter than pattern" do
+      assert :binary.replace("hello world", "hello", "hi", []) == "hi world"
+    end
+
+    test "works with single character subject" do
+      assert :binary.replace("a", "a", "b", []) == "b"
     end
 
     # Error cases
@@ -954,28 +976,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert_error ArgumentError,
                    build_argument_error_msg(4, "invalid options"),
                    {:binary, :replace, ["hello", "l", "X", [scope: {-1, 5}]]}
-    end
-
-    # Edge cases
-
-    test "works with empty subject" do
-      assert :binary.replace("", "x", "y", []) == ""
-    end
-
-    test "works when pattern equals entire subject" do
-      assert :binary.replace("hello", "hello", "world", []) == "world"
-    end
-
-    test "works when replacement is longer than pattern" do
-      assert :binary.replace("hi", "i", "ello world", []) == "hello world"
-    end
-
-    test "works when replacement is shorter than pattern" do
-      assert :binary.replace("hello world", "hello", "hi", []) == "hi world"
-    end
-
-    test "works with single character subject" do
-      assert :binary.replace("a", "a", "b", []) == "b"
     end
   end
 

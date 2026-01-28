@@ -722,6 +722,7 @@ const Erlang_Binary = {
 
     const compilePatternOrRaise = (pat, argPos) => {
       const isCompiled = Type.isCompiledPattern(pat);
+
       try {
         return isCompiled ? pat : Erlang_Binary["compile_pattern/1"](pat);
       } catch (error) {
@@ -730,6 +731,7 @@ const Erlang_Binary = {
             Interpreter.buildArgumentErrorMsg(argPos, "not a valid pattern"),
           );
         }
+
         throw error;
       }
     };
@@ -757,6 +759,7 @@ const Erlang_Binary = {
       }
 
       const scopeEnd = start + effectiveLength;
+
       return {
         actualStart: Math.min(start, scopeEnd),
         actualEnd: Math.max(start, scopeEnd),
@@ -768,11 +771,13 @@ const Erlang_Binary = {
       const type = compiledPat.data[0].value;
       const ref = compiledPat.data[1];
       const data = ERTS.binaryPatternRegistry.get(ref);
+
       if (!data || data.type !== type) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       }
+
       return {type, data};
     };
 
@@ -800,7 +805,9 @@ const Erlang_Binary = {
       }
 
       positions.sort((a, b) => b - a);
+
       let resultBytes = [...repBytes];
+
       for (const pos of positions) {
         resultBytes.splice(pos, 0, ...matchedBin.bytes);
       }
@@ -815,12 +822,15 @@ const Erlang_Binary = {
 
     const interleaveReplacement = (partsList, replacementBin) => {
       Bitstring.maybeSetBytesFromText(replacementBin);
+
       const items = [];
       const len = partsList.data.length;
+
       for (let i = 0; i < len; i++) {
         items.push(partsList.data[i]);
         if (i < len - 1) items.push(replacementBin);
       }
+
       return Erlang["iolist_to_binary/1"](Type.list(items));
     };
 
@@ -846,6 +856,7 @@ const Erlang_Binary = {
             global = true;
             return;
           }
+
           raiseInvalidOptions();
         }
 
@@ -857,19 +868,23 @@ const Erlang_Binary = {
 
         if (isScopeTuple) {
           const scopeData = option.data[1];
+
           const isValidScope =
             Type.isTuple(scopeData) &&
             scopeData.data.length === 2 &&
             Type.isInteger(scopeData.data[0]) &&
             Type.isInteger(scopeData.data[1]);
+
           if (!isValidScope) raiseInvalidOptions();
 
           const startValue = scopeData.data[0].value;
           const lengthValue = scopeData.data[1].value;
+
           if (startValue < 0n) raiseInvalidOptions();
 
           scopeStart = Number(startValue);
           scopeLength = Number(lengthValue);
+
           return;
         }
 
@@ -881,22 +896,28 @@ const Erlang_Binary = {
 
         if (isInsertTuple) {
           const insertData = option.data[1];
+
           if (Type.isInteger(insertData)) {
             if (insertData.value < 0n) raiseInvalidOptions();
             insertReplaced = insertData;
           } else if (Type.isList(insertData)) {
             // Reject improper lists to match top-level options validation
             if (Type.isImproperList(insertData)) raiseInvalidOptions();
+
             const allIntegers = insertData.data.every((item) =>
               Type.isInteger(item),
             );
+
             if (!allIntegers) raiseInvalidOptions();
+
             const hasNegative = insertData.data.some((item) => item.value < 0n);
             if (hasNegative) raiseInvalidOptions();
+
             insertReplaced = insertData;
           } else {
             raiseInvalidOptions();
           }
+
           return;
         }
 
@@ -921,6 +942,7 @@ const Erlang_Binary = {
         }
 
         Bitstring.maybeSetBytesFromText(replacementResult);
+
         return replacementResult.bytes;
       }
 
@@ -932,10 +954,12 @@ const Erlang_Binary = {
         );
 
         Bitstring.maybeSetBytesFromText(withInserted);
+
         return withInserted.bytes;
       }
 
       Bitstring.maybeSetBytesFromText(replacement);
+
       return replacement.bytes;
     };
 
@@ -978,6 +1002,7 @@ const Erlang_Binary = {
 
     // Validate pattern before checking scope length - pattern errors take priority
     const compiledPattern = compilePatternOrRaise(pattern, 2);
+
     const {type: patternType, data: compiledData} =
       getCompiledData(compiledPattern);
 
@@ -989,7 +1014,9 @@ const Erlang_Binary = {
     // Fast-path: static binary replacement without insert_replaced
     if (!isReplacementFunction && insertPositionsOpt === null) {
       const splitOpts = [];
+
       if (global) splitOpts.push(Type.atom("global"));
+
       if (effectiveLength !== subject.bytes.length || scopeStart !== 0) {
         splitOpts.push(
           Type.tuple([
@@ -1001,11 +1028,13 @@ const Erlang_Binary = {
           ]),
         );
       }
+
       const parts = Erlang_Binary["split/3"](
         subject,
         compiledPattern,
         Type.list(splitOpts),
       );
+
       return interleaveReplacement(parts, replacement);
     }
 
@@ -1063,6 +1092,7 @@ const Erlang_Binary = {
         absMatchStart,
         absMatchStart + matchLength,
       );
+
       const matchedBitstring = bytesToBitstring(matchedBytes);
       Bitstring.maybeSetBytesFromText(matchedBitstring);
 
@@ -1117,7 +1147,7 @@ const Erlang_Binary = {
     }
 
     const result = bytesToBitstring(resultBytes);
-    Bitstring.maybeSetBytesFromText(result);
+
     return result;
   },
   // End replace/4

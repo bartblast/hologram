@@ -1514,10 +1514,12 @@ describe("Erlang_Binary", () => {
 
       it("replaces single pattern with multiple patterns in list", () => {
         const subject = Bitstring.fromText("hello world");
+
         const pattern = Type.list([
           Bitstring.fromText("world"),
           Bitstring.fromText("hello"),
         ]);
+
         const replacement = Bitstring.fromText("X");
         const options = Type.list();
 
@@ -1566,10 +1568,12 @@ describe("Erlang_Binary", () => {
 
       it("replaces with multiple patterns globally", () => {
         const subject = Bitstring.fromText("hello-world_test");
+
         const pattern = Type.list([
           Bitstring.fromText("-"),
           Bitstring.fromText("_"),
         ]);
+
         const replacement = Bitstring.fromText("X");
         const options = Type.list([Type.atom("global")]);
 
@@ -1601,11 +1605,12 @@ describe("Erlang_Binary", () => {
       });
     });
 
-    describe("with insert_replaced option", () => {
+    describe("with :insert_replaced option", () => {
       it("inserts matched part at single position", () => {
         const subject = Bitstring.fromText("abcde");
         const pattern = Bitstring.fromText("bcd");
         const replacement = Bitstring.fromText("[");
+
         const options = Type.list([
           Type.tuple([Type.atom("insert_replaced"), Type.integer(1)]),
         ]);
@@ -1621,6 +1626,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
         const replacement = Bitstring.fromText("[]");
+
         const options = Type.list([
           Type.tuple([Type.atom("insert_replaced"), Type.integer(0)]),
         ]);
@@ -1634,6 +1640,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
         const replacement = Bitstring.fromText("[]");
+
         const options = Type.list([
           Type.tuple([Type.atom("insert_replaced"), Type.integer(2)]),
         ]);
@@ -1647,6 +1654,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("abcde");
         const pattern = Bitstring.fromText("cd");
         const replacement = Bitstring.fromText("[]");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("insert_replaced"),
@@ -1659,10 +1667,11 @@ describe("Erlang_Binary", () => {
         assertBoxedStrictEqual(result, Bitstring.fromText("ab[cdcd]e"));
       });
 
-      it("works with :global and insert_replaced", () => {
+      it("works with :global and :insert_replaced", () => {
         const subject = Bitstring.fromText("a-a-a");
         const pattern = Bitstring.fromText("a");
         const replacement = Bitstring.fromText("x");
+
         const options = Type.list([
           Type.atom("global"),
           Type.tuple([Type.atom("insert_replaced"), Type.integer(1)]),
@@ -1684,6 +1693,7 @@ describe("Erlang_Binary", () => {
       it("uses function for replacement", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
+
         const replacement = Type.anonymousFunction(
           1,
           [
@@ -1698,6 +1708,7 @@ describe("Erlang_Binary", () => {
           ],
           contextFixture(),
         );
+
         const options = Type.list();
 
         const result = replace(subject, pattern, replacement, options);
@@ -1709,6 +1720,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("abcabc");
         const pattern = Bitstring.fromText("ab");
         let callCount = 0;
+
         const replacement = Type.anonymousFunction(
           1,
           [
@@ -1723,6 +1735,7 @@ describe("Erlang_Binary", () => {
           ],
           contextFixture(),
         );
+
         const options = Type.list([Type.atom("global")]);
 
         const result = replace(subject, pattern, replacement, options);
@@ -1734,6 +1747,7 @@ describe("Erlang_Binary", () => {
       it("raises error if function returns non-binary", () => {
         const subject = Bitstring.fromText("hello");
         const pattern = Bitstring.fromText("l");
+
         const replacement = Type.anonymousFunction(
           1,
           [
@@ -1745,6 +1759,7 @@ describe("Erlang_Binary", () => {
           ],
           contextFixture(),
         );
+
         const options = Type.list();
 
         assertBoxedError(
@@ -1755,11 +1770,12 @@ describe("Erlang_Binary", () => {
       });
     });
 
-    describe("with scope option", () => {
+    describe("with :scope option", () => {
       it("respects scope when replacing", () => {
         const subject = Bitstring.fromText("abc def abc");
         const pattern = Bitstring.fromText("abc");
         const replacement = Bitstring.fromText("X");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -1776,6 +1792,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("abc def abc");
         const pattern = Bitstring.fromText("abc");
         const replacement = Bitstring.fromText("X");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -1792,6 +1809,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("abc def abc ghi abc");
         const pattern = Bitstring.fromText("abc");
         const replacement = Bitstring.fromText("X");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -1809,6 +1827,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("hello world");
         const pattern = Bitstring.fromText("world");
         const replacement = Bitstring.fromText("universe");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -1825,6 +1844,7 @@ describe("Erlang_Binary", () => {
         const subject = Bitstring.fromText("test");
         const pattern = Bitstring.fromText("t");
         const replacement = Bitstring.fromText("x");
+
         const options = Type.list([
           Type.tuple([
             Type.atom("scope"),
@@ -1853,10 +1873,12 @@ describe("Erlang_Binary", () => {
 
       it("works with compiled Aho-Corasick pattern", () => {
         const subject = Bitstring.fromText("hello-world");
+
         const pattern = Type.list([
           Bitstring.fromText("-"),
           Bitstring.fromText("o"),
         ]);
+
         const compiled = Erlang_Binary["compile_pattern/1"](pattern);
         const replacement = Bitstring.fromText("X");
         const options = Type.list([Type.atom("global")]);
@@ -1864,319 +1886,6 @@ describe("Erlang_Binary", () => {
         const result = replace(subject, compiled, replacement, options);
 
         assertBoxedStrictEqual(result, Bitstring.fromText("hellXXwXrld"));
-      });
-    });
-
-    describe("error cases", () => {
-      it("raises ArgumentError if subject is not a binary", () => {
-        const subject = Type.atom("test");
-        const pattern = Bitstring.fromText("test");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-        );
-      });
-
-      it("raises ArgumentError if subject is non-binary bitstring", () => {
-        const subject = Type.bitstring([1, 0, 1]);
-        const pattern = Bitstring.fromText("test");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "is a bitstring (expected a binary)",
-          ),
-        );
-      });
-
-      it("raises ArgumentError when pattern is empty", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when insert_replaced position exceeds replacement length", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("X");
-        const options = Type.list([
-          Type.tuple([Type.atom("insert_replaced"), Type.integer(10)]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError for invalid options", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("es");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.atom("invalid");
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError for improper list options", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("t");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.improperList([
-          Type.atom("global"),
-          Type.atom("bad"),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when scope start exceeds subject length", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("t");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(10), Type.integer(1)]),
-          ]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when scope extends beyond subject", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("st");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(0), Type.integer(100)]),
-          ]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when scope start plus negative length is below zero", () => {
-        const subject = Bitstring.fromText("test");
-        const pattern = Bitstring.fromText("t");
-        const replacement = Bitstring.fromText("x");
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(0), Type.integer(-1)]),
-          ]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when replacement is an atom", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Type.atom("invalid");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
-        );
-      });
-
-      it("raises ArgumentError when replacement is an integer", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Type.integer(123);
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
-        );
-      });
-
-      it("raises ArgumentError when replacement is a list", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Type.list([Type.integer(1)]);
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is a list with non-binary element", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Type.list([
-          Bitstring.fromText("l"),
-          Type.atom("invalid"),
-        ]);
-        const replacement = Bitstring.fromText("X");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when pattern is an empty list", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Type.list([]);
-        const replacement = Bitstring.fromText("X");
-        const options = Type.list();
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
-        );
-      });
-
-      it("raises ArgumentError when insert_replaced has negative position", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("[]");
-        const options = Type.list([
-          Type.tuple([Type.atom("insert_replaced"), Type.integer(-1)]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when insert_replaced value is an atom", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("[]");
-        const options = Type.list([
-          Type.tuple([Type.atom("insert_replaced"), Type.atom("invalid")]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when insert_replaced list contains non-integer", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("[]");
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("insert_replaced"),
-            Type.list([Type.integer(1), Type.atom("invalid")]),
-          ]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when insert_replaced is an improper list", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("[]");
-        const improperPositions = Type.improperList([
-          Type.integer(1),
-          Type.integer(2),
-        ]);
-        const options = Type.list([
-          Type.tuple([Type.atom("insert_replaced"), improperPositions]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when insert_replaced list contains negative integer", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("[]");
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("insert_replaced"),
-            Type.list([Type.integer(1), Type.integer(-1)]),
-          ]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
-      });
-
-      it("raises ArgumentError when scope start is negative", () => {
-        const subject = Bitstring.fromText("hello");
-        const pattern = Bitstring.fromText("l");
-        const replacement = Bitstring.fromText("X");
-        const options = Type.list([
-          Type.tuple([
-            Type.atom("scope"),
-            Type.tuple([Type.integer(-1), Type.integer(5)]),
-          ]),
-        ]);
-
-        assertBoxedError(
-          () => replace(subject, pattern, replacement, options),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
-        );
       });
     });
 
@@ -2234,6 +1943,333 @@ describe("Erlang_Binary", () => {
         const result = replace(subject, pattern, replacement, options);
 
         assertBoxedStrictEqual(result, Bitstring.fromText("b"));
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises ArgumentError if subject is not a binary", () => {
+        const subject = Type.atom("test");
+        const pattern = Bitstring.fromText("test");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        );
+      });
+
+      it("raises ArgumentError if subject is non-binary bitstring", () => {
+        const subject = Type.bitstring([1, 0, 1]);
+        const pattern = Bitstring.fromText("test");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "is a bitstring (expected a binary)",
+          ),
+        );
+      });
+
+      it("raises ArgumentError when pattern is empty", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced position exceeds replacement length", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("X");
+
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(10)]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError for invalid options", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("es");
+        const replacement = Bitstring.fromText("x");
+        const options = Type.atom("invalid");
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError for improper list options", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("t");
+        const replacement = Bitstring.fromText("x");
+
+        const options = Type.improperList([
+          Type.atom("global"),
+          Type.atom("bad"),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope start exceeds subject length", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("t");
+        const replacement = Bitstring.fromText("x");
+
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(10), Type.integer(1)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope extends beyond subject", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("st");
+        const replacement = Bitstring.fromText("x");
+
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.integer(100)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope start plus negative length is below zero", () => {
+        const subject = Bitstring.fromText("test");
+        const pattern = Bitstring.fromText("t");
+        const replacement = Bitstring.fromText("x");
+
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(0), Type.integer(-1)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when replacement is an atom", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Type.atom("invalid");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError when replacement is an integer", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Type.integer(123);
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError when replacement is a list", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Type.list([Type.integer(1)]);
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "not a valid replacement"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is a list with non-binary element", () => {
+        const subject = Bitstring.fromText("hello");
+
+        const pattern = Type.list([
+          Bitstring.fromText("l"),
+          Type.atom("invalid"),
+        ]);
+
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when pattern is an empty list", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Type.list([]);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list();
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced has negative position", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(-1)]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced value is an atom", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.atom("invalid")]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced list contains non-integer", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("insert_replaced"),
+            Type.list([Type.integer(1), Type.atom("invalid")]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced is an improper list", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+
+        const improperPositions = Type.improperList([
+          Type.integer(1),
+          Type.integer(2),
+        ]);
+
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), improperPositions]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when insert_replaced list contains negative integer", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("[]");
+
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("insert_replaced"),
+            Type.list([Type.integer(1), Type.integer(-1)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
+      });
+
+      it("raises ArgumentError when scope start is negative", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Bitstring.fromText("X");
+
+        const options = Type.list([
+          Type.tuple([
+            Type.atom("scope"),
+            Type.tuple([Type.integer(-1), Type.integer(5)]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () => replace(subject, pattern, replacement, options),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(4, "invalid options"),
+        );
       });
     });
   });
