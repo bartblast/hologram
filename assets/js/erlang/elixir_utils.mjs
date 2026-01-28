@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_UnicodeUtil from "./unicode_util.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -11,91 +12,51 @@ import Type from "../type.mjs";
 const Erlang_Elixir_Utils = {
   // Start jaro_similarity/2
   "jaro_similarity/2": (str1, str2) => {
-    const extractCodePoints = (str) => {
-      if (Type.isBitstring(str)) {
-        const text = Bitstring.toText(str);
+    const extractCodePoints = (str, argPosition) => {
+      const cp = Erlang_UnicodeUtil["cp/1"];
+      const codePoints = [];
+      let current = str;
 
-        if (text === false) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(1, Interpreter.inspect(str)),
-          );
+      while (true) {
+        const result = cp(current);
+
+        if (Type.isList(result) && result.data.length === 0) {
+          break;
         }
 
-        return Array.from(text).map((c) => c.codePointAt(0));
-      }
-
-      if (Type.isList(str)) {
-        const codePoints = [];
-
-        for (let i = 0; i < str.data.length; i++) {
-          const elem = str.data[i];
-
-          if (Type.isInteger(elem)) {
-            codePoints.push(Number(elem.value));
-            continue;
+        if (Type.isTuple(result) && result.data.length === 2) {
+          const [atom, value] = result.data;
+          if (Type.isAtom(atom) && atom.value === "error") {
+            Interpreter.raiseArgumentError(
+              Interpreter.buildArgumentErrorMsg(
+                argPosition,
+                Interpreter.inspect(value),
+              ),
+            );
           }
-
-          if (Type.isBitstring(elem)) {
-            const text = Bitstring.toText(elem);
-
-            if (text === false) {
-              Interpreter.raiseArgumentError(
-                Interpreter.buildArgumentErrorMsg(1, Interpreter.inspect(elem)),
-              );
-            }
-
-            codePoints.push(text.codePointAt(0));
-            continue;
-          }
-
-          if (Type.isList(elem) && elem.data.length > 0) {
-            const firstElem = elem.data[0];
-
-            if (Type.isInteger(firstElem)) {
-              codePoints.push(Number(firstElem.value));
-              continue;
-            }
-
-            if (Type.isBitstring(firstElem)) {
-              const text = Bitstring.toText(firstElem);
-
-              if (text === false) {
-                Interpreter.raiseArgumentError(
-                  Interpreter.buildArgumentErrorMsg(
-                    1,
-                    Interpreter.inspect(firstElem),
-                  ),
-                );
-              }
-
-              codePoints.push(text.codePointAt(0));
-              continue;
-            }
-          }
-
-          const isMultiElement = str.data.length > 1;
-          const funcName = isMultiElement
-            ? ":unicode_util.cpl/2"
-            : ":unicode_util.cp/1";
-          const args = isMultiElement
-            ? [elem, Type.list(str.data.slice(i + 1))]
-            : [elem];
-
-          Interpreter.raiseFunctionClauseError(
-            Interpreter.buildFunctionClauseErrorMsg(funcName, args),
-          );
         }
 
-        return codePoints;
+        const codepoint = result.data[0];
+        codePoints.push(Number(codepoint.value));
+
+        if (Type.isImproperList(result)) {
+          current = result.data[1];
+
+          if (Type.isBitstring(current) && Bitstring.isEmpty(current)) {
+            break;
+          }
+        } else if (result.data.length > 1) {
+          current = Type.list(result.data.slice(1));
+        } else {
+          break;
+        }
       }
 
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [str]),
-      );
+      return codePoints;
     };
 
-    const codePoints1 = extractCodePoints(str1);
-    const codePoints2 = extractCodePoints(str2);
+    const codePoints1 = extractCodePoints(str1, 1);
+    const codePoints2 = extractCodePoints(str2, 2);
     const len1 = codePoints1.length;
     const len2 = codePoints2.length;
 
@@ -157,7 +118,7 @@ const Erlang_Elixir_Utils = {
     return Type.float(similarity);
   },
   // End jaro_similarity/2
-  // Deps: []
+  // Deps: [:unicode_utl.cp/1]
 };
 
 export default Erlang_Elixir_Utils;
