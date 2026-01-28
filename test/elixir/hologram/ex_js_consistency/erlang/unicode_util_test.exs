@@ -150,7 +150,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.cp([[], []]) == []
     end
 
-    # Section: error handling"
+    # Section: error handling
 
     test "raises FunctionClauseError for integer input" do
       expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [42])
@@ -176,7 +176,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       end
     end
 
-    test "raises FunctionClauseError for non-byte-aligned bitstring direct input" do
+    test "raises FunctionClauseError for non-byte-aligned bitstring (direct)" do
       expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
 
       assert_error FunctionClauseError, expected_msg, fn ->

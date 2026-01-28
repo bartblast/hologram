@@ -337,7 +337,7 @@ describe("Erlang_UnicodeUtil", () => {
         );
       });
 
-      it("raises FunctionClauseError for non-byte-aligned bitstring", () => {
+      it("raises FunctionClauseError for non-byte-aligned bitstring (direct)", () => {
         const bitstring = Type.bitstring([1, 0, 1]);
 
         assertBoxedError(
