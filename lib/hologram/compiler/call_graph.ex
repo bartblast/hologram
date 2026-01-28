@@ -39,6 +39,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:binary, :split, 3}, {:binary, :match, 3}},
     {{:elixir_aliases, :safe_concat, 1}, {:elixir_aliases, :concat, 1}},
     {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
+    {{:elixir_utils, :jaro_similarity, 2}, {:unicode_util, :cp, 1}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
     {{:erlang, :>=, 2}, {:erlang, :==, 2}},
