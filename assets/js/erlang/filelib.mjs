@@ -13,25 +13,16 @@ const Erlang_Filelib = {
   // Start safe_relative_path/2
   "safe_relative_path/2": (filename, cwd) => {
     // Validate filename type (must be binary, charlist, or atom - filename_all())
-    const isFilenameBinary = Type.isBinary(filename);
-    const isFilenameCharlist = Type.isList(filename);
-    const isFilenameAtom = Type.isAtom(filename);
-
-    if (!isFilenameBinary && !isFilenameCharlist && !isFilenameAtom) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg("safe_relative_path/2", [
-          filename,
-          cwd,
-        ]),
-      );
-    }
+    const isFilenameInvalid =
+      !Type.isBinary(filename) &&
+      !Type.isList(filename) &&
+      !Type.isAtom(filename);
 
     // Validate cwd type (must be binary, charlist, or atom - filename_all())
-    const isCwdBinary = Type.isBinary(cwd);
-    const isCwdCharlist = Type.isList(cwd);
-    const isCwdAtom = Type.isAtom(cwd);
+    const isCwdInvalid =
+      !Type.isBinary(cwd) && !Type.isList(cwd) && !Type.isAtom(cwd);
 
-    if (!isCwdBinary && !isCwdCharlist && !isCwdAtom) {
+    if (isFilenameInvalid || isCwdInvalid) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg("safe_relative_path/2", [
           filename,
