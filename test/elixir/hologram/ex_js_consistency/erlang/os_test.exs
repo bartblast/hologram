@@ -10,7 +10,7 @@ defmodule Hologram.ExJsConsistency.Erlang.OsTest do
   @moduletag :consistency
 
   describe "system_time/0" do
-    test "returns current system time in nanoseconds" do
+    test "returns current system time in native time unit (nanoseconds)" do
       before_ms = System.os_time(:millisecond)
       result = :os.system_time()
       after_ms = System.os_time(:millisecond)
@@ -18,14 +18,6 @@ defmodule Hologram.ExJsConsistency.Erlang.OsTest do
       assert is_integer(result)
       assert result >= before_ms * 1_000_000
       assert result <= (after_ms + 1) * 1_000_000
-    end
-
-    test "returns different values on subsequent calls" do
-      result1 = :os.system_time()
-      result2 = :os.system_time()
-
-      assert is_integer(result1)
-      assert is_integer(result2)
     end
   end
 

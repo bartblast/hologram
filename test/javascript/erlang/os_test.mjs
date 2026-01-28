@@ -18,45 +18,14 @@ describe("Erlang_Os", () => {
   describe("system_time/0", () => {
     const systemTime = Erlang_Os["system_time/0"];
 
-    it("returns current system time in nanoseconds", () => {
+    it("returns current system time in native time unit (nanoseconds)", () => {
       const beforeMs = Date.now();
       const result = systemTime();
       const afterMs = Date.now();
 
-      assert.ok(Type.isInteger(result));
-      assert.ok(result.value >= BigInt(beforeMs) * 1_000_000n);
-      assert.ok(result.value <= BigInt(afterMs + 1) * 1_000_000n);
-    });
-
-    it("returns positive values", () => {
-      const result = systemTime();
-
-      assert.ok(result.value > 0n);
-    });
-
-    it("converts correctly to milliseconds", () => {
-      const result = systemTime();
-      const resultMs = Number(result.value / 1_000_000n);
-      const currentMs = Date.now();
-
-      // Allow 100ms tolerance for test execution time
-      assert.ok(Math.abs(resultMs - currentMs) < 100);
-    });
-
-    it("returns different values on subsequent calls", () => {
-      const result1 = systemTime();
-      const result2 = systemTime();
-
-      assert.ok(Type.isInteger(result1));
-      assert.ok(Type.isInteger(result2));
-    });
-
-    it("maintains monotonic ordering across multiple calls", () => {
-      const results = Array.from({length: 5}, () => systemTime());
-
-      for (let i = 0; i < results.length; i++) {
-        assert.ok(Type.isInteger(results[i]));
-      }
+      assert.isTrue(Type.isInteger(result));
+      assert.isAtLeast(result.value, BigInt(beforeMs) * 1_000_000n);
+      assert.isAtMost(result.value, BigInt(afterMs + 1) * 1_000_000n);
     });
   });
 
