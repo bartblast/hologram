@@ -3186,6 +3186,219 @@ describe("Erlang", () => {
     });
   });
 
+  describe("convert_time_unit/3", () => {
+    const testedFun = Erlang["convert_time_unit/3"];
+
+    it("converts seconds to milliseconds", () => {
+      const result = testedFun(
+        Type.integer(2),
+        Type.atom("second"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2000));
+    });
+
+    it("converts milliseconds to seconds using floor rounding", () => {
+      const result = testedFun(
+        Type.integer(1500),
+        Type.atom("millisecond"),
+        Type.atom("second"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+
+    it("converts negative values using floor rounding", () => {
+      const result = testedFun(
+        Type.integer(-1500),
+        Type.atom("millisecond"),
+        Type.atom("second"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(-2));
+    });
+
+    it("supports deprecated symbolic time units", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("seconds"),
+        Type.atom("milli_seconds"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1000));
+    });
+
+    it("supports integer time units", () => {
+      const result = testedFun(
+        Type.integer(3),
+        Type.integer(1),
+        Type.integer(1000),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(3000));
+    });
+
+    it("converts zero time", () => {
+      const result = testedFun(
+        integer0,
+        Type.atom("second"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("handles same unit conversion (identity)", () => {
+      const result = testedFun(
+        Type.integer(42),
+        Type.atom("millisecond"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("handles same unit conversion with negative value (identity)", () => {
+      const result = testedFun(
+        Type.integer(-42),
+        Type.atom("millisecond"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(-42));
+    });
+
+    it("supports native time unit", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("second"),
+        Type.atom("native"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1_000_000_000));
+    });
+
+    it("supports perf_counter time unit", () => {
+      const result = testedFun(
+        Type.integer(2_000_000),
+        Type.atom("perf_counter"),
+        Type.atom("millisecond"),
+      );
+
+      // 2_000_000 perf_counter units (nanoseconds) = 2 milliseconds
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("supports nanosecond time unit", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("second"),
+        Type.atom("nanosecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1_000_000_000));
+    });
+
+    it("supports microsecond time unit", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("microsecond"),
+        Type.atom("millisecond"),
+      );
+
+      // 1 microsecond < 1 millisecond, floor(1/1000) = 0
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("supports all deprecated time unit forms", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("nano_seconds"),
+        Type.atom("micro_seconds"),
+      );
+
+      // 1 nanosecond < 1 microsecond, floor(1/1000) = 0
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("handles large integer values", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      const largeValue = Type.integer(9_007_199_254_740_992n);
+
+      const result = testedFun(
+        largeValue,
+        Type.atom("second"),
+        Type.atom("second"),
+      );
+
+      assert.deepStrictEqual(result, largeValue);
+    });
+
+    it("raises ArgumentError if time is not an integer", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.float(1.0), Type.atom("second"), Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is invalid", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.integer(1), Type.atom("banana"), Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if toUnit is invalid", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("second"), integer0),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is a negative integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.integer(-1), Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is zero", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), integer0, Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if toUnit is a float", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("second"), Type.float(1.5)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is not an atom or positive integer", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.integer(1),
+            Type.bitstring("second"),
+            Type.atom("second"),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+  });
+
   describe("div/2", () => {
     const testedFun = Erlang["div/2"];
 
@@ -4348,219 +4561,6 @@ describe("Erlang", () => {
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
-    });
-  });
-
-  describe("convert_time_unit/3", () => {
-    const testedFun = Erlang["convert_time_unit/3"];
-
-    it("converts seconds to milliseconds", () => {
-      const result = testedFun(
-        Type.integer(2),
-        Type.atom("second"),
-        Type.atom("millisecond"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(2000));
-    });
-
-    it("converts milliseconds to seconds using floor rounding", () => {
-      const result = testedFun(
-        Type.integer(1500),
-        Type.atom("millisecond"),
-        Type.atom("second"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(1));
-    });
-
-    it("converts negative values using floor rounding", () => {
-      const result = testedFun(
-        Type.integer(-1500),
-        Type.atom("millisecond"),
-        Type.atom("second"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(-2));
-    });
-
-    it("supports deprecated symbolic time units", () => {
-      const result = testedFun(
-        Type.integer(1),
-        Type.atom("seconds"),
-        Type.atom("milli_seconds"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(1000));
-    });
-
-    it("supports integer time units", () => {
-      const result = testedFun(
-        Type.integer(3),
-        Type.integer(1),
-        Type.integer(1000),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(3000));
-    });
-
-    it("converts zero time", () => {
-      const result = testedFun(
-        integer0,
-        Type.atom("second"),
-        Type.atom("millisecond"),
-      );
-
-      assert.deepStrictEqual(result, integer0);
-    });
-
-    it("handles same unit conversion (identity)", () => {
-      const result = testedFun(
-        Type.integer(42),
-        Type.atom("millisecond"),
-        Type.atom("millisecond"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(42));
-    });
-
-    it("handles same unit conversion with negative value (identity)", () => {
-      const result = testedFun(
-        Type.integer(-42),
-        Type.atom("millisecond"),
-        Type.atom("millisecond"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(-42));
-    });
-
-    it("supports native time unit", () => {
-      const result = testedFun(
-        Type.integer(1),
-        Type.atom("second"),
-        Type.atom("native"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(1_000_000_000));
-    });
-
-    it("supports perf_counter time unit", () => {
-      const result = testedFun(
-        Type.integer(2_000_000),
-        Type.atom("perf_counter"),
-        Type.atom("millisecond"),
-      );
-
-      // 2_000_000 perf_counter units (nanoseconds) = 2 milliseconds
-      assert.deepStrictEqual(result, Type.integer(2));
-    });
-
-    it("supports nanosecond time unit", () => {
-      const result = testedFun(
-        Type.integer(1),
-        Type.atom("second"),
-        Type.atom("nanosecond"),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(1_000_000_000));
-    });
-
-    it("supports microsecond time unit", () => {
-      const result = testedFun(
-        Type.integer(1),
-        Type.atom("microsecond"),
-        Type.atom("millisecond"),
-      );
-
-      // 1 microsecond < 1 millisecond, floor(1/1000) = 0
-      assert.deepStrictEqual(result, integer0);
-    });
-
-    it("supports all deprecated time unit forms", () => {
-      const result = testedFun(
-        Type.integer(1),
-        Type.atom("nano_seconds"),
-        Type.atom("micro_seconds"),
-      );
-
-      // 1 nanosecond < 1 microsecond, floor(1/1000) = 0
-      assert.deepStrictEqual(result, integer0);
-    });
-
-    it("handles large integer values", () => {
-      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
-      const largeValue = Type.integer(9_007_199_254_740_992n);
-
-      const result = testedFun(
-        largeValue,
-        Type.atom("second"),
-        Type.atom("second"),
-      );
-
-      assert.deepStrictEqual(result, largeValue);
-    });
-
-    it("raises ArgumentError if time is not an integer", () => {
-      assertBoxedError(
-        () =>
-          testedFun(Type.float(1.0), Type.atom("second"), Type.atom("second")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    });
-
-    it("raises ArgumentError if fromUnit is invalid", () => {
-      assertBoxedError(
-        () =>
-          testedFun(Type.integer(1), Type.atom("banana"), Type.atom("second")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError if toUnit is invalid", () => {
-      assertBoxedError(
-        () => testedFun(Type.integer(1), Type.atom("second"), integer0),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError if fromUnit is a negative integer", () => {
-      assertBoxedError(
-        () => testedFun(Type.integer(1), Type.integer(-1), Type.atom("second")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError if fromUnit is zero", () => {
-      assertBoxedError(
-        () => testedFun(Type.integer(1), integer0, Type.atom("second")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError if toUnit is a float", () => {
-      assertBoxedError(
-        () => testedFun(Type.integer(1), Type.atom("second"), Type.float(1.5)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError if fromUnit is not an atom or positive integer", () => {
-      assertBoxedError(
-        () =>
-          testedFun(
-            Type.integer(1),
-            Type.bitstring("second"),
-            Type.atom("second"),
-          ),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
       );
     });
   });

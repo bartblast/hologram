@@ -2224,6 +2224,117 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "convert_time_unit/3" do
+    test "converts seconds to milliseconds" do
+      assert :erlang.convert_time_unit(2, :second, :millisecond) == 2000
+    end
+
+    test "converts milliseconds to seconds using floor rounding" do
+      assert :erlang.convert_time_unit(1500, :millisecond, :second) == 1
+    end
+
+    test "converts negative values using floor rounding" do
+      assert :erlang.convert_time_unit(-1500, :millisecond, :second) == -2
+    end
+
+    test "supports deprecated symbolic time units" do
+      assert :erlang.convert_time_unit(1, :seconds, :milli_seconds) == 1000
+    end
+
+    test "supports integer time units" do
+      assert :erlang.convert_time_unit(3, 1, 1000) == 3000
+    end
+
+    test "converts zero time" do
+      assert :erlang.convert_time_unit(0, :second, :millisecond) == 0
+    end
+
+    test "handles same unit conversion (identity)" do
+      assert :erlang.convert_time_unit(42, :millisecond, :millisecond) == 42
+    end
+
+    test "handles same unit conversion with negative value (identity)" do
+      assert :erlang.convert_time_unit(-42, :millisecond, :millisecond) == -42
+    end
+
+    test "supports native time unit" do
+      # :native is the time unit of :erlang.monotonic_time/0. It's technically
+      # platform-dependent, but is nanoseconds on all major platforms (Linux,
+      # macOS, Windows). The JS port standardizes on nanoseconds.
+      assert :erlang.convert_time_unit(1, :second, :native) == 1_000_000_000
+    end
+
+    test "supports perf_counter time unit" do
+      # :perf_counter is the time unit of :os.perf_counter/0 (high-resolution OS timer
+      # used for micro-benchmarking). Like :native, it's technically platform-dependent
+      # but is nanoseconds on all major platforms. 2_000_000 nanoseconds = 2 milliseconds.
+      assert :erlang.convert_time_unit(2_000_000, :perf_counter, :millisecond) == 2
+    end
+
+    test "supports nanosecond time unit" do
+      assert :erlang.convert_time_unit(1, :second, :nanosecond) == 1_000_000_000
+    end
+
+    test "supports microsecond time unit" do
+      # 1 microsecond < 1 millisecond, floor(1/1000) = 0
+      assert :erlang.convert_time_unit(1, :microsecond, :millisecond) == 0
+    end
+
+    test "supports all deprecated time unit forms" do
+      # 1 nanosecond < 1 microsecond, floor(1/1000) = 0
+      assert :erlang.convert_time_unit(1, :nano_seconds, :micro_seconds) == 0
+    end
+
+    test "handles large integer values" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      large_value = 9_007_199_254_740_992
+
+      assert :erlang.convert_time_unit(large_value, :second, :second) == large_value
+    end
+
+    test "raises ArgumentError if time is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :convert_time_unit, [1.0, :second, :second]}
+    end
+
+    test "raises ArgumentError if fromUnit is invalid" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid time unit"),
+                   {:erlang, :convert_time_unit, [1, :banana, :second]}
+    end
+
+    test "raises ArgumentError if toUnit is invalid" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid time unit"),
+                   {:erlang, :convert_time_unit, [1, :second, 0]}
+    end
+
+    test "raises ArgumentError if fromUnit is a negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid time unit"),
+                   {:erlang, :convert_time_unit, [1, -1, :second]}
+    end
+
+    test "raises ArgumentError if fromUnit is zero" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid time unit"),
+                   {:erlang, :convert_time_unit, [1, 0, :second]}
+    end
+
+    test "raises ArgumentError if toUnit is a float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "invalid time unit"),
+                   {:erlang, :convert_time_unit, [1, :second, 1.5]}
+    end
+
+    test "raises ArgumentError if fromUnit is not an atom or positive integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid time unit"),
+                   {:erlang, :convert_time_unit, [1, "second", :second]}
+    end
+  end
+
   describe "div/2" do
     test "divides positive integers" do
       assert :erlang.div(10, 3) === 3
@@ -2859,117 +2970,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a number"),
                    {:erlang, :floor, [:abc]}
-    end
-  end
-
-  describe "convert_time_unit/3" do
-    test "converts seconds to milliseconds" do
-      assert :erlang.convert_time_unit(2, :second, :millisecond) == 2000
-    end
-
-    test "converts milliseconds to seconds using floor rounding" do
-      assert :erlang.convert_time_unit(1500, :millisecond, :second) == 1
-    end
-
-    test "converts negative values using floor rounding" do
-      assert :erlang.convert_time_unit(-1500, :millisecond, :second) == -2
-    end
-
-    test "supports deprecated symbolic time units" do
-      assert :erlang.convert_time_unit(1, :seconds, :milli_seconds) == 1000
-    end
-
-    test "supports integer time units" do
-      assert :erlang.convert_time_unit(3, 1, 1000) == 3000
-    end
-
-    test "converts zero time" do
-      assert :erlang.convert_time_unit(0, :second, :millisecond) == 0
-    end
-
-    test "handles same unit conversion (identity)" do
-      assert :erlang.convert_time_unit(42, :millisecond, :millisecond) == 42
-    end
-
-    test "handles same unit conversion with negative value (identity)" do
-      assert :erlang.convert_time_unit(-42, :millisecond, :millisecond) == -42
-    end
-
-    test "supports native time unit" do
-      # :native is the time unit of :erlang.monotonic_time/0. It's technically
-      # platform-dependent, but is nanoseconds on all major platforms (Linux,
-      # macOS, Windows). The JS port standardizes on nanoseconds.
-      assert :erlang.convert_time_unit(1, :second, :native) == 1_000_000_000
-    end
-
-    test "supports perf_counter time unit" do
-      # :perf_counter is the time unit of :os.perf_counter/0 (high-resolution OS timer
-      # used for micro-benchmarking). Like :native, it's technically platform-dependent
-      # but is nanoseconds on all major platforms. 2_000_000 nanoseconds = 2 milliseconds.
-      assert :erlang.convert_time_unit(2_000_000, :perf_counter, :millisecond) == 2
-    end
-
-    test "supports nanosecond time unit" do
-      assert :erlang.convert_time_unit(1, :second, :nanosecond) == 1_000_000_000
-    end
-
-    test "supports microsecond time unit" do
-      # 1 microsecond < 1 millisecond, floor(1/1000) = 0
-      assert :erlang.convert_time_unit(1, :microsecond, :millisecond) == 0
-    end
-
-    test "supports all deprecated time unit forms" do
-      # 1 nanosecond < 1 microsecond, floor(1/1000) = 0
-      assert :erlang.convert_time_unit(1, :nano_seconds, :micro_seconds) == 0
-    end
-
-    test "handles large integer values" do
-      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
-      large_value = 9_007_199_254_740_992
-
-      assert :erlang.convert_time_unit(large_value, :second, :second) == large_value
-    end
-
-    test "raises ArgumentError if time is not an integer" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not an integer"),
-                   {:erlang, :convert_time_unit, [1.0, :second, :second]}
-    end
-
-    test "raises ArgumentError if fromUnit is invalid" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "invalid time unit"),
-                   {:erlang, :convert_time_unit, [1, :banana, :second]}
-    end
-
-    test "raises ArgumentError if toUnit is invalid" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid time unit"),
-                   {:erlang, :convert_time_unit, [1, :second, 0]}
-    end
-
-    test "raises ArgumentError if fromUnit is a negative integer" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "invalid time unit"),
-                   {:erlang, :convert_time_unit, [1, -1, :second]}
-    end
-
-    test "raises ArgumentError if fromUnit is zero" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "invalid time unit"),
-                   {:erlang, :convert_time_unit, [1, 0, :second]}
-    end
-
-    test "raises ArgumentError if toUnit is a float" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "invalid time unit"),
-                   {:erlang, :convert_time_unit, [1, :second, 1.5]}
-    end
-
-    test "raises ArgumentError if fromUnit is not an atom or positive integer" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(2, "invalid time unit"),
-                   {:erlang, :convert_time_unit, [1, "second", :second]}
     end
   end
 
