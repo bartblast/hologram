@@ -707,6 +707,7 @@ const Erlang_UnicodeUtil = {
     const firstSegment = (text) => {
       const iterator = segmenter.segment(text)[Symbol.iterator]();
       const {done, value} = iterator.next();
+
       return done ? "" : value.segment;
     };
 
@@ -719,12 +720,14 @@ const Erlang_UnicodeUtil = {
     const prependCodepointToRest = (codepoint, rest) => {
       if (Type.isBitstring(rest)) {
         const restText = Bitstring.toText(rest);
+
         // Handle invalid UTF-8: when restText is false, treat as boundary
         if (restText === false) {
           // Return a list [codepointBinary, invalidBinary] to preserve the boundary
           const codepointBinary = Type.bitstring(
             String.fromCodePoint(codepoint),
           );
+
           return Type.list([codepointBinary, rest]);
         }
         return Type.bitstring(String.fromCodePoint(codepoint) + restText);
@@ -733,6 +736,7 @@ const Erlang_UnicodeUtil = {
       if (!Type.isList(rest)) return rest;
 
       const data = [Type.integer(codepoint), ...rest.data];
+
       return Type.isImproperList(rest)
         ? Type.improperList(data)
         : Type.list(data);
@@ -746,6 +750,7 @@ const Erlang_UnicodeUtil = {
       if (cpResult.data.length === 0) return {empty: true};
 
       const headCodepoint = Number(cpResult.data[0].value);
+
       const tail = Type.isImproperList(cpResult)
         ? cpResult.data.length === 2
           ? cpResult.data[1]
@@ -762,9 +767,11 @@ const Erlang_UnicodeUtil = {
       if (text.length === 0) return Type.list();
 
       const segment = firstSegment(text);
+
       const clusterCodepoints = Array.from(segment).map((char) =>
         char.codePointAt(0),
       );
+
       const cluster = buildCluster(clusterCodepoints);
       const restText = text.slice(segment.length);
 
@@ -797,14 +804,15 @@ const Erlang_UnicodeUtil = {
 
         const newCollectedText =
           collectedText + String.fromCodePoint(codepoint);
-        const newCollectedCodepoints = [...collectedCodepoints, codepoint];
 
+        const newCollectedCodepoints = [...collectedCodepoints, codepoint];
         const segment = firstSegment(newCollectedText);
         const segmentLength = Array.from(segment).length;
         const consumedLength = newCollectedCodepoints.length;
 
         // Check if we've reached a definitive boundary
         const tailIsEmptyList = Type.isList(tail) && tail.data.length === 0;
+
         const tailBinaryTextForEmptyCheck = Type.isBinary(tail)
           ? Bitstring.toText(tail)
           : null;
@@ -815,14 +823,16 @@ const Erlang_UnicodeUtil = {
             tailBinaryTextForEmptyCheck === false ||
             tailBinaryTextForEmptyCheck.length === 0);
 
-        const tailStartsWithEmptyBinary =
+        const tailFirstBinaryText =
           Type.isList(tail) &&
           tail.data.length > 0 &&
-          Type.isBinary(tail.data[0]) &&
-          (() => {
-            const text = Bitstring.toText(tail.data[0]);
-            return text === false || text.length === 0;
-          })();
+          Type.isBinary(tail.data[0])
+            ? Bitstring.toText(tail.data[0])
+            : null;
+
+        const tailStartsWithEmptyBinary =
+          tailFirstBinaryText !== null &&
+          (tailFirstBinaryText === false || tailFirstBinaryText.length === 0);
 
         // When we've consumed exactly one grapheme and the tail starts with a binary,
         // check if that binary starts with a combining character. If it starts with a
@@ -833,26 +843,25 @@ const Erlang_UnicodeUtil = {
           tail.data.length > 0 &&
           Type.isBinary(tail.data[0]);
 
-        const tailBinaryText = shouldCheckCombining
-          ? (() => {
-              const text = Bitstring.toText(tail.data[0]);
-              return text === false ? null : text;
-            })()
+        const tailBinaryTextRaw = shouldCheckCombining
+          ? Bitstring.toText(tail.data[0])
           : null;
+
+        const tailBinaryText =
+          tailBinaryTextRaw === false ? null : tailBinaryTextRaw;
 
         const hasValidBinaryText =
           typeof tailBinaryText === "string" && tailBinaryText.length > 0;
 
         // Test if the next character combines with a base character.
         // If "a" + nextChar segments as just "a", then nextChar doesn't combine.
+        const nextCharForCombiningCheck = hasValidBinaryText
+          ? Array.from(tailBinaryText)[0]
+          : null;
+
         const tailStartsWithNonCombiningChar =
-          hasValidBinaryText &&
-          (() => {
-            const nextChar = Array.from(tailBinaryText)[0];
-            const testText = "a" + nextChar;
-            const testSegment = firstSegment(testText);
-            return testSegment === "a";
-          })();
+          nextCharForCombiningCheck !== null &&
+          firstSegment("a" + nextCharForCombiningCheck) === "a";
 
         const boundaryKnown =
           segmentLength < consumedLength ||
@@ -866,8 +875,10 @@ const Erlang_UnicodeUtil = {
           return collectCluster(tail, newCollectedText, newCollectedCodepoints);
 
         // We've found the boundary. Check if we overshot (consumed too many codepoints).
+
         const clusterLength = segmentLength;
         const extraCount = consumedLength - clusterLength;
+
         const adjustedTail =
           extraCount > 0
             ? prependCodepointToRest(
@@ -880,6 +891,7 @@ const Erlang_UnicodeUtil = {
           0,
           clusterLength,
         );
+
         const cluster = buildCluster(clusterCodepoints);
 
         if (Type.isBitstring(adjustedTail))
@@ -887,6 +899,7 @@ const Erlang_UnicodeUtil = {
 
         if (Type.isList(adjustedTail)) {
           const tailData = adjustedTail.data;
+
           const singleInvalidBinary =
             tailData.length === 1 &&
             Type.isBinary(tailData[0]) &&
@@ -896,8 +909,9 @@ const Erlang_UnicodeUtil = {
             return Type.improperList([cluster, tailData[0]]);
 
           // Preserve improper list structure if adjustedTail is improper
-          if (Type.isImproperList(adjustedTail))
+          if (Type.isImproperList(adjustedTail)) {
             return Type.improperList([cluster, ...tailData]);
+          }
 
           return Type.list([cluster, ...tailData]);
         }
