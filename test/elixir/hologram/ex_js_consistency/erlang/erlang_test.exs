@@ -3779,15 +3779,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "ref_to_list/1" do
     test "reference for local node" do
-      assert "0.1.2.3"
-             |> ref()
-             |> :erlang.ref_to_list() == ~c"#Ref<0.1.2.3>"
+      result =
+        "0.1.2.3"
+        |> ref()
+        |> :erlang.ref_to_list()
+
+      assert result == ~c"#Ref<0.1.2.3>"
     end
 
     test "not a reference" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a reference"),
-                   {:erlang, :ref_to_list, [123]}
+                   {:erlang, :ref_to_list, [:abc]}
     end
   end
 

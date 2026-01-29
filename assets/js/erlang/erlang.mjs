@@ -1737,9 +1737,9 @@ const Erlang = {
       reference.creation,
     );
 
-    const text = `#Ref<${localIncarnationId}.${reference.idWords.toReversed().join(".")}>`;
-
-    return Bitstring.toCodepoints(Type.bitstring(text));
+    return Type.charlist(
+      `#Ref<${localIncarnationId}.${reference.idWords.toReversed().join(".")}>`,
+    );
   },
   // End ref_to_list/1
   // Deps: []

@@ -6177,11 +6177,6 @@ describe("Erlang", () => {
       ERTS.nodeTable.reset();
     });
 
-    const toCharlist = (text) =>
-      Type.list(
-        Array.from(text).map((char) => Type.integer(char.codePointAt(0))),
-      );
-
     it("reference for local node", () => {
       const reference = Type.reference(
         ERTS.nodeTable.CLIENT_NODE,
@@ -6190,7 +6185,7 @@ describe("Erlang", () => {
       );
 
       const result = ref_to_list(reference);
-      const expected = toCharlist("#Ref<0.1.2.3>");
+      const expected = Type.charlist("#Ref<0.1.2.3>");
 
       assert.deepStrictEqual(result, expected);
     });
