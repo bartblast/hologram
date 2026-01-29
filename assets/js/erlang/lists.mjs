@@ -734,7 +734,11 @@ const Erlang_Lists = {
 
   // Start seq/2
   "seq/2": (from, to) => {
-    if (!Type.isInteger(from) || !Type.isInteger(to) || (from.value - 1n > to.value)) {
+    if (
+      !Type.isInteger(from) ||
+      !Type.isInteger(to) ||
+      from.value - 1n > to.value
+    ) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.seq/2", [from, to]),
       );
