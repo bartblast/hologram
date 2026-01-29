@@ -6392,6 +6392,87 @@ describe("Erlang", () => {
     });
   });
 
+  describe("monotonic_time/0", () => {
+    const monotonic_time = Erlang["monotonic_time/0"];
+
+    it("returns an integer", () => {
+      const result = monotonic_time();
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("is monotonic non-decreasing", () => {
+      const t1 = monotonic_time().value;
+      const t2 = monotonic_time().value;
+
+      assert.isTrue(t2 >= t1);
+    });
+  });
+
+  describe("monotonic_time/1", () => {
+    const monotonic_time = Erlang["monotonic_time/1"];
+
+    it("all allowed units return integer", () => {
+      const units = [
+        "native",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+      ];
+
+      for (const u of units) {
+        assert.isTrue(Type.isInteger(monotonic_time(Type.atom(u))));
+      }
+    });
+
+    it("nanosecond unit yields larger values than microsecond", () => {
+      const micro = monotonic_time(Type.atom("microsecond"));
+      const nano = monotonic_time(Type.atom("nanosecond"));
+
+      // Since 1 microsecond = 1000 nanoseconds, nano should be approximately 1000x micro
+      // We check that the ratio is close to 1000 (allowing for timing between calls)
+      const ratio = nano.value / (micro.value + 1n); // +1 to avoid division by very small numbers
+      assert.isTrue(ratio >= 500n && ratio <= 2000n);
+    });
+
+    it("with positive integer unit", () => {
+      const result = monotonic_time(Type.integer(1000n));
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("raises ArgumentError when unit is less than 1", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.integer(0n)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when unit is negative", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.integer(-1n)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when unit is not a valid time unit atom", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when unit is not atom or integer", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.float(1.0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+  });
+
   // describe("time_offset/0", () => {
   //   const time_offset = Erlang["time_offset/0"];
 
