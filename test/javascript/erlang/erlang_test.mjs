@@ -6397,6 +6397,7 @@ describe("Erlang", () => {
 
     it("returns an integer", () => {
       const result = monotonic_time();
+
       assert.isTrue(Type.isInteger(result));
     });
 
@@ -6405,6 +6406,43 @@ describe("Erlang", () => {
       const t2 = monotonic_time().value;
 
       assert.isTrue(t2 >= t1);
+    });
+
+    describe("client-only behaviour", () => {
+      it("uses fast path for small values (< 9_007_199_254 ms / ~104 days)", () => {
+        const originalNow = performance.now;
+
+        try {
+          // Mock performance.now() to return a small value (1 second)
+          performance.now = () => 1000.123456;
+
+          const result = monotonic_time();
+
+          // 1000.123456 ms * 1_000_000 = 1000123456 ns
+          assertBoxedStrictEqual(result, Type.integer(1_000_123_456));
+        } finally {
+          performance.now = originalNow;
+        }
+      });
+
+      it("uses safe path for large values (>= 9_007_199_254 ms / ~104 days)", () => {
+        const originalNow = performance.now;
+
+        try {
+          // Mock performance.now() to return a value >= 9_007_199_254 ms (~104 days)
+          // 10_000_000_000.5 ms (using .5 to avoid float precision issues)
+          performance.now = () => 10_000_000_000.5;
+
+          const result = monotonic_time();
+
+          // 10_000_000_000 ms * 1_000_000 = 10000000000000000 ns (whole part)
+          // 0.5 ms * 1_000_000 = 500000 ns (fractional part)
+          // Total = 10000000000500000 ns
+          assertBoxedStrictEqual(result, Type.integer(10_000_000_000_500_000n));
+        } finally {
+          performance.now = originalNow;
+        }
+      });
     });
   });
 

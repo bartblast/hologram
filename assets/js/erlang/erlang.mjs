@@ -1636,8 +1636,27 @@ const Erlang = {
 
   // Start monotonic_time/0
   "monotonic_time/0": () => {
-    // performance.now() returns milliseconds with sub-ms precision
-    return Type.integer(BigInt(Math.round(performance.now() * 1_000_000)));
+    // performance.now() returns milliseconds with sub-ms precision.
+    // We convert to nanoseconds (multiply by 1_000_000).
+    //
+    // MAX_SAFE_INTEGER == 9_007_199_254_740_991
+    // MAX_SAFE_INTEGER / 1_000_000 ≈ 9_007_199_254 ms ≈ 104 days.
+    // Beyond that, ms * 1_000_000 exceeds MAX_SAFE_INTEGER and loses precision.
+    //
+    // Fast path: direct multiplication when safely within bounds.
+    // Safe path: split whole/fractional parts to avoid large float multiplication.
+    const ms = performance.now();
+
+    if (ms < 9_007_199_254) {
+      return Type.integer(BigInt(Math.round(ms * 1_000_000)));
+    }
+
+    const msWhole = Math.trunc(ms);
+
+    return Type.integer(
+      BigInt(msWhole) * 1_000_000n +
+        BigInt(Math.round((ms - msWhole) * 1_000_000)),
+    );
   },
   // End monotonic_time/0
   // Deps: []

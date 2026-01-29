@@ -3971,6 +3971,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "is monotonic non-decreasing" do
       t1 = :erlang.monotonic_time()
       t2 = :erlang.monotonic_time()
+
       assert t2 >= t1
     end
   end
