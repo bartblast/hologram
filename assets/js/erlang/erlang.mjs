@@ -1655,20 +1655,13 @@ const Erlang = {
 
   // Start monotonic_time/1
   "monotonic_time/1": (unit) => {
-    const toUnitValue = Erlang["_resolve_time_unit/1"](unit, 1);
+    Erlang["_resolve_time_unit/1"](unit, 1);
     const nativeTime = Erlang["monotonic_time/0"]();
-    const fromUnitValue = 1_000_000_000n; // native time unit
-    const numerator = toUnitValue * nativeTime.value;
 
-    const adjustedNumerator =
-      nativeTime.value < 0n ? numerator - (fromUnitValue - 1n) : numerator;
-
-    const result = adjustedNumerator / fromUnitValue;
-
-    return Type.integer(result);
+    return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End monotonic_time/1
-  // Deps: [:erlang._resolve_time_unit/1, :erlang.monotonic_time/0]
+  // Deps: [:erlang._resolve_time_unit/1, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
 
   // Start not/1
   "not/1": (term) => {
