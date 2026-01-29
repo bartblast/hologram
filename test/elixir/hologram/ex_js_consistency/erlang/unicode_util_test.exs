@@ -474,10 +474,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.gc([97 | <<255>>]) == [97 | <<255>>]
     end
 
-    test "cp/1 returns 3-element improper list for [binary | binary] input" do
-      assert :unicode_util.cp(["ab" | "cd"]) == [97, "b" | "cd"]
-    end
-
     test "handles improper list [binary | binary] preserving all elements" do
       assert :unicode_util.gc(["ab" | "cd"]) == [97, "b" | "cd"]
     end

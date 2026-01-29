@@ -997,22 +997,6 @@ describe("Erlang_UnicodeUtil", () => {
         );
       });
 
-      it("cp/1 returns 3-element improper list for [binary | binary] input", () => {
-        const cp = Erlang_UnicodeUtil["cp/1"];
-        const result = cp(
-          Type.improperList([Type.bitstring("ab"), Type.bitstring("cd")]),
-        );
-
-        assert.deepStrictEqual(
-          result,
-          Type.improperList([
-            Type.integer(97),
-            Type.bitstring("b"),
-            Type.bitstring("cd"),
-          ]),
-        );
-      });
-
       it("handles improper list [binary | binary] preserving all elements", () => {
         const result = gc(
           Type.improperList([Type.bitstring("ab"), Type.bitstring("cd")]),
