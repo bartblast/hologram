@@ -3982,15 +3982,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       for u <- @units, do: assert(is_integer(:erlang.monotonic_time(u)))
     end
 
-    test "nanosecond unit yields larger values than microsecond" do
-      # Get multiple samples to verify the mathematical relationship
-      micro1 = :erlang.monotonic_time(:microsecond)
-      nano1 = :erlang.monotonic_time(:nanosecond)
-      # Since 1 microsecond = 1000 nanoseconds, nano should be approximately 1000x micro
-      # We check that the ratio is close to 1000 (allowing for timing between calls)
-      # +1 to avoid division by very small numbers
-      ratio = div(nano1, micro1 + 1)
-      assert ratio >= 500 and ratio <= 2000
+    test "nanosecond unit is 1000x microsecond unit" do
+      micro = :erlang.monotonic_time(:microsecond)
+      nano = :erlang.monotonic_time(:nanosecond)
+
+      # Use absolute values since monotonic_time can be negative
+      abs_micro = abs(micro)
+      abs_nano = abs(nano)
+
+      # Allow small timing drift between calls
+      assert abs_nano >= abs_micro * 999
+      assert abs_nano <= abs_micro * 1001 + 1000
     end
 
     test "with positive integer unit" do

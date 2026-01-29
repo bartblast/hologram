@@ -6425,14 +6425,17 @@ describe("Erlang", () => {
       }
     });
 
-    it("nanosecond unit yields larger values than microsecond", () => {
-      const micro = monotonic_time(Type.atom("microsecond"));
-      const nano = monotonic_time(Type.atom("nanosecond"));
+    it("nanosecond unit is 1000x microsecond unit", () => {
+      const micro = monotonic_time(Type.atom("microsecond")).value;
+      const nano = monotonic_time(Type.atom("nanosecond")).value;
 
-      // Since 1 microsecond = 1000 nanoseconds, nano should be approximately 1000x micro
-      // We check that the ratio is close to 1000 (allowing for timing between calls)
-      const ratio = nano.value / (micro.value + 1n); // +1 to avoid division by very small numbers
-      assert.isTrue(ratio >= 500n && ratio <= 2000n);
+      // Use absolute values since monotonic_time can be negative
+      const absMicro = micro >= 0n ? micro : -micro;
+      const absNano = nano >= 0n ? nano : -nano;
+
+      // Allow small timing drift between calls
+      assert.isTrue(absNano >= absMicro * 999n);
+      assert.isTrue(absNano <= absMicro * 1001n + 1000n);
     });
 
     it("with positive integer unit", () => {

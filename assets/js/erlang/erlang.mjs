@@ -35,35 +35,6 @@ MFAs for sorting:
 |> Enum.sort()
 */
 
-const _getTimeUnitValue = (unit) => {
-  if (Type.isAtom(unit)) {
-    switch (unit.value) {
-      case "native":
-        return 1_000_000n;
-      case "second":
-        return 1_000_000_000n;
-      case "millisecond":
-        return 1_000_000n;
-      case "microsecond":
-        return 1_000n;
-      case "nanosecond":
-        return 1n;
-      default:
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-        );
-    }
-  }
-
-  if (Type.isInteger(unit) && unit.value >= 1n) {
-    return unit.value;
-  }
-
-  Interpreter.raiseArgumentError(
-    Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-  );
-};
-
 const Erlang = {
   // Start */2
   "*/2": (left, right) => {
@@ -1665,24 +1636,42 @@ const Erlang = {
 
   // Start monotonic_time/0
   "monotonic_time/0": () => {
-    return Erlang["monotonic_time/1"](Type.atom("native"));
+    // performance.now() returns milliseconds with sub-ms precision
+    return Type.integer(BigInt(Math.round(performance.now() * 1_000_000)));
   },
   // End monotonic_time/0
-  // Deps: [:erlang.monotonic_time/1]
+  // Deps: []
 
   // Start monotonic_time/1
   "monotonic_time/1": (unit) => {
-    const unitValue = _getTimeUnitValue(unit);
+    const validAtomUnits = [
+      "nanosecond",
+      "nano_seconds",
+      "microsecond",
+      "micro_seconds",
+      "millisecond",
+      "milli_seconds",
+      "second",
+      "seconds",
+      "native",
+      "perf_counter",
+    ];
 
-    const monoTimeNs =
-      BigInt(Math.round(performance.timeOrigin + performance.now())) *
-      1_000_000n;
+    const isValidUnit =
+      (Type.isAtom(unit) && validAtomUnits.includes(unit.value)) ||
+      (Type.isInteger(unit) && unit.value > 0n);
 
-    const quotient = monoTimeNs / unitValue;
-    return Type.integer(quotient);
+    if (!isValidUnit) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    }
+
+    const nativeTime = Erlang["monotonic_time/0"]();
+    return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End monotonic_time/1
-  // Deps: []
+  // Deps: [:erlang.monotonic_time/0, :erlang.convert_time_unit/3]
 
   // Start not/1
   "not/1": (term) => {
@@ -1865,19 +1854,18 @@ const Erlang = {
 
   // Start time_offset/1
   "time_offset/1": (unit) => {
-    const unitValue = _getTimeUnitValue(unit);
-
     const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
-    const monoTimeNs =
-      BigInt(Math.round(performance.timeOrigin + performance.now())) *
-      1_000_000n;
+    const monoTimeNs = BigInt(Math.round(performance.now() * 1_000_000));
     const offsetNs = systemTimeNs - monoTimeNs;
 
-    const quotient = offsetNs / unitValue;
-    return Type.integer(quotient);
+    return Erlang["convert_time_unit/3"](
+      Type.integer(offsetNs),
+      Type.atom("native"),
+      unit,
+    );
   },
   // End time_offset/1
-  // Deps: []
+  // Deps: [:erlang.convert_time_unit/3]
 
   // Start trunc/1
   "trunc/1": (number) => {
