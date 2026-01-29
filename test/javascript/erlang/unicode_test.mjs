@@ -552,12 +552,14 @@ describe("Erlang_Unicode", () => {
     it("normalizes combining characters to NFC", () => {
       const result = fun(Type.list([Type.integer(97), Type.integer(0x030a)]));
       const expected = Type.list([Type.integer(229)]); // å
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("handles already normalized text", () => {
       const result = fun(Type.list([Type.integer(229)]));
       const expected = Type.list([Type.integer(229)]);
+
       assert.deepStrictEqual(result, expected);
     });
 
@@ -572,6 +574,7 @@ describe("Erlang_Unicode", () => {
           Type.integer(0x0308), // combining diaeresis
         ]),
       );
+
       const expected = Type.list([
         Type.integer(97), // a
         Type.integer(98), // b
@@ -582,16 +585,19 @@ describe("Erlang_Unicode", () => {
         Type.integer(228), // ä (a + diaeresis composed)
         Type.integer(246), // ö (o + diaeresis composed)
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("handles empty binary", () => {
       const result = fun(Type.bitstring(""));
+
       assert.deepStrictEqual(result, Type.list());
     });
 
     it("handles empty list", () => {
       const result = fun(Type.list());
+
       assert.deepStrictEqual(result, Type.list());
     });
 
@@ -601,7 +607,9 @@ describe("Erlang_Unicode", () => {
           Type.list([Type.list([Type.integer(97), Type.integer(0x030a)])]),
         ]),
       );
+
       const expected = Type.list([Type.integer(229)]); // å
+
       assert.deepStrictEqual(result, expected);
     });
 
@@ -613,13 +621,16 @@ describe("Erlang_Unicode", () => {
           Type.integer(0x0304),
         ]),
       );
+
       // Normalized form combines these in canonical order
       const expected = Type.list([Type.integer(0x022b)]); // ȫ
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("handles large input", () => {
       const largeInput = [];
+
       for (let i = 0; i < 100; i++) {
         largeInput.push(
           Type.integer(97), // a
@@ -634,8 +645,10 @@ describe("Erlang_Unicode", () => {
           Type.integer(106), // j
         );
       }
+
       const result = fun(Type.list(largeInput));
       const expected = Type.list(largeInput);
+
       assert.deepStrictEqual(result, expected);
     });
 
@@ -644,11 +657,11 @@ describe("Erlang_Unicode", () => {
         Type.list([
           Type.bitstring("hello"),
           Type.bitstring(" "),
-          Type.integer(97), // a
-          Type.integer(0x030a), // combining ring above
+          Type.list([Type.integer(97), Type.integer(0x030a)]), // [?a, 0x030A]
           Type.bitstring(" world"),
         ]),
       );
+
       const expected = Type.list([
         Type.integer(104), // h
         Type.integer(101), // e
@@ -664,6 +677,7 @@ describe("Erlang_Unicode", () => {
         Type.integer(108), // l
         Type.integer(100), // d
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
@@ -671,7 +685,9 @@ describe("Erlang_Unicode", () => {
       const result = fun(
         Type.list([Type.integer(0x3042), Type.integer(0x3044)]),
       );
+
       const expected = Type.list([Type.integer(0x3042), Type.integer(0x3044)]);
+
       assert.deepStrictEqual(result, expected);
     });
 
@@ -679,6 +695,7 @@ describe("Erlang_Unicode", () => {
       const invalidBinary = Bitstring.fromBytes([255, 255]);
       const input = Type.list([Type.bitstring("abc"), invalidBinary]);
       const result = fun(input);
+
       const expected = Type.tuple([
         Type.atom("error"),
         Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
@@ -693,6 +710,7 @@ describe("Erlang_Unicode", () => {
       const invalidBinary = Bitstring.fromBytes([0xc0, 0x80]);
       const input = Type.list([Type.bitstring("a"), invalidBinary]);
       const result = fun(input);
+
       const expected = Type.tuple([
         Type.atom("error"),
         Type.list([Type.integer(97)]),
@@ -705,8 +723,10 @@ describe("Erlang_Unicode", () => {
     it("rejects UTF-16 surrogate range in binary", () => {
       // CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
       const invalidBinary = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+
       const input = Type.list([Type.bitstring("a"), invalidBinary]);
       const result = fun(input);
+
       const expected = Type.tuple([
         Type.atom("error"),
         Type.list([Type.integer(97)]),
@@ -719,8 +739,10 @@ describe("Erlang_Unicode", () => {
     it("rejects code points above U+10FFFF in binary", () => {
       // Leader 0xF5 starts sequences above Unicode max (invalid)
       const invalidBinary = Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]);
+
       const input = Type.list([Type.bitstring("a"), invalidBinary]);
       const result = fun(input);
+
       const expected = Type.tuple([
         Type.atom("error"),
         Type.list([Type.integer(97)]),
@@ -733,12 +755,29 @@ describe("Erlang_Unicode", () => {
     it("returns error tuple for truncated UTF-8 sequence", () => {
       // First two bytes of a 3-byte sequence (incomplete)
       const incompleteBinary = Bitstring.fromBytes([0xe4, 0xb8]);
+
       const input = Type.list([Type.bitstring("a"), incompleteBinary]);
       const result = fun(input);
+
       const expected = Type.tuple([
         Type.atom("error"),
         Type.list([Type.integer(97)]),
         incompleteBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple for single invalid binary not wrapped in a list", () => {
+      const input = Bitstring.fromBytes([255, 255]);
+      const result = fun(input);
+
+      const expectedRest = Bitstring.fromBytes([255, 255]);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list(),
+        expectedRest,
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -757,6 +796,7 @@ describe("Erlang_Unicode", () => {
 
     it("raises ArgumentError when input is a non-binary bitstring", () => {
       const input = new Bitstring([1, 0, 1], 3); // 3 bits, not byte-aligned
+
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
@@ -769,6 +809,7 @@ describe("Erlang_Unicode", () => {
 
     it("raises ArgumentError when input list contains invalid types", () => {
       const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
@@ -781,6 +822,7 @@ describe("Erlang_Unicode", () => {
 
     it("raises ArgumentError on invalid code point before normalization", () => {
       const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
       assertBoxedError(
         () => fun(input),
         "ArgumentError",
@@ -796,6 +838,20 @@ describe("Erlang_Unicode", () => {
         Type.list([Type.integer(97), Type.integer(0x030a)]),
         Type.integer(0x110000),
       ]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on negative integer code point", () => {
+      const input = Type.list([Type.integer(-1)]);
+
       assertBoxedError(
         () => fun(input),
         "ArgumentError",

@@ -309,7 +309,9 @@ const Erlang_Unicode = {
     ) => {
       const text =
         preDecodedText !== null ? preDecodedText : Bitstring.toText(binary);
+
       const normalized = text.normalize("NFC");
+
       return Array.from(normalized).map((char) =>
         Type.integer(char.codePointAt(0)),
       );
@@ -330,9 +332,6 @@ const Erlang_Unicode = {
       ]);
     };
 
-    // Invalid integer codepoints must raise ArgumentError (Erlang semantics).
-    // We raise directly where detected instead of delegating through a helper.
-
     // Handles invalid UTF-8 errors. Always returns error tuple (invalid UTF-8
     // in binaries returns tuples, not exceptions), even if no valid data exists.
     const handleInvalidUtf8 = (chunks, invalidBinary) => {
@@ -340,15 +339,17 @@ const Erlang_Unicode = {
       if (chunks.length === 0) {
         return createErrorTuple([], invalidBinary);
       }
+
       // Normalize valid prefix and return error tuple
       const validBinary = Bitstring.concat(chunks);
       const codepoints = convertBinaryToNormalizedCodepoints(validBinary);
+
       return createErrorTuple(codepoints, invalidBinary);
     };
 
     // Processes a single list element, validating and accumulating it.
     // Returns { type, data } object: type is 'valid', 'error', or 'invalid'.
-    const processElement = (elem, index, flatData, chunks) => {
+    const processElement = (elem, chunks) => {
       // Guard: reject invalid types
       if (!Type.isBinary(elem) && !Type.isInteger(elem)) {
         return {type: "invalid"};
@@ -357,6 +358,7 @@ const Erlang_Unicode = {
       // Process binary elements (no nested ifs - use ternary for early exit)
       if (Type.isBinary(elem)) {
         const text = Bitstring.toText(elem);
+
         return text === false
           ? {type: "error", data: handleInvalidUtf8(chunks, elem)}
           : {type: "valid", data: elem};
@@ -367,6 +369,7 @@ const Erlang_Unicode = {
       if (!isValidCodepoint) {
         raiseInvalidChardataError();
       }
+
       return {type: "valid", data: convertCodepointToBinary(elem)};
     };
 
@@ -392,17 +395,22 @@ const Erlang_Unicode = {
     // Fast path for binary input
     if (isBinary) {
       const result = Erlang_Unicode["characters_to_nfc_binary/1"](chardata);
+
       if (Type.isTuple(result)) {
         const prefixBin = result.data[1];
         const rest = result.data[2];
         const prefixText = Bitstring.toText(prefixBin);
+
         const prefixCodepoints =
           prefixText === false
             ? []
             : convertBinaryToNormalizedCodepoints(prefixBin, prefixText);
+
         return createErrorTuple(prefixCodepoints, rest);
       }
+
       const codepoints = convertBinaryToNormalizedCodepoints(result);
+
       return Type.list(codepoints);
     }
 
@@ -413,14 +421,16 @@ const Erlang_Unicode = {
     // Process elements: concatenate all valid data first (combining characters
     // may span multiple elements), then normalize. O(n) single pass.
     for (let i = 0; i < flatData.length; ++i) {
-      const result = processElement(flatData[i], i, flatData, chunks);
+      const result = processElement(flatData[i], chunks);
 
       if (result.type === "error") {
         return result.data;
       }
+
       if (result.type === "invalid") {
         raiseInvalidChardataError();
       }
+
       // result.type === "valid" - accumulate
       chunks.push(result.data);
     }
@@ -428,6 +438,7 @@ const Erlang_Unicode = {
     // All elements valid - concatenate, normalize, and return
     const binary = Bitstring.concat(chunks);
     const codepoints = convertBinaryToNormalizedCodepoints(binary);
+
     return Type.list(codepoints);
   },
   // End characters_to_nfc_list/1

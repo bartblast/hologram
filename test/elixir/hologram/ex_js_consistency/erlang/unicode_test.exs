@@ -462,6 +462,13 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfc_list(input) == expected
     end
 
+    test "returns error tuple for single invalid binary not wrapped in a list" do
+      invalid_binary = <<255, 255>>
+      expected = {:error, [], invalid_binary}
+
+      assert :unicode.characters_to_nfc_list(invalid_binary) == expected
+    end
+
     test "raises ArgumentError when input is not a list or a bitstring" do
       expected_msg =
         build_argument_error_msg(1, "not valid character data (an iodata term)")
@@ -506,6 +513,17 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "raises ArgumentError on invalid code point after normalization" do
       input = [[?a, 0x030A], 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfc_list(input)
+      end
+    end
+
+    test "raises ArgumentError on negative integer code point" do
+      input = [-1]
 
       expected_msg =
         build_argument_error_msg(1, "not valid character data (an iodata term)")
