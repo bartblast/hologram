@@ -1345,6 +1345,126 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "seq/2" do
+    test "generates ascending sequence" do
+      assert :lists.seq(1, 5) == [1, 2, 3, 4, 5]
+    end
+
+    test "raises FunctionClauseError when from > to + 1" do
+      expected_msg = build_function_clause_error_msg(":lists.seq/2", [10, 5])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.seq(10, 5)
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.seq/2", [:abc, 5])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.seq(:abc, 5)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.seq/2", [1, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.seq(1, :abc)
+      end
+    end
+  end
+
+  describe "seq/3" do
+    test "generates ascending sequence with increment 1" do
+      assert :lists.seq(1, 5, 1) == [1, 2, 3, 4, 5]
+    end
+
+    test "generates ascending sequence with increment 2" do
+      assert :lists.seq(1, 10, 2) == [1, 3, 5, 7, 9]
+    end
+
+    test "generates ascending sequence from negative to positive" do
+      assert :lists.seq(-5, 5, 2) == [-5, -3, -1, 1, 3, 5]
+    end
+
+    test "generates descending sequence with negative increment" do
+      assert :lists.seq(10, 5, -1) == [10, 9, 8, 7, 6, 5]
+    end
+
+    test "generates descending sequence with negative increment of -2" do
+      assert :lists.seq(10, 1, -2) == [10, 8, 6, 4, 2]
+    end
+
+    test "generates descending sequence in negative range" do
+      assert :lists.seq(-1, -10, -2) == [-1, -3, -5, -7, -9]
+    end
+
+    test "generates single element sequence when from equals to" do
+      assert :lists.seq(5, 5, 1) == [5]
+    end
+
+    test "generates single element sequence when from equals to with increment 0" do
+      assert :lists.seq(5, 5, 0) == [5]
+    end
+
+    test "generates empty sequence if from > to with positive increment" do
+      assert :lists.seq(10, 6, 4) == []
+    end
+
+    test "generates empty sequence when from - incr equals to (boundary case)" do
+      assert :lists.seq(2, 1, 1) == []
+    end
+
+    test "raises ArgumentError if from > to with positive increment" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a negative increment"),
+                   fn ->
+                     :lists.seq(10, 1, 1)
+                   end
+    end
+
+    test "raises ArgumentError if from < to with negative increment" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a positive increment"),
+                   fn ->
+                     :lists.seq(1, 10, -1)
+                   end
+    end
+
+    test "raises ArgumentError if increment is 0" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a positive increment"),
+                   fn ->
+                     :lists.seq(1, 5, 0)
+                   end
+    end
+
+    test "raises ArgumentError if the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   fn ->
+                     :lists.seq(:abc, 5, 1)
+                   end
+    end
+
+    test "raises ArgumentError if the second argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer"),
+                   fn ->
+                     :lists.seq(1, :abc, 1)
+                   end
+    end
+
+    test "raises ArgumentError if the third argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not an integer"),
+                   fn ->
+                     :lists.seq(1, 5, :abc)
+                   end
+    end
+  end
+
   describe "sort/2" do
     setup do
       [fun: fn a, b -> a <= b end]

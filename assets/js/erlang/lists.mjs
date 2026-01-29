@@ -732,6 +732,91 @@ const Erlang_Lists = {
   // End sort/1
   // Deps: []
 
+  // Start seq/2
+  "seq/2": (from, to) => {
+    if (!Type.isInteger(from) || !Type.isInteger(to) || (from.value - 1n > to.value)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq/2", [from, to]),
+      );
+    }
+
+    return Erlang_Lists["seq/3"](from, to, Type.integer(1));
+  },
+  // End seq/2
+  // Deps: [:lists.seq/3]
+
+  // Start seq/3
+  "seq/3": (from, to, incr) => {
+    if (!Type.isInteger(from)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(to)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(incr)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const fromVal = from.value;
+    const toVal = to.value;
+    const incrVal = incr.value;
+
+    // Special case: seq(Same, Same, 0) when is_integer(Same) -> [Same]
+    if (fromVal === toVal && incrVal === 0n) {
+      return Type.list([Type.integer(fromVal)]);
+    }
+
+    // Erlang guard conditions:
+    // (Inc > 0 andalso First - Inc =< Last) orelse (Inc < 0 andalso First - Inc >= Last)
+    // Negating this (to find error cases):
+    // Inc > 0 andalso First - Inc > Last  (i.e., To < From - Inc when Inc > 0)
+    // Inc < 0 andalso First - Inc < Last  (i.e., To > From - Inc when Inc < 0)
+    // Inc === 0 (special case already handled above when From === To)
+
+    if (incrVal > 0n && toVal < fromVal - incrVal) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
+      );
+    }
+
+    if (incrVal < 0n && toVal > fromVal - incrVal) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+      );
+    }
+
+    if (incrVal === 0n) {
+      // If we reach here, fromVal !== toVal and incrVal === 0
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+      );
+    }
+
+    const result = [];
+
+    if (incrVal > 0n) {
+      for (let i = fromVal; i <= toVal; i += incrVal) {
+        result.push(Type.integer(i));
+      }
+    } else {
+      for (let i = fromVal; i >= toVal; i += incrVal) {
+        result.push(Type.integer(i));
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End seq/3
+  // Deps: []
+
   // Client-side implementation uses simplified error details (for improper list with 2+ elements case)
   // Start sort/2
   "sort/2": (fun, list) => {
