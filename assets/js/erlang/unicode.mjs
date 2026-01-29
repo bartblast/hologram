@@ -431,7 +431,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_nfc_list/1
-  // Deps: [:lists.flatten/1]
+  // Deps: [:lists.flatten/1, :unicode.characters_to_nfc_binary/1]
 
   // Start characters_to_nfd_binary/1
   "characters_to_nfd_binary/1": (data) => {
