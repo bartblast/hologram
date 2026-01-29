@@ -1724,6 +1724,26 @@ const Erlang = {
   // End pid_to_list/1
   // Deps: []
 
+  // Start ref_to_list/1
+  "ref_to_list/1": (reference) => {
+    if (!Type.isReference(reference)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    const localIncarnationId = ERTS.nodeTable.getLocalIncarnationId(
+      reference.node,
+      reference.creation,
+    );
+
+    const text = `#Ref<${localIncarnationId}.${reference.idWords.toReversed().join(".")}>`;
+
+    return Bitstring.toCodepoints(Type.bitstring(text));
+  },
+  // End ref_to_list/1
+  // Deps: []
+
   // Start rem/2
   "rem/2": (integer1, integer2) => {
     if (
