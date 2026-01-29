@@ -1673,6 +1673,8 @@ const Erlang = {
 
   // Start monotonic_time/1
   "monotonic_time/1": (unit) => {
+    // TODO: unit is validated twice - here (for correct arg index in error message)
+    // and in convert_time_unit/3. This could be optimized in the future.
     Erlang["_validate_time_unit/2"](unit, 1);
     const nativeTime = Erlang["monotonic_time/0"]();
 
