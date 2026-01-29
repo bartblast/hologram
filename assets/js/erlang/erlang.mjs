@@ -36,6 +36,55 @@ MFAs for sorting:
 */
 
 const Erlang = {
+  // Start _resolve_time_unit/1
+  "_resolve_time_unit/1": (unit, argumentIndex) => {
+    // :native and :perf_counter are technically platform-dependent in Erlang/OTP,
+    // but in practice they're nanoseconds on all major platforms (Linux, macOS, Windows).
+    // We standardize on nanoseconds to match typical Erlang behavior while keeping
+    // JS behavior predictable.
+    const NATIVE_TIME_UNIT = 1_000_000_000n;
+    const PERF_COUNTER_TIME_UNIT = 1_000_000_000n;
+
+    if (Type.isInteger(unit) && unit.value > 0n) return unit.value;
+
+    if (!Type.isAtom(unit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
+      );
+    }
+
+    switch (unit.value) {
+      case "nanosecond":
+      case "nano_seconds":
+        return 1_000_000_000n;
+
+      case "microsecond":
+      case "micro_seconds":
+        return 1_000_000n;
+
+      case "millisecond":
+      case "milli_seconds":
+        return 1_000n;
+
+      case "second":
+      case "seconds":
+        return 1n;
+
+      case "native":
+        return NATIVE_TIME_UNIT;
+
+      case "perf_counter":
+        return PERF_COUNTER_TIME_UNIT;
+
+      default:
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
+        );
+    }
+  },
+  // End _resolve_time_unit/1
+  // Deps: []
+
   // Start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
@@ -669,71 +718,14 @@ const Erlang = {
 
   // Start convert_time_unit/3
   "convert_time_unit/3": (time, fromUnit, toUnit) => {
-    // Helpers
-
-    const resolveTimeUnit = (unit, argumentIndex) => {
-      // :native - the time unit used by :erlang.monotonic_time/0
-      // :perf_counter - the time unit used by :os.perf_counter/0 (high-resolution OS timer)
-      //
-      // Both are technically platform-dependent in Erlang/OTP, but in practice they're
-      // nanoseconds on all major platforms (Linux, macOS, Windows). We standardize on
-      // nanoseconds to match typical Erlang behavior while keeping JS behavior predictable.
-      const NATIVE_TIME_UNIT = 1_000_000_000n;
-      const PERF_COUNTER_TIME_UNIT = 1_000_000_000n;
-
-      const isPositiveIntegerUnit = Type.isInteger(unit) && unit.value > 0n;
-
-      if (isPositiveIntegerUnit) return unit.value;
-
-      if (!Type.isAtom(unit)) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
-        );
-      }
-
-      switch (unit.value) {
-        case "nanosecond":
-        case "nano_seconds":
-          return 1_000_000_000n;
-
-        case "microsecond":
-        case "micro_seconds":
-          return 1_000_000n;
-
-        case "millisecond":
-        case "milli_seconds":
-          return 1_000n;
-
-        case "second":
-        case "seconds":
-          return 1n;
-
-        case "native":
-          return NATIVE_TIME_UNIT;
-
-        case "perf_counter":
-          return PERF_COUNTER_TIME_UNIT;
-
-        default:
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              argumentIndex,
-              "invalid time unit",
-            ),
-          );
-      }
-    };
-
-    // Main logic
-
     if (!Type.isInteger(time)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     }
 
-    const fromUnitValue = resolveTimeUnit(fromUnit, 2);
-    const toUnitValue = resolveTimeUnit(toUnit, 3);
+    const fromUnitValue = Erlang["_resolve_time_unit/1"](fromUnit, 2);
+    const toUnitValue = Erlang["_resolve_time_unit/1"](toUnit, 3);
     const numerator = toUnitValue * time.value;
 
     const adjustedNumerator =
@@ -744,7 +736,7 @@ const Erlang = {
     return Type.integer(result);
   },
   // End convert_time_unit/3
-  // Deps: []
+  // Deps: [:erlang._resolve_time_unit/1]
 
   // Start div/2
   "div/2": (integer1, integer2) => {
@@ -1663,34 +1655,20 @@ const Erlang = {
 
   // Start monotonic_time/1
   "monotonic_time/1": (unit) => {
-    const validAtomUnits = [
-      "nanosecond",
-      "nano_seconds",
-      "microsecond",
-      "micro_seconds",
-      "millisecond",
-      "milli_seconds",
-      "second",
-      "seconds",
-      "native",
-      "perf_counter",
-    ];
-
-    const isValidUnit =
-      (Type.isAtom(unit) && validAtomUnits.includes(unit.value)) ||
-      (Type.isInteger(unit) && unit.value > 0n);
-
-    if (!isValidUnit) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-      );
-    }
-
+    const toUnitValue = Erlang["_resolve_time_unit/1"](unit, 1);
     const nativeTime = Erlang["monotonic_time/0"]();
-    return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
+    const fromUnitValue = 1_000_000_000n; // native time unit
+    const numerator = toUnitValue * nativeTime.value;
+
+    const adjustedNumerator =
+      nativeTime.value < 0n ? numerator - (fromUnitValue - 1n) : numerator;
+
+    const result = adjustedNumerator / fromUnitValue;
+
+    return Type.integer(result);
   },
   // End monotonic_time/1
-  // Deps: [:erlang.monotonic_time/0, :erlang.convert_time_unit/3]
+  // Deps: [:erlang._resolve_time_unit/1, :erlang.monotonic_time/0]
 
   // Start not/1
   "not/1": (term) => {
