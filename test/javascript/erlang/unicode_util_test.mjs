@@ -987,11 +987,8 @@ describe("Erlang_UnicodeUtil", () => {
         );
       });
 
-      it("handles base character followed by direct invalid UTF-8 binary (tests tailIsEmptyBinary with false)", () => {
-        // This specifically tests the bug where tailIsEmptyBinary tries to access .length on false
-        // When we have [97] with tail being <<255>>, gc needs to check if the tail is empty
+      it("handles improper list with integer and invalid UTF-8 binary tail", () => {
         const invalid = Bitstring.fromBytes(new Uint8Array([255]));
-        // Use improper list to make invalid binary the direct tail, not wrapped in a list
         const result = gc(Type.improperList([Type.integer(97), invalid]));
 
         assert.deepStrictEqual(
@@ -1000,29 +997,14 @@ describe("Erlang_UnicodeUtil", () => {
         );
       });
 
-      it("demonstrates cp/1 produces 3-element improper list for [binary | binary]", () => {
-        // Verify that cp/1 actually creates the 3-element improper list
-        // This is the condition that triggers the bug in extractHead
+      it("cp/1 returns 3-element improper list for [binary | binary] input", () => {
         const cp = Erlang_UnicodeUtil["cp/1"];
-        const improperInput = Type.improperList([
-          Type.bitstring("ab"),
-          Type.bitstring("cd"),
-        ]);
-        const cpResult = cp(improperInput);
+        const result = cp(
+          Type.improperList([Type.bitstring("ab"), Type.bitstring("cd")]),
+        );
 
-        // cp/1 should return improper list: [97, bitstring("b"), bitstring("cd")]
-        assert.strictEqual(
-          cpResult.data.length,
-          3,
-          "cp/1 should return 3-element improper list",
-        );
-        assert.strictEqual(
-          cpResult.isProper,
-          false,
-          "cp/1 result should be improper",
-        );
         assert.deepStrictEqual(
-          cpResult,
+          result,
           Type.improperList([
             Type.integer(97),
             Type.bitstring("b"),
@@ -1031,15 +1013,10 @@ describe("Erlang_UnicodeUtil", () => {
         );
       });
 
-      it("handles improper list [binary | binary] without losing tail data", () => {
-        // This tests that gc/1 correctly processes cp/1's 3-element improper list result
-        // gc(["ab" | "cd"]) should preserve all elements: 97 (codepoint 'a'), "b", and "cd"
-        // Without the fix, would return [97, "b"] losing "cd"
-        const improperInput = Type.improperList([
-          Type.bitstring("ab"),
-          Type.bitstring("cd"),
-        ]);
-        const result = gc(improperInput);
+      it("handles improper list [binary | binary] preserving all elements", () => {
+        const result = gc(
+          Type.improperList([Type.bitstring("ab"), Type.bitstring("cd")]),
+        );
 
         assert.deepStrictEqual(
           result,

@@ -470,22 +470,15 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.gc([[97], 98]) == [97, 98]
     end
 
-    test "handles base character followed by direct invalid UTF-8 binary (tests tailIsEmptyBinary with false)" do
-      # This specifically tests the bug where tailIsEmptyBinary tries to access .length on false
+    test "handles improper list with integer and invalid UTF-8 binary tail" do
       assert :unicode_util.gc([97 | <<255>>]) == [97 | <<255>>]
     end
 
-    test "demonstrates cp/1 produces 3-element improper list for [binary | binary]" do
-      # Verify that cp/1 actually creates the 3-element improper list
-      # This is the condition that triggers the bug in extractHead
-      # cp/1(["ab" | "cd"]) should return improper list: [97, "b" | "cd"]
+    test "cp/1 returns 3-element improper list for [binary | binary] input" do
       assert :unicode_util.cp(["ab" | "cd"]) == [97, "b" | "cd"]
     end
 
-    test "handles improper list [binary | binary] without losing tail data" do
-      # This tests that gc/1 correctly processes cp/1's 3-element improper list result
-      # gc(["ab" | "cd"]) should preserve all elements: 97 (codepoint 'a'), "b", and "cd"
-      # Without the fix, would return [97, "b"] losing "cd"
+    test "handles improper list [binary | binary] preserving all elements" do
       assert :unicode_util.gc(["ab" | "cd"]) == [97, "b" | "cd"]
     end
 
