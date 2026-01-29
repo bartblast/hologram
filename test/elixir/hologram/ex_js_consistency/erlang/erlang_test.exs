@@ -3679,7 +3679,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       for u <- @units, do: assert(is_integer(:erlang.monotonic_time(u)))
     end
 
-    test "nanosecond unit is 1000x microsecond unit" do
+    test "applies time unit conversion" do
       micro = :erlang.monotonic_time(:microsecond)
       nano = :erlang.monotonic_time(:nanosecond)
 

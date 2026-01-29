@@ -5998,7 +5998,7 @@ describe("Erlang", () => {
       }
     });
 
-    it("nanosecond unit is 1000x microsecond unit", () => {
+    it("applies time unit conversion", () => {
       const micro = monotonic_time(Type.atom("microsecond")).value;
       const nano = monotonic_time(Type.atom("nanosecond")).value;
 
