@@ -36,53 +36,31 @@ MFAs for sorting:
 */
 
 const Erlang = {
-  // Start _resolve_time_unit/1
-  "_resolve_time_unit/1": (unit, argumentIndex) => {
-    // :native and :perf_counter are technically platform-dependent in Erlang/OTP,
-    // but in practice they're nanoseconds on all major platforms (Linux, macOS, Windows).
-    // We standardize on nanoseconds to match typical Erlang behavior while keeping
-    // JS behavior predictable.
-    const NATIVE_TIME_UNIT = 1_000_000_000n;
-    const PERF_COUNTER_TIME_UNIT = 1_000_000_000n;
+  // Start _validate_time_unit/2
+  "_validate_time_unit/2": (unit, argumentIndex) => {
+    const validAtomUnits = [
+      "nanosecond",
+      "nano_seconds",
+      "microsecond",
+      "micro_seconds",
+      "millisecond",
+      "milli_seconds",
+      "second",
+      "seconds",
+      "native",
+      "perf_counter",
+    ];
 
-    if (Type.isInteger(unit) && unit.value > 0n) return unit.value;
-
-    if (!Type.isAtom(unit)) {
+    if (
+      !(Type.isAtom(unit) && validAtomUnits.includes(unit.value)) &&
+      !(Type.isInteger(unit) && unit.value > 0n)
+    ) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
       );
     }
-
-    switch (unit.value) {
-      case "nanosecond":
-      case "nano_seconds":
-        return 1_000_000_000n;
-
-      case "microsecond":
-      case "micro_seconds":
-        return 1_000_000n;
-
-      case "millisecond":
-      case "milli_seconds":
-        return 1_000n;
-
-      case "second":
-      case "seconds":
-        return 1n;
-
-      case "native":
-        return NATIVE_TIME_UNIT;
-
-      case "perf_counter":
-        return PERF_COUNTER_TIME_UNIT;
-
-      default:
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(argumentIndex, "invalid time unit"),
-        );
-    }
   },
-  // End _resolve_time_unit/1
+  // End _validate_time_unit/2
   // Deps: []
 
   // Start */2
@@ -718,14 +696,54 @@ const Erlang = {
 
   // Start convert_time_unit/3
   "convert_time_unit/3": (time, fromUnit, toUnit) => {
+    // :native and :perf_counter are technically platform-dependent in Erlang/OTP,
+    // but in practice they're nanoseconds on all major platforms (Linux, macOS, Windows).
+    // We standardize on nanoseconds to match typical Erlang behavior while keeping
+    // JS behavior predictable.
+    const NATIVE_TIME_UNIT = 1_000_000_000n;
+    const PERF_COUNTER_TIME_UNIT = 1_000_000_000n;
+
+    const resolveTimeUnit = (unit) => {
+      switch (unit.value) {
+        case "nanosecond":
+        case "nano_seconds":
+          return 1_000_000_000n;
+
+        case "microsecond":
+        case "micro_seconds":
+          return 1_000_000n;
+
+        case "millisecond":
+        case "milli_seconds":
+          return 1_000n;
+
+        case "second":
+        case "seconds":
+          return 1n;
+
+        case "native":
+          return NATIVE_TIME_UNIT;
+
+        case "perf_counter":
+          return PERF_COUNTER_TIME_UNIT;
+
+        // integer
+        default:
+          return unit.value;
+      }
+    };
+
     if (!Type.isInteger(time)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     }
 
-    const fromUnitValue = Erlang["_resolve_time_unit/1"](fromUnit, 2);
-    const toUnitValue = Erlang["_resolve_time_unit/1"](toUnit, 3);
+    Erlang["_validate_time_unit/2"](fromUnit, 2);
+    Erlang["_validate_time_unit/2"](toUnit, 3);
+
+    const fromUnitValue = resolveTimeUnit(fromUnit);
+    const toUnitValue = resolveTimeUnit(toUnit);
     const numerator = toUnitValue * time.value;
 
     const adjustedNumerator =
@@ -736,7 +754,7 @@ const Erlang = {
     return Type.integer(result);
   },
   // End convert_time_unit/3
-  // Deps: [:erlang._resolve_time_unit/1]
+  // Deps: [:erlang._validate_time_unit/2]
 
   // Start div/2
   "div/2": (integer1, integer2) => {
@@ -1655,13 +1673,13 @@ const Erlang = {
 
   // Start monotonic_time/1
   "monotonic_time/1": (unit) => {
-    Erlang["_resolve_time_unit/1"](unit, 1);
+    Erlang["_validate_time_unit/2"](unit, 1);
     const nativeTime = Erlang["monotonic_time/0"]();
 
     return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
   },
   // End monotonic_time/1
-  // Deps: [:erlang._resolve_time_unit/1, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
+  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
 
   // Start not/1
   "not/1": (term) => {
