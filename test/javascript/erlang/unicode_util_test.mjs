@@ -986,6 +986,19 @@ describe("Erlang_UnicodeUtil", () => {
           Type.list([Type.integer(97), Type.integer(98)]),
         );
       });
+
+      it("handles base character followed by direct invalid UTF-8 binary (tests tailIsEmptyBinary with false)", () => {
+        // This specifically tests the bug where tailIsEmptyBinary tries to access .length on false
+        // When we have [97] with tail being <<255>>, gc needs to check if the tail is empty
+        const invalid = Bitstring.fromBytes(new Uint8Array([255]));
+        // Use improper list to make invalid binary the direct tail, not wrapped in a list
+        const result = gc(Type.improperList([Type.integer(97), invalid]));
+
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([Type.integer(97), invalid]),
+        );
+      });
     });
 
     describe("error handling", () => {

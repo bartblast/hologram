@@ -470,6 +470,11 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       assert :unicode_util.gc([[97], 98]) == [97, 98]
     end
 
+    test "handles base character followed by direct invalid UTF-8 binary (tests tailIsEmptyBinary with false)" do
+      # This specifically tests the bug where tailIsEmptyBinary tries to access .length on false
+      assert :unicode_util.gc([97 | <<255>>]) == [97 | <<255>>]
+    end
+
     # Section: error handling
 
     test "raises FunctionClauseError for non-byte-aligned bitstring" do

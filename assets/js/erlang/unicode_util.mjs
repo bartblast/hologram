@@ -719,6 +719,14 @@ const Erlang_UnicodeUtil = {
     const prependCodepointToRest = (codepoint, rest) => {
       if (Type.isBitstring(rest)) {
         const restText = Bitstring.toText(rest);
+        // Handle invalid UTF-8: when restText is false, treat as boundary
+        if (restText === false) {
+          // Return a list [codepointBinary, invalidBinary] to preserve the boundary
+          const codepointBinary = Type.bitstring(
+            String.fromCodePoint(codepoint),
+          );
+          return Type.list([codepointBinary, rest]);
+        }
         return Type.bitstring(String.fromCodePoint(codepoint) + restText);
       }
 
@@ -802,6 +810,7 @@ const Erlang_UnicodeUtil = {
         const tailIsEmptyBinary =
           Type.isBinary(tail) &&
           (tailBinaryTextForEmptyCheck === null ||
+            tailBinaryTextForEmptyCheck === false ||
             tailBinaryTextForEmptyCheck.length === 0);
 
         const tailStartsWithEmptyBinary =
