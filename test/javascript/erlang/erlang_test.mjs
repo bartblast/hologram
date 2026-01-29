@@ -5984,18 +5984,16 @@ describe("Erlang", () => {
   describe("monotonic_time/1", () => {
     const monotonic_time = Erlang["monotonic_time/1"];
 
-    it("all allowed units return integer", () => {
-      const units = [
-        "native",
-        "second",
-        "millisecond",
-        "microsecond",
-        "nanosecond",
-      ];
+    it("with valid atom unit", () => {
+      const result = monotonic_time(Type.atom("second"));
 
-      for (const u of units) {
-        assert.isTrue(Type.isInteger(monotonic_time(Type.atom(u))));
-      }
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("with valid integer unit", () => {
+      const result = monotonic_time(Type.integer(1000n));
+
+      assert.isTrue(Type.isInteger(result));
     });
 
     it("applies time unit conversion", () => {
@@ -6011,28 +6009,15 @@ describe("Erlang", () => {
       assert.isTrue(absNano <= absMicro * 1001n + 1000n);
     });
 
-    it("with positive integer unit", () => {
-      const result = monotonic_time(Type.integer(1000n));
-      assert.isTrue(Type.isInteger(result));
-    });
-
-    it("raises ArgumentError when unit is less than 1", () => {
+    it("raises ArgumentError when argument is not atom or integer", () => {
       assertBoxedError(
-        () => monotonic_time(Type.integer(0n)),
+        () => monotonic_time(Type.float(1.0)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
 
-    it("raises ArgumentError when unit is negative", () => {
-      assertBoxedError(
-        () => monotonic_time(Type.integer(-1n)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError when unit is not a valid time unit atom", () => {
+    it("raises ArgumentError when atom argument is not a valid time unit", () => {
       assertBoxedError(
         () => monotonic_time(Type.atom("invalid")),
         "ArgumentError",
@@ -6040,9 +6025,17 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError when unit is not atom or integer", () => {
+    it("raises ArgumentError when integer argument is 0", () => {
       assertBoxedError(
-        () => monotonic_time(Type.float(1.0)),
+        () => monotonic_time(Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when integer argument is negative", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.integer(-1)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
       );

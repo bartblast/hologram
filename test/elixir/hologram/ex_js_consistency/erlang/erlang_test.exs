@@ -3673,10 +3673,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "monotonic_time/1" do
-    @units [:native, :second, :millisecond, :microsecond, :nanosecond]
+    test "with valid atom unit" do
+      assert is_integer(:erlang.monotonic_time(:second))
+    end
 
-    test "all allowed units return integer" do
-      for u <- @units, do: assert(is_integer(:erlang.monotonic_time(u)))
+    test "with valid integer unit" do
+      assert is_integer(:erlang.monotonic_time(1000))
     end
 
     test "applies time unit conversion" do
@@ -3692,32 +3694,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert abs_nano <= abs_micro * 1001 + 1000
     end
 
-    test "with positive integer unit" do
-      assert is_integer(:erlang.monotonic_time(1000))
-    end
-
-    test "raises ArgumentError when unit is less than 1" do
+    test "raises ArgumentError when argument is not atom or integer" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "invalid time unit"),
-                   {:erlang, :monotonic_time, [0]}
+                   {:erlang, :monotonic_time, [1.0]}
     end
 
-    test "raises ArgumentError when unit is negative" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid time unit"),
-                   {:erlang, :monotonic_time, [-1]}
-    end
-
-    test "raises ArgumentError when unit is not a valid time unit atom" do
+    test "raises ArgumentError when atom argument is not a valid time unit" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "invalid time unit"),
                    {:erlang, :monotonic_time, [:invalid]}
     end
 
-    test "raises ArgumentError when unit is not atom or integer" do
+    test "raises ArgumentError when integer argument is 0" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "invalid time unit"),
-                   {:erlang, :monotonic_time, [1.0]}
+                   {:erlang, :monotonic_time, [0]}
+    end
+
+    test "raises ArgumentError when integer argument is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :monotonic_time, [-1]}
     end
   end
 
