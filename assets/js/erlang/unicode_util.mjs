@@ -747,7 +747,9 @@ const Erlang_UnicodeUtil = {
 
       const headCodepoint = Number(cpResult.data[0].value);
       const tail = Type.isImproperList(cpResult)
-        ? cpResult.data[1]
+        ? cpResult.data.length === 2
+          ? cpResult.data[1]
+          : Type.improperList(cpResult.data.slice(1))
         : Type.list(cpResult.data.slice(1));
 
       return {codepoint: headCodepoint, tail};
@@ -892,6 +894,10 @@ const Erlang_UnicodeUtil = {
 
           if (singleInvalidBinary)
             return Type.improperList([cluster, tailData[0]]);
+
+          // Preserve improper list structure if adjustedTail is improper
+          if (Type.isImproperList(adjustedTail))
+            return Type.improperList([cluster, ...tailData]);
 
           return Type.list([cluster, ...tailData]);
         }

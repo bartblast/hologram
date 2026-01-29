@@ -999,6 +999,46 @@ describe("Erlang_UnicodeUtil", () => {
           Type.improperList([Type.integer(97), invalid]),
         );
       });
+
+      it("demonstrates cp/1 produces 3-element improper list for [binary | binary]", () => {
+        // Verify that cp/1 actually creates the 3-element improper list
+        // This is the condition that triggers the bug in extractHead
+        const cp = Erlang_UnicodeUtil["cp/1"];
+        const improperInput = Type.improperList([
+          Type.bitstring("ab"),
+          Type.bitstring("cd"),
+        ]);
+        const cpResult = cp(improperInput);
+
+        // cp/1 should return improper list: [97, bitstring("b"), bitstring("cd")]
+        assert.strictEqual(cpResult.data.length, 3, "cp/1 should return 3-element improper list");
+        assert.strictEqual(cpResult.isProper, false, "cp/1 result should be improper");
+        assert.deepStrictEqual(
+          cpResult,
+          Type.improperList([
+            Type.integer(97),
+            Type.bitstring("b"),
+            Type.bitstring("cd"),
+          ]),
+        );
+      });
+
+      it("handles improper list [binary | binary] without losing tail data", () => {
+        // This tests that gc/1 correctly processes cp/1's 3-element improper list result
+        // gc(["ab" | "cd"]) should preserve all elements: 97 (codepoint 'a'), "b", and "cd"
+        // Without the fix, would return [97, "b"] losing "cd"
+        const improperInput = Type.improperList([
+          Type.bitstring("ab"),
+          Type.bitstring("cd"),
+        ]);
+        const result = gc(improperInput);
+
+        assert.deepStrictEqual(result, Type.improperList([
+          Type.integer(97),
+          Type.bitstring("b"),
+          Type.bitstring("cd"),
+        ]));
+      });
     });
 
     describe("error handling", () => {
