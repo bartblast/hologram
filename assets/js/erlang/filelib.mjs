@@ -2,7 +2,6 @@
 
 import Bitstring from "../bitstring.mjs";
 import Erlang_Filename from "./filename.mjs";
-import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 // IMPORTANT!
@@ -12,30 +11,17 @@ import Type from "../type.mjs";
 const Erlang_Filelib = {
   // Start safe_relative_path/2
   "safe_relative_path/2": (filename, cwd) => {
-    // Validate filename type (must be binary, charlist, or atom - filename_all())
-    const isFilenameInvalid =
-      !Type.isBinary(filename) &&
-      !Type.isList(filename) &&
-      !Type.isAtom(filename);
-
-    // Validate cwd type (must be binary, charlist, or atom - filename_all())
-    const isCwdInvalid =
-      !Type.isBinary(cwd) && !Type.isList(cwd) && !Type.isAtom(cwd);
-
-    if (isFilenameInvalid || isCwdInvalid) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg("safe_relative_path/2", [
-          filename,
-          cwd,
-        ]),
-      );
-    }
+    // Validate cwd by calling join/1 with [cwd] - mirrors Erlang's internal behavior
+    // which validates cwd through :filename.join/1. This will raise FunctionClauseError
+    // for invalid cwd types.
+    Erlang_Filename["join/1"](Type.list([cwd]));
 
     // Note: In OTP, cwd is used to build absolute paths for each segment in order
     // to call :file.read_link/1 and detect symlinks that would escape the relative
     // root (see srp_segment/4 in filelib.erl). This is not applicable in a browser
     // environment, so only pure path sanitization (removing ".", resolving "..",
     // rejecting absolute paths) is performed here.
+    // The filename validation happens naturally through split/1 below.
 
     const DIR_SEPARATOR_BYTE = 47;
     const isBinaryInput = Type.isBinary(filename);
@@ -158,7 +144,7 @@ const Erlang_Filelib = {
       : buildCharlistResult(joinedBytes);
   },
   // End safe_relative_path/2
-  // Deps: [:filename.split/1]
+  // Deps: [:filename.join/1, :filename.split/1]
 };
 
 export default Erlang_Filelib;

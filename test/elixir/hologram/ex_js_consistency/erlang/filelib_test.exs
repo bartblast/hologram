@@ -110,15 +110,21 @@ defmodule Hologram.ExJsConsistency.Erlang.FilelibTest do
     end
 
     test "cwd with invalid type" do
-      assert_raise FunctionClauseError, fn ->
-        :filelib.safe_relative_path("dir", 123)
-      end
+      # Erlang's internal implementation produces error from :filename.join/1
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.join/1", [[123]]),
+                   fn ->
+                     :filelib.safe_relative_path("dir", 123)
+                   end
     end
 
     test "filename with invalid type" do
-      assert_raise FunctionClauseError, fn ->
-        :filelib.safe_relative_path(123, "/home")
-      end
+      # Erlang's internal implementation produces error from :filename.do_flatten/2
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
+                   fn ->
+                     :filelib.safe_relative_path(123, "/home")
+                   end
     end
 
     test "cwd with valid atom type" do

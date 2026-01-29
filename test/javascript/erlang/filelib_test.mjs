@@ -7,9 +7,10 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import Erlang_Filelib from "../../../assets/js/erlang/filelib.mjs";
-import Type from "../../../assets/js/type.mjs";
 import Bitstring from "../../../assets/js/bitstring.mjs";
+import Erlang_Filelib from "../../../assets/js/erlang/filelib.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
+import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -285,10 +286,13 @@ describe("Erlang_Filelib", () => {
       const filename = Type.bitstring("dir");
       const cwd = Type.integer(123);
 
+      // Erlang's internal implementation produces error from :filename.join/1
       assertBoxedError(
         () => safeRelativePath(filename, cwd),
         "FunctionClauseError",
-        /safe_relative_path\/2/,
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
+          Type.list([cwd]),
+        ]),
       );
     });
 
@@ -296,10 +300,14 @@ describe("Erlang_Filelib", () => {
       const filename = Type.integer(123);
       const cwd = Type.bitstring("/home");
 
+      // Erlang's internal implementation produces error from :filename.do_flatten/2
       assertBoxedError(
         () => safeRelativePath(filename, cwd),
         "FunctionClauseError",
-        /safe_relative_path\/2/,
+        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
+          filename,
+          Type.list(),
+        ]),
       );
     });
 
