@@ -1122,4 +1122,327 @@ describe("Erlang_Unicode", () => {
       );
     });
   });
+
+  describe("characters_to_nfkd_binary/1", () => {
+    const fun = Erlang_Unicode["characters_to_nfkd_binary/1"];
+
+    it("normalizes combining characters to NFKD", () => {
+      // Input: "a" + combining ring above (decomposed form)
+      // NFKD: keeps it as decomposed
+      const input = Type.bitstring("a\u030a");
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
+    });
+
+    it("decomposes already normalized precomposed characters", () => {
+      // Input: precomposed "å" (U+00E5)
+      // NFKD: decomposes to "a" + combining ring above (U+0061 + U+030A)
+      const input = Type.bitstring("å");
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
+    });
+
+    it("normalizes nested chardata", () => {
+      const input = Type.list([
+        Type.bitstring("abc.."),
+        Type.list([Type.bitstring("a"), Type.integer(0x030a)]),
+        Type.bitstring("a"),
+        Type.list([Type.integer(0x0308)]),
+        Type.bitstring("o"),
+        Type.integer(0x0308),
+      ]);
+
+      const result = fun(input);
+
+      // Expected: "abc.." + "a\u030a" + "a\u0308" + "o\u0308"
+      assert.deepStrictEqual(
+        result,
+        Type.bitstring("abc..a\u030aa\u0308o\u0308"),
+      );
+    });
+
+    it("handles empty binary", () => {
+      const input = Type.bitstring("");
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles empty list", () => {
+      const input = Type.list();
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("handles deeply nested lists", () => {
+      const input = Type.list([
+        Type.list([Type.list([Type.bitstring("a"), Type.integer(0x030a)])]),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
+    });
+
+    it("handles multiple combining marks", () => {
+      const input = Type.list([
+        Type.bitstring("o"),
+        Type.integer(0x0308), // Combining diaeresis
+        Type.integer(0x0304), // Combining macron
+      ]);
+
+      const result = fun(input);
+
+      // NFKD keeps combining marks as-is
+      assert.deepStrictEqual(result, Type.bitstring("o\u0308\u0304"));
+    });
+
+    it("handles large input", () => {
+      const largeInput = "abcdefghij".repeat(100);
+      const input = Type.bitstring(largeInput);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring(largeInput));
+    });
+
+    it("handles mixed ASCII and Unicode", () => {
+      const input = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring(" "),
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.bitstring(" world"),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("hello a\u030a world"));
+    });
+
+    it("preserves non-combining characters", () => {
+      const input = Type.list([
+        Type.integer(0x3042), // Hiragana A
+        Type.integer(0x3044), // Hiragana I
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, Type.bitstring("あい"));
+    });
+
+    it("normalizes compatibility characters", () => {
+      // NFKD normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
+      const input = Type.bitstring("\u210C"); // ℌ DOUBLE-STRUCK CAPITAL H
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("H"));
+    });
+
+    it("normalizes ligatures", () => {
+      // NFKD normalizes ligatures like ﬁ (U+FB01) to fi (U+0066 U+0069)
+      const input = Type.bitstring("\uFB01"); // ﬁ LATIN SMALL LIGATURE FI
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("fi"));
+    });
+
+    it("normalizes width variants", () => {
+      // NFKD normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
+      const input = Type.bitstring("\uFF21"); // Ａ FULLWIDTH LATIN CAPITAL LETTER A
+      const result = fun(input);
+      assert.deepStrictEqual(result, Type.bitstring("A"));
+    });
+
+    it("returns error tuple on invalid UTF-8 in binary", () => {
+      const invalidBinary = Bitstring.fromBytes([255, 255]);
+      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abc"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects overlong encoding (2-byte for ASCII)", () => {
+      // Overlong encoding: 'A' (U+0041) encoded as 2 bytes: 0xC1 0x81
+      const invalidBinary = Bitstring.fromBytes([0xc1, 0x81]);
+      const input = Type.list([Type.bitstring("abc"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("abc"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects overlong encoding (3-byte for 2-byte range)", () => {
+      // Overlong encoding: U+007F encoded as 3 bytes: 0xE0 0x81 0xBF
+      const invalidBinary = Bitstring.fromBytes([0xe0, 0x81, 0xbf]);
+      const input = Type.list([Type.bitstring("test"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("test"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate (high surrogate)", () => {
+      // UTF-16 high surrogate: U+D800 encoded as 0xED 0xA0 0x80
+      const invalidBinary = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+      const input = Type.list([Type.bitstring("hello"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("hello"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate (low surrogate)", () => {
+      // UTF-16 low surrogate: U+DFFF encoded as 0xED 0xBF 0xBF
+      const invalidBinary = Bitstring.fromBytes([0xed, 0xbf, 0xbf]);
+      const input = Type.list([Type.bitstring("world"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("world"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects code point above U+10FFFF", () => {
+      // U+110000 encoded as 4 bytes: 0xF4 0x90 0x80 0x80
+      const invalidBinary = Bitstring.fromBytes([0xf4, 0x90, 0x80, 0x80]);
+      const input = Type.list([Type.bitstring("xyz"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("xyz"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects 4-byte overlong encoding", () => {
+      // Overlong encoding: U+FFFF encoded as 4 bytes: 0xF0 0x8F 0xBF 0xBF
+      const invalidBinary = Bitstring.fromBytes([0xf0, 0x8f, 0xbf, 0xbf]);
+      const input = Type.list([Type.bitstring("pre"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("pre"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple for truncated UTF-8 sequence", () => {
+      // Truncated UTF-8: start of a 2-byte sequence without continuation
+      const truncatedBinary = Bitstring.fromBytes([0xc3]);
+      const input = Type.list([Type.bitstring("test"), truncatedBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("test"),
+        truncatedBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError when input is not a list or a bitstring", () => {
+      assertBoxedError(
+        () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input is a non-binary bitstring", () => {
+      const input = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input list contains invalid types", () => {
+      const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point before normalization", () => {
+      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid code point after normalization", () => {
+      const input = Type.list([
+        Type.bitstring("a"),
+        Type.integer(0x030a),
+        Type.integer(0x110000),
+      ]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+  });
 });
