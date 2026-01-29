@@ -1011,8 +1011,16 @@ describe("Erlang_UnicodeUtil", () => {
         const cpResult = cp(improperInput);
 
         // cp/1 should return improper list: [97, bitstring("b"), bitstring("cd")]
-        assert.strictEqual(cpResult.data.length, 3, "cp/1 should return 3-element improper list");
-        assert.strictEqual(cpResult.isProper, false, "cp/1 result should be improper");
+        assert.strictEqual(
+          cpResult.data.length,
+          3,
+          "cp/1 should return 3-element improper list",
+        );
+        assert.strictEqual(
+          cpResult.isProper,
+          false,
+          "cp/1 result should be improper",
+        );
         assert.deepStrictEqual(
           cpResult,
           Type.improperList([
@@ -1033,11 +1041,14 @@ describe("Erlang_UnicodeUtil", () => {
         ]);
         const result = gc(improperInput);
 
-        assert.deepStrictEqual(result, Type.improperList([
-          Type.integer(97),
-          Type.bitstring("b"),
-          Type.bitstring("cd"),
-        ]));
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([
+            Type.integer(97),
+            Type.bitstring("b"),
+            Type.bitstring("cd"),
+          ]),
+        );
       });
     });
 
