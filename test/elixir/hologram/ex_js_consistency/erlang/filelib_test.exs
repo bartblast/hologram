@@ -109,16 +109,11 @@ defmodule Hologram.ExJsConsistency.Erlang.FilelibTest do
       assert result == <<0xFF, 0xFE>>
     end
 
-    test "cwd with invalid type" do
-      # Erlang's internal implementation produces error from :filename.join/1
-      assert_error FunctionClauseError,
-                   build_function_clause_error_msg(":filename.join/1", [[123]]),
-                   fn ->
-                     :filelib.safe_relative_path("dir", 123)
-                   end
+    test "cwd with valid atom type" do
+      assert :filelib.safe_relative_path("dir", :ok) == "dir"
     end
 
-    test "filename with invalid type" do
+    test "raises FunctionClauseError if the first argument is not a valid filename type" do
       # Erlang's internal implementation produces error from :filename.do_flatten/2
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":filename.do_flatten/2", [123, []]),
@@ -127,8 +122,13 @@ defmodule Hologram.ExJsConsistency.Erlang.FilelibTest do
                    end
     end
 
-    test "cwd with valid atom type" do
-      assert :filelib.safe_relative_path("dir", :ok) == "dir"
+    test "raises FunctionClauseError if the second argument is not a valid cwd type" do
+      # Erlang's internal implementation produces error from :filename.join/1
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.join/1", [[123]]),
+                   fn ->
+                     :filelib.safe_relative_path("dir", 123)
+                   end
     end
   end
 end

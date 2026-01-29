@@ -282,21 +282,16 @@ describe("Erlang_Filelib", () => {
       assertBoxedStrictEqual(result, Bitstring.fromBytes([0xff, 0xfe]));
     });
 
-    it("cwd with invalid type", () => {
+    it("cwd with valid atom type", () => {
       const filename = Type.bitstring("dir");
-      const cwd = Type.integer(123);
+      const cwd = Type.atom("ok");
+      const result = safeRelativePath(filename, cwd);
+      const expected = Type.bitstring("dir");
 
-      // Erlang's internal implementation produces error from :filename.join/1
-      assertBoxedError(
-        () => safeRelativePath(filename, cwd),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
-          Type.list([cwd]),
-        ]),
-      );
+      assert.deepStrictEqual(result, expected);
     });
 
-    it("filename with invalid type", () => {
+    it("raises FunctionClauseError if the first argument is not a valid filename type", () => {
       const filename = Type.integer(123);
       const cwd = Type.bitstring("/home");
 
@@ -311,13 +306,18 @@ describe("Erlang_Filelib", () => {
       );
     });
 
-    it("cwd with valid atom type", () => {
+    it("raises FunctionClauseError if the second argument is not a valid cwd type", () => {
       const filename = Type.bitstring("dir");
-      const cwd = Type.atom("ok");
-      const result = safeRelativePath(filename, cwd);
-      const expected = Type.bitstring("dir");
+      const cwd = Type.integer(123);
 
-      assert.deepStrictEqual(result, expected);
+      // Erlang's internal implementation produces error from :filename.join/1
+      assertBoxedError(
+        () => safeRelativePath(filename, cwd),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
+          Type.list([cwd]),
+        ]),
+      );
     });
   });
 });
