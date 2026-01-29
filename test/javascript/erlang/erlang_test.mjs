@@ -5857,40 +5857,6 @@ describe("Erlang", () => {
     });
   });
 
-  describe("ref_to_list/1", () => {
-    const ref_to_list = Erlang["ref_to_list/1"];
-
-    beforeEach(() => {
-      ERTS.nodeTable.reset();
-    });
-
-    const toCharlist = (text) =>
-      Type.list(
-        Array.from(text).map((char) => Type.integer(char.codePointAt(0))),
-      );
-
-    it("reference for local node", () => {
-      const reference = Type.reference(
-        ERTS.nodeTable.CLIENT_NODE,
-        0,
-        [3, 2, 1],
-      );
-
-      const result = ref_to_list(reference);
-      const expected = toCharlist("#Ref<0.1.2.3>");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("not a reference", () => {
-      assertBoxedError(
-        () => ref_to_list(Type.atom("abc")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
-      );
-    });
-  });
-
   describe("make_ref/0", () => {
     const make_ref = Erlang["make_ref/0"];
 
@@ -6200,6 +6166,40 @@ describe("Erlang", () => {
         () => testedFun(Type.integer(123)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    });
+  });
+
+  describe("ref_to_list/1", () => {
+    const ref_to_list = Erlang["ref_to_list/1"];
+
+    beforeEach(() => {
+      ERTS.nodeTable.reset();
+    });
+
+    const toCharlist = (text) =>
+      Type.list(
+        Array.from(text).map((char) => Type.integer(char.codePointAt(0))),
+      );
+
+    it("reference for local node", () => {
+      const reference = Type.reference(
+        ERTS.nodeTable.CLIENT_NODE,
+        0,
+        [3, 2, 1],
+      );
+
+      const result = ref_to_list(reference);
+      const expected = toCharlist("#Ref<0.1.2.3>");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("not a reference", () => {
+      assertBoxedError(
+        () => ref_to_list(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
       );
     });
   });
