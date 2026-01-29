@@ -398,4 +398,121 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeUtilTest do
       end
     end
   end
+
+  describe "gc/1" do
+    # Section: with binary input
+
+    test "returns empty list for empty binary" do
+      assert :unicode_util.gc("") == []
+    end
+
+    test "extracts first grapheme from ascii string" do
+      assert :unicode_util.gc("ab") == [97 | "b"]
+    end
+
+    test "handles grapheme with combining mark" do
+      assert :unicode_util.gc("e̊x") == [[101, 778] | "x"]
+    end
+
+    test "returns error tuple for invalid UTF-8" do
+      invalid_binary = <<255, 255>>
+
+      assert :unicode_util.gc(invalid_binary) == {:error, invalid_binary}
+    end
+
+    test "extracts single character binary" do
+      assert :unicode_util.gc("a") == [97 | ""]
+    end
+
+    test "handles emoji outside BMP" do
+      assert :unicode_util.gc("😀x") == [128_512 | "x"]
+    end
+
+    test "handles flag emoji as single grapheme cluster" do
+      assert :unicode_util.gc("🇺🇸") == [[0x1F1FA, 0x1F1F8] | ""]
+    end
+
+    # Section: with list input
+
+    test "returns empty list for empty list" do
+      assert :unicode_util.gc([]) == []
+    end
+
+    test "extracts single-codepoint cluster when next codepoint is non-combining" do
+      assert :unicode_util.gc([97, 98]) == [97, 98]
+    end
+
+    test "groups combining marks across integers" do
+      assert :unicode_util.gc([97, 778, 120]) == [[97, 778], 120]
+    end
+
+    test "handles list starting with binary" do
+      assert :unicode_util.gc(["ab", 98]) == [97, "b", 98]
+    end
+
+    test "handles binary with combining marks inside list" do
+      assert :unicode_util.gc(["e̊", 120]) == [[101, 778], "", 120]
+    end
+
+    test "handles integer followed by empty binary" do
+      assert :unicode_util.gc([97, <<>>]) == [97, <<>>]
+    end
+
+    test "treats invalid UTF-8 tail binary as boundary" do
+      assert :unicode_util.gc([97, <<255>>]) == [97 | <<255>>]
+    end
+
+    test "handles single integer list" do
+      assert :unicode_util.gc([97]) == [97]
+    end
+
+    test "handles list with nested list" do
+      assert :unicode_util.gc([[97], 98]) == [97, 98]
+    end
+
+    test "handles base character followed by direct invalid UTF-8 binary (tests tailIsEmptyBinary with false)" do
+      # This specifically tests the bug where tailIsEmptyBinary tries to access .length on false
+      assert :unicode_util.gc([97 | <<255>>]) == [97 | <<255>>]
+    end
+
+    test "demonstrates cp/1 produces 3-element improper list for [binary | binary]" do
+      # Verify that cp/1 actually creates the 3-element improper list
+      # This is the condition that triggers the bug in extractHead
+      # cp/1(["ab" | "cd"]) should return improper list: [97, "b" | "cd"]
+      assert :unicode_util.cp(["ab" | "cd"]) == [97, "b" | "cd"]
+    end
+
+    test "handles improper list [binary | binary] without losing tail data" do
+      # This tests that gc/1 correctly processes cp/1's 3-element improper list result
+      # gc(["ab" | "cd"]) should preserve all elements: 97 (codepoint 'a'), "b", and "cd"
+      # Without the fix, would return [97, "b"] losing "cd"
+      assert :unicode_util.gc(["ab" | "cd"]) == [97, "b" | "cd"]
+    end
+
+    # Section: error handling
+
+    test "raises FunctionClauseError for non-byte-aligned bitstring" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.gc(<<1::1, 0::1, 1::1>>)
+      end
+    end
+
+    test "raises FunctionClauseError for integer input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [42])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.gc(42)
+      end
+    end
+
+    test "raises FunctionClauseError for atom input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:test])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :unicode_util.gc(:test)
+      end
+    end
+  end
 end

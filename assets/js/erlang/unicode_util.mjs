@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -695,8 +696,222 @@ const Erlang_UnicodeUtil = {
       Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
     );
   },
+
   // End cp/1
   // Deps: [:unicode_util._cpl/2, :unicode_util._is_cp/1]
+
+  // Start gc/1
+  "gc/1": (arg) => {
+    const segmenter = ERTS.graphemeSegmenter;
+
+    const firstSegment = (text) => {
+      const iterator = segmenter.segment(text)[Symbol.iterator]();
+      const {done, value} = iterator.next();
+      return done ? "" : value.segment;
+    };
+
+    const buildCluster = (codepoints) => {
+      if (codepoints.length === 1) return Type.integer(codepoints[0]);
+
+      return Type.list(codepoints.map((cp) => Type.integer(cp)));
+    };
+
+    const prependCodepointToRest = (codepoint, rest) => {
+      if (Type.isBitstring(rest)) {
+        const restText = Bitstring.toText(rest);
+        // Handle invalid UTF-8: when restText is false, treat as boundary
+        if (restText === false) {
+          // Return a list [codepointBinary, invalidBinary] to preserve the boundary
+          const codepointBinary = Type.bitstring(
+            String.fromCodePoint(codepoint),
+          );
+          return Type.list([codepointBinary, rest]);
+        }
+        return Type.bitstring(String.fromCodePoint(codepoint) + restText);
+      }
+
+      if (!Type.isList(rest)) return rest;
+
+      const data = [Type.integer(codepoint), ...rest.data];
+      return Type.isImproperList(rest)
+        ? Type.improperList(data)
+        : Type.list(data);
+    };
+
+    const extractHead = (input) => {
+      const cpResult = Erlang_UnicodeUtil["cp/1"](input);
+
+      if (Type.isTuple(cpResult)) return {error: cpResult};
+
+      if (cpResult.data.length === 0) return {empty: true};
+
+      const headCodepoint = Number(cpResult.data[0].value);
+      const tail = Type.isImproperList(cpResult)
+        ? cpResult.data.length === 2
+          ? cpResult.data[1]
+          : Type.improperList(cpResult.data.slice(1))
+        : Type.list(cpResult.data.slice(1));
+
+      return {codepoint: headCodepoint, tail};
+    };
+
+    if (Type.isBinary(arg)) {
+      const text = Bitstring.toText(arg);
+
+      if (text === false) return Type.tuple([Type.atom("error"), arg]);
+      if (text.length === 0) return Type.list();
+
+      const segment = firstSegment(text);
+      const clusterCodepoints = Array.from(segment).map((char) =>
+        char.codePointAt(0),
+      );
+      const cluster = buildCluster(clusterCodepoints);
+      const restText = text.slice(segment.length);
+
+      return Type.improperList([cluster, Type.bitstring(restText)]);
+    }
+
+    if (Type.isList(arg)) {
+      if (arg.data.length === 0) return Type.list();
+
+      // Recursively collect codepoints until we can determine the grapheme boundary.
+      // We may need to look ahead one codepoint to know if the current cluster is complete
+      // (e.g., to check if the next character is a combining mark).
+      const collectCluster = (
+        remaining,
+        collectedText,
+        collectedCodepoints,
+      ) => {
+        const {codepoint, tail, error, empty} = extractHead(remaining);
+
+        if (error) return error;
+
+        if (empty) {
+          if (collectedCodepoints.length > 0) {
+            const cluster = buildCluster(collectedCodepoints);
+            return Type.list([cluster]);
+          }
+
+          return Type.list();
+        }
+
+        const newCollectedText =
+          collectedText + String.fromCodePoint(codepoint);
+        const newCollectedCodepoints = [...collectedCodepoints, codepoint];
+
+        const segment = firstSegment(newCollectedText);
+        const segmentLength = Array.from(segment).length;
+        const consumedLength = newCollectedCodepoints.length;
+
+        // Check if we've reached a definitive boundary
+        const tailIsEmptyList = Type.isList(tail) && tail.data.length === 0;
+        const tailBinaryTextForEmptyCheck = Type.isBinary(tail)
+          ? Bitstring.toText(tail)
+          : null;
+
+        const tailIsEmptyBinary =
+          Type.isBinary(tail) &&
+          (tailBinaryTextForEmptyCheck === null ||
+            tailBinaryTextForEmptyCheck === false ||
+            tailBinaryTextForEmptyCheck.length === 0);
+
+        const tailStartsWithEmptyBinary =
+          Type.isList(tail) &&
+          tail.data.length > 0 &&
+          Type.isBinary(tail.data[0]) &&
+          (() => {
+            const text = Bitstring.toText(tail.data[0]);
+            return text === false || text.length === 0;
+          })();
+
+        // When we've consumed exactly one grapheme and the tail starts with a binary,
+        // check if that binary starts with a combining character. If it starts with a
+        // non-combining character (base character), we've found a boundary.
+        const shouldCheckCombining =
+          segmentLength === consumedLength &&
+          Type.isList(tail) &&
+          tail.data.length > 0 &&
+          Type.isBinary(tail.data[0]);
+
+        const tailBinaryText = shouldCheckCombining
+          ? (() => {
+              const text = Bitstring.toText(tail.data[0]);
+              return text === false ? null : text;
+            })()
+          : null;
+
+        const hasValidBinaryText =
+          typeof tailBinaryText === "string" && tailBinaryText.length > 0;
+
+        // Test if the next character combines with a base character.
+        // If "a" + nextChar segments as just "a", then nextChar doesn't combine.
+        const tailStartsWithNonCombiningChar =
+          hasValidBinaryText &&
+          (() => {
+            const nextChar = Array.from(tailBinaryText)[0];
+            const testText = "a" + nextChar;
+            const testSegment = firstSegment(testText);
+            return testSegment === "a";
+          })();
+
+        const boundaryKnown =
+          segmentLength < consumedLength ||
+          tailIsEmptyList ||
+          tailIsEmptyBinary ||
+          tailStartsWithEmptyBinary ||
+          tailStartsWithNonCombiningChar;
+
+        // Keep collecting codepoints if boundary not yet determined
+        if (!boundaryKnown)
+          return collectCluster(tail, newCollectedText, newCollectedCodepoints);
+
+        // We've found the boundary. Check if we overshot (consumed too many codepoints).
+        const clusterLength = segmentLength;
+        const extraCount = consumedLength - clusterLength;
+        const adjustedTail =
+          extraCount > 0
+            ? prependCodepointToRest(
+                newCollectedCodepoints[newCollectedCodepoints.length - 1],
+                tail,
+              )
+            : tail;
+
+        const clusterCodepoints = newCollectedCodepoints.slice(
+          0,
+          clusterLength,
+        );
+        const cluster = buildCluster(clusterCodepoints);
+
+        if (Type.isBitstring(adjustedTail))
+          return Type.improperList([cluster, adjustedTail]);
+
+        if (Type.isList(adjustedTail)) {
+          const tailData = adjustedTail.data;
+          const singleInvalidBinary =
+            tailData.length === 1 &&
+            Type.isBinary(tailData[0]) &&
+            Bitstring.toText(tailData[0]) === false;
+
+          if (singleInvalidBinary)
+            return Type.improperList([cluster, tailData[0]]);
+
+          // Preserve improper list structure if adjustedTail is improper
+          if (Type.isImproperList(adjustedTail))
+            return Type.improperList([cluster, ...tailData]);
+
+          return Type.list([cluster, ...tailData]);
+        }
+
+        return Type.list([cluster]);
+      };
+
+      return collectCluster(arg, "", []);
+    }
+
+    return Erlang_UnicodeUtil["cp/1"](arg);
+  },
+  // End gc/1
+  // Deps: [:unicode_util.cp/1]
 };
 
 export default Erlang_UnicodeUtil;
