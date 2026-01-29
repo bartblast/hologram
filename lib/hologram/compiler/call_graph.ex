@@ -111,6 +111,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:unicode, :characters_to_nfc_binary, 1}, {:unicode, :characters_to_binary, 3}},
     {{:unicode, :characters_to_nfd_binary, 1}, {:unicode, :characters_to_binary, 3}},
     {{:unicode, :characters_to_nfkc_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :characters_to_nfkd_binary, 1}, {:unicode, :characters_to_binary, 3}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_cpl_1_cont, 1}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_cpl_cont, 2}},
     {{:unicode_util, :_cpl, 2}, {:unicode_util, :_is_cp, 1}},
