@@ -1130,7 +1130,9 @@ describe("Erlang_Unicode", () => {
       // Input: "a" + combining ring above (decomposed form)
       // NFKD: keeps it as decomposed
       const input = Type.bitstring("a\u030a");
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
     });
 
@@ -1138,7 +1140,9 @@ describe("Erlang_Unicode", () => {
       // Input: precomposed "å" (U+00E5)
       // NFKD: decomposes to "a" + combining ring above (U+0061 + U+030A)
       const input = Type.bitstring("å");
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("a\u030a"));
     });
 
@@ -1164,12 +1168,14 @@ describe("Erlang_Unicode", () => {
     it("handles empty binary", () => {
       const input = Type.bitstring("");
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
     it("handles empty list", () => {
       const input = Type.list();
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
@@ -1233,21 +1239,27 @@ describe("Erlang_Unicode", () => {
     it("normalizes compatibility characters", () => {
       // NFKD normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
       const input = Type.bitstring("\u210C"); // ℌ DOUBLE-STRUCK CAPITAL H
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("H"));
     });
 
     it("normalizes ligatures", () => {
       // NFKD normalizes ligatures like ﬁ (U+FB01) to fi (U+0066 U+0069)
       const input = Type.bitstring("\uFB01"); // ﬁ LATIN SMALL LIGATURE FI
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("fi"));
     });
 
     it("normalizes width variants", () => {
       // NFKD normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
       const input = Type.bitstring("\uFF21"); // Ａ FULLWIDTH LATIN CAPITAL LETTER A
+
       const result = fun(input);
+
       assert.deepStrictEqual(result, Type.bitstring("A"));
     });
 
@@ -1421,9 +1433,11 @@ describe("Erlang_Unicode", () => {
       );
     });
 
-    it("raises ArgumentError when input is a single integer", () => {
+    it("raises ArgumentError when input is a non-binary bitstring", () => {
+      const input = Type.bitstring([1, 0, 1]);
+
       assertBoxedError(
-        () => fun(Type.integer(65)),
+        () => fun(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1432,11 +1446,9 @@ describe("Erlang_Unicode", () => {
       );
     });
 
-    it("raises ArgumentError when input is a non-binary bitstring", () => {
-      const input = Type.bitstring([1, 0, 1]);
-
+    it("raises ArgumentError when input is a single integer", () => {
       assertBoxedError(
-        () => fun(input),
+        () => fun(Type.integer(65)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,

@@ -789,24 +789,28 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "preserves non-combining characters" do
       input = [0x3042, 0x3044]
+
       assert :unicode.characters_to_nfkd_binary(input) == "あい"
     end
 
     test "normalizes compatibility characters" do
       # NFKD normalizes compatibility characters like ℌ (U+210C) to H (U+0048)
       input = "\u210C"
+
       assert :unicode.characters_to_nfkd_binary(input) == "H"
     end
 
     test "normalizes ligatures" do
       # NFKD normalizes ligatures like ﬁ (U+FB01) to fi (U+0066 U+0069)
       input = "\uFB01"
+
       assert :unicode.characters_to_nfkd_binary(input) == "fi"
     end
 
     test "normalizes width variants" do
       # NFKD normalizes fullwidth forms like Ａ (U+FF21) to A (U+0041)
       input = "\uFF21"
+
       assert :unicode.characters_to_nfkd_binary(input) == "A"
     end
 
@@ -814,78 +818,106 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       invalid_binary = <<255, 255>>
       input = ["abc", invalid_binary]
       expected = {:error, "abc", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "normalizes prefix in error tuple" do
       # Prefix contains precomposed "å" (U+00E5) which should be normalized to "a" + U+030A
       invalid_binary = <<255, 255>>
+
       input = ["å", invalid_binary]
+
       expected = {:error, "a\u030a", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "rejects overlong encoding (2-byte for ASCII)" do
       # Overlong encoding: 'A' (U+0041) encoded as 2 bytes: 0xC1 0x81
       invalid_binary = <<0xC1, 0x81>>
+
       input = ["abc", invalid_binary]
+
       expected = {:error, "abc", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "rejects overlong encoding (3-byte for 2-byte range)" do
       # Overlong encoding: U+007F encoded as 3 bytes: 0xE0 0x81 0xBF
       invalid_binary = <<0xE0, 0x81, 0xBF>>
+
       input = ["test", invalid_binary]
+
       expected = {:error, "test", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "rejects UTF-16 surrogate (high surrogate)" do
       # UTF-16 high surrogate: U+D800 encoded as 0xED 0xA0 0x80
       invalid_binary = <<0xED, 0xA0, 0x80>>
+
       input = ["hello", invalid_binary]
+
       expected = {:error, "hello", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "rejects UTF-16 surrogate (low surrogate)" do
       # UTF-16 low surrogate: U+DFFF encoded as 0xED 0xBF 0xBF
       invalid_binary = <<0xED, 0xBF, 0xBF>>
+
       input = ["world", invalid_binary]
+
       expected = {:error, "world", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "rejects code point above U+10FFFF" do
       # U+110000 encoded as 4 bytes: 0xF4 0x90 0x80 0x80
       invalid_binary = <<0xF4, 0x90, 0x80, 0x80>>
+
       input = ["xyz", invalid_binary]
+
       expected = {:error, "xyz", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "rejects 4-byte overlong encoding" do
       # Overlong encoding: U+FFFF encoded as 4 bytes: 0xF0 0x8F 0xBF 0xBF
       invalid_binary = <<0xF0, 0x8F, 0xBF, 0xBF>>
+
       input = ["pre", invalid_binary]
+
       expected = {:error, "pre", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "returns error tuple for truncated UTF-8 sequence" do
       # Truncated UTF-8: start of a 2-byte sequence without continuation
       truncated_binary = <<0xC3>>
+
       input = ["test", truncated_binary]
+
       expected = {:error, "test", truncated_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
     test "rejects standalone continuation byte" do
       # Continuation byte (10xxxxxx) at start of sequence is invalid
       invalid_binary = <<0x80>>
+
       input = ["valid", invalid_binary]
+
       expected = {:error, "valid", invalid_binary}
+
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
@@ -898,15 +930,6 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       end
     end
 
-    test "raises ArgumentError when input is a single integer" do
-      expected_msg =
-        build_argument_error_msg(1, "not valid character data (an iodata term)")
-
-      assert_error ArgumentError, expected_msg, fn ->
-        :unicode.characters_to_nfkd_binary(65)
-      end
-    end
-
     test "raises ArgumentError when input is a non-binary bitstring" do
       input = <<1::1, 0::1, 1::1>>
 
@@ -915,6 +938,15 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfkd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError when input is a single integer" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(65)
       end
     end
 
