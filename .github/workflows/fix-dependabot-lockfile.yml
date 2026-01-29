@@ -1,0 +1,37 @@
+name: Fix Dependabot Lockfile
+
+on:
+  pull_request:
+    paths:
+      - "assets/package-lock.json"
+
+permissions:
+  contents: write
+
+jobs:
+  fix-lockfile:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.13.0"
+
+      - name: Regenerate lockfile
+        run: |
+          cd assets
+          rm -rf node_modules package-lock.json
+          npm install
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/package-lock.json
+          git diff --staged --quiet || git commit -m "Regenerate package-lock.json with npm $(npm --version)"
+          git push
