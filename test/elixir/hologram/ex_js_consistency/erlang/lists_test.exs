@@ -1322,29 +1322,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
-  describe "sort/1" do
-    test "sorts items in the list" do
-      assert :lists.sort([:a, 4, 3.0, :b, 1, 2.0]) == [1, 2.0, 3.0, 4, :a, :b]
-    end
-
-    test "raises FunctionClauseError if the argument is not a list" do
-      expected_msg = build_function_clause_error_msg(":lists.sort/1", [:abc])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.sort(:abc)
-      end
-    end
-
-    # Client error message is intentionally different than server error message.
-    test "raises FunctionClauseError if the argument is an improper list" do
-      expected_msg = build_function_clause_error_msg(":lists.split_1/5", [1, 2, 3, [], []])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.sort([1, 2 | 3])
-      end
-    end
-  end
-
   describe "seq/2" do
     test "generates ascending sequence" do
       assert :lists.seq(1, 5) == [1, 2, 3, 4, 5]
@@ -1462,6 +1439,29 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn ->
                      :lists.seq(1, 5, :abc)
                    end
+    end
+  end
+
+  describe "sort/1" do
+    test "sorts items in the list" do
+      assert :lists.sort([:a, 4, 3.0, :b, 1, 2.0]) == [1, 2.0, 3.0, 4, :a, :b]
+    end
+
+    test "raises FunctionClauseError if the argument is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.sort/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort(:abc)
+      end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the argument is an improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.split_1/5", [1, 2, 3, [], []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort([1, 2 | 3])
+      end
     end
   end
 

@@ -713,25 +713,6 @@ const Erlang_Lists = {
   // End reverse/2
   // Deps: []
 
-  // Start sort/1
-  "sort/1": (list) => {
-    if (!Type.isList(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/1", [list]),
-      );
-    }
-
-    if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
-      );
-    }
-
-    return Type.list(list.data.slice().sort(Interpreter.compareTerms));
-  },
-  // End sort/1
-  // Deps: []
-
   // Start seq/2
   "seq/2": (from, to) => {
     if (
@@ -819,6 +800,25 @@ const Erlang_Lists = {
     return Type.list(result);
   },
   // End seq/3
+  // Deps: []
+
+  // Start sort/1
+  "sort/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
+      );
+    }
+
+    return Type.list(list.data.slice().sort(Interpreter.compareTerms));
+  },
+  // End sort/1
   // Deps: []
 
   // Client-side implementation uses simplified error details (for improper list with 2+ elements case)

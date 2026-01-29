@@ -2592,55 +2592,6 @@ describe("Erlang_Lists", () => {
     });
   });
 
-  describe("sort/1", () => {
-    const sort = Erlang_Lists["sort/1"];
-
-    it("sorts items in the list", () => {
-      const list = Type.list([
-        Type.atom("a"),
-        Type.integer(4),
-        Type.float(3.0),
-        Type.atom("b"),
-        Type.integer(1),
-        Type.float(2.0),
-      ]);
-
-      assert.deepStrictEqual(
-        sort(list),
-        Type.list([
-          Type.integer(1),
-          Type.float(2.0),
-          Type.float(3.0),
-          Type.integer(4),
-          Type.atom("a"),
-          Type.atom("b"),
-        ]),
-      );
-    });
-
-    it("raises FunctionClauseError if the argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.sort/1",
-        [Type.atom("abc")],
-      );
-
-      assertBoxedError(
-        () => sort(Type.atom("abc")),
-        "FunctionClauseError",
-        expectedMessage,
-      );
-    });
-
-    // Client error message is intentionally different than server error message.
-    it("raises FunctionClauseError if the argument is an improper list", () => {
-      assertBoxedError(
-        () => sort(improperList),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
-      );
-    });
-  });
-
   describe("seq/2", () => {
     const seq = Erlang_Lists["seq/2"];
 
@@ -2842,6 +2793,55 @@ describe("Erlang_Lists", () => {
         () => seq(Type.integer(1), Type.integer(5), Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+  });
+
+  describe("sort/1", () => {
+    const sort = Erlang_Lists["sort/1"];
+
+    it("sorts items in the list", () => {
+      const list = Type.list([
+        Type.atom("a"),
+        Type.integer(4),
+        Type.float(3.0),
+        Type.atom("b"),
+        Type.integer(1),
+        Type.float(2.0),
+      ]);
+
+      assert.deepStrictEqual(
+        sort(list),
+        Type.list([
+          Type.integer(1),
+          Type.float(2.0),
+          Type.float(3.0),
+          Type.integer(4),
+          Type.atom("a"),
+          Type.atom("b"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.sort/1",
+        [Type.atom("abc")],
+      );
+
+      assertBoxedError(
+        () => sort(Type.atom("abc")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the argument is an improper list", () => {
+      assertBoxedError(
+        () => sort(improperList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
       );
     });
   });
