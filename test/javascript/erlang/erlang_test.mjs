@@ -5927,6 +5927,128 @@ describe("Erlang", () => {
     });
   });
 
+  describe("monotonic_time/0", () => {
+    const monotonic_time = Erlang["monotonic_time/0"];
+
+    it("returns an integer", () => {
+      const result = monotonic_time();
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("is monotonic non-decreasing", () => {
+      const t1 = monotonic_time().value;
+      const t2 = monotonic_time().value;
+
+      assert.isTrue(t2 >= t1);
+    });
+
+    describe("client-only behaviour", () => {
+      it("uses fast path for small values (< 9_007_199_254 ms / ~104 days)", () => {
+        const originalNow = performance.now;
+
+        try {
+          // Mock performance.now() to return a small value (1 second)
+          performance.now = () => 1000.123456;
+
+          const result = monotonic_time();
+
+          // 1000.123456 ms * 1_000_000 = 1000123456 ns
+          assertBoxedStrictEqual(result, Type.integer(1_000_123_456));
+        } finally {
+          performance.now = originalNow;
+        }
+      });
+
+      it("uses safe path for large values (>= 9_007_199_254 ms / ~104 days)", () => {
+        const originalNow = performance.now;
+
+        try {
+          // Mock performance.now() to return a value >= 9_007_199_254 ms (~104 days)
+          // 10_000_000_000.5 ms (using .5 to avoid float precision issues)
+          performance.now = () => 10_000_000_000.5;
+
+          const result = monotonic_time();
+
+          // 10_000_000_000 ms * 1_000_000 = 10000000000000000 ns (whole part)
+          // 0.5 ms * 1_000_000 = 500000 ns (fractional part)
+          // Total = 10000000000500000 ns
+          assertBoxedStrictEqual(result, Type.integer(10_000_000_000_500_000n));
+        } finally {
+          performance.now = originalNow;
+        }
+      });
+    });
+  });
+
+  describe("monotonic_time/1", () => {
+    const monotonic_time = Erlang["monotonic_time/1"];
+
+    it("all allowed units return integer", () => {
+      const units = [
+        "native",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+      ];
+
+      for (const u of units) {
+        assert.isTrue(Type.isInteger(monotonic_time(Type.atom(u))));
+      }
+    });
+
+    it("nanosecond unit is 1000x microsecond unit", () => {
+      const micro = monotonic_time(Type.atom("microsecond")).value;
+      const nano = monotonic_time(Type.atom("nanosecond")).value;
+
+      // Use absolute values since monotonic_time can be negative
+      const absMicro = micro >= 0n ? micro : -micro;
+      const absNano = nano >= 0n ? nano : -nano;
+
+      // Allow small timing drift between calls
+      assert.isTrue(absNano >= absMicro * 999n);
+      assert.isTrue(absNano <= absMicro * 1001n + 1000n);
+    });
+
+    it("with positive integer unit", () => {
+      const result = monotonic_time(Type.integer(1000n));
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("raises ArgumentError when unit is less than 1", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.integer(0n)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when unit is negative", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.integer(-1n)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when unit is not a valid time unit atom", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when unit is not atom or integer", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.float(1.0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+  });
+
   describe("not/1", () => {
     const not = Erlang["not/1"];
 
@@ -6389,128 +6511,6 @@ describe("Erlang", () => {
           Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
-    });
-  });
-
-  describe("monotonic_time/0", () => {
-    const monotonic_time = Erlang["monotonic_time/0"];
-
-    it("returns an integer", () => {
-      const result = monotonic_time();
-
-      assert.isTrue(Type.isInteger(result));
-    });
-
-    it("is monotonic non-decreasing", () => {
-      const t1 = monotonic_time().value;
-      const t2 = monotonic_time().value;
-
-      assert.isTrue(t2 >= t1);
-    });
-
-    describe("client-only behaviour", () => {
-      it("uses fast path for small values (< 9_007_199_254 ms / ~104 days)", () => {
-        const originalNow = performance.now;
-
-        try {
-          // Mock performance.now() to return a small value (1 second)
-          performance.now = () => 1000.123456;
-
-          const result = monotonic_time();
-
-          // 1000.123456 ms * 1_000_000 = 1000123456 ns
-          assertBoxedStrictEqual(result, Type.integer(1_000_123_456));
-        } finally {
-          performance.now = originalNow;
-        }
-      });
-
-      it("uses safe path for large values (>= 9_007_199_254 ms / ~104 days)", () => {
-        const originalNow = performance.now;
-
-        try {
-          // Mock performance.now() to return a value >= 9_007_199_254 ms (~104 days)
-          // 10_000_000_000.5 ms (using .5 to avoid float precision issues)
-          performance.now = () => 10_000_000_000.5;
-
-          const result = monotonic_time();
-
-          // 10_000_000_000 ms * 1_000_000 = 10000000000000000 ns (whole part)
-          // 0.5 ms * 1_000_000 = 500000 ns (fractional part)
-          // Total = 10000000000500000 ns
-          assertBoxedStrictEqual(result, Type.integer(10_000_000_000_500_000n));
-        } finally {
-          performance.now = originalNow;
-        }
-      });
-    });
-  });
-
-  describe("monotonic_time/1", () => {
-    const monotonic_time = Erlang["monotonic_time/1"];
-
-    it("all allowed units return integer", () => {
-      const units = [
-        "native",
-        "second",
-        "millisecond",
-        "microsecond",
-        "nanosecond",
-      ];
-
-      for (const u of units) {
-        assert.isTrue(Type.isInteger(monotonic_time(Type.atom(u))));
-      }
-    });
-
-    it("nanosecond unit is 1000x microsecond unit", () => {
-      const micro = monotonic_time(Type.atom("microsecond")).value;
-      const nano = monotonic_time(Type.atom("nanosecond")).value;
-
-      // Use absolute values since monotonic_time can be negative
-      const absMicro = micro >= 0n ? micro : -micro;
-      const absNano = nano >= 0n ? nano : -nano;
-
-      // Allow small timing drift between calls
-      assert.isTrue(absNano >= absMicro * 999n);
-      assert.isTrue(absNano <= absMicro * 1001n + 1000n);
-    });
-
-    it("with positive integer unit", () => {
-      const result = monotonic_time(Type.integer(1000n));
-      assert.isTrue(Type.isInteger(result));
-    });
-
-    it("raises ArgumentError when unit is less than 1", () => {
-      assertBoxedError(
-        () => monotonic_time(Type.integer(0n)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError when unit is negative", () => {
-      assertBoxedError(
-        () => monotonic_time(Type.integer(-1n)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError when unit is not a valid time unit atom", () => {
-      assertBoxedError(
-        () => monotonic_time(Type.atom("invalid")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-      );
-    });
-
-    it("raises ArgumentError when unit is not atom or integer", () => {
-      assertBoxedError(
-        () => monotonic_time(Type.float(1.0)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-      );
     });
   });
 
