@@ -699,6 +699,12 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
                    build_function_clause_error_msg(":filename.join/1", [[]]),
                    fn -> :filename.join([]) end
     end
+
+    test "raises FunctionClauseError if list contains invalid component type" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":filename.join/1", [[123]]),
+                   fn -> :filename.join([123]) end
+    end
   end
 
   describe "join/2" do

@@ -1555,6 +1555,16 @@ describe("Erlang_Filename", () => {
         Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
       );
     });
+
+    it("raises FunctionClauseError if list contains invalid component type", () => {
+      const arg = Type.list([Type.integer(123)]);
+
+      assertBoxedError(
+        () => join(arg),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [arg]),
+      );
+    });
   });
 
   describe("join/2", () => {

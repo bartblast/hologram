@@ -600,7 +600,22 @@ const Erlang_Filename = {
 
   // Start join/1
   "join/1": (components) => {
+    // Validate components is a non-empty list
     if (!Type.isList(components) || components.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
+          components,
+        ]),
+      );
+    }
+
+    // Validate all components are valid filename_all() types (binary, list, or atom)
+    // This matches Erlang's behavior of validating at join/1 level before delegating
+    const hasInvalidComponent = !components.data.every(
+      (comp) => Type.isBinary(comp) || Type.isList(comp) || Type.isAtom(comp),
+    );
+
+    if (hasInvalidComponent) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":filename.join/1", [
           components,
