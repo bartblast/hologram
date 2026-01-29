@@ -817,6 +817,14 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
+    test "normalizes prefix in error tuple" do
+      # Prefix contains precomposed "å" (U+00E5) which should be normalized to "a" + U+030A
+      invalid_binary = <<255, 255>>
+      input = ["å", invalid_binary]
+      expected = {:error, "a\u030a", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
     test "rejects overlong encoding (2-byte for ASCII)" do
       # Overlong encoding: 'A' (U+0041) encoded as 2 bytes: 0xC1 0x81
       invalid_binary = <<0xC1, 0x81>>
@@ -873,12 +881,29 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_nfkd_binary(input) == expected
     end
 
+    test "rejects standalone continuation byte" do
+      # Continuation byte (10xxxxxx) at start of sequence is invalid
+      invalid_binary = <<0x80>>
+      input = ["valid", invalid_binary]
+      expected = {:error, "valid", invalid_binary}
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
     test "raises ArgumentError when input is not a list or a bitstring" do
       expected_msg =
         build_argument_error_msg(1, "not valid character data (an iodata term)")
 
       assert_error ArgumentError, expected_msg, fn ->
         :unicode.characters_to_nfkd_binary(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a single integer" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(65)
       end
     end
 

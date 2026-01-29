@@ -1266,6 +1266,22 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("normalizes prefix in error tuple", () => {
+      // Prefix contains precomposed "å" (U+00E5) which should be normalized to "a" + U+030A
+      const invalidBinary = Bitstring.fromBytes([255, 255]);
+      const input = Type.list([Type.bitstring("å"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("a\u030a"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("rejects overlong encoding (2-byte for ASCII)", () => {
       // Overlong encoding: 'A' (U+0041) encoded as 2 bytes: 0xC1 0x81
       const invalidBinary = Bitstring.fromBytes([0xc1, 0x81]);
@@ -1378,9 +1394,36 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("rejects standalone continuation byte", () => {
+      // Continuation byte (10xxxxxx) at start of sequence is invalid
+      const invalidBinary = Bitstring.fromBytes([0x80]);
+      const input = Type.list([Type.bitstring("valid"), invalidBinary]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.bitstring("valid"),
+        invalidBinary,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("raises ArgumentError when input is not a list or a bitstring", () => {
       assertBoxedError(
         () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when input is a single integer", () => {
+      assertBoxedError(
+        () => fun(Type.integer(65)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
