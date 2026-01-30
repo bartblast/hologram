@@ -264,7 +264,7 @@ describe("Utils", () => {
     // Test 5: Type Safety
     it("should handle input as a Buffer or Uint8Array interchangeably", async () => {
       // Small valid zlib: "hi"
-      const input = new Uint8Array([120, 156, 203, 200, 4, 0, 1, 43, 0, 201]);
+      const input = new Uint8Array([120, 156, 203, 200, 4, 0, 1, 59, 0, 210]);
       const decompressed = await Utils.zlibInflate(input);
 
       assert.strictEqual(new TextDecoder().decode(decompressed), "hi");
