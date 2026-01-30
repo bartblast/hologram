@@ -3399,6 +3399,128 @@ describe("Erlang", () => {
     });
   });
 
+  describe("delete_element/2", () => {
+    const delete_element = Erlang["delete_element/2"];
+
+    it("deletes the only item from a single-item tuple", () => {
+      const result = delete_element(
+        Type.integer(1),
+        Type.tuple([Type.integer(5)]),
+      );
+
+      assert.deepStrictEqual(result, Type.tuple([]));
+    });
+
+    it("deletes the first item from a tuple with multiple items", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      const result = delete_element(Type.integer(1), tuple);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(6), Type.integer(7)]),
+      );
+    });
+
+    it("deletes a middle item from a tuple with multiple items", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      const result = delete_element(Type.integer(2), tuple);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(5), Type.integer(7)]),
+      );
+    });
+
+    it("deletes the last item from a tuple with multiple items", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      const result = delete_element(Type.integer(3), tuple);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(5), Type.integer(6)]),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not an integer", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      assertBoxedError(
+        () => delete_element(Type.atom("abc"), tuple),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a tuple", () => {
+      assertBoxedError(
+        () => delete_element(Type.integer(1), Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if the given index is greater than the number of elements in the tuple", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      assertBoxedError(
+        () => delete_element(Type.integer(10), tuple),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the given index is 0", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      assertBoxedError(
+        () => delete_element(Type.integer(0), tuple),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the given index is negative", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      assertBoxedError(
+        () => delete_element(Type.integer(-1), tuple),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("div/2", () => {
     const testedFun = Erlang["div/2"];
 
@@ -3499,72 +3621,6 @@ describe("Erlang", () => {
         () => testedFun(Type.integer(5), Type.atom("abc")),
         "ArgumentError",
         "bad argument in arithmetic expression: div(5, :abc)",
-      );
-    });
-  });
-
-  describe("delete_element/2", () => {
-    const delete_element = Erlang["delete_element/2"];
-
-    const tuple = Type.tuple([
-      Type.integer(5),
-      Type.integer(6),
-      Type.integer(7),
-    ]);
-
-    it("returns the tuple without the element at the one-based index", () => {
-      const resultMiddle = delete_element(Type.integer(2), tuple);
-      assert.deepStrictEqual(
-        resultMiddle,
-        Type.tuple([Type.integer(5), Type.integer(7)]),
-      );
-      const resultStart = delete_element(Type.integer(1), tuple);
-      assert.deepStrictEqual(
-        resultStart,
-        Type.tuple([Type.integer(6), Type.integer(7)]),
-      );
-      const resultEnd = delete_element(Type.integer(3), tuple);
-      assert.deepStrictEqual(
-        resultEnd,
-        Type.tuple([Type.integer(5), Type.integer(6)]),
-      );
-    });
-
-    it("raises ArgumentError if the first argument is not an integer", () => {
-      assertBoxedError(
-        () => delete_element(Type.atom("abc"), tuple),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not a tuple", () => {
-      assertBoxedError(
-        () => delete_element(Type.integer(1), Type.atom("abc")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
-      );
-    });
-
-    it("raises ArgumentError if the given index is greater than the number of elements in the tuple", () => {
-      assertBoxedError(
-        () => delete_element(Type.integer(10), tuple),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
-    });
-
-    it("raises ArgumentError if the given index is smaller than 1", () => {
-      assertBoxedError(
-        () => delete_element(Type.integer(0), tuple),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
-      );
-
-      assertBoxedError(
-        () => delete_element(Type.integer(-1), tuple),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
