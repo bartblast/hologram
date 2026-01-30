@@ -163,7 +163,7 @@ const Erlang_String = {
     let subjectBinary;
     try {
       subjectBinary = Erlang_Unicode["characters_to_binary/1"](subject);
-    } catch (_error) {
+    } catch {
       Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(subject));
     }
 
