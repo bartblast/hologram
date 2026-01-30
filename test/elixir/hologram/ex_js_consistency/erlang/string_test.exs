@@ -259,7 +259,7 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "raises MatchError if the first argument is not a string" do
-      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
+      assert_error MatchError, build_match_error_msg(:hello_world), fn ->
         :string.split(:hello_world, "_", :all)
       end
     end
