@@ -3205,10 +3205,15 @@ describe("Erlang", () => {
         assert.strictEqual(Bitstring.calculateBitCount(result), 5);
       });
 
-      it("decodes BIT_BINARY_EXT with full bytes", async () => {
-        // Bitstring with 16 bits (2 full bytes): <<255, 0>>
+      it("decodes BIT_BINARY_EXT with full bytes (Bits=8)", async () => {
+        // BIT_BINARY_EXT with 2 bytes, 8 bits used in last byte
+        // 131 - VERSION_MAGIC
+        // 77 - BIT_BINARY_EXT
+        // 0, 0, 0, 2 - length (2 bytes)
+        // 8 - bits used in last byte (8 = full byte)
+        // 255, 0 - the actual data bytes
         const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 77, 0, 0, 0, 2, 0, 255, 0]),
+          new Uint8Array([131, 77, 0, 0, 0, 2, 8, 255, 0]),
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(Bitstring.calculateBitCount(result), 16);
@@ -3633,7 +3638,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "string length exceeds available bytes: 100",
+          "invalid external representation of a term",
         );
       });
 
@@ -3681,7 +3686,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "atom length exceeds available bytes: 100",
+          "invalid external representation of a term",
         );
       });
 

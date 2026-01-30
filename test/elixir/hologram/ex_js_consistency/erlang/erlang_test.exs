@@ -1989,7 +1989,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "decodes atom UTF-8 (ATOM_UTF8_EXT)" do
       name = "élixir"
       binary = <<131, 118, byte_size(name)::16, name::binary>>
-      assert :erlang.binary_to_term(binary) == String.to_existing_atom(name)
+      assert :erlang.binary_to_term(binary) == :élixir
     end
 
     test "decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)" do
@@ -2112,7 +2112,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes FLOAT_EXT (deprecated string format)" do
       # Manually construct FLOAT_EXT binary
-      float_str = :io_lib.format("~.20e", [1.5]) |> IO.iodata_to_binary()
+      iodata = :io_lib.format("~.20e", [1.5])
+      float_str = IO.iodata_to_binary(iodata)
       padded = String.pad_trailing(float_str, 31, <<0>>)
       binary = <<131, 99, padded::binary>>
 

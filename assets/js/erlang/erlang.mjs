@@ -784,6 +784,17 @@ const Erlang = {
     // The decompressed data contains the ETF representation of the term without the version byte
 
     const decodeCompressed = async (dataView, bytes, offset) => {
+      // Disallow nested COMPRESSED: verify it is only used at top-level
+      // For top-level usage, offset should be 2 (version byte + COMPRESSED tag consumed)
+      if (offset !== 2) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       if (offset + 4 > bytes.length) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
@@ -815,7 +826,14 @@ const Erlang = {
           decompressed.byteLength,
         );
 
-        return await decodeTerm(decompressedView, decompressed, 0);
+        const result = await decodeTerm(decompressedView, decompressed, 0);
+
+        // Return with newOffset pointing to end of original bytes since
+        // COMPRESSED must consume the entire remaining buffer at top-level
+        return {
+          term: result.term,
+          newOffset: bytes.length,
+        };
       } catch (error) {
         console.error("Decode error:", error);
         Interpreter.raiseArgumentError(
@@ -891,7 +909,7 @@ const Erlang = {
       const length = dataView.getUint16(offset);
       if (offset + 2 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          `atom length exceeds available bytes: ${length}`,
+          "invalid external representation of a term",
         );
       }
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
@@ -983,7 +1001,7 @@ const Erlang = {
       const length = dataView.getUint16(offset);
       if (offset + 2 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          `string length exceeds available bytes: ${length}`,
+          "invalid external representation of a term",
         );
       }
       const elements = [];
@@ -1076,6 +1094,15 @@ const Erlang = {
       const floatString = decoder.decode(floatBytes).replace(/\0.*$/, "");
       const value = parseFloat(floatString);
 
+      if (Number.isNaN(value)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       return {
         term: Type.float(value),
         newOffset: offset + 31,
@@ -1087,6 +1114,15 @@ const Erlang = {
     const decodeBitBinary = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
       const bits = dataView.getUint8(offset + 4);
+
+      if (bits < 1 || bits > 8) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
 
       if (offset + 5 + length > bytes.length) {
         Interpreter.raiseArgumentError(
