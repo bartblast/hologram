@@ -164,38 +164,19 @@ const Erlang_String = {
   "split/3": (subject, pattern, direction) => {
     const returnCharlist = Type.isList(subject);
 
-    function convertToBinary(input) {
-      try {
-        return Erlang_Unicode["characters_to_binary/1"](input);
-      } catch (error) {
-        switch (input) {
-          case subject:
-            Interpreter.raiseMatchError(
-              Interpreter.buildMatchErrorMsg(subject),
-            );
-            return;
-
-          case pattern:
-            Interpreter.raiseArgumentError(
-              Interpreter.buildArgumentErrorMsg(
-                1,
-                "not valid character data (an iodata term)",
-              ),
-            );
-            return;
-
-          default:
-            throw error;
-        }
-      }
+    let subjectBinary;
+    try {
+      subjectBinary = Erlang_Unicode["characters_to_binary/1"](subject);
+    } catch (_error) {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(subject));
     }
 
-    const subjectBinary = convertToBinary(subject);
     if (Type.isTuple(subjectBinary)) {
       Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(subject));
     }
 
-    const patternBinary = convertToBinary(pattern);
+    const patternBinary = Erlang_Unicode["characters_to_binary/1"](pattern);
+
     if (Type.isTuple(patternBinary)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
