@@ -11,9 +11,9 @@ defmodule Hologram.MixProject do
     [
       eslint:
         "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** scripts/** test/javascript/** --no-error-on-unmatched-pattern",
-      f: ["format", "format.js", "cmd --cd test/features mix format"],
+      f: ["format", "format.js", "cmd cd test/features && mix format"],
       "format.js":
-        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**/*.{mjs,js,json}' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
       "format.js.check":
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
       setup: [
@@ -97,12 +97,10 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  def cli do
+  def preferred_cli_env do
     [
-      preferred_envs: [
-        t: :test,
-        "test.js": :test
-      ]
+      t: :test,
+      "test.js": :test
     ]
   end
 
@@ -110,7 +108,6 @@ defmodule Hologram.MixProject do
     [
       aliases: aliases(),
       app: :hologram,
-      cli: cli(),
       deps: deps(),
       description:
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
@@ -146,6 +143,7 @@ defmodule Hologram.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       homepage_url: "https://hologram.page/",
       package: package(),
+      preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/bartblast/hologram",
       test_paths: ["test/elixir"],
