@@ -636,6 +636,45 @@ const Erlang = {
     const SMALL_ATOM_UTF8_EXT = 119;
     const V4_PORT_EXT = 120;
 
+    // Decompresses zlib-compressed data using native DecompressionStream API
+    // Returns a Promise that resolves to a Uint8Array with the decompressed data
+    // Throws an error if decompression fails
+    const zlibInflate = async (compressedData) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          // Ensure we are passing a standard Uint8Array to the stream
+          // This solves the Buffer/Uint8Array mismatch in Node.js
+          const data =
+            compressedData instanceof Uint8Array
+              ? compressedData
+              : new Uint8Array(compressedData);
+
+          controller.enqueue(data);
+          controller.close();
+        },
+      });
+
+      const decompressedStream = stream.pipeThrough(
+        new DecompressionStream("deflate"),
+      );
+
+      const reader = decompressedStream.getReader();
+      const chunks = [];
+
+      try {
+        while (true) {
+          const {done, value} = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+      } catch (err) {
+        // In Node, stream errors often need to be caught during the read loop
+        throw new Error(`Decompression failed: ${err.message}`);
+      }
+
+      return Utils.concatUint8Arrays(chunks);
+    };
+
     const decodeTerm = async (dataView, bytes, offset) => {
       if (offset >= bytes.length) {
         Interpreter.raiseArgumentError(
@@ -759,7 +798,7 @@ const Erlang = {
 
       try {
         // Use native DecompressionStream for zlib decompression
-        const decompressed = await Utils.zlibInflate(compressedData);
+        const decompressed = await zlibInflate(compressedData);
 
         if (decompressed.length !== uncompressedSize) {
           Interpreter.raiseArgumentError(

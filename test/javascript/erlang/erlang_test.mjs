@@ -3472,6 +3472,26 @@ describe("Erlang", () => {
         assertBoxedStrictEqual(result, expectedList);
       });
 
+      it("validates internal zlibInflate functionality within binary_to_term context", async () => {
+        // This test validates that the zlibInflate function was successfully moved from Utils
+        // to within the binary_to_term context and still works correctly for compressed terms.
+
+        // Use the same working test data as the first compressed test
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146, 145,
+            154, 147, 147, 63, 74, 140, 40, 2, 0, 21, 94, 209, 51,
+          ]),
+        );
+
+        const result = await binary_to_term(binary);
+        const expected = Type.bitstring("hello".repeat(100));
+
+        // Verify the result to ensure zlibInflate worked correctly
+        // This confirms that the moved zlibInflate function is working properly
+        assertBoxedStrictEqual(result, expected);
+      });
+
       it("raises ArgumentError for compressed term with truncated uncompressed size", async () => {
         // COMPRESSED tag but missing uncompressed size bytes
         const binary = Bitstring.fromBytes(
