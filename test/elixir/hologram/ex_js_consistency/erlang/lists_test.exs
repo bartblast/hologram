@@ -1354,7 +1354,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   describe "seq/3" do
     test "generates ascending sequence with increment 1" do
-      assert :lists.seq(1, 5, 1) == [1, 2, 3, 4, 5]
+      assert :lists.seq(3, 5, 1) == [3, 4, 5]
     end
 
     test "generates ascending sequence with increment 2" do
@@ -1390,31 +1390,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "generates empty sequence when from - incr equals to (boundary case)" do
-      assert :lists.seq(2, 1, 1) == []
+      assert :lists.seq(3, 2, 1) == []
     end
 
-    test "raises ArgumentError if from > to with positive increment" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "not a negative increment"),
-                   fn ->
-                     :lists.seq(10, 1, 1)
-                   end
-    end
-
-    test "raises ArgumentError if from < to with negative increment" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "not a positive increment"),
-                   fn ->
-                     :lists.seq(1, 10, -1)
-                   end
-    end
-
-    test "raises ArgumentError if increment is 0" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(3, "not a positive increment"),
-                   fn ->
-                     :lists.seq(1, 5, 0)
-                   end
+    test "generates empty sequence if from < to with negative increment" do
+      assert :lists.seq(6, 7, -1) == []
     end
 
     test "raises ArgumentError if the first argument is not an integer" do
@@ -1438,6 +1418,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    build_argument_error_msg(3, "not an integer"),
                    fn ->
                      :lists.seq(1, 5, :abc)
+                   end
+    end
+
+    test "raises ArgumentError if from > to with positive increment" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a negative increment"),
+                   fn ->
+                     :lists.seq(10, 1, 1)
+                   end
+    end
+
+    test "raises ArgumentError if from < to with negative increment" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a positive increment"),
+                   fn ->
+                     :lists.seq(1, 10, -1)
+                   end
+    end
+
+    test "raises ArgumentError if increment is 0" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a positive increment"),
+                   fn ->
+                     :lists.seq(1, 5, 0)
                    end
     end
   end

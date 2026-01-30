@@ -731,55 +731,48 @@ const Erlang_Lists = {
   // Deps: [:lists.seq/3]
 
   // Start seq/3
-  "seq/3": (from, to, incr) => {
-    if (!Type.isInteger(from)) {
+  "seq/3": (fromTerm, toTerm, incrTerm) => {
+    if (!Type.isInteger(fromTerm)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     }
 
-    if (!Type.isInteger(to)) {
+    if (!Type.isInteger(toTerm)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
     }
 
-    if (!Type.isInteger(incr)) {
+    if (!Type.isInteger(incrTerm)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(3, "not an integer"),
       );
     }
 
-    const fromVal = from.value;
-    const toVal = to.value;
-    const incrVal = incr.value;
+    const from = fromTerm.value;
+    const to = toTerm.value;
+    const incr = incrTerm.value;
 
-    // Special case: seq(Same, Same, 0) when is_integer(Same) -> [Same]
-    if (fromVal === toVal && incrVal === 0n) {
-      return Type.list([Type.integer(fromVal)]);
+    // Special case: seq(same, same, 0) when is_integer(same) -> [same]
+    if (from === to && incr === 0n) {
+      return Type.list([Type.integer(from)]);
     }
 
     // Erlang guard conditions:
-    // (Inc > 0 andalso First - Inc =< Last) orelse (Inc < 0 andalso First - Inc >= Last)
+    // (incr > 0 andalso from - incr =< to) orelse (incr < 0 andalso from - incr >= to)
     // Negating this (to find error cases):
-    // Inc > 0 andalso First - Inc > Last  (i.e., To < From - Inc when Inc > 0)
-    // Inc < 0 andalso First - Inc < Last  (i.e., To > From - Inc when Inc < 0)
-    // Inc === 0 (special case already handled above when From === To)
+    // incr > 0 andalso from - incr > to  (i.e., to < from - incr when incr > 0)
+    // incr < 0 andalso from - incr < to  (i.e., to > from - incr when incr < 0)
+    // incr === 0 (special case already handled above when from === to)
 
-    if (incrVal > 0n && toVal < fromVal - incrVal) {
+    if (incr > 0n && to < from - incr) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
       );
     }
 
-    if (incrVal < 0n && toVal > fromVal - incrVal) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
-      );
-    }
-
-    if (incrVal === 0n) {
-      // If we reach here, fromVal !== toVal and incrVal === 0
+    if ((incr < 0n && to > from - incr) || incr === 0n) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
       );
@@ -787,12 +780,12 @@ const Erlang_Lists = {
 
     const result = [];
 
-    if (incrVal > 0n) {
-      for (let i = fromVal; i <= toVal; i += incrVal) {
+    if (incr > 0n) {
+      for (let i = from; i <= to; i += incr) {
         result.push(Type.integer(i));
       }
     } else {
-      for (let i = fromVal; i >= toVal; i += incrVal) {
+      for (let i = from; i >= to; i += incr) {
         result.push(Type.integer(i));
       }
     }

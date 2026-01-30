@@ -2651,19 +2651,20 @@ describe("Erlang_Lists", () => {
     const seq = Erlang_Lists["seq/3"];
 
     it("generates ascending sequence with increment 1", () => {
-      const result = seq(Type.integer(1), Type.integer(5), Type.integer(1));
+      const result = seq(Type.integer(3), Type.integer(5), Type.integer(1));
+
       const expected = Type.list([
-        Type.integer(1),
-        Type.integer(2),
         Type.integer(3),
         Type.integer(4),
         Type.integer(5),
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates ascending sequence with increment 2", () => {
       const result = seq(Type.integer(1), Type.integer(10), Type.integer(2));
+
       const expected = Type.list([
         Type.integer(1),
         Type.integer(3),
@@ -2671,11 +2672,13 @@ describe("Erlang_Lists", () => {
         Type.integer(7),
         Type.integer(9),
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates ascending sequence from negative to positive", () => {
       const result = seq(Type.integer(-5), Type.integer(5), Type.integer(2));
+
       const expected = Type.list([
         Type.integer(-5),
         Type.integer(-3),
@@ -2684,11 +2687,13 @@ describe("Erlang_Lists", () => {
         Type.integer(3),
         Type.integer(5),
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates descending sequence with negative increment", () => {
       const result = seq(Type.integer(10), Type.integer(5), Type.integer(-1));
+
       const expected = Type.list([
         Type.integer(10),
         Type.integer(9),
@@ -2697,11 +2702,13 @@ describe("Erlang_Lists", () => {
         Type.integer(6),
         Type.integer(5),
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates descending sequence with negative increment of -2", () => {
       const result = seq(Type.integer(10), Type.integer(1), Type.integer(-2));
+
       const expected = Type.list([
         Type.integer(10),
         Type.integer(8),
@@ -2709,11 +2716,13 @@ describe("Erlang_Lists", () => {
         Type.integer(4),
         Type.integer(2),
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates descending sequence in negative range", () => {
       const result = seq(Type.integer(-1), Type.integer(-10), Type.integer(-2));
+
       const expected = Type.list([
         Type.integer(-1),
         Type.integer(-3),
@@ -2721,55 +2730,43 @@ describe("Erlang_Lists", () => {
         Type.integer(-7),
         Type.integer(-9),
       ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates single element sequence when from equals to", () => {
       const result = seq(Type.integer(5), Type.integer(5), Type.integer(1));
       const expected = Type.list([Type.integer(5)]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates single element sequence when from equals to with increment 0", () => {
       const result = seq(Type.integer(5), Type.integer(5), Type.integer(0));
       const expected = Type.list([Type.integer(5)]);
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates empty sequence if from > to with positive increment", () => {
       const result = seq(Type.integer(10), Type.integer(6), Type.integer(4));
-      const expected = Type.list([]);
+      const expected = Type.list();
+
       assert.deepStrictEqual(result, expected);
     });
 
     it("generates empty sequence when from - incr equals to (boundary case)", () => {
-      const result = seq(Type.integer(2), Type.integer(1), Type.integer(1));
-      const expected = Type.list([]);
+      const result = seq(Type.integer(3), Type.integer(2), Type.integer(1));
+      const expected = Type.list();
+
       assert.deepStrictEqual(result, expected);
     });
 
-    it("raises ArgumentError if from > to with positive increment", () => {
-      assertBoxedError(
-        () => seq(Type.integer(10), Type.integer(1), Type.integer(1)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
-      );
-    });
+    it("generates empty sequence if from < to with negative increment", () => {
+      const result = seq(Type.integer(6), Type.integer(7), Type.integer(-1));
+      const expected = Type.list();
 
-    it("raises ArgumentError if from < to with negative increment", () => {
-      assertBoxedError(
-        () => seq(Type.integer(1), Type.integer(10), Type.integer(-1)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
-      );
-    });
-
-    it("raises ArgumentError if increment is 0", () => {
-      assertBoxedError(
-        () => seq(Type.integer(1), Type.integer(5), Type.integer(0)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
-      );
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises ArgumentError if the first argument is not an integer", () => {
@@ -2793,6 +2790,30 @@ describe("Erlang_Lists", () => {
         () => seq(Type.integer(1), Type.integer(5), Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if from > to with positive increment", () => {
+      assertBoxedError(
+        () => seq(Type.integer(10), Type.integer(1), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
+      );
+    });
+
+    it("raises ArgumentError if from < to with negative increment", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(10), Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+      );
+    });
+
+    it("raises ArgumentError if increment is 0", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(5), Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
       );
     });
   });
