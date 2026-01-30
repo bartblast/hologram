@@ -204,43 +204,43 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "split/3" do
-    test "returns unchanged string inside a list if the pattern is empty" do
+    test "returns unchanged subject inside a list if the pattern is empty" do
       result = :string.split("Hello World !", "", :all)
 
       assert result == ["Hello World !"]
     end
 
-    test "returns unchanged string inside a list if the pattern is not present inside the string" do
+    test "returns unchanged subject inside a list if the pattern is not found" do
       result = :string.split("Hello World !", ".", :all)
 
       assert result == ["Hello World !"]
     end
 
-    test "returns a list which length is equal to the number of words inside the string with the direction set to :all" do
+    test "splits on all occurrences with direction set to :all" do
       result = :string.split("Hello World !", " ", :all)
 
       assert result == ["Hello", "World", "!"]
     end
 
-    test "returns a two-element list with the first word at the beginning and the tail at the end when the direction is set to :leading" do
+    test "splits on first occurrence with direction set to :leading" do
       result = :string.split("Hello World !", " ", :leading)
 
       assert result == ["Hello", "World !"]
     end
 
-    test "returns a two-element list with the last word at the end and the rest at the begining when the direction is set to :trailing" do
+    test "splits on last occurrence with direction set to :trailing" do
       result = :string.split("Hello World !", " ", :trailing)
 
       assert result == ["Hello World", "!"]
     end
 
-    test "when pattern is at the start of the string" do
+    test "when pattern is at the start of the subject" do
       result = :string.split("Hello World !", "H", :leading)
 
       assert result == ["", "ello World !"]
     end
 
-    test "when pattern is at the end of the string" do
+    test "when pattern is at the end of the subject" do
       result = :string.split("Hello World !", "!", :trailing)
 
       assert result == ["Hello World ", ""]
@@ -258,31 +258,31 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert result == ["Hello ", " World"]
     end
 
-    test "with charlist string and charlist pattern" do
+    test "with charlist subject and charlist pattern" do
       result = :string.split(~c"Hello World", ~c" ", :all)
 
       assert result == [~c"Hello", ~c"World"]
     end
 
-    test "with charlist string and binary pattern" do
+    test "with charlist subject and binary pattern" do
       result = :string.split(~c"Hello World", " ", :all)
 
       assert result == [~c"Hello", ~c"World"]
     end
 
-    test "with binary string and charlist pattern" do
+    test "with binary subject and charlist pattern" do
       result = :string.split("Hello World", ~c" ", :all)
 
       assert result == ["Hello", "World"]
     end
 
-    test "raises MatchError if the first argument is not a string" do
+    test "raises MatchError if the first argument is not valid chardata" do
       assert_error MatchError, build_match_error_msg(:hello_world), fn ->
         :string.split(:hello_world, "_", :all)
       end
     end
 
-    test "raises ArgumentError if the second argument is not a string" do
+    test "raises ArgumentError if the second argument is not valid chardata" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not valid character data (an iodata term)"),
                    fn ->
