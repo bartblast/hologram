@@ -1323,16 +1323,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
   end
 
   describe "seq/2" do
-    test "generates ascending sequence" do
-      assert :lists.seq(1, 5) == [1, 2, 3, 4, 5]
-    end
-
-    test "raises FunctionClauseError when from > to + 1" do
-      expected_msg = build_function_clause_error_msg(":lists.seq/2", [10, 5])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.seq(10, 5)
-      end
+    test "delegates to seq/3 with increment = 1" do
+      assert :lists.seq(3, 5) == :lists.seq(3, 5, 1)
     end
 
     test "raises FunctionClauseError if the first argument is not an integer" do
@@ -1348,6 +1340,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.seq(1, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError when from > to + 1" do
+      expected_msg = build_function_clause_error_msg(":lists.seq/2", [10, 5])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.seq(10, 5)
       end
     end
   end

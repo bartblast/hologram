@@ -2595,29 +2595,16 @@ describe("Erlang_Lists", () => {
   describe("seq/2", () => {
     const seq = Erlang_Lists["seq/2"];
 
-    it("generates ascending sequence", () => {
-      const result = seq(Type.integer(1), Type.integer(5));
-      const expected = Type.list([
-        Type.integer(1),
-        Type.integer(2),
+    it("delegates to seq/3 with increment = 1", () => {
+      const result = seq(Type.integer(3), Type.integer(5));
+
+      const expected = Erlang_Lists["seq/3"](
         Type.integer(3),
-        Type.integer(4),
         Type.integer(5),
-      ]);
+        Type.integer(1),
+      );
+
       assert.deepStrictEqual(result, expected);
-    });
-
-    it("raises FunctionClauseError when from > to + 1", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.seq/2",
-        [Type.integer(10), Type.integer(5)],
-      );
-
-      assertBoxedError(
-        () => seq(Type.integer(10), Type.integer(5)),
-        "FunctionClauseError",
-        expectedMessage,
-      );
     });
 
     it("raises FunctionClauseError if the first argument is not an integer", () => {
@@ -2641,6 +2628,19 @@ describe("Erlang_Lists", () => {
 
       assertBoxedError(
         () => seq(Type.integer(1), Type.atom("abc")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError when from > to + 1", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.seq/2",
+        [Type.integer(10), Type.integer(5)],
+      );
+
+      assertBoxedError(
+        () => seq(Type.integer(10), Type.integer(5)),
         "FunctionClauseError",
         expectedMessage,
       );
