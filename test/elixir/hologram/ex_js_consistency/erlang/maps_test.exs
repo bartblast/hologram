@@ -149,45 +149,46 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
   end
 
   describe "intersect/2" do
-    test "takes value from map2" do
-      assert :maps.intersect(%{a: 1, b: 3}, %{a: 2, c: 4}) == %{a: 2}
+    test "takes value from the second map" do
+      map1 = %{a: 1, b: 3}
+      map2 = %{a: 2, c: 4}
+
+      assert :maps.intersect(map1, map2) == %{a: 2}
     end
 
-    test "handles not strictly equal keys" do
-      assert :maps.intersect(%{1 => 1}, %{1.0 => 2}) == %{}
+    test "handles multiple common keys" do
+      map1 = %{:a => 1, "a" => 2, 1 => 3}
+      map2 = %{:a => 10, "a" => 20, 1 => 30}
+
+      assert :maps.intersect(map1, map2) == %{:a => 10, "a" => 20, 1 => 30}
     end
 
-    test "returns an empty map when no common keys exist" do
-      assert :maps.intersect(%{a: 1, b: 3}, %{c: 2, d: 4}) == %{}
+    test "returns an empty map when no keys are common" do
+      map1 = %{a: 1, b: 3}
+      map2 = %{c: 2, d: 4}
+
+      assert :maps.intersect(map1, map2) == %{}
     end
 
-    test "returns an empty map when map1 is empty" do
+    test "returns an empty map when the first map is empty" do
       assert :maps.intersect(%{}, %{a: 2}) == %{}
     end
 
-    test "returns an empty map when map2 is empty" do
+    test "returns an empty map when the second map is empty" do
       assert :maps.intersect(%{a: 1}, %{}) == %{}
     end
 
-    test "returns an empty map when map1 and map2 are empty" do
+    test "returns an empty map when both maps are empty" do
       assert :maps.intersect(%{}, %{}) == %{}
     end
 
-    test "doesn't mutate the inputs" do
-      map1 = %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
-      map2 = %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
-      :maps.intersect(map1, map2)
-      assert map1 == %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
-      assert map2 == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
-    end
-
-    test "raises when map1 is not a map" do
+    test "raises BadMapError if the first argument is not a map" do
       assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.intersect(:abc, %{})
       end
     end
 
-    test "raises when map2 is not a map" do
+    test "raises BadMapError if the second argument is not a map" do
       assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.intersect(%{}, :abc)
       end

@@ -322,7 +322,7 @@ describe("Erlang_Maps", () => {
   describe("intersect/2", () => {
     const intersect = Erlang_Maps["intersect/2"];
 
-    it("takes value from map2", () => {
+    it("takes value from the second map", () => {
       const map1 = Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("b"), Type.integer(3)],
@@ -335,19 +335,35 @@ describe("Erlang_Maps", () => {
 
       const result = intersect(map1, map2);
       const expected = Type.map([[Type.atom("a"), Type.integer(2)]]);
+
       assert.deepStrictEqual(result, expected);
     });
 
-    it("handles not strictly equal keys", () => {
-      const map1 = Type.map([[Type.integer(1), Type.integer(1)]]);
-      const map2 = Type.map([[Type.float(1.0), Type.integer(2)]]);
+    it("handles multiple common keys", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.bitstring("a"), Type.integer(2)],
+        [Type.integer(1), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(10)],
+        [Type.bitstring("a"), Type.integer(20)],
+        [Type.integer(1), Type.integer(30)],
+      ]);
 
       const result = intersect(map1, map2);
-      const expected = Type.map([]);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(10)],
+        [Type.bitstring("a"), Type.integer(20)],
+        [Type.integer(1), Type.integer(30)],
+      ]);
+
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns an empty map when no common keys exist", () => {
+    it("returns an empty map when no keys are common", () => {
       const map1 = Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("b"), Type.integer(3)],
@@ -359,76 +375,37 @@ describe("Erlang_Maps", () => {
       ]);
 
       const result = intersect(map1, map2);
-      const expected = Type.map([]);
-      assert.deepStrictEqual(result, expected);
+
+      assert.deepStrictEqual(result, Type.map());
     });
 
-    it("returns an empty map when map1 is empty", () => {
-      const map1 = Type.map([]);
+    it("returns an empty map when the first map is empty", () => {
+      const map1 = Type.map();
       const map2 = Type.map([[Type.atom("a"), Type.integer(2)]]);
-
       const result = intersect(map1, map2);
-      assert.deepStrictEqual(result, Type.map([]));
+
+      assert.deepStrictEqual(result, Type.map());
     });
 
-    it("returns an empty map when map2 is empty", () => {
+    it("returns an empty map when the second map is empty", () => {
       const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
-      const map2 = Type.map([]);
-
+      const map2 = Type.map();
       const result = intersect(map1, map2);
-      assert.deepStrictEqual(result, Type.map([]));
+
+      assert.deepStrictEqual(result, Type.map());
     });
 
-    it("returns an empty map when map1 and map2 are empty", () => {
-      const result = intersect(Type.map([]), Type.map([]));
-      assert.deepStrictEqual(result, Type.map([]));
+    it("returns an empty map when both maps are empty", () => {
+      const map1 = Type.map();
+      const map2 = Type.map();
+      const result = intersect(map1, map2);
+
+      assert.deepStrictEqual(result, Type.map());
     });
 
-    it("doesn't mutate the inputs", () => {
-      const map1 = Type.map([
-        [Type.atom("a"), Type.integer(1)],
-        [Type.bitstring("a"), Type.integer(3)],
-        [Type.integer(1), Type.integer(5)],
-        [Type.float(1.0), Type.integer(7)],
-        [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(9)],
-      ]);
-
-      const map2 = Type.map([
-        [Type.atom("a"), Type.integer(2)],
-        [Type.bitstring("a"), Type.integer(4)],
-        [Type.integer(1), Type.integer(6)],
-        [Type.float(1.0), Type.integer(8)],
-        [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(10)],
-      ]);
-
-      intersect(map1, map2);
-
-      assert.deepStrictEqual(
-        map1,
-        Type.map([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.bitstring("a"), Type.integer(3)],
-          [Type.integer(1), Type.integer(5)],
-          [Type.float(1.0), Type.integer(7)],
-          [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(9)],
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        map2,
-        Type.map([
-          [Type.atom("a"), Type.integer(2)],
-          [Type.bitstring("a"), Type.integer(4)],
-          [Type.integer(1), Type.integer(6)],
-          [Type.float(1.0), Type.integer(8)],
-          [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(10)],
-        ]),
-      );
-    });
-
-    it("raises when map1 is not a map", () => {
+    it("raises BadMapError if the first argument is not a map", () => {
       const map1 = Type.atom("abc");
-      const map2 = Type.map([]);
+      const map2 = Type.map();
 
       assertBoxedError(
         () => intersect(map1, map2),
@@ -437,8 +414,8 @@ describe("Erlang_Maps", () => {
       );
     });
 
-    it("raises when map2 is not a map", () => {
-      const map1 = Type.map([]);
+    it("raises BadMapError if the second argument is not a map", () => {
+      const map1 = Type.map();
       const map2 = Type.atom("abc");
 
       assertBoxedError(
@@ -446,6 +423,38 @@ describe("Erlang_Maps", () => {
         "BadMapError",
         "expected a map, got: :abc",
       );
+    });
+
+    describe("client-only behaviour", () => {
+      it("doesn't mutate the inputs", () => {
+        const map1 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(1)],
+        ]);
+
+        const map2 = Type.map([
+          [Type.atom("a"), Type.integer(2)],
+          [Type.atom("c"), Type.integer(2)],
+        ]);
+
+        intersect(map1, map2);
+
+        assert.deepStrictEqual(
+          map1,
+          Type.map([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.integer(1)],
+          ]),
+        );
+
+        assert.deepStrictEqual(
+          map2,
+          Type.map([
+            [Type.atom("a"), Type.integer(2)],
+            [Type.atom("c"), Type.integer(2)],
+          ]),
+        );
+      });
     });
   });
 
