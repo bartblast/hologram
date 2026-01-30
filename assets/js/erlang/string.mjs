@@ -162,8 +162,6 @@ const Erlang_String = {
 
   // Start split/3
   "split/3": (subject, pattern, direction) => {
-    const returnCharlist = Type.isList(subject);
-
     let subjectBinary;
     try {
       subjectBinary = Erlang_Unicode["characters_to_binary/1"](subject);
@@ -199,7 +197,8 @@ const Erlang_String = {
     const subjectText = Bitstring.toText(subjectBinary);
     const patternText = Bitstring.toText(patternBinary);
 
-    const convertResult = (str) => (returnCharlist ? Type.charlist(str) : str);
+    const convertResult = (str) =>
+      Type.isList(subject) ? Type.charlist(str) : str;
 
     if (
       Bitstring.isEmpty(patternBinary) ||
