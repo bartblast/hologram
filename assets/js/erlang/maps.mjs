@@ -122,14 +122,11 @@ const Erlang_Maps = {
 
     const result = Type.map();
 
-    Object.values(map1.data).forEach(([key, _value]) => {
-      const encodedKey = Type.encodeMapKey(key);
-      const keyValue2 = map2.data[encodedKey];
-
-      if (keyValue2) {
-        result.data[encodedKey] = keyValue2;
+    for (const encodedKey of Object.keys(map1.data)) {
+      if (encodedKey in map2.data) {
+        result.data[encodedKey] = map2.data[encodedKey];
       }
-    });
+    }
 
     return result;
   },
@@ -156,17 +153,18 @@ const Erlang_Maps = {
 
     const result = Type.map();
 
-    Object.values(map1.data).forEach(([key, value]) => {
-      const encodedKey = Type.encodeMapKey(key);
-      const keyValue2 = map2.data[encodedKey];
-
-      if (keyValue2) {
+    for (const [encodedKey, [key, value]] of Object.entries(map1.data)) {
+      if (encodedKey in map2.data) {
         result.data[encodedKey] = [
           key,
-          Interpreter.callAnonymousFunction(fun, [key, value, keyValue2[1]]),
+          Interpreter.callAnonymousFunction(fun, [
+            key,
+            value,
+            map2.data[encodedKey][1],
+          ]),
         ];
       }
-    });
+    }
 
     return result;
   },
