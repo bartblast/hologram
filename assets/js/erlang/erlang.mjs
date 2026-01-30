@@ -600,7 +600,7 @@ const Erlang = {
   // Deps: []
 
   // Start binary_to_term/1
-  "binary_to_term/1": (binary) => {
+  "binary_to_term/1": async (binary) => {
     if (!Type.isBinary(binary)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
@@ -636,7 +636,7 @@ const Erlang = {
     const SMALL_ATOM_UTF8_EXT = 119;
     const V4_PORT_EXT = 120;
 
-    const decodeTerm = (dataView, bytes, offset) => {
+    const decodeTerm = async (dataView, bytes, offset) => {
       if (offset >= bytes.length) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
@@ -650,7 +650,7 @@ const Erlang = {
 
       switch (tag) {
         case COMPRESSED:
-          return decodeCompressed(dataView, bytes, offset + 1);
+          return await decodeCompressed(dataView, bytes, offset + 1);
 
         case SMALL_INTEGER_EXT:
           return decodeSmallInteger(dataView, offset + 1);
@@ -680,10 +680,10 @@ const Erlang = {
           return decodeBinary(dataView, bytes, offset + 1);
 
         case SMALL_TUPLE_EXT:
-          return decodeSmallTuple(dataView, bytes, offset + 1);
+          return await decodeSmallTuple(dataView, bytes, offset + 1);
 
         case LARGE_TUPLE_EXT:
-          return decodeLargeTuple(dataView, bytes, offset + 1);
+          return await decodeLargeTuple(dataView, bytes, offset + 1);
 
         case NIL_EXT:
           return {term: Type.list(), newOffset: offset + 1};
@@ -692,10 +692,10 @@ const Erlang = {
           return decodeString(dataView, bytes, offset + 1);
 
         case LIST_EXT:
-          return decodeList(dataView, bytes, offset + 1);
+          return await decodeList(dataView, bytes, offset + 1);
 
         case MAP_EXT:
-          return decodeMap(dataView, bytes, offset + 1);
+          return await decodeMap(dataView, bytes, offset + 1);
 
         case NEW_FLOAT_EXT:
           return decodeNewFloat(dataView, offset + 1);
@@ -707,28 +707,28 @@ const Erlang = {
           return decodeBitBinary(dataView, bytes, offset + 1);
 
         case NEW_REFERENCE_EXT:
-          return decodeNewReference(dataView, bytes, offset + 1);
+          return await decodeNewReference(dataView, bytes, offset + 1);
 
         case NEWER_REFERENCE_EXT:
-          return decodeNewerReference(dataView, bytes, offset + 1);
+          return await decodeNewerReference(dataView, bytes, offset + 1);
 
         case PID_EXT:
-          return decodePid(dataView, bytes, offset + 1);
+          return await decodePid(dataView, bytes, offset + 1);
 
         case NEW_PID_EXT:
-          return decodeNewPid(dataView, bytes, offset + 1);
+          return await decodeNewPid(dataView, bytes, offset + 1);
 
         case PORT_EXT:
-          return decodePort(dataView, bytes, offset + 1);
+          return await decodePort(dataView, bytes, offset + 1);
 
         case NEW_PORT_EXT:
-          return decodeNewPort(dataView, bytes, offset + 1);
+          return await decodeNewPort(dataView, bytes, offset + 1);
 
         case V4_PORT_EXT:
-          return decodeV4Port(dataView, bytes, offset + 1);
+          return await decodeV4Port(dataView, bytes, offset + 1);
 
         case EXPORT_EXT:
-          return decodeExport(dataView, bytes, offset + 1);
+          return await decodeExport(dataView, bytes, offset + 1);
 
         default:
           Interpreter.raiseArgumentError(
@@ -744,7 +744,7 @@ const Erlang = {
     // Format: COMPRESSED (80) | UncompressedSize (4 bytes, big-endian) | ZlibCompressedData
     // The decompressed data contains the ETF representation of the term without the version byte
 
-    const decodeCompressed = (dataView, bytes, offset) => {
+    const decodeCompressed = async (dataView, bytes, offset) => {
       if (offset + 4 > bytes.length) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
@@ -758,8 +758,8 @@ const Erlang = {
       const compressedData = bytes.slice(offset + 4);
 
       try {
-        // Use Utils.zlibInflate for zlib decompression
-        const decompressed = Utils.zlibInflate(compressedData);
+        // Use native DecompressionStream for zlib decompression
+        const decompressed = await Utils.zlibInflate(compressedData);
 
         if (decompressed.length !== uncompressedSize) {
           Interpreter.raiseArgumentError(
@@ -776,8 +776,9 @@ const Erlang = {
           decompressed.byteLength,
         );
 
-        return decodeTerm(decompressedView, decompressed, 0);
-      } catch {
+        return await decodeTerm(decompressedView, decompressed, 0);
+      } catch (error) {
+        console.error("Decode error:", error);
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
             1,
@@ -903,13 +904,13 @@ const Erlang = {
 
     // Tuple decoders
 
-    const decodeSmallTuple = (dataView, bytes, offset) => {
+    const decodeSmallTuple = async (dataView, bytes, offset) => {
       const arity = dataView.getUint8(offset);
       const elements = [];
       let currentOffset = offset + 1;
 
       for (let i = 0; i < arity; i++) {
-        const result = decodeTerm(dataView, bytes, currentOffset);
+        const result = await decodeTerm(dataView, bytes, currentOffset);
         elements.push(result.term);
         currentOffset = result.newOffset;
       }
@@ -920,13 +921,13 @@ const Erlang = {
       };
     };
 
-    const decodeLargeTuple = (dataView, bytes, offset) => {
+    const decodeLargeTuple = async (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
       const elements = [];
       let currentOffset = offset + 4;
 
       for (let i = 0; i < arity; i++) {
-        const result = decodeTerm(dataView, bytes, currentOffset);
+        const result = await decodeTerm(dataView, bytes, currentOffset);
         elements.push(result.term);
         currentOffset = result.newOffset;
       }
@@ -959,19 +960,19 @@ const Erlang = {
       };
     };
 
-    const decodeList = (dataView, bytes, offset) => {
+    const decodeList = async (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
       const elements = [];
       let currentOffset = offset + 4;
 
       for (let i = 0; i < length; i++) {
-        const result = decodeTerm(dataView, bytes, currentOffset);
+        const result = await decodeTerm(dataView, bytes, currentOffset);
         elements.push(result.term);
         currentOffset = result.newOffset;
       }
 
       // Decode the tail
-      const tailResult = decodeTerm(dataView, bytes, currentOffset);
+      const tailResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = tailResult.newOffset;
 
       // If tail is a list, merge it to preserve proper list semantics
@@ -993,14 +994,18 @@ const Erlang = {
 
     // Map decoder
 
-    const decodeMap = (dataView, bytes, offset) => {
+    const decodeMap = async (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
       const entries = [];
       let currentOffset = offset + 4;
 
       for (let i = 0; i < arity; i++) {
-        const keyResult = decodeTerm(dataView, bytes, currentOffset);
-        const valueResult = decodeTerm(dataView, bytes, keyResult.newOffset);
+        const keyResult = await decodeTerm(dataView, bytes, currentOffset);
+        const valueResult = await decodeTerm(
+          dataView,
+          bytes,
+          keyResult.newOffset,
+        );
 
         entries.push([keyResult.term, valueResult.term]);
         currentOffset = valueResult.newOffset;
@@ -1069,12 +1074,12 @@ const Erlang = {
 
     // Reference decoders
 
-    const decodeNewReference = (dataView, bytes, offset) => {
+    const decodeNewReference = async (dataView, bytes, offset) => {
       const len = dataView.getUint16(offset);
       let currentOffset = offset + 2;
 
       // Decode node name (atom)
-      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       const creation = dataView.getUint8(currentOffset);
@@ -1092,12 +1097,12 @@ const Erlang = {
       };
     };
 
-    const decodeNewerReference = (dataView, bytes, offset) => {
+    const decodeNewerReference = async (dataView, bytes, offset) => {
       const len = dataView.getUint16(offset);
       let currentOffset = offset + 2;
 
       // Decode node name (atom)
-      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       const creation = dataView.getUint32(currentOffset);
@@ -1117,11 +1122,11 @@ const Erlang = {
 
     // PID decoders
 
-    const decodePid = (dataView, bytes, offset) => {
+    const decodePid = async (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Serial (4 bytes), Creation (1 byte)
@@ -1140,11 +1145,11 @@ const Erlang = {
       };
     };
 
-    const decodeNewPid = (dataView, bytes, offset) => {
+    const decodeNewPid = async (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Serial (4 bytes), Creation (4 bytes)
@@ -1165,11 +1170,11 @@ const Erlang = {
 
     // Port decoders
 
-    const decodePort = (dataView, bytes, offset) => {
+    const decodePort = async (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Creation (1 byte)
@@ -1185,11 +1190,11 @@ const Erlang = {
       };
     };
 
-    const decodeNewPort = (dataView, bytes, offset) => {
+    const decodeNewPort = async (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Creation (4 bytes)
@@ -1205,11 +1210,11 @@ const Erlang = {
       };
     };
 
-    const decodeV4Port = (dataView, bytes, offset) => {
+    const decodeV4Port = async (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (8 bytes as BigUint64), Creation (4 bytes)
@@ -1226,19 +1231,19 @@ const Erlang = {
     };
 
     // EXPORT_EXT decoder (function capture)
-    const decodeExport = (dataView, bytes, offset) => {
+    const decodeExport = async (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode module (atom)
-      const moduleResult = decodeTerm(dataView, bytes, currentOffset);
+      const moduleResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = moduleResult.newOffset;
 
       // Decode function (atom)
-      const functionResult = decodeTerm(dataView, bytes, currentOffset);
+      const functionResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = functionResult.newOffset;
 
       // Decode arity (small integer)
-      const arityResult = decodeTerm(dataView, bytes, currentOffset);
+      const arityResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = arityResult.newOffset;
 
       const context = Interpreter.buildContext();
@@ -1278,7 +1283,7 @@ const Erlang = {
         );
       }
 
-      const result = decodeTerm(dataView, bytes, 1);
+      const result = await decodeTerm(dataView, bytes, 1);
       return result.term;
     } catch (err) {
       if (err instanceof RangeError || err instanceof TypeError) {

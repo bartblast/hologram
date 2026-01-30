@@ -3,7 +3,6 @@
     "@biomejs/biome": "^2",
     "esbuild": "^0.27",
     "lodash": "^4",
-    "pako": "^2",
     "snabbdom": "^3",
     "snabbdom-to-html": "^7"
   },

@@ -1,7 +1,5 @@
 "use strict";
 
-import pako from "pako";
-
 export default class Utils {
   static capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
@@ -88,10 +86,42 @@ export default class Utils {
     return {...obj};
   }
 
-  // Decompresses zlib-compressed data using pako
-  // Returns a Uint8Array with the decompressed data
-  // Throws an error if decompression fails
-  static zlibInflate(compressedData) {
-    return pako.inflate(compressedData);
+  // Decompresses zlib-compressed data using native DecompressionStream API
+  // Returns a Promise that resolves to a Uint8Array with the decompressed data
+  // Throws an error if decompression fai
+  static async zlibInflate(compressedData) {
+    const stream = new ReadableStream({
+      start(controller) {
+        // Ensure we are passing a standard Uint8Array to the stream
+        // This solves the Buffer/Uint8Array mismatch in Node.js
+        const data =
+          compressedData instanceof Uint8Array
+            ? compressedData
+            : new Uint8Array(compressedData);
+
+        controller.enqueue(data);
+        controller.close();
+      },
+    });
+
+    const decompressedStream = stream.pipeThrough(
+      new DecompressionStream("deflate"),
+    );
+
+    const reader = decompressedStream.getReader();
+    const chunks = [];
+
+    try {
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+    } catch (err) {
+      // In Node, stream errors often need to be caught during the read loop
+      throw new Error(`Decompression failed: ${err.message}`);
+    }
+
+    return this.concatUint8Arrays(chunks);
   }
 }

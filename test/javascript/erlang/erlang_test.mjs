@@ -3456,7 +3456,7 @@ describe("Erlang", () => {
         assertBoxedStrictEqual(result, expected);
       });
 
-      it("decodes compressed term with list of tuples", () => {
+      it("decodes compressed term with list of tuples", async () => {
         // Real Erlang-generated compressed term for a list of 50 identical tuples
         // Generated with: :erlang.term_to_binary(List.duplicate({:ok, 42}, 50), [compressed: 9])
         const binary = Bitstring.fromBytes(
@@ -3465,7 +3465,7 @@ describe("Erlang", () => {
             103, 202, 207, 78, 212, 26, 165, 7, 7, 157, 5, 0, 189, 136, 115, 25,
           ]),
         );
-        const result = binary_to_term(binary);
+        const result = await binary_to_term(binary);
         const expectedTuple = Type.tuple([Type.atom("ok"), Type.integer(42)]);
         const expectedList = Type.list(Array(50).fill(expectedTuple));
         assertBoxedStrictEqual(result, expectedList);
