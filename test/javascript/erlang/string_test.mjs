@@ -605,6 +605,42 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["Hello ", " World"]));
     });
 
+    it("with charlist string and charlist pattern", () => {
+      const result = split(
+        Type.charlist("Hello World"),
+        Type.charlist(" "),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.charlist("Hello"), Type.charlist("World")]),
+      );
+    });
+
+    it("with charlist string and binary pattern", () => {
+      const result = split(
+        Type.charlist("Hello World"),
+        Type.bitstring(" "),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.charlist("Hello"), Type.charlist("World")]),
+      );
+    });
+
+    it("with binary string and charlist pattern", () => {
+      const result = split(
+        Type.bitstring("Hello World"),
+        Type.charlist(" "),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello", "World"]));
+    });
+
     it("raises MatchError if the first argument is not a string", () => {
       assertBoxedError(
         () =>

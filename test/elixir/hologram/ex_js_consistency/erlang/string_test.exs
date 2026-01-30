@@ -258,6 +258,24 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert result == ["Hello ", " World"]
     end
 
+    test "with charlist string and charlist pattern" do
+      result = :string.split(~c"Hello World", ~c" ", :all)
+
+      assert result == [~c"Hello", ~c"World"]
+    end
+
+    test "with charlist string and binary pattern" do
+      result = :string.split(~c"Hello World", " ", :all)
+
+      assert result == [~c"Hello", ~c"World"]
+    end
+
+    test "with binary string and charlist pattern" do
+      result = :string.split("Hello World", ~c" ", :all)
+
+      assert result == ["Hello", "World"]
+    end
+
     test "raises MatchError if the first argument is not a string" do
       assert_error MatchError, build_match_error_msg(:hello_world), fn ->
         :string.split(:hello_world, "_", :all)

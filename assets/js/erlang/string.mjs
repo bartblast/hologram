@@ -162,6 +162,8 @@ const Erlang_String = {
 
   // Start split/3
   "split/3": (string, pattern, direction) => {
+    const returnCharlist = Type.isList(string);
+
     function convertToBinary(input) {
       try {
         return Erlang_Unicode["characters_to_binary/1"](input);
@@ -208,8 +210,10 @@ const Erlang_String = {
     const stringText = Bitstring.toText(stringBinary);
     const patternText = Bitstring.toText(patternBinary);
 
+    const convertResult = (str) => (returnCharlist ? Type.charlist(str) : str);
+
     if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
-      return Type.list([stringText]);
+      return Type.list([convertResult(stringText)]);
     }
 
     let splittedStringList, index;
@@ -238,7 +242,7 @@ const Erlang_String = {
         Interpreter.raiseCaseClauseError(direction);
     }
 
-    return Type.list(splittedStringList);
+    return Type.list(splittedStringList.map(convertResult));
   },
   // End split/3
   // Deps: [:unicode.characters_to_binary/1]
