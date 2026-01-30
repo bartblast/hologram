@@ -1672,7 +1672,7 @@ describe("Interpreter", () => {
     it("defines a function which raises an exception with instructions", () => {
       const expectedMessage =
         `Function :aaa_bbb.my_fun_a/2 is not yet ported.\n` +
-        `  * Check implementation status: https://hologram.page/reference/client-runtime` +
+        `  * Check implementation status: https://hologram.page/reference/client-runtime\n` +
         `  * If the function is not marked 'in progress' and is critical for your project, you may request it here: https://github.com/bartblast/hologram/issues`;
 
       assert.throw(

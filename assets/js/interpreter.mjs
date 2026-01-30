@@ -442,7 +442,7 @@ export default class Interpreter {
     globalThis[moduleJsName][`${functionName}/${arity}`] = () => {
       const message =
         `Function :${moduleExName}.${functionName}/${arity} is not yet ported.\n` +
-        `  * Check implementation status: https://hologram.page/reference/client-runtime` +
+        `  * Check implementation status: https://hologram.page/reference/client-runtime\n` +
         `  * If the function is not marked 'in progress' and is critical for your project, you may request it here: https://github.com/bartblast/hologram/issues`;
 
       throw new HologramInterpreterError(message);
