@@ -190,6 +190,12 @@ const Erlang_String = {
       Interpreter.raiseCaseClauseError(direction);
     }
 
+    const directionValue = direction.value;
+
+    if (!["all", "leading", "trailing"].includes(directionValue)) {
+      Interpreter.raiseCaseClauseError(direction);
+    }
+
     const subjectText = Bitstring.toText(subjectBinary);
     const patternText = Bitstring.toText(patternBinary);
 
@@ -202,33 +208,23 @@ const Erlang_String = {
       return Type.list([convertResult(subjectText)]);
     }
 
-    let splittedList, index;
-    switch (direction.value) {
-      case "all":
-        splittedList = subjectText.split(patternText);
-        break;
+    let parts;
 
-      case "trailing":
-        index = subjectText.lastIndexOf(patternText);
-        splittedList = [
-          subjectText.slice(0, index),
-          subjectText.slice(index + patternText.length),
-        ];
-        break;
+    if (directionValue === "all") {
+      parts = subjectText.split(patternText);
+    } else {
+      const index =
+        directionValue === "trailing"
+          ? subjectText.lastIndexOf(patternText)
+          : subjectText.indexOf(patternText);
 
-      case "leading":
-        index = subjectText.indexOf(patternText);
-        splittedList = [
-          subjectText.slice(0, index),
-          subjectText.slice(index + patternText.length),
-        ];
-        break;
-
-      default:
-        Interpreter.raiseCaseClauseError(direction);
+      parts = [
+        subjectText.slice(0, index),
+        subjectText.slice(index + patternText.length),
+      ];
     }
 
-    return Type.list(splittedList.map(convertResult));
+    return Type.list(parts.map(convertResult));
   },
   // End split/3
   // Deps: [:unicode.characters_to_binary/1]
