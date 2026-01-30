@@ -196,10 +196,8 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "split/2" do
-    test "returns a two-elements list with the first word at the beginning and the tail at the end" do
-      result = :string.split("Hello World !", " ")
-
-      assert result == ["Hello", "World !"]
+    test "delegates to split/3 with :leading direction" do
+      assert :string.split("a-b-c", "-") == :string.split("a-b-c", "-", :leading)
     end
   end
 

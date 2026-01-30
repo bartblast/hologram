@@ -511,13 +511,16 @@ describe("Erlang_String", () => {
   });
 
   describe("split/2", () => {
-    const split = Erlang_String["split/2"];
-    const string_test = Type.bitstring("Hello World !");
+    const testedFun = Erlang_String["split/2"];
 
-    it("returns a two-elements list with the first word at the beginning and the tail at the end", () => {
-      const result = split(string_test, Type.bitstring(" "));
+    it("delegates to split/3 with :leading direction", () => {
+      const subject = Type.bitstring("a-b-c");
+      const pattern = Type.bitstring("-");
 
-      assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
+      assert.deepStrictEqual(
+        testedFun(subject, pattern),
+        Erlang_String["split/3"](subject, pattern, Type.atom("leading")),
+      );
     });
   });
 

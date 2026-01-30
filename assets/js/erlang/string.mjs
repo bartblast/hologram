@@ -152,10 +152,8 @@ const Erlang_String = {
   // Deps: [:unicode.characters_to_binary/1]
 
   // Start split/2
-  "split/2": (string, pattern) => {
-    const split = Erlang_String["split/3"];
-
-    return split(string, pattern, Type.atom("leading"));
+  "split/2": (subject, pattern) => {
+    return Erlang_String["split/3"](subject, pattern, Type.atom("leading"));
   },
   // End split/2
   // Deps: [:string.split/3]
