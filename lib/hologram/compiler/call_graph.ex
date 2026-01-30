@@ -88,6 +88,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:filename, :rootname, 2}, {:filename, :flatten, 1}},
     {{:filename, :split, 1}, {:erlang, :iolist_to_binary, 1}},
     {{:filename, :split, 1}, {:filename, :flatten, 1}},
+    {{:lists, :seq, 2}, {:lists, :seq, 3}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
     {{:lists, :keysort, 2}, {:erlang, :element, 2}},
     {{:maps, :get, 2}, {:maps, :get, 3}},
