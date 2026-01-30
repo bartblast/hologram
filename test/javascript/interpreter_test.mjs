@@ -4934,6 +4934,18 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
       });
 
+      // :top = _placeholder
+      it("atom with right placeholder", () => {
+        const result = Interpreter.matchOperator(
+          Type.matchPlaceholder(),
+          Type.atom("top"),
+          context,
+        );
+
+        assert.deepStrictEqual(result, Type.atom("top"));
+        assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
+      });
+
       // <<prefix::size(8), _rest::binary>> = "hello"
       it("last bitstring segment", () => {
         const myBitstring = Type.bitstring("hello");

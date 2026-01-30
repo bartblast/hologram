@@ -660,6 +660,10 @@ export default class Interpreter {
       return right;
     }
 
+    if (Type.isMatchPlaceholder(right)) {
+      return left;
+    }
+
     if (Type.isVariablePattern(left)) {
       return Interpreter.#matchVariablePattern(
         right,
