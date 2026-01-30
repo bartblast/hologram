@@ -2407,6 +2407,42 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "delete_element/2" do
+    test "returns the tuple without the element at the one-based index" do
+      assert :erlang.delete_element(2, {5, 6, 7}) == {5, 7}
+      assert :erlang.delete_element(1, {5, 6, 7}) == {6, 7}
+      assert :erlang.delete_element(3, {5, 6, 7}) == {5, 6}
+    end
+
+    test "raises ArgumentError if the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :delete_element, [:abc, {5, 6, 7}]}
+    end
+
+    test "raises ArgumentError if the second argument is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   {:erlang, :delete_element, [1, :abc]}
+    end
+
+    test "raises ArgumentError if the given index is greater than the number of elements in the tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :delete_element, [10, {5, 6, 7}]}
+    end
+
+    test "raises ArgumentError if the given index is smaller than 1" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :delete_element, [0, {5, 6, 7}]}
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :delete_element, [-1, {5, 6, 7}]}
+    end
+  end
+
   describe "element/2" do
     test "returns the element at the one-based index in the tuple" do
       assert :erlang.element(2, {5, 6, 7}) == 6

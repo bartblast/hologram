@@ -782,6 +782,35 @@ const Erlang = {
   // End div/2
   // Deps: []
 
+  // Start delete_element/2
+  "delete_element/2": (index, tuple) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    if (index.value > tuple.data.length || index.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const data = tuple.data
+      .slice(0, Number(index.value) - 1)
+      .concat(tuple.data.slice(Number(index.value)));
+
+    return Type.tuple(data);
+  },
+  // End element/2
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
