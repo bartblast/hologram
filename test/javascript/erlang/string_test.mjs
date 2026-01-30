@@ -564,6 +564,19 @@ describe("Erlang_String", () => {
       );
     });
 
+    it("raises CaseClauseError if the third argument is not a valid direction atom", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello world"),
+            Type.bitstring(" "),
+            Type.atom("invalid"),
+          ),
+        "CaseClauseError",
+        "no case clause matching: :invalid",
+      );
+    });
+
     it("returns unchanged string inside a list if the pattern is empty", () => {
       const result = split(string_test, Type.bitstring(""), Type.atom("all"));
 
@@ -608,7 +621,7 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["Hello World", "!"]));
     });
 
-    it("returns a list when patterns is at the start of the string", () => {
+    it("when pattern is at the start of the string", () => {
       const result = split(
         string_test,
         Type.bitstring("H"),
@@ -618,7 +631,7 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["", "ello World !"]));
     });
 
-    it("returns a list when patterns is at the end of the string", () => {
+    it("when pattern is at the end of the string", () => {
       const result = split(
         string_test,
         Type.bitstring("!"),
@@ -628,13 +641,13 @@ describe("Erlang_String", () => {
       assert.deepStrictEqual(result, Type.list(["Hello World ", ""]));
     });
 
-    it("returns a list when pattern is consecutive inside replacements", () => {
+    it("with consecutive pattern", () => {
       const result = split(string_test, Type.bitstring("l"), Type.atom("all"));
 
       assert.deepStrictEqual(result, Type.list(["He", "", "o Wor", "d !"]));
     });
 
-    it("correctly split unicode patterns (emoji)", () => {
+    it("with unicode pattern", () => {
       const result = split(
         Type.bitstring("Hello 👋 World"),
         Type.bitstring("👋"),

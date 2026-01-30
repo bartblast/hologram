@@ -224,6 +224,12 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       end
     end
 
+    test "raises CaseClauseError if the third argument is not a valid direction atom" do
+      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
+        :string.split("hello world", " ", :invalid)
+      end
+    end
+
     test "returns unchanged string inside a list if the pattern is empty" do
       result = :string.split("Hello World !", "", :all)
 
