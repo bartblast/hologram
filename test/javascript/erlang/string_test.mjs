@@ -646,7 +646,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () =>
           split(
-            Type.bitstring("hello_world"),
+            Type.bitstring("Hello_World_!"),
             Type.atom("_"),
             Type.atom("all"),
           ),
@@ -678,7 +678,7 @@ describe("Erlang_String", () => {
       assertBoxedError(
         () =>
           split(
-            Type.bitstring("hello world"),
+            Type.bitstring("Hello World !"),
             Type.bitstring(" "),
             Type.bitstring("all"),
           ),
