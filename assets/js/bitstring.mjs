@@ -1,11 +1,12 @@
 "use strict";
 
+import ERTS from "./erts.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Bitstring {
-  static #decoder = new TextDecoder("utf-8", {fatal: true});
+  static #decoder = ERTS.utf8Decoder;
   static #encoder = new TextEncoder("utf-8");
 
   static calculateBitCount(bitstring) {

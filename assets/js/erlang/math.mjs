@@ -28,6 +28,40 @@ const Erlang_Math = {
   // End ceil/1
   // Deps: []
 
+  // Start exp/1
+  "exp/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    const value = Type.isInteger(number) ? Number(number.value) : number.value;
+    const result = Math.exp(value);
+
+    if (!Number.isFinite(result)) {
+      Interpreter.raiseArithmeticError();
+    }
+
+    return Type.float(result);
+  },
+  // End exp/1
+  // Deps: []
+
+  // Start floor/1
+  "floor/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+    return Type.isInteger(number)
+      ? Type.float(Number(number.value))
+      : Type.float(Math.floor(number.value));
+  },
+  // End floor/1
+  // Deps: []
+
   // Start pow/2
   "pow/2": (base, exponent) => {
     if (!Type.isNumber(base)) {

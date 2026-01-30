@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Lists from "./lists.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -116,6 +117,863 @@ const Erlang_Unicode = {
   },
   // End characters_to_list/1
   // Deps: []
+
+  // Start characters_to_nfc_binary/1
+  "characters_to_nfc_binary/1": (data) => {
+    // Helpers
+
+    // Scans forward once to find the longest valid UTF-8 prefix.
+    // Validates UTF-8 by checking byte structure, decoding code points,
+    // and rejecting overlong encodings, surrogates, and out-of-range values.
+    // Time complexity: O(n) where n is the number of bytes.
+    const findValidUtf8Length = (bytes) => {
+      // Determines the expected UTF-8 sequence length from the leader byte.
+      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
+      const getSequenceLength = (leaderByte) => {
+        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
+        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
+        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
+        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
+        return -1; // Invalid leader byte
+      };
+
+      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
+      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
+
+      // Decodes a UTF-8 sequence starting at the given position.
+      // Returns the decoded Unicode code point value.
+      const decodeCodePoint = (start, length) => {
+        if (length === 1) {
+          return bytes[start];
+        }
+
+        if (length === 2) {
+          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
+        }
+
+        if (length === 3) {
+          return (
+            ((bytes[start] & 0x0f) << 12) |
+            ((bytes[start + 1] & 0x3f) << 6) |
+            (bytes[start + 2] & 0x3f)
+          );
+        }
+
+        // length === 4
+        return (
+          ((bytes[start] & 0x07) << 18) |
+          ((bytes[start + 1] & 0x3f) << 12) |
+          ((bytes[start + 2] & 0x3f) << 6) |
+          (bytes[start + 3] & 0x3f)
+        );
+      };
+
+      // Validates that a code point is within UTF-8 rules:
+      // - Not an overlong encoding (using more bytes than necessary)
+      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
+      // - Not above maximum Unicode (U+10FFFF)
+      const isValidCodePoint = (codePoint, encodingLength) => {
+        // Check for overlong encodings (security issue)
+        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
+        if (codePoint < minValueForLength[encodingLength]) return false;
+
+        // Reject UTF-16 surrogates (U+D800–U+DFFF)
+        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
+
+        // Reject code points beyond Unicode range (> U+10FFFF)
+        if (codePoint > 0x10ffff) return false;
+
+        return true;
+      };
+
+      // Validates a complete UTF-8 sequence at the given position.
+      // Checks: sufficient bytes, valid continuations, and valid code point.
+      const isValidSequence = (start, length) => {
+        // Check if we have enough bytes
+        if (start + length > bytes.length) return false;
+
+        // Verify all continuation bytes have correct pattern (10xxxxxx)
+        for (let i = 1; i < length; i++) {
+          if (!isValidContinuation(bytes[start + i])) return false;
+        }
+
+        // Decode and validate the code point value
+        const codePoint = decodeCodePoint(start, length);
+
+        return isValidCodePoint(codePoint, length);
+      };
+
+      // Main loop: scan forward, validating each sequence
+      let pos = 0;
+
+      while (pos < bytes.length) {
+        const seqLength = getSequenceLength(bytes[pos]);
+        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        pos += seqLength;
+      }
+
+      return pos;
+    };
+
+    // Validates that rest is a list containing a binary (from invalid UTF-8).
+    // Raises ArgumentError if it's a list of invalid codepoints instead.
+    const validateListRest = (rest) => {
+      if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not valid character data (an iodata term)",
+          ),
+        );
+      }
+    };
+
+    // Handles error tuples from characters_to_binary/3.
+    // Distinguishes between invalid codepoints (raises ArgumentError) and
+    // invalid UTF-8 (returns error tuple with normalized prefix).
+    const handleConversionError = (tag, prefix, rest) => {
+      const textPrefix = Bitstring.toText(prefix);
+
+      const normalizedPrefix =
+        textPrefix === false
+          ? prefix
+          : Type.bitstring(textPrefix.normalize("NFC"));
+
+      if (Type.isList(rest)) {
+        validateListRest(rest);
+
+        // rest.data[0] is the binary with invalid UTF-8
+        return Type.tuple([tag, normalizedPrefix, rest.data[0]]);
+      }
+
+      return Type.tuple([tag, normalizedPrefix, rest]);
+    };
+
+    // Handles valid binary input with invalid UTF-8 bytes.
+    // Finds the UTF-8 validity boundary, normalizes the valid prefix,
+    // and returns error tuple with normalized prefix and invalid remainder.
+    const handleInvalidUtf8 = (bytes) => {
+      const validLength = findValidUtf8Length(bytes);
+      const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
+      const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
+      const validText = Bitstring.toText(validPrefix);
+      const normalizedPrefix = Type.bitstring(validText.normalize("NFC"));
+
+      return Type.tuple([Type.atom("error"), normalizedPrefix, invalidRest]);
+    };
+
+    // Main logic
+
+    const utf8 = Type.atom("utf8");
+
+    const converted = Erlang_Unicode["characters_to_binary/3"](
+      data,
+      utf8,
+      utf8,
+    );
+
+    // characters_to_binary/3 returns either a binary (success) or error tuple
+    if (Type.isTuple(converted)) {
+      return handleConversionError(
+        converted.data[0],
+        converted.data[1],
+        converted.data[2],
+      );
+    }
+
+    // Valid binary - check for UTF-8 validity then normalize
+    const text = Bitstring.toText(converted);
+
+    if (text === false) {
+      const bytes = converted.bytes ?? new Uint8Array(0);
+      return handleInvalidUtf8(bytes);
+    }
+
+    const normalized = text.normalize("NFC");
+
+    return Type.bitstring(normalized);
+  },
+  // End characters_to_nfc_binary/1
+  // Deps: [:unicode.characters_to_binary/3]
+
+  // Start characters_to_nfc_list/1
+  "characters_to_nfc_list/1": (chardata) => {
+    // Helpers
+
+    // Converts a binary to NFC-normalized list of codepoints.
+    // Uses JavaScript's String.normalize('NFC') for canonical composition.
+    // Pass preDecodedText for performance - avoids redundant UTF-8 decoding.
+    const convertBinaryToNormalizedCodepoints = (
+      binary,
+      preDecodedText = null,
+    ) => {
+      const text =
+        preDecodedText !== null ? preDecodedText : Bitstring.toText(binary);
+
+      const normalized = text.normalize("NFC");
+
+      return Array.from(normalized).map((char) =>
+        Type.integer(char.codePointAt(0)),
+      );
+    };
+
+    // Converts a single codepoint integer to a UTF-8 encoded binary.
+    const convertCodepointToBinary = (codepoint) => {
+      const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
+      return Bitstring.fromSegments([segment]);
+    };
+
+    // Creates an error tuple: {:error, normalized_so_far, rest}
+    const createErrorTuple = (normalizedCodepoints, rest) => {
+      return Type.tuple([
+        Type.atom("error"),
+        Type.list(normalizedCodepoints),
+        rest,
+      ]);
+    };
+
+    // Handles invalid UTF-8 errors. Always returns error tuple (invalid UTF-8
+    // in binaries returns tuples, not exceptions), even if no valid data exists.
+    const handleInvalidUtf8 = (chunks, invalidBinary) => {
+      // Early return for no valid prefix
+      if (chunks.length === 0) {
+        return createErrorTuple([], invalidBinary);
+      }
+
+      // Normalize valid prefix and return error tuple
+      const validBinary = Bitstring.concat(chunks);
+      const codepoints = convertBinaryToNormalizedCodepoints(validBinary);
+
+      return createErrorTuple(codepoints, invalidBinary);
+    };
+
+    // Processes a single list element, validating and accumulating it.
+    // Returns { type, data } object: type is 'valid', 'error', or 'invalid'.
+    const processElement = (elem, chunks) => {
+      // Guard: reject invalid types
+      if (!Type.isBinary(elem) && !Type.isInteger(elem)) {
+        return {type: "invalid"};
+      }
+
+      // Process binary elements (no nested ifs - use ternary for early exit)
+      if (Type.isBinary(elem)) {
+        const text = Bitstring.toText(elem);
+
+        return text === false
+          ? {type: "error", data: handleInvalidUtf8(chunks, elem)}
+          : {type: "valid", data: elem};
+      }
+
+      // Process integer elements (guaranteed integer at this point)
+      const isValidCodepoint = Bitstring.validateCodePoint(elem.value);
+      if (!isValidCodepoint) {
+        raiseInvalidChardataError();
+      }
+
+      return {type: "valid", data: convertCodepointToBinary(elem)};
+    };
+
+    const raiseInvalidChardataError = () => {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    };
+
+    // Main logic
+
+    // Guard: reject non-list, non-binary input early
+    const isBinary = Type.isBinary(chardata);
+    const isList = Type.isList(chardata);
+
+    if (!isBinary && !isList) {
+      raiseInvalidChardataError();
+    }
+
+    // Fast path for binary input
+    if (isBinary) {
+      const result = Erlang_Unicode["characters_to_nfc_binary/1"](chardata);
+
+      if (Type.isTuple(result)) {
+        const prefixBin = result.data[1];
+        const rest = result.data[2];
+        const prefixText = Bitstring.toText(prefixBin);
+
+        const prefixCodepoints =
+          prefixText === false
+            ? []
+            : convertBinaryToNormalizedCodepoints(prefixBin, prefixText);
+
+        return createErrorTuple(prefixCodepoints, rest);
+      }
+
+      const codepoints = convertBinaryToNormalizedCodepoints(result);
+
+      return Type.list(codepoints);
+    }
+
+    // List path (guaranteed to be list at this point)
+    const flatData = Erlang_Lists["flatten/1"](chardata).data;
+    const chunks = [];
+
+    // Process elements: concatenate all valid data first (combining characters
+    // may span multiple elements), then normalize. O(n) single pass.
+    for (let i = 0; i < flatData.length; ++i) {
+      const result = processElement(flatData[i], chunks);
+
+      if (result.type === "error") {
+        return result.data;
+      }
+
+      if (result.type === "invalid") {
+        raiseInvalidChardataError();
+      }
+
+      // result.type === "valid" - accumulate
+      chunks.push(result.data);
+    }
+
+    // All elements valid - concatenate, normalize, and return
+    const binary = Bitstring.concat(chunks);
+    const codepoints = convertBinaryToNormalizedCodepoints(binary);
+
+    return Type.list(codepoints);
+  },
+  // End characters_to_nfc_list/1
+  // Deps: [:lists.flatten/1, :unicode.characters_to_nfc_binary/1]
+
+  // Start characters_to_nfd_binary/1
+  "characters_to_nfd_binary/1": (data) => {
+    // Helpers
+
+    // Scans forward once to find the longest valid UTF-8 prefix.
+    // Validates UTF-8 by checking byte structure, decoding code points,
+    // and rejecting overlong encodings, surrogates, and out-of-range values.
+    // Time complexity: O(n) where n is the number of bytes.
+    const findValidUtf8Length = (bytes) => {
+      // Determines the expected UTF-8 sequence length from the leader byte.
+      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
+      const getSequenceLength = (leaderByte) => {
+        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
+        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
+        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
+        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
+        return -1; // Invalid leader byte
+      };
+
+      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
+      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
+
+      // Decodes a UTF-8 sequence starting at the given position.
+      // Returns the decoded Unicode code point value.
+      const decodeCodePoint = (start, length) => {
+        if (length === 1) {
+          return bytes[start];
+        }
+
+        if (length === 2) {
+          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
+        }
+
+        if (length === 3) {
+          return (
+            ((bytes[start] & 0x0f) << 12) |
+            ((bytes[start + 1] & 0x3f) << 6) |
+            (bytes[start + 2] & 0x3f)
+          );
+        }
+        // length === 4
+        return (
+          ((bytes[start] & 0x07) << 18) |
+          ((bytes[start + 1] & 0x3f) << 12) |
+          ((bytes[start + 2] & 0x3f) << 6) |
+          (bytes[start + 3] & 0x3f)
+        );
+      };
+
+      // Validates that a code point is within UTF-8 rules:
+      // - Not an overlong encoding (using more bytes than necessary)
+      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
+      // - Not above maximum Unicode (U+10FFFF)
+      const isValidCodePoint = (codePoint, encodingLength) => {
+        // Check for overlong encodings (security issue)
+        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
+        if (codePoint < minValueForLength[encodingLength]) return false;
+
+        // Reject UTF-16 surrogates (U+D800–U+DFFF)
+        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
+
+        // Reject code points beyond Unicode range (> U+10FFFF)
+        if (codePoint > 0x10ffff) return false;
+
+        return true;
+      };
+
+      // Validates a complete UTF-8 sequence at the given position.
+      // Checks: sufficient bytes, valid continuations, and valid code point.
+      const isValidSequence = (start, length) => {
+        // Check if we have enough bytes
+        if (start + length > bytes.length) return false;
+
+        // Verify all continuation bytes have correct pattern (10xxxxxx)
+        for (let i = 1; i < length; i++) {
+          if (!isValidContinuation(bytes[start + i])) return false;
+        }
+
+        // Decode and validate the code point value
+        const codePoint = decodeCodePoint(start, length);
+
+        return isValidCodePoint(codePoint, length);
+      };
+
+      // Main loop: scan forward, validating each sequence
+      let pos = 0;
+      while (pos < bytes.length) {
+        const seqLength = getSequenceLength(bytes[pos]);
+        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        pos += seqLength;
+      }
+
+      return pos;
+    };
+
+    // Validates that rest is a list containing a binary (from invalid UTF-8).
+    // Raises ArgumentError if it's a list of invalid codepoints instead.
+    const validateListRest = (rest) => {
+      if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not valid character data (an iodata term)",
+          ),
+        );
+      }
+    };
+
+    // Handles error tuples from characters_to_binary/3.
+    // Distinguishes between invalid codepoints (raises ArgumentError) and
+    // invalid UTF-8 (returns error tuple with normalized prefix).
+    const handleConversionError = (tag, prefix, rest) => {
+      const textPrefix = Bitstring.toText(prefix);
+
+      const normalizedPrefix =
+        textPrefix === false
+          ? prefix
+          : Type.bitstring(textPrefix.normalize("NFD"));
+
+      if (Type.isList(rest)) {
+        validateListRest(rest);
+
+        // rest.data[0] is the binary with invalid UTF-8
+        return Type.tuple([tag, normalizedPrefix, rest.data[0]]);
+      }
+
+      return Type.tuple([tag, normalizedPrefix, rest]);
+    };
+
+    // Handles valid binary input with invalid UTF-8 bytes.
+    // Finds the UTF-8 validity boundary, normalizes the valid prefix,
+    // and returns error tuple with normalized prefix and invalid remainder.
+    const handleInvalidUtf8 = (bytes) => {
+      const validLength = findValidUtf8Length(bytes);
+      const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
+      const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
+      const validText = Bitstring.toText(validPrefix);
+
+      const normalizedPrefix = Type.bitstring(validText.normalize("NFD"));
+
+      return Type.tuple([Type.atom("error"), normalizedPrefix, invalidRest]);
+    };
+
+    // Main logic
+
+    const utf8 = Type.atom("utf8");
+
+    const converted = Erlang_Unicode["characters_to_binary/3"](
+      data,
+      utf8,
+      utf8,
+    );
+
+    // characters_to_binary/3 returns either a binary (success) or error tuple
+    if (Type.isTuple(converted)) {
+      return handleConversionError(
+        converted.data[0],
+        converted.data[1],
+        converted.data[2],
+      );
+    }
+
+    // Valid binary - check for UTF-8 validity then normalize
+    const text = Bitstring.toText(converted);
+
+    if (text === false) {
+      const bytes = converted.bytes ?? new Uint8Array(0);
+      return handleInvalidUtf8(bytes);
+    }
+
+    const normalized = text.normalize("NFD");
+
+    return Type.bitstring(normalized);
+  },
+  // End characters_to_nfd_binary/1
+  // Deps: [:unicode.characters_to_binary/3]
+
+  // Start characters_to_nfkc_binary/1
+  "characters_to_nfkc_binary/1": (data) => {
+    // Helpers
+
+    // Scans forward once to find the longest valid UTF-8 prefix.
+    // Validates UTF-8 by checking byte structure, decoding code points,
+    // and rejecting overlong encodings, surrogates, and out-of-range values.
+    // Time complexity: O(n) where n is the number of bytes.
+    const findValidUtf8Length = (bytes) => {
+      // Determines the expected UTF-8 sequence length from the leader byte.
+      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
+      const getSequenceLength = (leaderByte) => {
+        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
+        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
+        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
+        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
+        return -1; // Invalid leader byte
+      };
+
+      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
+      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
+
+      // Decodes a UTF-8 sequence starting at the given position.
+      // Returns the decoded Unicode code point value.
+      const decodeCodePoint = (start, length) => {
+        if (length === 1) {
+          return bytes[start];
+        }
+
+        if (length === 2) {
+          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
+        }
+
+        if (length === 3) {
+          return (
+            ((bytes[start] & 0x0f) << 12) |
+            ((bytes[start + 1] & 0x3f) << 6) |
+            (bytes[start + 2] & 0x3f)
+          );
+        }
+
+        // length === 4
+        return (
+          ((bytes[start] & 0x07) << 18) |
+          ((bytes[start + 1] & 0x3f) << 12) |
+          ((bytes[start + 2] & 0x3f) << 6) |
+          (bytes[start + 3] & 0x3f)
+        );
+      };
+
+      // Validates that a code point is within UTF-8 rules:
+      // - Not an overlong encoding (using more bytes than necessary)
+      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
+      // - Not above maximum Unicode (U+10FFFF)
+      const isValidCodePoint = (codePoint, encodingLength) => {
+        // Check for overlong encodings (security issue)
+        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
+        if (codePoint < minValueForLength[encodingLength]) return false;
+
+        // Reject UTF-16 surrogates (U+D800–U+DFFF)
+        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
+
+        // Reject code points beyond Unicode range (> U+10FFFF)
+        if (codePoint > 0x10ffff) return false;
+
+        return true;
+      };
+
+      // Validates a complete UTF-8 sequence at the given position.
+      // Checks: sufficient bytes, valid continuations, and valid code point.
+      const isValidSequence = (start, length) => {
+        // Check if we have enough bytes
+        if (start + length > bytes.length) return false;
+
+        // Verify all continuation bytes have correct pattern (10xxxxxx)
+        for (let i = 1; i < length; i++) {
+          if (!isValidContinuation(bytes[start + i])) return false;
+        }
+
+        // Decode and validate the code point value
+        const codePoint = decodeCodePoint(start, length);
+        return isValidCodePoint(codePoint, length);
+      };
+
+      // Main loop: scan forward, validating each sequence
+      let pos = 0;
+      while (pos < bytes.length) {
+        const seqLength = getSequenceLength(bytes[pos]);
+        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        pos += seqLength;
+      }
+
+      return pos;
+    };
+
+    // Validates that rest is a list containing a binary (from invalid UTF-8).
+    // Raises ArgumentError if it's a list of invalid codepoints instead.
+    const validateListRest = (rest) => {
+      if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not valid character data (an iodata term)",
+          ),
+        );
+      }
+    };
+
+    // Handles error tuples from characters_to_binary/3.
+    // Distinguishes between invalid codepoints (raises ArgumentError) and
+    // invalid UTF-8 (returns error tuple with normalized prefix).
+    const handleConversionError = (tag, prefix, rest) => {
+      const textPrefix = Bitstring.toText(prefix);
+
+      const normalizedPrefix =
+        textPrefix === false
+          ? prefix
+          : Type.bitstring(textPrefix.normalize("NFKC"));
+
+      if (Type.isList(rest)) {
+        validateListRest(rest);
+
+        // rest.data[0] is the binary with invalid UTF-8
+        return Type.tuple([tag, normalizedPrefix, rest.data[0]]);
+      }
+
+      return Type.tuple([tag, normalizedPrefix, rest]);
+    };
+
+    // Handles valid binary input with invalid UTF-8 bytes.
+    // Finds the UTF-8 validity boundary, normalizes the valid prefix,
+    // and returns error tuple with normalized prefix and invalid remainder.
+    const handleInvalidUtf8 = (bytes) => {
+      const validLength = findValidUtf8Length(bytes);
+      const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
+      const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
+      const validText = Bitstring.toText(validPrefix);
+      const normalizedPrefix = Type.bitstring(validText.normalize("NFKC"));
+
+      return Type.tuple([Type.atom("error"), normalizedPrefix, invalidRest]);
+    };
+
+    // Main logic
+
+    const utf8 = Type.atom("utf8");
+
+    const converted = Erlang_Unicode["characters_to_binary/3"](
+      data,
+      utf8,
+      utf8,
+    );
+
+    // characters_to_binary/3 returns either a binary (success) or error tuple
+    if (Type.isTuple(converted)) {
+      return handleConversionError(
+        converted.data[0],
+        converted.data[1],
+        converted.data[2],
+      );
+    }
+
+    const text = Bitstring.toText(converted);
+
+    // Valid binary - check for UTF-8 validity then normalize
+    if (text === false) {
+      const bytes = converted.bytes ?? new Uint8Array(0);
+      return handleInvalidUtf8(bytes);
+    }
+
+    const normalized = text.normalize("NFKC");
+
+    return Type.bitstring(normalized);
+  },
+  // End characters_to_nfkc_binary/1
+  // Deps: [:unicode.characters_to_binary/3]
+
+  // Start characters_to_nfkd_binary/1
+  "characters_to_nfkd_binary/1": (data) => {
+    // Helpers
+
+    // Scans forward once to find the longest valid UTF-8 prefix.
+    // Validates UTF-8 by checking byte structure, decoding code points,
+    // and rejecting overlong encodings, surrogates, and out-of-range values.
+    // Time complexity: O(n) where n is the number of bytes.
+    const findValidUtf8Length = (bytes) => {
+      // Determines the expected UTF-8 sequence length from the leader byte.
+      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
+      const getSequenceLength = (leaderByte) => {
+        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
+        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
+        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
+        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
+        return -1; // Invalid leader byte
+      };
+
+      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
+      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
+
+      // Decodes a UTF-8 sequence starting at the given position.
+      // Returns the decoded Unicode code point value.
+      const decodeCodePoint = (start, length) => {
+        if (length === 1) {
+          return bytes[start];
+        }
+
+        if (length === 2) {
+          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
+        }
+
+        if (length === 3) {
+          return (
+            ((bytes[start] & 0x0f) << 12) |
+            ((bytes[start + 1] & 0x3f) << 6) |
+            (bytes[start + 2] & 0x3f)
+          );
+        }
+
+        // length === 4
+        return (
+          ((bytes[start] & 0x07) << 18) |
+          ((bytes[start + 1] & 0x3f) << 12) |
+          ((bytes[start + 2] & 0x3f) << 6) |
+          (bytes[start + 3] & 0x3f)
+        );
+      };
+
+      // Validates that a code point is within UTF-8 rules:
+      // - Not an overlong encoding (using more bytes than necessary)
+      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
+      // - Not above maximum Unicode (U+10FFFF)
+      const isValidCodePoint = (codePoint, encodingLength) => {
+        // Check for overlong encodings (security issue)
+        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
+        if (codePoint < minValueForLength[encodingLength]) return false;
+
+        // Reject UTF-16 surrogates (U+D800–U+DFFF)
+        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
+
+        // Reject code points beyond Unicode range (> U+10FFFF)
+        if (codePoint > 0x10ffff) return false;
+
+        return true;
+      };
+
+      // Validates a complete UTF-8 sequence at the given position.
+      // Checks: sufficient bytes, valid continuations, and valid code point.
+      const isValidSequence = (start, length) => {
+        // Check if we have enough bytes
+        if (start + length > bytes.length) return false;
+
+        // Verify all continuation bytes have correct pattern (10xxxxxx)
+        for (let i = 1; i < length; i++) {
+          if (!isValidContinuation(bytes[start + i])) {
+            return false;
+          }
+        }
+
+        // Decode and validate the code point value
+        const codePoint = decodeCodePoint(start, length);
+
+        return isValidCodePoint(codePoint, length);
+      };
+
+      // Main loop: scan forward, validating each sequence
+      let pos = 0;
+      while (pos < bytes.length) {
+        const seqLength = getSequenceLength(bytes[pos]);
+        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        pos += seqLength;
+      }
+
+      return pos;
+    };
+
+    // Validates that rest is a list containing a binary (from invalid UTF-8).
+    // Raises ArgumentError if it's a list of invalid codepoints instead.
+    const validateListRest = (rest) => {
+      if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not valid character data (an iodata term)",
+          ),
+        );
+      }
+    };
+
+    // Handles error tuples from characters_to_binary/3.
+    // Distinguishes between invalid codepoints (raises ArgumentError) and
+    // invalid UTF-8 (returns error tuple with normalized prefix).
+    const handleConversionError = (tag, prefix, rest) => {
+      const textPrefix = Bitstring.toText(prefix);
+
+      const normalizedPrefix =
+        textPrefix === false
+          ? prefix
+          : Type.bitstring(textPrefix.normalize("NFKD"));
+
+      if (Type.isList(rest)) {
+        validateListRest(rest);
+
+        // rest.data[0] is the binary with invalid UTF-8
+        return Type.tuple([tag, normalizedPrefix, rest.data[0]]);
+      }
+
+      return Type.tuple([tag, normalizedPrefix, rest]);
+    };
+
+    // Handles valid binary input with invalid UTF-8 bytes.
+    // Finds the UTF-8 validity boundary, normalizes the valid prefix,
+    // and returns error tuple with normalized prefix and invalid remainder.
+    const handleInvalidUtf8 = (bytes) => {
+      const validLength = findValidUtf8Length(bytes);
+      const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
+      const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
+      const validText = Bitstring.toText(validPrefix);
+      const normalizedPrefix = Type.bitstring(validText.normalize("NFKD"));
+
+      return Type.tuple([Type.atom("error"), normalizedPrefix, invalidRest]);
+    };
+
+    // Main logic
+
+    const utf8 = Type.atom("utf8");
+
+    const converted = Erlang_Unicode["characters_to_binary/3"](
+      data,
+      utf8,
+      utf8,
+    );
+
+    // characters_to_binary/3 returns either a binary (success) or error tuple
+    if (Type.isTuple(converted)) {
+      return handleConversionError(
+        converted.data[0],
+        converted.data[1],
+        converted.data[2],
+      );
+    }
+
+    // Valid binary - check for UTF-8 validity then normalize
+    const text = Bitstring.toText(converted);
+    if (text === false) {
+      const bytes = converted.bytes ?? new Uint8Array(0);
+      return handleInvalidUtf8(bytes);
+    }
+
+    const normalized = text.normalize("NFKD");
+
+    return Type.bitstring(normalized);
+  },
+  // End characters_to_nfkd_binary/1
+  // Deps: [:unicode.characters_to_binary/3]
 };
 
 export default Erlang_Unicode;

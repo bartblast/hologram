@@ -23,6 +23,14 @@ defmodule Hologram.Commons.TestUtils do
   end
 
   @doc """
+  Builds an error message for BadFunctionError.
+  """
+  @spec build_bad_function_error_msg(any) :: String.t()
+  def build_bad_function_error_msg(term) do
+    "expected a function, got: " <> KernelUtils.inspect(term)
+  end
+
+  @doc """
   Builds an error message for FunctionClauseError.
   """
   @spec build_function_clause_error_msg(String.t(), list, list) :: String.t()

@@ -9,7 +9,7 @@ import {
   sinon,
 } from "./support/helpers.mjs";
 
-import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
+import {defineModule1Fixture as defineInterpreterModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
 import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -20,8 +20,7 @@ import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
-
-defineModule1Fixture();
+defineInterpreterModule1Fixture();
 defineMatchOperatorModule1Fixture();
 
 describe("Interpreter", () => {
@@ -66,6 +65,18 @@ describe("Interpreter", () => {
 
     const expected =
       "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
+
+    assert.equal(result, expected);
+  });
+
+  it("buildBadFunctionErrorMsg()", () => {
+    const term = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const result = Interpreter.buildBadFunctionErrorMsg(term);
+    const expected = "expected a function, got: %{a: 1, b: 2}";
 
     assert.equal(result, expected);
   });
@@ -115,6 +126,7 @@ describe("Interpreter", () => {
 
   it("buildErlangErrorMsg()", () => {
     const result = Interpreter.buildErlangErrorMsg("my message");
+
     assert.equal(result, "Erlang error: my message");
   });
 
@@ -6552,6 +6564,16 @@ describe("Interpreter", () => {
         "anonymous function with arity 1 called with 2 arguments (9, 8)",
       );
     });
+  });
+
+  it("raiseBadFunctionError()", () => {
+    const term = Type.atom("abc");
+
+    assertBoxedError(
+      () => Interpreter.raiseBadFunctionError(term),
+      "BadFunctionError",
+      Interpreter.buildBadFunctionErrorMsg(term),
+    );
   });
 
   it("raiseBadMapError()", () => {

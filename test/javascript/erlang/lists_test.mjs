@@ -26,10 +26,28 @@ const atomF = Type.atom("f");
 const atomG = Type.atom("g");
 const atomH = Type.atom("h");
 const atomI = Type.atom("i");
+const atomX = Type.atom("x");
 
 const emptyList = Type.list();
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
+
+const funArity2 = Type.anonymousFunction(
+  2,
+  [
+    {
+      params: (_context) => [
+        Type.variablePattern("x"),
+        Type.variablePattern("y"),
+      ],
+      guards: [],
+      body: (context) => {
+        return Erlang["+/2"](context.vars.x, context.vars.y);
+      },
+    },
+  ],
+  contextFixture(),
+);
 
 const improperList = Type.improperList([
   Type.integer(1),
@@ -50,22 +68,11 @@ const properList = Type.list([
   Type.integer(3),
 ]);
 
-const funArity2 = Type.anonymousFunction(
-  2,
-  [
-    {
-      params: (_context) => [
-        Type.variablePattern("x"),
-        Type.variablePattern("y"),
-      ],
-      guards: [],
-      body: (context) => {
-        return Erlang["+/2"](context.vars.x, context.vars.y);
-      },
-    },
-  ],
-  contextFixture(),
-);
+const list1 = Type.list([Type.integer(1)]);
+const list2 = Type.list([Type.integer(1), Type.integer(2)]);
+const list3 = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+
+const tupleX = Type.tuple([atomX]);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs
@@ -395,6 +402,180 @@ describe("Erlang_Lists", () => {
         Interpreter.buildErlangErrorMsg("{:bad_filter, 4}");
 
       assertBoxedError(() => filter(fun, list), "ErlangError", expectedMessage);
+    });
+  });
+
+  describe("flatmap/2", () => {
+    const flatmap = Erlang_Lists["flatmap/2"];
+
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("x")],
+          guards: [],
+          body: (context) => {
+            return Type.list([
+              context.vars.x,
+              Erlang["*/2"](context.vars.x, Type.integer(10)),
+            ]);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("returns empty list when given empty list", () => {
+      const result = flatmap(fun, emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("works with single element list", () => {
+      const list = Type.list([integer1]);
+      const result = flatmap(fun, list);
+      const expected = Type.list([integer1, Type.integer(10)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("works with multiple element list", () => {
+      const list = Type.list([integer1, integer2, integer3]);
+      const result = flatmap(fun, list);
+
+      const expected = Type.list([
+        integer1,
+        Type.integer(10),
+        integer2,
+        Type.integer(20),
+        integer3,
+        Type.integer(30),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns empty list when mapper returns empty lists", () => {
+      const emptyFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.matchPlaceholder()],
+            guards: [],
+            body: (_context) => {
+              return emptyList;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([integer1, integer2, integer3]);
+      const result = flatmap(emptyFun, list);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("flattens only one level", () => {
+      const nestedFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return Type.list([Type.list([Type.list([context.vars.x])])]);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([integer1, integer2]);
+      const result = flatmap(nestedFun, list);
+
+      const expected = Type.list([
+        Type.list([Type.list([integer1])]),
+        Type.list([Type.list([integer2])]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap/2",
+        [atomAbc, emptyList],
+      );
+
+      assertBoxedError(
+        () => flatmap(atomAbc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap/2",
+        [funArity2, emptyList],
+      );
+
+      assertBoxedError(
+        () => flatmap(funArity2, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap_1/2",
+        [fun, atomAbc],
+      );
+
+      assertBoxedError(
+        () => flatmap(fun, atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is an improper list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatmap_1/2",
+        [fun, integer3],
+      );
+
+      assertBoxedError(
+        () => flatmap(fun, improperList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError if the mapper does not return a proper list", () => {
+      const badFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return Erlang["*/2"](context.vars.x, Type.integer(10));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([integer1, integer2, integer3]);
+
+      assertBoxedError(
+        () => flatmap(badFun, list),
+        "ArgumentError",
+        "argument error",
+      );
     });
   });
 
@@ -1036,6 +1217,184 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keyreplace/4", () => {
+    const keyreplace = Erlang_Lists["keyreplace/4"];
+
+    it("returns the original list if tuples list is empty", () => {
+      const result = keyreplace(atomC, integer1, emptyList, tupleX);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("single tuple, no match", () => {
+      const tuples = Type.list([Type.tuple([atomA, integer2, float3])]);
+      const result = keyreplace(atomC, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, tuples);
+    });
+
+    it("single tuple, match at first index", () => {
+      const tuples = Type.list([Type.tuple([atomA, integer2, float3])]);
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("single tuple, match at middle index", () => {
+      const tuples = Type.list([Type.tuple([integer1, atomB, float3])]);
+      const result = keyreplace(atomB, integer2, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("single tuple, match at last index", () => {
+      const tuples = Type.list([Type.tuple([integer1, float2, atomC])]);
+      const result = keyreplace(atomC, integer3, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("multiple tuples, no match", () => {
+      const tuples = Type.list([
+        Type.tuple([atomA, integer2, float3]),
+        Type.tuple([atomD, atomE, atomF]),
+        Type.tuple([atomG, atomH, atomI]),
+      ]);
+
+      const result = keyreplace(atomC, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, tuples);
+    });
+
+    it("multiple tuples, match first tuple", () => {
+      const tuple2 = Type.tuple([atomD, atomE, atomF]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+
+      const tuples = Type.list([
+        Type.tuple([atomA, integer2, float3]),
+        tuple2,
+        tuple3,
+      ]);
+
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+      const expected = Type.list([tupleX, tuple2, tuple3]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match middle tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+
+      const tuples = Type.list([
+        tuple1,
+        Type.tuple([atomA, integer2, float3]),
+        tuple3,
+      ]);
+
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+      const expected = Type.list([tuple1, tupleX, tuple3]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match last tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple2 = Type.tuple([atomG, atomH, atomI]);
+
+      const tuples = Type.list([
+        tuple1,
+        tuple2,
+        Type.tuple([atomA, integer2, float3]),
+      ]);
+
+      const result = keyreplace(atomA, integer1, tuples, tupleX);
+      const expected = Type.list([tuple1, tuple2, tupleX]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("applies non-strict comparison", () => {
+      const tuples = Type.list([Type.tuple([float2])]);
+      const result = keyreplace(integer2, integer1, tuples, tupleX);
+
+      assert.deepStrictEqual(result, Type.list([tupleX]));
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is not an integer", () => {
+      assertBoxedError(
+        () => keyreplace(atomA, float2, Type.list(), Type.tuple()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+          atomA,
+          float2,
+          Type.list(),
+          Type.tuple(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is smaller than 1", () => {
+      assertBoxedError(
+        () => keyreplace(atomA, integer0, Type.list(), Type.tuple()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+          atomA,
+          integer0,
+          Type.list(),
+          Type.tuple(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
+      const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
+
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.keyreplace3/4",
+        [atomA, integer1, tuples, Type.tuple()],
+      );
+
+      assertBoxedError(
+        () => keyreplace(atomA, integer1, tuples, Type.tuple()),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
+      const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.keyreplace3/4",
+        [atomA, integer1, Type.tuple([atomD]), Type.tuple()],
+      );
+
+      const tuples = Type.improperList([
+        Type.tuple([atomB]),
+        Type.tuple([atomC]),
+        Type.tuple([atomD]),
+      ]);
+
+      assertBoxedError(
+        () => keyreplace(atomA, integer1, tuples, Type.tuple()),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the fourth argument (newTuple) is not a tuple", () => {
+      assertBoxedError(
+        () => keyreplace(atomA, integer1, Type.list(), atomX),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace/4", [
+          atomA,
+          integer1,
+          Type.list(),
+          atomX,
+        ]),
+      );
+    });
+  });
+
   describe("keysort/2", () => {
     const keysort = Erlang_Lists["keysort/2"];
 
@@ -1235,6 +1594,214 @@ describe("Erlang_Lists", () => {
         () => keysort(Type.integer(1), input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
+  describe("keytake/3", () => {
+    const keytake = Erlang_Lists["keytake/3"];
+
+    it("returns false if tuples list is empty", () => {
+      const result = keytake(atomC, integer1, emptyList);
+
+      assertBoxedFalse(result);
+    });
+
+    it("single tuple, no match", () => {
+      const tuples = Type.list([Type.tuple([atomA, integer2, float3])]);
+      const result = keytake(atomC, integer1, tuples);
+
+      assertBoxedFalse(result);
+    });
+
+    it("single tuple, match at first index", () => {
+      const tuple = Type.tuple([atomA, integer2, float3]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(atomA, integer1, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single tuple, match at middle index", () => {
+      const tuple = Type.tuple([integer1, atomB, float3]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(atomB, integer2, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single tuple, match at last index", () => {
+      const tuple = Type.tuple([integer1, float2, atomC]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(atomC, integer3, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, no match", () => {
+      const tuples = Type.list([
+        Type.tuple([atomA, integer2, float3]),
+        Type.tuple([atomD, atomE, atomF]),
+        Type.tuple([atomG, atomH, atomI]),
+      ]);
+
+      const result = keytake(atomC, integer1, tuples);
+
+      assertBoxedFalse(result);
+    });
+
+    it("multiple tuples, match first tuple", () => {
+      const tuple1 = Type.tuple([atomA, integer2, float3]);
+      const tuple2 = Type.tuple([atomD, atomE, atomF]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+      const tuples = Type.list([tuple1, tuple2, tuple3]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple1,
+        Type.list([tuple2, tuple3]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match middle tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple2 = Type.tuple([atomA, integer2, float3]);
+      const tuple3 = Type.tuple([atomG, atomH, atomI]);
+      const tuples = Type.list([tuple1, tuple2, tuple3]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple2,
+        Type.list([tuple1, tuple3]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple tuples, match last tuple", () => {
+      const tuple1 = Type.tuple([atomD, atomE, atomF]);
+      const tuple2 = Type.tuple([atomG, atomH, atomI]);
+      const tuple3 = Type.tuple([atomA, integer2, float3]);
+      const tuples = Type.list([tuple1, tuple2, tuple3]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple3,
+        Type.list([tuple1, tuple2]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("skips tuple when its size is smaller than the index", () => {
+      const tuple1 = Type.tuple([atomA]);
+      const tuple2 = Type.tuple([atomB, atomA, atomC]);
+      const tuples = Type.list([tuple1, tuple2]);
+
+      const result = keytake(atomA, integer2, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple2,
+        Type.list([tuple1]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns only the first matching tuple", () => {
+      const tuple1 = Type.tuple([atomA, integer1]);
+      const tuple2 = Type.tuple([atomA, integer2]);
+      const tuples = Type.list([tuple1, tuple2]);
+
+      const result = keytake(atomA, integer1, tuples);
+
+      const expected = Type.tuple([
+        Type.atom("value"),
+        tuple1,
+        Type.list([tuple2]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("applies non-strict comparison", () => {
+      const tuple = Type.tuple([float2]);
+      const tuples = Type.list([tuple]);
+
+      const result = keytake(integer2, integer1, tuples);
+      const expected = Type.tuple([Type.atom("value"), tuple, emptyList]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is not an integer", () => {
+      assertBoxedError(
+        () => keytake(atomA, float2, Type.list()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", [
+          atomA,
+          float2,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is smaller than 1", () => {
+      assertBoxedError(
+        () => keytake(atomA, integer0, Type.list()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/3", [
+          atomA,
+          integer0,
+          Type.list(),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
+      // Client-side error message is intentionally simplified.
+      const expectedMsg =
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/4");
+
+      const tuples = Type.tuple([Type.tuple([atomB]), Type.tuple([atomC])]);
+
+      assertBoxedError(
+        () => keytake(atomA, integer1, tuples),
+        "FunctionClauseError",
+        expectedMsg,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
+      // Client-side error message is intentionally simplified.
+      const expectedMsg =
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keytake/4");
+
+      const tuples = Type.improperList([
+        Type.tuple([atomB]),
+        Type.tuple([atomC]),
+        Type.tuple([atomD]),
+      ]);
+
+      assertBoxedError(
+        () => keytake(atomA, integer1, tuples),
+        "FunctionClauseError",
+        expectedMsg,
       );
     });
   });
@@ -1479,6 +2046,107 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("max/1", () => {
+    const max = Erlang_Lists["max/1"];
+    const shuffle = (array) => array.sort(() => Math.random() - 0.5);
+
+    it("returns the element from a list of length 1", () => {
+      const list = Type.list([integer3]);
+      const result = max(list);
+
+      assert.deepStrictEqual(result, integer3);
+    });
+
+    it("returns the larger element from a list of size 2 with second being largest", () => {
+      const list = Type.list([integer1, integer3]);
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer3);
+    });
+
+    it("returns the larger element from a list of size 2 with first being largest", () => {
+      const list = Type.list([integer3, integer1]);
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer3);
+    });
+
+    it("returns the element from a list of size 2 when both are the same", () => {
+      const list = Type.list([integer3, integer3]);
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer3);
+    });
+
+    it("applies structural comparison", () => {
+      const data = [
+        atomA,
+        float2,
+        integer3,
+        Type.bitstring("d"),
+        Type.pid("my_node", [0, 1, 2]),
+        Type.tuple([integer0, integer1]),
+      ];
+
+      const list = Type.list(shuffle(data));
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, Type.bitstring("d"));
+    });
+
+    it("returns the largest element from a large list with many duplicates", () => {
+      const data = [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5].map(
+        Type.integer,
+      );
+
+      const list = Type.list(shuffle(data));
+      const result = max(list);
+
+      assertBoxedStrictEqual(result, integer5);
+    });
+
+    it("raises FunctionClauseError if the argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.max/1",
+        [atomAbc],
+      );
+
+      assertBoxedError(
+        () => max(atomAbc),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is an improper list", () => {
+      // Notice that the error message says :lists.max/2 (not :lists.max/1)
+      // :lists.max/2 is (probably) a private Erlang function that get's called by :lists.max/1
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.max/2",
+        [improperList],
+      );
+
+      assertBoxedError(
+        () => max(improperList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the argument is an empty list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.max/1",
+        [emptyList],
+      );
+
+      assertBoxedError(
+        () => max(emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("member/2", () => {
     const member = Erlang_Lists["member/2"];
 
@@ -1634,39 +2302,218 @@ describe("Erlang_Lists", () => {
     });
   });
 
-  describe("reverse/1", () => {
-    const reverse = Erlang_Lists["reverse/1"];
+  describe("prefix/2", () => {
+    const prefix = Erlang_Lists["prefix/2"];
 
-    it("returns a list with the elements in the argument in reverse order", () => {
-      const result = reverse(properList);
+    it("returns true if the first one-element list is a prefix of the second list", () => {
+      const result = prefix(list1, list2);
 
-      const expected = Type.list([
-        Type.integer(3),
-        Type.integer(2),
-        Type.integer(1),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
+      assertBoxedTrue(result);
     });
 
-    it("raises FunctionClauseError if the argument is not a list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.reverse/1",
-        [Type.atom("abc")],
+    it("returns true if the first multiple-element list is a prefix of the second list", () => {
+      const result = prefix(list2, list3);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if the lists are the same", () => {
+      const result = prefix(list2, list2);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both lists contain the same single element", () => {
+      const result = prefix(list1, list1);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both lists are empty", () => {
+      const result = prefix(Type.list(), Type.list());
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true when the first list is empty", () => {
+      const result = prefix(Type.list(), list2);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns false if the first list is not a prefix of the second list", () => {
+      const result = prefix(list2, list1);
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the first list has an element that differs from the corresponding element in the second list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(3)]),
+        list3,
       );
 
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the first argument is an improper list that has no common prefix with the second proper list", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2)]),
+        Type.list([Type.integer(3), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the first argument is an improper list that shares a shorter prefix with the second proper list", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        Type.list([Type.integer(1), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the second argument is an improper list that has no common prefix with the first proper list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(2)]),
+        Type.improperList([Type.integer(3), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if the second argument is an improper list that shares a shorter prefix with the first proper list", () => {
+      const result = prefix(
+        Type.list([Type.integer(1), Type.integer(4)]),
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if both lists are improper with no common prefix", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2)]),
+        Type.improperList([Type.integer(3), Type.integer(4)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false if both lists are improper with a common shorter prefix", () => {
+      const result = prefix(
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        Type.improperList([Type.integer(1), Type.integer(4), Type.integer(3)]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a list", () => {
       assertBoxedError(
-        () => reverse(Type.atom("abc")),
+        () => prefix(Type.atom("a"), list2),
         "FunctionClauseError",
-        expectedMessage,
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.atom("a"),
+          list2,
+        ]),
       );
     });
 
-    it("raises ArgumentError if the argument is not a proper list", () => {
+    it("raises FunctionClauseError if the second argument is not a list", () => {
       assertBoxedError(
-        () => reverse(improperList),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+        () => prefix(list2, Type.atom("a")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          list2,
+          Type.atom("a"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an improper list where everything but the last element is a prefix of the second proper list", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.integer(3),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is an improper list where everything but the last element is a prefix of the first proper list", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.list([Type.integer(1), Type.integer(2)]),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          emptyList,
+          Type.integer(3),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if both lists are improper and have a common prefix made of everything but the last element", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(4),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.integer(3),
+          Type.integer(4),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first improper list would be a prefix of the second improper list had the first list been proper", () => {
+      assertBoxedError(
+        () =>
+          prefix(
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+              Type.integer(4),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.integer(3),
+          Type.improperList([Type.integer(3), Type.integer(4)]),
+        ]),
       );
     });
   });
@@ -1741,6 +2588,232 @@ describe("Erlang_Lists", () => {
         () => reverse(integer5, list34),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+  });
+
+  describe("seq/2", () => {
+    const seq = Erlang_Lists["seq/2"];
+
+    it("delegates to seq/3 with increment = 1", () => {
+      const result = seq(Type.integer(3), Type.integer(5));
+
+      const expected = Erlang_Lists["seq/3"](
+        Type.integer(3),
+        Type.integer(5),
+        Type.integer(1),
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not an integer", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.seq/2",
+        [Type.atom("abc"), Type.integer(5)],
+      );
+
+      assertBoxedError(
+        () => seq(Type.atom("abc"), Type.integer(5)),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not an integer", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.seq/2",
+        [Type.integer(1), Type.atom("abc")],
+      );
+
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.atom("abc")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError when from > to + 1", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.seq/2",
+        [Type.integer(10), Type.integer(5)],
+      );
+
+      assertBoxedError(
+        () => seq(Type.integer(10), Type.integer(5)),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
+
+  describe("seq/3", () => {
+    const seq = Erlang_Lists["seq/3"];
+
+    it("generates ascending sequence with increment 1", () => {
+      const result = seq(Type.integer(3), Type.integer(5), Type.integer(1));
+
+      const expected = Type.list([
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(5),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates ascending sequence with increment 2", () => {
+      const result = seq(Type.integer(1), Type.integer(10), Type.integer(2));
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(3),
+        Type.integer(5),
+        Type.integer(7),
+        Type.integer(9),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates ascending sequence from negative to positive", () => {
+      const result = seq(Type.integer(-5), Type.integer(5), Type.integer(2));
+
+      const expected = Type.list([
+        Type.integer(-5),
+        Type.integer(-3),
+        Type.integer(-1),
+        Type.integer(1),
+        Type.integer(3),
+        Type.integer(5),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates descending sequence with negative increment", () => {
+      const result = seq(Type.integer(10), Type.integer(5), Type.integer(-1));
+
+      const expected = Type.list([
+        Type.integer(10),
+        Type.integer(9),
+        Type.integer(8),
+        Type.integer(7),
+        Type.integer(6),
+        Type.integer(5),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates descending sequence with negative increment of -2", () => {
+      const result = seq(Type.integer(10), Type.integer(1), Type.integer(-2));
+
+      const expected = Type.list([
+        Type.integer(10),
+        Type.integer(8),
+        Type.integer(6),
+        Type.integer(4),
+        Type.integer(2),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates descending sequence in negative range", () => {
+      const result = seq(Type.integer(-1), Type.integer(-10), Type.integer(-2));
+
+      const expected = Type.list([
+        Type.integer(-1),
+        Type.integer(-3),
+        Type.integer(-5),
+        Type.integer(-7),
+        Type.integer(-9),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates single element sequence when from equals to", () => {
+      const result = seq(Type.integer(5), Type.integer(5), Type.integer(1));
+      const expected = Type.list([Type.integer(5)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates single element sequence when from equals to with increment 0", () => {
+      const result = seq(Type.integer(5), Type.integer(5), Type.integer(0));
+      const expected = Type.list([Type.integer(5)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates empty sequence if from > to with positive increment", () => {
+      const result = seq(Type.integer(10), Type.integer(6), Type.integer(4));
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates empty sequence when from - incr equals to (boundary case)", () => {
+      const result = seq(Type.integer(3), Type.integer(2), Type.integer(1));
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates empty sequence if from < to with negative increment", () => {
+      const result = seq(Type.integer(6), Type.integer(7), Type.integer(-1));
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => seq(Type.atom("abc"), Type.integer(5), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.atom("abc"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not an integer", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(5), Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if from > to with positive increment", () => {
+      assertBoxedError(
+        () => seq(Type.integer(10), Type.integer(1), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
+      );
+    });
+
+    it("raises ArgumentError if from < to with negative increment", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(10), Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+      );
+    });
+
+    it("raises ArgumentError if increment is 0", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(5), Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
       );
     });
   });

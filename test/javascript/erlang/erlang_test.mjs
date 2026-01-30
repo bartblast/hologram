@@ -10,6 +10,8 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
@@ -18,6 +20,7 @@ import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
+defineErlangModule1Fixture();
 
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
@@ -1467,6 +1470,215 @@ describe("Erlang", () => {
           ),
         "ArgumentError",
         "argument error: nil",
+      );
+    });
+  });
+
+  describe("apply/2", () => {
+    const apply = Erlang["apply/2"];
+
+    const funNoArgs = Type.anonymousFunction(
+      0,
+      [
+        {
+          params: (_context) => [],
+          guards: [],
+          body: (_context) => Type.integer(42),
+        },
+      ],
+      contextFixture(),
+    );
+
+    const funSingleArg = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("x")],
+          guards: [],
+          body: (context) => Erlang["+/2"](context.vars.x, Type.integer(10)),
+        },
+      ],
+      contextFixture(),
+    );
+
+    const funMultipleArgs = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("a"),
+            Type.variablePattern("b"),
+          ],
+          guards: [],
+          body: (context) => Erlang["+/2"](context.vars.a, context.vars.b),
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("calls anonymous function with no arguments", () => {
+      const args = Type.list();
+      const result = apply(funNoArgs, args);
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("calls anonymous function with a single argument", () => {
+      const args = Type.list([Type.integer(5)]);
+      const result = apply(funSingleArg, args);
+
+      assert.deepStrictEqual(result, Type.integer(15));
+    });
+
+    it("calls anonymous function with multiple arguments", () => {
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = apply(funMultipleArgs, args);
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("raises BadFunctionError if the first argument is not a function", () => {
+      const fun = Type.atom("not_a_function");
+
+      assertBoxedError(
+        () => apply(fun, Type.list()),
+        "BadFunctionError",
+        Interpreter.buildBadFunctionErrorMsg(fun),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a list", () => {
+      assertBoxedError(
+        () => apply(funNoArgs, Type.atom("not_a_list")),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a proper list", () => {
+      const args = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => apply(funMultipleArgs, args),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises BadArityError if arity doesn't match", () => {
+      const args = Type.list([Type.integer(1)]);
+
+      assertBoxedError(
+        () => apply(funMultipleArgs, args),
+        "BadArityError",
+        "anonymous function with arity 2 called with 1 argument (1)",
+      );
+    });
+  });
+
+  describe("apply/3", () => {
+    const apply = Erlang["apply/3"];
+
+    const module = Type.alias(
+      "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+    );
+
+    const fun = Type.atom("fun_0");
+    const args = Type.list();
+
+    it("invokes a function with no params", () => {
+      const result = apply(module, fun, args);
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("invokes a function with a single param", () => {
+      const fun = Type.atom("fun_1");
+      const args = Type.list([Type.integer(9)]);
+      const result = apply(module, fun, args);
+      const expected = Type.integer(109);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("invokes a function with multiple params", () => {
+      const fun = Type.atom("fun_2");
+      const args = Type.list([Type.integer(3), Type.integer(4)]);
+      const result = apply(module, fun, args);
+      const expected = Type.integer(7);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not an atom", () => {
+      const module = Type.integer(123);
+
+      const expectedMessage =
+        "you attempted to apply a function named :fun_0 on 123. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module";
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an atom", () => {
+      const fun = Type.integer(123);
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not a list", () => {
+      const args = Type.integer(123);
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not a proper list", () => {
+      const fun = Type.atom("fun_2");
+      const args = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    });
+
+    it("raises UndefinedFunctionError if the module doesn't exist", () => {
+      const module = Type.alias("NonexistentModule");
+      const fun = Type.atom("fun_2");
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "UndefinedFunctionError",
+        Interpreter.buildUndefinedFunctionErrorMsg(module, "fun_2", 2, false),
+      );
+    });
+
+    it("raises UndefinedFunctionError if the function doesn't exist", () => {
+      const fun = Type.atom("nonexistent_fun");
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => apply(module, fun, args),
+        "UndefinedFunctionError",
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          module,
+          "nonexistent_fun",
+          2,
+        ),
       );
     });
   });
@@ -2974,6 +3186,219 @@ describe("Erlang", () => {
     });
   });
 
+  describe("convert_time_unit/3", () => {
+    const testedFun = Erlang["convert_time_unit/3"];
+
+    it("converts seconds to milliseconds", () => {
+      const result = testedFun(
+        Type.integer(2),
+        Type.atom("second"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(2000));
+    });
+
+    it("converts milliseconds to seconds using floor rounding", () => {
+      const result = testedFun(
+        Type.integer(1500),
+        Type.atom("millisecond"),
+        Type.atom("second"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+
+    it("converts negative values using floor rounding", () => {
+      const result = testedFun(
+        Type.integer(-1500),
+        Type.atom("millisecond"),
+        Type.atom("second"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(-2));
+    });
+
+    it("supports deprecated symbolic time units", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("seconds"),
+        Type.atom("milli_seconds"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1000));
+    });
+
+    it("supports integer time units", () => {
+      const result = testedFun(
+        Type.integer(3),
+        Type.integer(1),
+        Type.integer(1000),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(3000));
+    });
+
+    it("converts zero time", () => {
+      const result = testedFun(
+        integer0,
+        Type.atom("second"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("handles same unit conversion (identity)", () => {
+      const result = testedFun(
+        Type.integer(42),
+        Type.atom("millisecond"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("handles same unit conversion with negative value (identity)", () => {
+      const result = testedFun(
+        Type.integer(-42),
+        Type.atom("millisecond"),
+        Type.atom("millisecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(-42));
+    });
+
+    it("supports native time unit", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("second"),
+        Type.atom("native"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1_000_000_000));
+    });
+
+    it("supports perf_counter time unit", () => {
+      const result = testedFun(
+        Type.integer(2_000_000),
+        Type.atom("perf_counter"),
+        Type.atom("millisecond"),
+      );
+
+      // 2_000_000 perf_counter units (nanoseconds) = 2 milliseconds
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("supports nanosecond time unit", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("second"),
+        Type.atom("nanosecond"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(1_000_000_000));
+    });
+
+    it("supports microsecond time unit", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("microsecond"),
+        Type.atom("millisecond"),
+      );
+
+      // 1 microsecond < 1 millisecond, floor(1/1000) = 0
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("supports all deprecated time unit forms", () => {
+      const result = testedFun(
+        Type.integer(1),
+        Type.atom("nano_seconds"),
+        Type.atom("micro_seconds"),
+      );
+
+      // 1 nanosecond < 1 microsecond, floor(1/1000) = 0
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("handles large integer values", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      const largeValue = Type.integer(9_007_199_254_740_992n);
+
+      const result = testedFun(
+        largeValue,
+        Type.atom("second"),
+        Type.atom("second"),
+      );
+
+      assert.deepStrictEqual(result, largeValue);
+    });
+
+    it("raises ArgumentError if time is not an integer", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.float(1.0), Type.atom("second"), Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is invalid", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.integer(1), Type.atom("banana"), Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if toUnit is invalid", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("second"), integer0),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is a negative integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.integer(-1), Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is zero", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), integer0, Type.atom("second")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if toUnit is a float", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("second"), Type.float(1.5)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError if fromUnit is not an atom or positive integer", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.integer(1),
+            Type.bitstring("second"),
+            Type.atom("second"),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    });
+  });
+
   describe("div/2", () => {
     const testedFun = Erlang["div/2"];
 
@@ -4046,6 +4471,25 @@ describe("Erlang", () => {
     });
   });
 
+  // Delegates to float_to_binary/2, only need to test opts passthrough and codepoint conversion
+  describe("float_to_list/2", () => {
+    const float_to_list = Erlang["float_to_list/2"];
+
+    it("returns a list of character code points", () => {
+      const opts = Type.list([Type.atom("short")]);
+      const result = float_to_list(Type.float(2.0), opts);
+
+      // [50, 46, 48] == ~c"2.0"
+      const expected = Type.list([
+        Type.integer(50),
+        Type.integer(46),
+        Type.integer(48),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("floor/1", () => {
     const testedFun = Erlang["floor/1"];
 
@@ -4669,6 +5113,400 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_integer/1", () => {
+    const list_to_integer = Erlang["list_to_integer/1"];
+
+    it("delegates to list_to_integer/2 with base 10", () => {
+      const list = Type.list([
+        Type.integer(49),
+        Type.integer(50),
+        Type.integer(51),
+      ]);
+
+      const result = list_to_integer(list);
+      const expected = Erlang["list_to_integer/2"](list, Type.integer(10));
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("list_to_integer/2", () => {
+    const list_to_integer = Erlang["list_to_integer/2"];
+
+    it("base 2", () => {
+      // 0b1010 = 10
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(49),
+          Type.integer(48),
+          Type.integer(49),
+          Type.integer(48),
+        ]),
+        Type.integer(2),
+      );
+
+      const expected = Type.integer(10);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base 10", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+        Type.integer(10),
+      );
+
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base 16", () => {
+      // 0x3AF = 943
+      const result = list_to_integer(
+        Type.list([Type.integer(51), Type.integer(65), Type.integer(70)]),
+        Type.integer(16),
+      );
+
+      const expected = Type.integer(943);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("base 36", () => {
+      // "YZ" = 1259
+      const result = list_to_integer(
+        Type.list([Type.integer(89), Type.integer(90)]),
+        Type.integer(36),
+      );
+
+      const expected = Type.integer(1259);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("positive integer with plus sign", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(43),
+          Type.integer(49),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+        Type.integer(10),
+      );
+
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("negative integer", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(45),
+          Type.integer(49),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+        Type.integer(10),
+      );
+
+      const expected = Type.integer(-123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("zero", () => {
+      const result = list_to_integer(
+        Type.list([Type.integer(48)]),
+        Type.integer(10),
+      );
+
+      const expected = Type.integer(0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("lowercase letters", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(97),
+          Type.integer(98),
+          Type.integer(99),
+          Type.integer(100),
+        ]),
+        Type.integer(16),
+      );
+
+      const expected = Type.integer(43981);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("uppercase letters", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(65),
+          Type.integer(66),
+          Type.integer(67),
+          Type.integer(68),
+        ]),
+        Type.integer(16),
+      );
+
+      const expected = Type.integer(43981);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("mixed case letters", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(97),
+          Type.integer(66),
+          Type.integer(99),
+          Type.integer(68),
+        ]),
+        Type.integer(16),
+      );
+
+      const expected = Type.integer(43981);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("leading zeros", () => {
+      const result = list_to_integer(
+        Type.list([
+          Type.integer(48),
+          Type.integer(48),
+          Type.integer(49),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+        Type.integer(10),
+      );
+
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("very large (above Number.MAX_SAFE_INTEGER) base 10 integer", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      const codes = "999999999999999999999999999999"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(10));
+      const expected = Type.integer(BigInt("999999999999999999999999999999"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("very large (below Number.MIN_SAFE_INTEGER) negative base 10 integer", () => {
+      // Number.MIN_SAFE_INTEGER = -9007199254740991
+      const codes = "-999999999999999999999999999999"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(10));
+      const expected = Type.integer(BigInt("-999999999999999999999999999999"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("very large (above Number.MAX_SAFE_INTEGER) integer with letter digits", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      const codes = "FFFFFFFFFFFFFFFFFFFF"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(16));
+      const expected = Type.integer(BigInt("0xFFFFFFFFFFFFFFFFFFFF"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("very large (below Number.MIN_SAFE_INTEGER) negative integer with letter digits", () => {
+      // Number.MIN_SAFE_INTEGER = -9007199254740991
+      const codes = "-FFFFFFFFFFFFFFFFFFFF"
+        .split("")
+        .map((c) => Type.integer(c.charCodeAt(0)));
+
+      const result = list_to_integer(Type.list(codes), Type.integer(16));
+      const expected = Type.integer(-BigInt("0xFFFFFFFFFFFFFFFFFFFF"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.atom("abc"), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not a proper list", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.improperList([
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(51),
+            ]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if list is empty", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list(), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if list contains non-integer element", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([Type.integer(49), Type.atom("abc"), Type.integer(51)]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if list contains characters outside of the alphabet", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(50)]), Type.integer(2)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on sign in non-leading position", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(45),
+              Type.integer(51),
+            ]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on multiple signs", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([
+              Type.integer(43),
+              Type.integer(45),
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(51),
+            ]),
+            Type.integer(10),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on minus sign only", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(45)]), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on plus sign only", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(43)]), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => list_to_integer(Type.list([Type.integer(49)]), Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if base is less than 2", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+            Type.integer(1),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if base is greater than 36", () => {
+      assertBoxedError(
+        () =>
+          list_to_integer(
+            Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+            Type.integer(37),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+  });
+
   describe("list_to_pid/1", () => {
     const fun = Erlang["list_to_pid/1"];
 
@@ -4933,6 +5771,92 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_tuple/1", () => {
+    const list_to_tuple = Erlang["list_to_tuple/1"];
+
+    it("non-empty list", () => {
+      const data = [Type.integer(1), Type.integer(2), Type.integer(3)];
+      const list = Type.list(data);
+
+      const result = list_to_tuple(list);
+      const expected = Type.tuple(data);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty list", () => {
+      const result = list_to_tuple(Type.list());
+
+      assert.deepStrictEqual(result, Type.tuple());
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_tuple(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assertBoxedError(
+        () => list_to_tuple(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+  });
+
+  describe("localtime/0", () => {
+    const localtime = Erlang["localtime/0"];
+
+    it("returns a tuple with date and time", () => {
+      // Type checks
+
+      const result = localtime();
+      assert.isTrue(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 2);
+
+      const date = result.data[0];
+      assert.isTrue(Type.isTuple(date));
+      assert.strictEqual(date.data.length, 3);
+
+      const [year, month, day] = date.data;
+      assert.isTrue(Type.isInteger(year));
+      assert.isTrue(Type.isInteger(month));
+      assert.isTrue(Type.isInteger(day));
+
+      const time = result.data[1];
+      assert.isTrue(Type.isTuple(time));
+      assert.strictEqual(time.data.length, 3);
+
+      const [hour, minute, second] = time.data;
+      assert.isTrue(Type.isInteger(hour));
+      assert.isTrue(Type.isInteger(minute));
+      assert.isTrue(Type.isInteger(second));
+
+      // Range checks
+      assert.isAtLeast(year.value, 1970n);
+      assert.isAtMost(year.value, 2100n);
+      assert.isAtLeast(month.value, 1n);
+      assert.isAtMost(month.value, 12n);
+      assert.isAtLeast(day.value, 1n);
+      assert.isAtMost(day.value, 31n);
+      assert.isAtLeast(hour.value, 0n);
+      assert.isAtMost(hour.value, 23n);
+      assert.isAtLeast(minute.value, 0n);
+      assert.isAtMost(minute.value, 59n);
+      assert.isAtLeast(second.value, 0n);
+      assert.isAtMost(second.value, 59n);
+    });
+  });
+
   describe("make_ref/0", () => {
     const make_ref = Erlang["make_ref/0"];
 
@@ -4999,6 +5923,121 @@ describe("Erlang", () => {
         () => map_size(Type.atom("abc")),
         "BadMapError",
         "expected a map, got: :abc",
+      );
+    });
+  });
+
+  describe("monotonic_time/0", () => {
+    const monotonic_time = Erlang["monotonic_time/0"];
+
+    it("returns an integer", () => {
+      const result = monotonic_time();
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("is monotonic non-decreasing", () => {
+      const t1 = monotonic_time().value;
+      const t2 = monotonic_time().value;
+
+      assert.isTrue(t2 >= t1);
+    });
+
+    describe("client-only behaviour", () => {
+      it("uses fast path for small values (< 9_007_199_254 ms / ~104 days)", () => {
+        const originalNow = performance.now;
+
+        try {
+          // Mock performance.now() to return a small value (1 second)
+          performance.now = () => 1000.123456;
+
+          const result = monotonic_time();
+
+          // 1000.123456 ms * 1_000_000 = 1000123456 ns
+          assertBoxedStrictEqual(result, Type.integer(1_000_123_456));
+        } finally {
+          performance.now = originalNow;
+        }
+      });
+
+      it("uses safe path for large values (>= 9_007_199_254 ms / ~104 days)", () => {
+        const originalNow = performance.now;
+
+        try {
+          // Mock performance.now() to return a value >= 9_007_199_254 ms (~104 days)
+          // 10_000_000_000.5 ms (using .5 to avoid float precision issues)
+          performance.now = () => 10_000_000_000.5;
+
+          const result = monotonic_time();
+
+          // 10_000_000_000 ms * 1_000_000 = 10000000000000000 ns (whole part)
+          // 0.5 ms * 1_000_000 = 500000 ns (fractional part)
+          // Total = 10000000000500000 ns
+          assertBoxedStrictEqual(result, Type.integer(10_000_000_000_500_000n));
+        } finally {
+          performance.now = originalNow;
+        }
+      });
+    });
+  });
+
+  describe("monotonic_time/1", () => {
+    const monotonic_time = Erlang["monotonic_time/1"];
+
+    it("with valid atom unit", () => {
+      const result = monotonic_time(Type.atom("second"));
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("with valid integer unit", () => {
+      const result = monotonic_time(Type.integer(1000n));
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("applies time unit conversion", () => {
+      const micro = monotonic_time(Type.atom("microsecond")).value;
+      const nano = monotonic_time(Type.atom("nanosecond")).value;
+
+      // Use absolute values since monotonic_time can be negative
+      const absMicro = micro >= 0n ? micro : -micro;
+      const absNano = nano >= 0n ? nano : -nano;
+
+      // Allow small timing drift between calls
+      assert.isTrue(absNano >= absMicro * 999n);
+      assert.isTrue(absNano <= absMicro * 1001n + 1000n);
+    });
+
+    it("raises ArgumentError when argument is not atom or integer", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.float(1.0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when atom argument is not a valid time unit", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when integer argument is 0", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when integer argument is negative", () => {
+      assertBoxedError(
+        () => monotonic_time(Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
       );
     });
   });
@@ -5076,6 +6115,86 @@ describe("Erlang", () => {
           ),
         "ArgumentError",
         "argument error: nil",
+      );
+    });
+  });
+
+  describe("pid_to_list/1", () => {
+    const testedFun = Erlang["pid_to_list/1"];
+
+    it("single digit segments", () => {
+      const pid = Type.pid("hologram_client", [0, 1, 2], "client");
+      const result = testedFun(pid);
+
+      // "<0.1.2>" has codepoints [60, 48, 46, 49, 46, 50, 62]
+      const expected = Type.list([
+        Type.integer(60), // <
+        Type.integer(48), // 0
+        Type.integer(46), // .
+        Type.integer(49), // 1
+        Type.integer(46), // .
+        Type.integer(50), // 2
+        Type.integer(62), // >
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multi-digit segments", () => {
+      const pid = Type.pid("hologram_client", [0, 11, 222], "client");
+      const result = testedFun(pid);
+
+      // "<0.11.222>" has codepoints [60, 48, 46, 49, 49, 46, 50, 50, 50, 62]
+      const expected = Type.list([
+        Type.integer(60), // <
+        Type.integer(48), // 0
+        Type.integer(46), // .
+        Type.integer(49), // 1
+        Type.integer(49), // 1
+        Type.integer(46), // .
+        Type.integer(50), // 2
+        Type.integer(50), // 2
+        Type.integer(50), // 2
+        Type.integer(62), // >
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("not a pid", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    });
+  });
+
+  describe("ref_to_list/1", () => {
+    const ref_to_list = Erlang["ref_to_list/1"];
+
+    beforeEach(() => {
+      ERTS.nodeTable.reset();
+    });
+
+    it("reference for local node", () => {
+      const reference = Type.reference(
+        ERTS.nodeTable.CLIENT_NODE,
+        0,
+        [3, 2, 1],
+      );
+
+      const result = ref_to_list(reference);
+      const expected = Type.charlist("#Ref<0.1.2.3>");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("not a reference", () => {
+      assertBoxedError(
+        () => ref_to_list(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
       );
     });
   });
@@ -5417,6 +6536,80 @@ describe("Erlang", () => {
     });
   });
 
+  // describe("time_offset/0", () => {
+  //   const time_offset = Erlang["time_offset/0"];
+
+  //   it("delegates to time_offset/1 with :native", () => {
+  //     const result = time_offset();
+  //     assert.deepStrictEqual(
+  //       result,
+  //       Erlang["time_offset/1"](Type.atom("native")),
+  //     );
+  //   });
+  // });
+
+  // describe("time_offset/1", () => {
+  //   const time_offset = Erlang["time_offset/1"];
+
+  //   it("all allowed units return integer", () => {
+  //     const units = [
+  //       "native",
+  //       "second",
+  //       "millisecond",
+  //       "microsecond",
+  //       "nanosecond",
+  //     ];
+  //     for (const u of units) {
+  //       assert.isTrue(Type.isInteger(time_offset(Type.atom(u))));
+  //     }
+  //   });
+
+  //   it("coarser units yield smaller absolute values", () => {
+  //     // Each call is independent; only check magnitudes.
+  //     const nano = Math.abs(Number(time_offset(Type.atom("nanosecond")).value));
+  //     const sec = Math.abs(Number(time_offset(Type.atom("second")).value));
+  //     if (nano > 1_000_000_000) assert.isBelow(sec, nano);
+  //   });
+
+  //   it("drifts slowly between two calls", async () => {
+  //     const t1 = Number(time_offset(Type.atom("nanosecond")).value);
+  //     await new Promise((r) => setTimeout(r, 100));
+  //     const t2 = Number(time_offset(Type.atom("nanosecond")).value);
+  //     const drift = Math.abs(t2 - t1);
+  //     // allow ±50 ms for NTP jitter in CI
+  //     assert.isAtMost(drift, 50_000_000);
+  //   });
+
+  //   it("with positive integer unit", () => {
+  //     const result = time_offset(Type.integer(1000n));
+  //     assert.isTrue(Type.isInteger(result));
+  //   });
+
+  //   it("raises ArgumentError when unit is less than 1", () => {
+  //     assertBoxedError(
+  //       () => time_offset(Type.integer(0n)),
+  //       "ArgumentError",
+  //       Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+  //     );
+  //   });
+
+  //   it("raises ArgumentError when unit is negative", () => {
+  //     assertBoxedError(
+  //       () => time_offset(Type.integer(-1n)),
+  //       "ArgumentError",
+  //       Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+  //     );
+  //   });
+
+  //   it("raises ArgumentError when unit is not a valid time unit atom", () => {
+  //     assertBoxedError(
+  //       () => time_offset(Type.atom("invalid")),
+  //       "ArgumentError",
+  //       Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+  //     );
+  //   });
+  // });
+
   describe("trunc/1", () => {
     const testedFun = Erlang["trunc/1"];
 
@@ -5506,6 +6699,104 @@ describe("Erlang", () => {
         () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
+  describe("unique_integer/0", () => {
+    const unique_integer = Erlang["unique_integer/0"];
+
+    it("returns a unique integer each time it is called", () => {
+      const integer1 = unique_integer();
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer();
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+  });
+
+  // Simplified: always returns monotonic, positive integers regardless of modifiers.
+  describe("unique_integer/1", () => {
+    const unique_integer = Erlang["unique_integer/1"];
+
+    it("returns a unique integer each time it is called with empty modifier list", () => {
+      const integer1 = unique_integer(Type.list([]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with positive modifier", () => {
+      const integer1 = unique_integer(Type.list([Type.atom("positive")]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([Type.atom("positive")]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with monotonic modifier", () => {
+      const integer1 = unique_integer(Type.list([Type.atom("monotonic")]));
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(Type.list([Type.atom("monotonic")]));
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("returns a unique integer with both positive and monotonic modifiers", () => {
+      const integer1 = unique_integer(
+        Type.list([Type.atom("positive"), Type.atom("monotonic")]),
+      );
+
+      assert.isTrue(Type.isInteger(integer1));
+
+      const integer2 = unique_integer(
+        Type.list([Type.atom("positive"), Type.atom("monotonic")]),
+      );
+
+      assert.isTrue(Type.isInteger(integer2));
+
+      assert.isFalse(Interpreter.isEqual(integer1, integer2));
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => unique_integer(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a proper list", () => {
+      assertBoxedError(
+        () =>
+          unique_integer(Type.improperList([Type.atom("positive"), atomAbc])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if the modifier is not an atom", () => {
+      assertBoxedError(
+        () => unique_integer(Type.list([Type.integer(123)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+      );
+    });
+
+    it("raises ArgumentError if the modifier is not a valid modifier", () => {
+      assertBoxedError(
+        () => unique_integer(Type.list([Type.atom("invalid")])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
       );
     });
   });

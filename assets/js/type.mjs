@@ -259,6 +259,17 @@ export default class Type {
     );
   }
 
+  static isCharlist(term) {
+    if (!Type.isProperList(term)) {
+      return false;
+    }
+
+    return term.data.every(
+      (elem) => Type.isInteger(elem) && Bitstring.validateCodePoint(elem.value),
+    );
+  }
+
+  // TODO: check if the pattern is in the ERTS binary patterns registry
   static isCompiledPattern(term) {
     if (!Type.isTuple(term)) return false;
 
