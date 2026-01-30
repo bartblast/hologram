@@ -632,12 +632,38 @@ describe("Erlang_String", () => {
       );
     });
 
+    it("raises MatchError if the first argument is a non-binary bitstring", () => {
+      const nonBinaryBitstring = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => split(nonBinaryBitstring, Type.bitstring(" "), Type.atom("all")),
+        "MatchError",
+        Interpreter.buildMatchErrorMsg(nonBinaryBitstring),
+      );
+    });
+
     it("raises ArgumentError if the second argument is not valid chardata", () => {
       assertBoxedError(
         () =>
           split(
             Type.bitstring("hello_world"),
             Type.atom("_"),
+            Type.atom("all"),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("Hello World"),
+            Type.bitstring([1, 0, 1]),
             Type.atom("all"),
           ),
         "ArgumentError",

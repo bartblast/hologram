@@ -282,11 +282,25 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       end
     end
 
+    test "raises MatchError if the first argument is a non-binary bitstring" do
+      assert_error MatchError, build_match_error_msg(<<1::3>>), fn ->
+        :string.split(<<1::3>>, " ", :all)
+      end
+    end
+
     test "raises ArgumentError if the second argument is not valid chardata" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :string.split("Hello_World_!", :_, :all)
+                   end
+    end
+
+    test "raises ArgumentError if the second argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.split("Hello World", <<1::3>>, :all)
                    end
     end
 
