@@ -21,6 +21,49 @@ defmodule Hologram.ExJsConsistency.Erlang.OsTest do
     end
   end
 
+  describe "system_time/1" do
+    test "with valid atom unit" do
+      assert is_integer(:os.system_time(:second))
+    end
+
+    test "with valid integer unit" do
+      assert is_integer(:os.system_time(1000))
+    end
+
+    test "applies time unit conversion" do
+      micro = :os.system_time(:microsecond)
+      nano = :os.system_time(:nanosecond)
+
+      # Allow small timing drift between calls
+      assert nano >= micro * 999
+      assert nano <= micro * 1001 + 1000
+    end
+
+    test "raises ArgumentError when argument is not atom or integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:os, :system_time, [1.0]}
+    end
+
+    test "raises ArgumentError when atom argument is not a valid time unit" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:os, :system_time, [:invalid]}
+    end
+
+    test "raises ArgumentError when integer argument is 0" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:os, :system_time, [0]}
+    end
+
+    test "raises ArgumentError when integer argument is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:os, :system_time, [-1]}
+    end
+  end
+
   describe "type/0" do
     test "returns OS family and OS name" do
       assert {family, name} = :os.type()

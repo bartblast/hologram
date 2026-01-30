@@ -1,5 +1,6 @@
 "use strict";
 
+import Erlang from "./erlang.mjs";
 import Type from "../type.mjs";
 
 // IMPORTANT!
@@ -15,6 +16,16 @@ const Erlang_Os = {
   },
   // End system_time/0
   // Deps: []
+
+  // Start system_time/1
+  "system_time/1": (unit) => {
+    Erlang["_validate_time_unit/2"](unit, 1);
+    const nativeTime = Erlang_Os["system_time/0"]();
+
+    return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
+  },
+  // End system_time/1
+  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :os.system_time/0]
 
   // Start type/0
   // Hardcoded {:unix, :web} - unlike Erlang, Hologram runtime is sandboxed from the underlying OS.
