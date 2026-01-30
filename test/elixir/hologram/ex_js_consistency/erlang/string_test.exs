@@ -204,32 +204,6 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "split/3" do
-    test "raises MatchError if the first argument is not a string" do
-      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
-        :string.split(:hello_world, "_", :all)
-      end
-    end
-
-    test "raises ArgumentError if the second argument is not a string" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
-                   fn ->
-                     :string.split("Hello_World_!", :_, :all)
-                   end
-    end
-
-    test "raises CaseClauseError if the third argument is not an atom" do
-      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
-        :string.split("Hello World !", " ", "all")
-      end
-    end
-
-    test "raises CaseClauseError if the third argument is not a valid direction atom" do
-      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
-        :string.split("hello world", " ", :invalid)
-      end
-    end
-
     test "returns unchanged string inside a list if the pattern is empty" do
       result = :string.split("Hello World !", "", :all)
 
@@ -282,6 +256,32 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       result = :string.split("Hello 👋 World", "👋", :all)
 
       assert result == ["Hello ", " World"]
+    end
+
+    test "raises MatchError if the first argument is not a string" do
+      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
+        :string.split(:hello_world, "_", :all)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.split("Hello_World_!", :_, :all)
+                   end
+    end
+
+    test "raises CaseClauseError if the third argument is not an atom" do
+      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+        :string.split("Hello World !", " ", "all")
+      end
+    end
+
+    test "raises CaseClauseError if the third argument is not a valid direction atom" do
+      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
+        :string.split("hello world", " ", :invalid)
+      end
     end
   end
 

@@ -525,58 +525,6 @@ describe("Erlang_String", () => {
     const split = Erlang_String["split/3"];
     const string_test = Type.bitstring("Hello World !");
 
-    it("raises MatchError if the first argument is not a string", () => {
-      assertBoxedError(
-        () =>
-          split(
-            Type.atom("hello_world"),
-            Type.bitstring("_"),
-            Type.atom("all"),
-          ),
-        "MatchError",
-        "no match of right hand side value: :hello_world",
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not a string", () => {
-      assertBoxedError(
-        () =>
-          split(
-            Type.bitstring("hello_world"),
-            Type.atom("_"),
-            Type.atom("all"),
-          ),
-        "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
-      );
-    });
-
-    it("raises CaseClauseError if the third argument is not an atom", () => {
-      assertBoxedError(
-        () =>
-          split(
-            Type.bitstring("hello world"),
-            Type.bitstring(" "),
-            Type.bitstring("all"),
-          ),
-        "CaseClauseError",
-        'no case clause matching: "all"',
-      );
-    });
-
-    it("raises CaseClauseError if the third argument is not a valid direction atom", () => {
-      assertBoxedError(
-        () =>
-          split(
-            Type.bitstring("hello world"),
-            Type.bitstring(" "),
-            Type.atom("invalid"),
-          ),
-        "CaseClauseError",
-        "no case clause matching: :invalid",
-      );
-    });
-
     it("returns unchanged string inside a list if the pattern is empty", () => {
       const result = split(string_test, Type.bitstring(""), Type.atom("all"));
 
@@ -655,6 +603,58 @@ describe("Erlang_String", () => {
       );
 
       assert.deepStrictEqual(result, Type.list(["Hello ", " World"]));
+    });
+
+    it("raises MatchError if the first argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.atom("hello_world"),
+            Type.bitstring("_"),
+            Type.atom("all"),
+          ),
+        "MatchError",
+        "no match of right hand side value: :hello_world",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello_world"),
+            Type.atom("_"),
+            Type.atom("all"),
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      );
+    });
+
+    it("raises CaseClauseError if the third argument is not an atom", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello world"),
+            Type.bitstring(" "),
+            Type.bitstring("all"),
+          ),
+        "CaseClauseError",
+        'no case clause matching: "all"',
+      );
+    });
+
+    it("raises CaseClauseError if the third argument is not a valid direction atom", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello world"),
+            Type.bitstring(" "),
+            Type.atom("invalid"),
+          ),
+        "CaseClauseError",
+        "no case clause matching: :invalid",
+      );
     });
   });
 
