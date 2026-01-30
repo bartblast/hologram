@@ -151,6 +151,98 @@ const Erlang_String = {
   // End replace/4
   // Deps: [:unicode.characters_to_binary/1]
 
+  // Start split/2
+  "split/2": (string, pattern) => {
+    const split = Erlang_String["split/3"];
+
+    return split(string, pattern, Type.atom("leading"));
+  },
+  // End split/2
+  // Deps: [:string.split/3]
+
+  // Start split/3
+  "split/3": (string, pattern, direction) => {
+    function convertToBinary(input) {
+      try {
+        return Erlang_Unicode["characters_to_binary/1"](input);
+      } catch (error) {
+        switch (input) {
+          case string:
+            Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+            return;
+
+          case pattern:
+            Interpreter.raiseArgumentError(
+              Interpreter.buildArgumentErrorMsg(
+                1,
+                "not valid character data (an iodata term)",
+              ),
+            );
+            return;
+
+          default:
+            throw error;
+        }
+      }
+    }
+
+    const stringBinary = convertToBinary(string);
+    if (Type.isTuple(stringBinary)) {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    }
+
+    const patternBinary = convertToBinary(pattern);
+    if (Type.isTuple(patternBinary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
+
+    if (!Type.isAtom(direction)) {
+      Interpreter.raiseCaseClauseError(direction);
+    }
+
+    const stringText = Bitstring.toText(stringBinary);
+    const patternText = Bitstring.toText(patternBinary);
+
+    if (Bitstring.isEmpty(patternBinary) || !stringText.includes(patternText)) {
+      return Type.list([stringText]);
+    }
+
+    let splittedStringList, index;
+    switch (direction.value) {
+      case "all":
+        splittedStringList = stringText.split(patternText);
+        break;
+
+      case "trailing":
+        index = stringText.lastIndexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          stringText.slice(index + patternText.length),
+        ];
+        break;
+
+      case "leading":
+        index = stringText.indexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          stringText.slice(index + patternText.length),
+        ];
+        break;
+
+      default:
+        Interpreter.raiseCaseClauseError(direction);
+    }
+
+    return Type.list(splittedStringList);
+  },
+  // End split/3
+  // Deps: [:unicode.characters_to_binary/1]
+
   // Start titlecase/1
   "titlecase/1": (subject) => {
     // Custom uppercase mapping where Erlang differs from JavaScript's toUpperCase()

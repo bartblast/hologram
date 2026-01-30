@@ -510,6 +510,141 @@ describe("Erlang_String", () => {
     });
   });
 
+  describe("split/2", () => {
+    const split = Erlang_String["split/2"];
+    const string_test = Type.bitstring("Hello World !");
+
+    it("returns a two-elements list with the first word at the beginning and the tail at the end", () => {
+      const result = split(string_test, Type.bitstring(" "));
+
+      assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
+    });
+  });
+
+  describe("split/3", () => {
+    const split = Erlang_String["split/3"];
+    const string_test = Type.bitstring("Hello World !");
+
+    it("raises MatchError if the first argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.atom("hello_world"),
+            Type.bitstring("_"),
+            Type.atom("all"),
+          ),
+        "MatchError",
+        "no match of right hand side value: :hello_world",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello_world"),
+            Type.atom("_"),
+            Type.atom("all"),
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      );
+    });
+
+    it("raises CaseClauseError if the third argument is not an atom", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello world"),
+            Type.bitstring(" "),
+            Type.bitstring("all"),
+          ),
+        "CaseClauseError",
+        'no case clause matching: "all"',
+      );
+    });
+
+    it("returns unchanged string inside a list if the pattern is empty", () => {
+      const result = split(string_test, Type.bitstring(""), Type.atom("all"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Bitstring.toText(string_test)]),
+      );
+    });
+
+    it("returns unchanged string inside a list if the pattern is not present inside the string", () => {
+      const result = split(string_test, Type.bitstring("."), Type.atom("all"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Bitstring.toText(string_test)]),
+      );
+    });
+
+    it("returns a list which length is equal to the number of words inside the string with the direction set to :all", () => {
+      const result = split(string_test, Type.bitstring(" "), Type.atom("all"));
+
+      assert.deepStrictEqual(result, Type.list(["Hello", "World", "!"]));
+    });
+
+    it("returns a two-element list with the first word at the beginning and the tail at the end when the direction is set to :leading", () => {
+      const result = split(
+        string_test,
+        Type.bitstring(" "),
+        Type.atom("leading"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
+    });
+
+    it("returns a two-element list with the last word at the end and the rest at the begining when the direction is set to :trailing", () => {
+      const result = split(
+        string_test,
+        Type.bitstring(" "),
+        Type.atom("trailing"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello World", "!"]));
+    });
+
+    it("returns a list when patterns is at the start of the string", () => {
+      const result = split(
+        string_test,
+        Type.bitstring("H"),
+        Type.atom("leading"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["", "ello World !"]));
+    });
+
+    it("returns a list when patterns is at the end of the string", () => {
+      const result = split(
+        string_test,
+        Type.bitstring("!"),
+        Type.atom("trailing"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello World ", ""]));
+    });
+
+    it("returns a list when pattern is consecutive inside replacements", () => {
+      const result = split(string_test, Type.bitstring("l"), Type.atom("all"));
+
+      assert.deepStrictEqual(result, Type.list(["He", "", "o Wor", "d !"]));
+    });
+
+    it("correctly split unicode patterns (emoji)", () => {
+      const result = split(
+        Type.bitstring("Hello 👋 World"),
+        Type.bitstring("👋"),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello ", " World"]));
+    });
+  });
+
   describe("titlecase/1", () => {
     const titlecase = Erlang_String["titlecase/1"];
 

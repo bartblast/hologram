@@ -195,6 +195,90 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
   end
 
+  describe "split/2" do
+    test "returns a two-elements list with the first word at the beginning and the tail at the end" do
+      result = :string.split("Hello World !", " ")
+
+      assert result == ["Hello", "World !"]
+    end
+  end
+
+  describe "split/3" do
+    test "raises MatchError if the first argument is not a string" do
+      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
+        :string.split(:hello_world, "_", :all)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.split("Hello_World_!", :_, :all)
+                   end
+    end
+
+    test "raises CaseClauseError if the third argument is not an atom" do
+      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+        :string.split("Hello World !", " ", "all")
+      end
+    end
+
+    test "returns unchanged string inside a list if the pattern is empty" do
+      result = :string.split("Hello World !", "", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "returns unchanged string inside a list if the pattern is not present inside the string" do
+      result = :string.split("Hello World !", ".", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "returns a list which length is equal to the number of words inside the string with the direction set to :all" do
+      result = :string.split("Hello World !", " ", :all)
+
+      assert result == ["Hello", "World", "!"]
+    end
+
+    test "returns a two-element list with the first word at the beginning and the tail at the end when the direction is set to :leading" do
+      result = :string.split("Hello World !", " ", :leading)
+
+      assert result == ["Hello", "World !"]
+    end
+
+    test "returns a two-element list with the last word at the end and the rest at the begining when the direction is set to :trailing" do
+      result = :string.split("Hello World !", " ", :trailing)
+
+      assert result == ["Hello World", "!"]
+    end
+
+    test "when pattern is at the start of the string" do
+      result = :string.split("Hello World !", "H", :leading)
+
+      assert result == ["", "ello World !"]
+    end
+
+    test "when pattern is at the end of the string" do
+      result = :string.split("Hello World !", "!", :trailing)
+
+      assert result == ["Hello World ", ""]
+    end
+
+    test "with consecutive pattern" do
+      result = :string.split("Hello World !", "l", :all)
+
+      assert result == ["He", "", "o Wor", "d !"]
+    end
+
+    test "with unicode pattern" do
+      result = :string.split("Hello 👋 World", "👋", :all)
+
+      assert result == ["Hello ", " World"]
+    end
+  end
+
   describe "titlecase/1" do
     # Section: with binary input
 
