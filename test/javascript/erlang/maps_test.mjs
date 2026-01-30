@@ -319,6 +319,136 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("intersect/2", () => {
+    const intersect = Erlang_Maps["intersect/2"];
+
+    it("takes value from map2", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(4)],
+      ]);
+
+      const result = intersect(map1, map2);
+      const expected = Type.map([[Type.atom("a"), Type.integer(2)]]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles not strictly equal keys", () => {
+      const map1 = Type.map([[Type.integer(1), Type.integer(1)]]);
+      const map2 = Type.map([[Type.float(1.0), Type.integer(2)]]);
+
+      const result = intersect(map1, map2);
+      const expected = Type.map([]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns an empty map when no common keys exist", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(3)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("c"), Type.integer(2)],
+        [Type.atom("d"), Type.integer(4)],
+      ]);
+
+      const result = intersect(map1, map2);
+      const expected = Type.map([]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns an empty map when map1 is empty", () => {
+      const map1 = Type.map([]);
+      const map2 = Type.map([[Type.atom("a"), Type.integer(2)]]);
+
+      const result = intersect(map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("returns an empty map when map2 is empty", () => {
+      const map1 = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      const map2 = Type.map([]);
+
+      const result = intersect(map1, map2);
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("returns an empty map when map1 and map2 are empty", () => {
+      const result = intersect(Type.map([]), Type.map([]));
+      assert.deepStrictEqual(result, Type.map([]));
+    });
+
+    it("doesn't mutate the inputs", () => {
+      const map1 = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.bitstring("a"), Type.integer(3)],
+        [Type.integer(1), Type.integer(5)],
+        [Type.float(1.0), Type.integer(7)],
+        [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(9)],
+      ]);
+
+      const map2 = Type.map([
+        [Type.atom("a"), Type.integer(2)],
+        [Type.bitstring("a"), Type.integer(4)],
+        [Type.integer(1), Type.integer(6)],
+        [Type.float(1.0), Type.integer(8)],
+        [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(10)],
+      ]);
+
+      intersect(map1, map2);
+
+      assert.deepStrictEqual(
+        map1,
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.bitstring("a"), Type.integer(3)],
+          [Type.integer(1), Type.integer(5)],
+          [Type.float(1.0), Type.integer(7)],
+          [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(9)],
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        map2,
+        Type.map([
+          [Type.atom("a"), Type.integer(2)],
+          [Type.bitstring("a"), Type.integer(4)],
+          [Type.integer(1), Type.integer(6)],
+          [Type.float(1.0), Type.integer(8)],
+          [Type.tuple([Type.atom("a"), Type.atom("b")]), Type.integer(10)],
+        ]),
+      );
+    });
+
+    it("raises when map1 is not a map", () => {
+      const map1 = Type.atom("abc");
+      const map2 = Type.map([]);
+
+      assertBoxedError(
+        () => intersect(map1, map2),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+
+    it("raises when map2 is not a map", () => {
+      const map1 = Type.map([]);
+      const map2 = Type.atom("abc");
+
+      assertBoxedError(
+        () => intersect(map1, map2),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+  });
+
   describe("intersect_with/3", () => {
     const intersect_with = Erlang_Maps["intersect_with/3"];
 

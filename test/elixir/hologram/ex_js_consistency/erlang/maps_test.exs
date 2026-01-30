@@ -148,6 +148,52 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "intersect/2" do
+    test "takes value from map2" do
+      assert :maps.intersect(%{a: 1, b: 3}, %{a: 2, c: 4}) == %{a: 2}
+    end
+
+    test "handles not strictly equal keys" do
+      assert :maps.intersect(%{1 => 1}, %{1.0 => 2}) == %{}
+    end
+
+    test "returns an empty map when no common keys exist" do
+      assert :maps.intersect(%{a: 1, b: 3}, %{c: 2, d: 4}) == %{}
+    end
+
+    test "returns an empty map when map1 is empty" do
+      assert :maps.intersect(%{}, %{a: 2}) == %{}
+    end
+
+    test "returns an empty map when map2 is empty" do
+      assert :maps.intersect(%{a: 1}, %{}) == %{}
+    end
+
+    test "returns an empty map when map1 and map2 are empty" do
+      assert :maps.intersect(%{}, %{}) == %{}
+    end
+
+    test "doesn't mutate the inputs" do
+      map1 = %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
+      map2 = %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+      :maps.intersect(map1, map2)
+      assert map1 == %{:a => 1, "a" => 3, 1 => 5, 1.0 => 7, {:a, :b} => 9}
+      assert map2 == %{:a => 2, "a" => 4, 1 => 6, 1.0 => 8, {:a, :b} => 10}
+    end
+
+    test "raises when map1 is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect(:abc, %{})
+      end
+    end
+
+    test "raises when map2 is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.intersect(%{}, :abc)
+      end
+    end
+  end
+
   describe "intersect_with/3" do
     setup do
       [combiner: fn _k, v1, v2 -> v1 + v2 end]
