@@ -204,43 +204,43 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "split/3" do
-    test "returns unchanged subject inside a list if the pattern is empty" do
+    test "with empty pattern" do
       result = :string.split("Hello World !", "", :all)
 
       assert result == ["Hello World !"]
     end
 
-    test "returns unchanged subject inside a list if the pattern is not found" do
+    test "with pattern not found in subject" do
       result = :string.split("Hello World !", ".", :all)
 
       assert result == ["Hello World !"]
     end
 
-    test "splits on all occurrences with direction set to :all" do
+    test "with direction :all" do
       result = :string.split("Hello World !", " ", :all)
 
       assert result == ["Hello", "World", "!"]
     end
 
-    test "splits on first occurrence with direction set to :leading" do
+    test "with direction :leading" do
       result = :string.split("Hello World !", " ", :leading)
 
       assert result == ["Hello", "World !"]
     end
 
-    test "splits on last occurrence with direction set to :trailing" do
+    test "with direction :trailing" do
       result = :string.split("Hello World !", " ", :trailing)
 
       assert result == ["Hello World", "!"]
     end
 
-    test "when pattern is at the start of the subject" do
+    test "with pattern at the start of the subject" do
       result = :string.split("Hello World !", "H", :leading)
 
       assert result == ["", "ello World !"]
     end
 
-    test "when pattern is at the end of the subject" do
+    test "with pattern at the end of the subject" do
       result = :string.split("Hello World !", "!", :trailing)
 
       assert result == ["Hello World ", ""]
@@ -296,7 +296,7 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       end
     end
 
-    test "raises CaseClauseError if the third argument is not a valid direction atom" do
+    test "raises CaseClauseError if the third argument is an unrecognized atom" do
       assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
         :string.split("hello world", " ", :invalid)
       end

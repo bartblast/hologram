@@ -525,43 +525,43 @@ describe("Erlang_String", () => {
     const split = Erlang_String["split/3"];
     const subject = Type.bitstring("Hello World !");
 
-    it("returns unchanged subject inside a list if the pattern is empty", () => {
+    it("with empty pattern", () => {
       const result = split(subject, Type.bitstring(""), Type.atom("all"));
 
       assert.deepStrictEqual(result, Type.list([Bitstring.toText(subject)]));
     });
 
-    it("returns unchanged subject inside a list if the pattern is not found", () => {
+    it("with pattern not found in subject", () => {
       const result = split(subject, Type.bitstring("."), Type.atom("all"));
 
       assert.deepStrictEqual(result, Type.list([Bitstring.toText(subject)]));
     });
 
-    it("splits on all occurrences with direction set to :all", () => {
+    it("with direction :all", () => {
       const result = split(subject, Type.bitstring(" "), Type.atom("all"));
 
       assert.deepStrictEqual(result, Type.list(["Hello", "World", "!"]));
     });
 
-    it("splits on first occurrence with direction set to :leading", () => {
+    it("with direction :leading", () => {
       const result = split(subject, Type.bitstring(" "), Type.atom("leading"));
 
       assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
     });
 
-    it("splits on last occurrence with direction set to :trailing", () => {
+    it("with direction :trailing", () => {
       const result = split(subject, Type.bitstring(" "), Type.atom("trailing"));
 
       assert.deepStrictEqual(result, Type.list(["Hello World", "!"]));
     });
 
-    it("when pattern is at the start of the subject", () => {
+    it("with pattern at the start of the subject", () => {
       const result = split(subject, Type.bitstring("H"), Type.atom("leading"));
 
       assert.deepStrictEqual(result, Type.list(["", "ello World !"]));
     });
 
-    it("when pattern is at the end of the subject", () => {
+    it("with pattern at the end of the subject", () => {
       const result = split(subject, Type.bitstring("!"), Type.atom("trailing"));
 
       assert.deepStrictEqual(result, Type.list(["Hello World ", ""]));
@@ -661,7 +661,7 @@ describe("Erlang_String", () => {
       );
     });
 
-    it("raises CaseClauseError if the third argument is not a valid direction atom", () => {
+    it("raises CaseClauseError if the third argument is an unrecognized atom", () => {
       assertBoxedError(
         () =>
           split(
