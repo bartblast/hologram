@@ -187,7 +187,19 @@ const Erlang_String = {
     }
 
     const stringBinary = convertToBinary(string);
+    if (Type.isTuple(stringBinary)) {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    }
+
     const patternBinary = convertToBinary(pattern);
+    if (Type.isTuple(patternBinary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
 
     if (!Type.isAtom(direction)) {
       Interpreter.raiseCaseClauseError(direction);
@@ -335,7 +347,7 @@ const Erlang_String = {
       const codepointNum = Number(firstCodepoint.value);
       const rest = cpResult.data.slice(1);
 
-      return {codepointNum, rest};
+      return { codepointNum, rest };
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -365,7 +377,7 @@ const Erlang_String = {
         return Type.bitstring("");
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const restBinary = rest[0]; // Tail of the improper list
       const restText = Bitstring.toText(restBinary);
 
@@ -383,7 +395,7 @@ const Erlang_String = {
         return Type.list();
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const uppercasedCodepoints = uppercaseCodepoint(codepointNum).map((cp) =>
         Type.integer(cp),
       );
