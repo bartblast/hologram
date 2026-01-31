@@ -3733,31 +3733,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "make_fun/3" do
     test "creates a function capture from an Elixir module function with no args" do
-      result = :erlang.make_fun(Module1, :fun_0, 0)
-
-      assert is_function(result, 0)
-      assert result.() == 123
+      assert :erlang.make_fun(Module1, :fun_0, 0) == (&Module1.fun_0/0)
     end
 
     test "creates a function capture from an Elixir module function with a single arg" do
-      result = :erlang.make_fun(Module1, :fun_1, 1)
-
-      assert is_function(result, 1)
-      assert result.(9) == 109
+      assert :erlang.make_fun(Module1, :fun_1, 1) == (&Module1.fun_1/1)
     end
 
     test "creates a function capture from an Elixir module function with multiple args" do
-      result = :erlang.make_fun(Module1, :fun_2, 2)
-
-      assert is_function(result, 2)
-      assert result.(3, 4) == 7
+      assert :erlang.make_fun(Module1, :fun_2, 2) == (&Module1.fun_2/2)
     end
 
     test "creates a function capture from an Erlang module function" do
-      result = :erlang.make_fun(:erlang, :+, 2)
-
-      assert is_function(result, 2)
-      assert result.(2, 3) == 5
+      assert :erlang.make_fun(:erlang, :+, 2) == (&:erlang.+/2)
     end
 
     test "creates a function capture with maximum arity 255" do
