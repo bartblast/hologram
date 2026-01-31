@@ -419,6 +419,50 @@ const Erlang_Lists = {
   // End keysort/2
   // Deps: [:erlang.element/2]
 
+  // Start keystore/4
+  "keystore/4": function (key, index, tuples, newTuple) {
+    if (!Type.isInteger(index) || index.value < 1n || !Type.isTuple(newTuple)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keystore/4", arguments),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keystore2/4", [
+          key,
+          index,
+          thirdArg,
+          newTuple,
+        ]),
+      );
+    }
+
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        const resultData = [
+          ...tuples.data.slice(0, i),
+          newTuple,
+          ...tuples.data.slice(i + 1),
+        ];
+
+        return Type.list(resultData);
+      }
+    }
+
+    return Type.list([...tuples.data, newTuple]);
+  },
+  // End keystore/4
+  // Deps: []
+
   // Start keytake/3
   "keytake/3": function (key, index, tuples) {
     if (!Type.isInteger(index) || index.value < 1n) {
