@@ -227,6 +227,112 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
   end
 
+  describe "log/1" do
+    test "positive float" do
+      number = 2.0
+
+      result = :math.log(number)
+      expected = 0.6931471805599453
+
+      assert result == expected
+    end
+
+    test "one float" do
+      number = 1.0
+
+      result = :math.log(number)
+      expected = 0.0
+
+      assert result == expected
+    end
+
+    test "Euler's number float" do
+      number = 2.718281828459045
+
+      result = :math.log(number)
+      expected = 1.0
+
+      assert result == expected
+    end
+
+    test "positive integer" do
+      number = 2
+
+      result = :math.log(number)
+      expected = 0.6931471805599453
+
+      assert result == expected
+    end
+
+    test "one integer" do
+      number = 1
+
+      result = :math.log(number)
+      expected = 0.0
+
+      assert result == expected
+    end
+
+    test "integer above Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER = 9_007_199_254_740_991
+      number = 9_007_199_254_740_992
+
+      result = :math.log(number)
+      expected = 36.7368005696771
+
+      assert result == expected
+    end
+
+    test "negative float" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [-2.0]}
+    end
+
+    test "unsigned zero float" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [0.0]}
+    end
+
+    test "positive signed zero float" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [+0.0]}
+    end
+
+    test "negative signed zero float" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [-0.0]}
+    end
+
+    test "negative integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [-2]}
+    end
+
+    test "integer below Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER = -9_007_199_254_740_991
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [-9_007_199_254_740_992]}
+    end
+
+    test "zero integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [0]}
+    end
+
+    test "non-number argument" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:math, :log, [:abc]}
+    end
+  end
+
   describe "pow/2" do
     test "returns base integer value raised to exponent integer value" do
       assert :math.pow(7, 3) == 343.0
