@@ -153,6 +153,25 @@ const Erlang_Lists = {
   // End flatten/1
   // Deps: []
 
+  // Start flatten/2
+  "flatten/2": (list, tail) => {
+    if (!Type.isList(list) || !Type.isProperList(list) || !Type.isList(tail)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/2", [
+          list,
+          tail,
+        ]),
+      );
+    }
+
+    const flattened = Erlang_Lists["flatten/1"](list);
+    const data = flattened.data.concat(Type.isList(tail) ? tail.data : [tail]);
+
+    return Type.isProperList(tail) ? Type.list(data) : Type.improperList(data);
+  },
+  // End flatten/2
+  // Deps: [:lists.flatten/1]
+
   // Start foldl/3
   "foldl/3": function (fun, initialAcc, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {

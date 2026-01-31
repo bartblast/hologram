@@ -250,6 +250,68 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "flatten/2" do
+    test "empty list and empty tail" do
+      assert :lists.flatten([], []) == []
+    end
+
+    test "empty list and non-empty tail" do
+      assert :lists.flatten([], [1, 2, 3]) == [1, 2, 3]
+    end
+
+    test "non-nested list and empty tail" do
+      assert :lists.flatten([1, 2, 3], []) == [1, 2, 3]
+    end
+
+    test "non-nested list and non-empty tail" do
+      assert :lists.flatten([1, 2, 3], [4, 5, 6]) == [1, 2, 3, 4, 5, 6]
+    end
+
+    test "nested list and non-empty tail" do
+      assert :lists.flatten([1, [2, [3, 4]]], [5, 6]) == [1, 2, 3, 4, 5, 6]
+    end
+
+    test "deeply nested empty lists" do
+      assert :lists.flatten([[], [[]]], [1, 2]) == [1, 2]
+    end
+
+    test "improper tail" do
+      assert :lists.flatten([1, 2], [3, 4 | 5]) == [1, 2, 3, 4 | 5]
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.flatten/2", [:abc, [1, 2]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatten(:abc, [1, 2])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.do_flatten/2", [3, [4, 5]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatten([1, 2 | 3], [4, 5])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument contains a nested improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.do_flatten/2", [4, [5, 6]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatten([1, [2, 3 | 4]], [5, 6])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.flatten/2", [[1, 2], :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.flatten([1, 2], :abc)
+      end
+    end
+  end
+
   describe "foldl/3" do
     setup do
       [fun: fn elem, acc -> [elem | acc] end]

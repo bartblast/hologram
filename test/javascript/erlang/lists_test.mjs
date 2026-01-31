@@ -687,6 +687,199 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("flatten/2", () => {
+    const flatten = Erlang_Lists["flatten/2"];
+
+    it("empty list and empty tail", () => {
+      const result = flatten(emptyList, emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("empty list and non-empty tail", () => {
+      const tail = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const result = flatten(emptyList, tail);
+
+      assert.deepStrictEqual(result, tail);
+    });
+
+    it("non-nested list and empty tail", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const result = flatten(list, emptyList);
+
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("non-nested list and non-empty tail", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const tail = Type.list([
+        Type.integer(4),
+        Type.integer(5),
+        Type.integer(6),
+      ]);
+
+      const result = flatten(list, tail);
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(5),
+        Type.integer(6),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("nested list and non-empty tail", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.list([
+          Type.integer(2),
+          Type.list([Type.integer(3), Type.integer(4)]),
+        ]),
+      ]);
+
+      const tail = Type.list([Type.integer(5), Type.integer(6)]);
+
+      const result = flatten(list, tail);
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(5),
+        Type.integer(6),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("deeply nested empty lists", () => {
+      const list = Type.list([emptyList, Type.list([emptyList])]);
+      const tail = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const result = flatten(list, tail);
+      const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("improper tail", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const tail = Type.improperList([
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(5),
+      ]);
+
+      const result = flatten(list, tail);
+
+      const expected = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(5),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a list", () => {
+      const list = Type.atom("abc");
+      const tail = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatten/2",
+        [list, tail],
+      );
+
+      assertBoxedError(
+        () => flatten(list, tail),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an improper list", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const tail = Type.list([Type.integer(4), Type.integer(5)]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatten/2",
+        [list, tail],
+      );
+
+      assertBoxedError(
+        () => flatten(list, tail),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument contains a nested improper list", () => {
+      const nestedImproperList = Type.improperList([
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+
+      const list = Type.list([Type.integer(1), nestedImproperList]);
+      const tail = Type.list([Type.integer(5), Type.integer(6)]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatten/1",
+        [nestedImproperList],
+      );
+
+      assertBoxedError(
+        () => flatten(list, tail),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a list", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const tail = Type.atom("abc");
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatten/2",
+        [list, tail],
+      );
+
+      assertBoxedError(
+        () => flatten(list, tail),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("foldl/3", () => {
     const foldl = Erlang_Lists["foldl/3"];
 
