@@ -6252,6 +6252,17 @@ describe("Erlang", () => {
     });
   });
 
+  // On the server, node/0 returns `nonode@nohost` if the node is not alive,
+  // or the actual node name if it is. On the client it always returns `hologram_client`.
+  describe("node/0", () => {
+    it("returns local node", () => {
+      assert.deepStrictEqual(
+        Erlang["node/0"](),
+        Type.atom(ERTS.nodeTable.CLIENT_NODE),
+      );
+    });
+  });
+
   describe("not/1", () => {
     const not = Erlang["not/1"];
 
