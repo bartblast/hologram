@@ -162,22 +162,202 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
   end
 
   describe "characters_to_list/1" do
-    test "UTF8 binary" do
-      assert :unicode.characters_to_list("全息图") == [20_840, 24_687, 22_270]
+    test "converts binary to list of codepoints" do
+      assert :unicode.characters_to_list("abc") == [?a, ?b, ?c]
     end
 
-    test "list of UTF8 binaries" do
-      assert :unicode.characters_to_list(["abc", "全息图", "xyz"]) == [
-               97,
-               98,
-               99,
-               20_840,
-               24_687,
-               22_270,
-               120,
-               121,
-               122
+    test "converts binary with non-ASCII characters (Chinese)" do
+      assert :unicode.characters_to_list("全息图") == [?全, ?息, ?图]
+    end
+
+    test "converts list of codepoints to list of codepoints" do
+      input = [?a, ?b, ?c]
+
+      assert :unicode.characters_to_list(input) == input
+    end
+
+    test "converts list of binaries" do
+      input = ["abc", "def", "ghi"]
+
+      assert :unicode.characters_to_list(input) == [?a, ?b, ?c, ?d, ?e, ?f, ?g, ?h, ?i]
+    end
+
+    test "converts mixed list of codepoints and binaries" do
+      input = [?a, "bcd", ?e, "fgh", ?i]
+
+      assert :unicode.characters_to_list(input) == [?a, ?b, ?c, ?d, ?e, ?f, ?g, ?h, ?i]
+    end
+
+    test "handles nested lists" do
+      input = [
+        ?a,
+        [
+          ?b,
+          [
+            ?c,
+            "def",
+            ?g
+          ],
+          ?h
+        ],
+        ?i
+      ]
+
+      assert :unicode.characters_to_list(input) == [?a, ?b, ?c, ?d, ?e, ?f, ?g, ?h, ?i]
+    end
+
+    test "handles empty binary" do
+      assert :unicode.characters_to_list(<<>>) == []
+    end
+
+    test "handles empty list" do
+      assert :unicode.characters_to_list([]) == []
+    end
+
+    test "handles deeply nested lists" do
+      input = [[["abc"]]]
+
+      assert :unicode.characters_to_list(input) == [?a, ?b, ?c]
+    end
+
+    test "handles large input" do
+      str = String.duplicate("abcdefghij", 100)
+      large_input = str
+
+      assert :unicode.characters_to_list(large_input) == String.to_charlist(str)
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = ["hello", " ", 0x3042, " world"]
+
+      assert :unicode.characters_to_list(input) == [
+               ?h,
+               ?e,
+               ?l,
+               ?l,
+               ?o,
+               ?\s,
+               0x3042,
+               ?\s,
+               ?w,
+               ?o,
+               ?r,
+               ?l,
+               ?d
              ]
+    end
+
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, ~c"abc", [invalid_binary]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, ~c"a", [invalid_binary]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, ~c"a", [invalid_binary]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, ~c"a", [invalid_binary]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "returns incomplete tuple for truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+
+      input = ["a", incomplete_binary]
+
+      expected = {:incomplete, ~c"a", incomplete_binary}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "returns error tuple for single invalid binary not wrapped in a list" do
+      invalid_binary = <<255, 255>>
+      expected = {:error, [], invalid_binary}
+
+      assert :unicode.characters_to_list(invalid_binary) == expected
+    end
+
+    test "returns incomplete tuple for single truncated binary not wrapped in a list" do
+      # First byte of a 2-byte sequence (incomplete)
+      incomplete_binary = <<0xC3>>
+
+      expected = {:incomplete, [], incomplete_binary}
+
+      assert :unicode.characters_to_list(incomplete_binary) == expected
+    end
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_list(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_list(input)
+      end
+    end
+
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_list(input)
+      end
+    end
+
+    test "returns error tuple on invalid code point (above max)" do
+      input = [97, 0x110000]
+      expected = {:error, ~c"a", [0x110000]}
+
+      assert :unicode.characters_to_list(input) == expected
+    end
+
+    test "returns error tuple on negative integer code point" do
+      input = [-1]
+      expected = {:error, [], [-1]}
+
+      assert :unicode.characters_to_list(input) == expected
     end
   end
 

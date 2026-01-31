@@ -229,66 +229,399 @@ describe("Erlang_Unicode", () => {
   describe("characters_to_list/1", () => {
     const fun = Erlang_Unicode["characters_to_list/1"];
 
-    it("UTF8 binary", () => {
-      const result = fun(Type.bitstring("全息图"));
-
-      const expected = Type.list([
-        Type.integer(20840),
-        Type.integer(24687),
-        Type.integer(22270),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("list of UTF8 binaries", () => {
-      const result = fun(
-        Type.list([
-          Type.bitstring("abc"),
-          Type.bitstring("全息图"),
-          Type.bitstring("xyz"),
-        ]),
-      );
+    it("converts binary to list of codepoints", () => {
+      const result = fun(Type.bitstring("abc"));
 
       const expected = Type.list([
         Type.integer(97),
         Type.integer(98),
         Type.integer(99),
-        Type.integer(20840),
-        Type.integer(24687),
-        Type.integer(22270),
-        Type.integer(120),
-        Type.integer(121),
-        Type.integer(122),
       ]);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("a list that contains some items that are not UTF8 binaries", () => {
-      const data = Type.list([
-        Type.bitstring("abc"),
-        Type.integer(123),
-        Type.bitstring("xyz"),
+    it("converts binary with non-ASCII characters (Chinese)", () => {
+      const result = fun(Type.bitstring("全息图"));
+
+      const expected = Type.list([
+        Type.integer(20840), // 全
+        Type.integer(24687), // 息
+        Type.integer(22270), // 图
       ]);
 
-      assert.throw(
-        () => fun(data),
-        HologramInterpreterError,
-        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
-          `The following input was received: ["abc", 123, "xyz"]\n` +
-          "Check the implementation status here: https://hologram.page/reference/client-runtime",
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts list of codepoints to list of codepoints", () => {
+      const input = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      const result = fun(input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("converts list of binaries", () => {
+      const input = Type.list([
+        Type.bitstring("abc"),
+        Type.bitstring("def"),
+        Type.bitstring("ghi"),
+      ]);
+
+      const result = fun(input);
+
+      const expected = Type.list([
+        Type.integer(97), // a
+        Type.integer(98), // b
+        Type.integer(99), // c
+        Type.integer(100), // d
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(103), // g
+        Type.integer(104), // h
+        Type.integer(105), // i
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts mixed list of codepoints and binaries", () => {
+      const input = Type.list([
+        Type.integer(97), // a
+        Type.bitstring("bcd"),
+        Type.integer(101), // e
+        Type.bitstring("fgh"),
+        Type.integer(105), // i
+      ]);
+
+      const result = fun(input);
+
+      const expected = Type.list([
+        Type.integer(97), // a
+        Type.integer(98), // b
+        Type.integer(99), // c
+        Type.integer(100), // d
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(103), // g
+        Type.integer(104), // h
+        Type.integer(105), // i
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles nested lists", () => {
+      const input = Type.list([
+        Type.integer(97), // a
+        Type.list([
+          Type.integer(98), // b
+          Type.list([
+            Type.integer(99), // c
+            Type.bitstring("def"),
+            Type.integer(103), // g
+          ]),
+          Type.integer(104), // h
+        ]),
+        Type.integer(105), // i
+      ]);
+
+      const result = fun(input);
+
+      const expected = Type.list([
+        Type.integer(97), // a
+        Type.integer(98), // b
+        Type.integer(99), // c
+        Type.integer(100), // d
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(103), // g
+        Type.integer(104), // h
+        Type.integer(105), // i
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty binary", () => {
+      const result = fun(Type.bitstring(""));
+
+      assert.deepStrictEqual(result, Type.list());
+    });
+
+    it("handles empty list", () => {
+      const result = fun(Type.list());
+
+      assert.deepStrictEqual(result, Type.list());
+    });
+
+    it("handles deeply nested lists", () => {
+      const input = Type.list([
+        Type.list([Type.list([Type.bitstring("abc")])]),
+      ]);
+
+      const result = fun(input);
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles large input", () => {
+      const str = "abcdefghij".repeat(100);
+      const largeInput = Type.bitstring(str);
+
+      const result = fun(largeInput);
+
+      const expected = Type.list(
+        Array.from(str).map((char) => Type.integer(char.codePointAt(0))),
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles mixed ASCII and Unicode", () => {
+      const input = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring(" "),
+        Type.integer(0x3042), // Hiragana A
+        Type.bitstring(" world"),
+      ]);
+
+      const result = fun(input);
+
+      const expected = Type.list([
+        Type.integer(104), // h
+        Type.integer(101), // e
+        Type.integer(108), // l
+        Type.integer(108), // l
+        Type.integer(111), // o
+        Type.integer(32), // space
+        Type.integer(0x3042), // Hiragana A
+        Type.integer(32), // space
+        Type.integer(119), // w
+        Type.integer(111), // o
+        Type.integer(114), // r
+        Type.integer(108), // l
+        Type.integer(100), // d
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple on invalid UTF-8 in binary", () => {
+      const input = Type.list([
+        Type.bitstring("abc"),
+        Bitstring.fromBytes([255, 255]),
+      ]);
+
+      const result = fun(input);
+
+      // Set text to false to match the mutated binary in result
+      const expectedRest = Bitstring.fromBytes([255, 255]);
+      Bitstring.toText(expectedRest);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
+        Type.list([expectedRest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects overlong UTF-8 sequence in binary", () => {
+      // Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      const input = Type.list([
+        Type.bitstring("a"),
+        Bitstring.fromBytes([0xc0, 0x80]),
+      ]);
+
+      const result = fun(input);
+
+      // Set text to false to match the mutated binary in result
+      const expectedRest = Bitstring.fromBytes([0xc0, 0x80]);
+      Bitstring.toText(expectedRest);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([expectedRest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects UTF-16 surrogate range in binary", () => {
+      // CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      const input = Type.list([
+        Type.bitstring("a"),
+        Bitstring.fromBytes([0xed, 0xa0, 0x80]),
+      ]);
+
+      const result = fun(input);
+
+      // Set text to false to match the mutated binary in result
+      const expectedRest = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+      Bitstring.toText(expectedRest);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([expectedRest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rejects code points above U+10FFFF in binary", () => {
+      // Leader 0xF5 starts sequences above Unicode max (invalid)
+      const input = Type.list([
+        Type.bitstring("a"),
+        Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]),
+      ]);
+
+      const result = fun(input);
+
+      // Set text to false to match the mutated binary in result
+      const expectedRest = Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]);
+      Bitstring.toText(expectedRest);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([expectedRest]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns incomplete tuple for truncated UTF-8 sequence", () => {
+      // First two bytes of a 3-byte sequence (incomplete)
+      const input = Type.list([
+        Type.bitstring("a"),
+        Bitstring.fromBytes([0xe4, 0xb8]),
+      ]);
+
+      const result = fun(input);
+
+      // Set text to false to match the mutated binary in result
+      const expectedRest = Bitstring.fromBytes([0xe4, 0xb8]);
+      Bitstring.toText(expectedRest);
+
+      const expected = Type.tuple([
+        Type.atom("incomplete"),
+        Type.list([Type.integer(97)]),
+        expectedRest,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple for single invalid binary not wrapped in a list", () => {
+      const input = Bitstring.fromBytes([255, 255]);
+
+      const result = fun(input);
+
+      const expectedRest = Bitstring.fromBytes([255, 255]);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list(),
+        expectedRest,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns incomplete tuple for single truncated binary not wrapped in a list", () => {
+      // First byte of a 2-byte sequence (incomplete)
+      const input = Bitstring.fromBytes([0xc3]);
+
+      const result = fun(input);
+
+      const expectedRest = Bitstring.fromBytes([0xc3]);
+
+      const expected = Type.tuple([
+        Type.atom("incomplete"),
+        Type.list(),
+        expectedRest,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError when input is not a list or a bitstring", () => {
+      assertBoxedError(
+        () => fun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
       );
     });
 
-    it("input other than a list or UTF8 binary", () => {
-      assert.throw(
-        () => fun(Type.integer(123)),
-        HologramInterpreterError,
-        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
-          "The following input was received: 123\n" +
-          "Check the implementation status here: https://hologram.page/reference/client-runtime",
+    it("raises ArgumentError when input is a non-binary bitstring", () => {
+      const input = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
       );
+    });
+
+    it("raises ArgumentError when input list contains invalid types", () => {
+      const input = Type.list([Type.float(123.45), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => fun(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    });
+
+    it("returns error tuple on invalid code point (above max)", () => {
+      const input = Type.list([Type.integer(97), Type.integer(0x110000)]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list([Type.integer(97)]),
+        Type.list([Type.integer(0x110000)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns error tuple on negative integer code point", () => {
+      const input = Type.list([Type.integer(-1)]);
+
+      const result = fun(input);
+
+      const expected = Type.tuple([
+        Type.atom("error"),
+        Type.list(),
+        Type.list([Type.integer(-1)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
@@ -795,7 +1128,7 @@ describe("Erlang_Unicode", () => {
     });
 
     it("raises ArgumentError when input is a non-binary bitstring", () => {
-      const input = new Bitstring([1, 0, 1], 3); // 3 bits, not byte-aligned
+      const input = Type.bitstring([1, 0, 1]);
 
       assertBoxedError(
         () => fun(input),
