@@ -56,6 +56,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
+    opts = maybe_adjust_formatter_bin_path(opts)
+
     {old_module_digest_plt, module_digest_plt_dump_path} =
       Compiler.maybe_load_module_digest_plt(build_dir)
 
@@ -133,6 +135,46 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.info("Hologram: compiler finished")
 
     :ok
+  end
+
+  defp maybe_adjust_formatter_bin_path(opts) do
+    system_formatter_path = "biome"
+
+    formatter_bin_path =
+      Enum.find([opts[:formatter_bin_path], system_formatter_path], &bin_available?/1)
+
+    case formatter_bin_path do
+      nil ->
+        raise RuntimeError,
+          message: """
+          Biome Formatter failed to run
+
+          Neither the bundled biome binary nor a system-installed biome could be executed.
+          This can happen on systems where dynamically linked binaries are not supported,
+          such as NixOS or musl-based distributions (e.g., Alpine Linux).
+
+          To fix this, install biome and ensure it's available in your PATH.
+          For installation options, see: https://biomejs.dev/guides/manual-installation/
+          """
+
+      path ->
+        Keyword.put(opts, :formatter_bin_path, path)
+    end
+  end
+
+  defp bin_available?(path) do
+    cmd_args = ["--version"]
+
+    cmd_opts = [parallelism: true, stderr_to_stdout: true]
+
+    try do
+      case SystemUtils.cmd_cross_platform(path, cmd_args, cmd_opts) do
+        {_exit_msg, 0} -> true
+        _cmd_result -> false
+      end
+    rescue
+      _e -> false
+    end
   end
 
   defp build_default_opts do
