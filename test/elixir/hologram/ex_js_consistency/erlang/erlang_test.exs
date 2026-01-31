@@ -3731,6 +3731,78 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "make_fun/3" do
+    test "creates a function capture from an Elixir module function with no args" do
+      result = :erlang.make_fun(Module1, :fun_0, 0)
+
+      assert is_function(result, 0)
+      assert result.() == 123
+    end
+
+    test "creates a function capture from an Elixir module function with a single arg" do
+      result = :erlang.make_fun(Module1, :fun_1, 1)
+
+      assert is_function(result, 1)
+      assert result.(9) == 109
+    end
+
+    test "creates a function capture from an Elixir module function with multiple args" do
+      result = :erlang.make_fun(Module1, :fun_2, 2)
+
+      assert is_function(result, 2)
+      assert result.(3, 4) == 7
+    end
+
+    test "creates a function capture from an Erlang module function" do
+      result = :erlang.make_fun(:erlang, :+, 2)
+
+      assert is_function(result, 2)
+      assert result.(2, 3) == 5
+    end
+
+    test "creates a function capture for a non-existent module" do
+      result = :erlang.make_fun(NonExistentModule, :some_fun, 1)
+
+      assert is_function(result, 1)
+    end
+
+    test "creates a function capture for a non-existent function" do
+      result = :erlang.make_fun(Module1, :nonexistent_fun, 1)
+
+      assert is_function(result, 1)
+    end
+
+    test "creates a function capture for a non-matching arity" do
+      result = :erlang.make_fun(Module1, :fun_1, 2)
+
+      assert is_function(result, 2)
+    end
+
+    test "raises ArgumentError if the first argument is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an atom"),
+                   {:erlang, :make_fun, [123, :fun_0, 0]}
+    end
+
+    test "raises ArgumentError if the second argument is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an atom"),
+                   {:erlang, :make_fun, [Module1, 123, 0]}
+    end
+
+    test "raises ArgumentError if the third argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not an integer"),
+                   {:erlang, :make_fun, [Module1, :fun_0, 2.0]}
+    end
+
+    test "raises ArgumentError if the third argument is a negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "out of range"),
+                   {:erlang, :make_fun, [Module1, :fun_0, -1]}
+    end
+  end
+
   describe "make_tuple/2" do
     test "creates tuple of the given size with all elements set to the given value" do
       assert :erlang.make_tuple(3, :a) === {:a, :a, :a}

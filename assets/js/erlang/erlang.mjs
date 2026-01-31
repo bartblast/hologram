@@ -1632,6 +1632,75 @@ const Erlang = {
   // End make_ref/0
   // Deps: []
 
+  // Start make_fun/3
+  "make_fun/3": (module, functionName, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    if (arity.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    }
+
+    const arityValue = Number(arity.value);
+    const functionNameText = functionName.value;
+
+    const paramNames = Array.from(
+      {length: arityValue},
+      (_elem, index) => `$${index + 1}`,
+    );
+
+    const clauses = [
+      {
+        params: (_context) =>
+          paramNames.map((name) => Type.variablePattern(name)),
+        guards: [],
+        body: (context) => {
+          const args = Type.list(paramNames.map((name) => context.vars[name]));
+
+          return Interpreter.callNamedFunction(
+            module,
+            functionName,
+            args,
+            context,
+          );
+        },
+      },
+    ];
+
+    const capturedModule = module.value.startsWith("Elixir.")
+      ? Interpreter.moduleExName(module)
+      : `:${module.value}`;
+
+    const context = Interpreter.buildContext({module: Type.nil()});
+
+    return Type.functionCapture(
+      capturedModule,
+      functionNameText,
+      arityValue,
+      clauses,
+      context,
+    );
+  },
+  // End make_fun/3
+  // Deps: []
+
   // Start make_tuple/2
   "make_tuple/2": (arity, value) => {
     // The Erlang implementation says that the index is out of range even when it is not an integer

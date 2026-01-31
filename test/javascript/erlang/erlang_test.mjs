@@ -6084,6 +6084,138 @@ describe("Erlang", () => {
     });
   });
 
+  describe("make_fun/3", () => {
+    const make_fun = Erlang["make_fun/3"];
+
+    const moduleText = "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1";
+    const module = Type.alias(moduleText);
+
+    it("creates a function capture from an Elixir module function with no args", () => {
+      const result = make_fun(module, Type.atom("fun_0"), integer0);
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, moduleText);
+      assert.equal(result.capturedFunction, "fun_0");
+      assert.equal(result.arity, 0);
+
+      const callResult = Interpreter.callAnonymousFunction(result, []);
+      assert.deepStrictEqual(callResult, Type.integer(123));
+    });
+
+    it("creates a function capture from an Elixir module function with a single arg", () => {
+      const result = make_fun(module, Type.atom("fun_1"), integer1);
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, moduleText);
+      assert.equal(result.capturedFunction, "fun_1");
+      assert.equal(result.arity, 1);
+
+      const callResult = Interpreter.callAnonymousFunction(result, [
+        Type.integer(9),
+      ]);
+
+      assert.deepStrictEqual(callResult, Type.integer(109));
+    });
+
+    it("creates a function capture from an Elixir module function with multiple args", () => {
+      const result = make_fun(module, Type.atom("fun_2"), integer2);
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, moduleText);
+      assert.equal(result.capturedFunction, "fun_2");
+      assert.equal(result.arity, 2);
+
+      const callResult = Interpreter.callAnonymousFunction(result, [
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+
+      assert.deepStrictEqual(callResult, Type.integer(7));
+    });
+
+    it("creates a function capture from an Erlang module function", () => {
+      const erlangModule = Type.atom("erlang");
+      const result = make_fun(erlangModule, Type.atom("+"), integer2);
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, ":erlang");
+      assert.equal(result.capturedFunction, "+");
+      assert.equal(result.arity, 2);
+
+      const callResult = Interpreter.callAnonymousFunction(result, [
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(callResult, Type.integer(5));
+    });
+
+    it("creates a function capture for a non-existent module", () => {
+      const nonExistentModule = Type.alias("NonExistentModule");
+
+      const result = make_fun(
+        nonExistentModule,
+        Type.atom("some_fun"),
+        integer1,
+      );
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, "NonExistentModule");
+      assert.equal(result.capturedFunction, "some_fun");
+      assert.equal(result.arity, 1);
+    });
+
+    it("creates a function capture for a non-existent function", () => {
+      const result = make_fun(module, Type.atom("nonexistent_fun"), integer1);
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, moduleText);
+      assert.equal(result.capturedFunction, "nonexistent_fun");
+      assert.equal(result.arity, 1);
+    });
+
+    it("creates a function capture for a non-matching arity", () => {
+      const result = make_fun(module, Type.atom("fun_1"), integer2);
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, moduleText);
+      assert.equal(result.capturedFunction, "fun_1");
+      assert.equal(result.arity, 2);
+    });
+
+    it("raises ArgumentError if the first argument is not an atom", () => {
+      assertBoxedError(
+        () => make_fun(integer123, Type.atom("fun_0"), integer0),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an atom", () => {
+      assertBoxedError(
+        () => make_fun(module, integer123, integer0),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not an integer", () => {
+      assertBoxedError(
+        () => make_fun(module, Type.atom("fun_0"), float2),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is a negative integer", () => {
+      assertBoxedError(
+        () => make_fun(module, Type.atom("fun_0"), Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+  });
+
   describe("make_tuple/2", () => {
     const make_tuple = Erlang["make_tuple/2"];
 
