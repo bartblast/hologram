@@ -1658,6 +1658,10 @@ const Erlang = {
       );
     }
 
+    if (arity.value > 255n) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
     const arityValue = Number(arity.value);
     const functionNameText = functionName.value;
 

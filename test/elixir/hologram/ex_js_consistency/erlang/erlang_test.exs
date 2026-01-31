@@ -3760,6 +3760,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert result.(2, 3) == 5
     end
 
+    test "creates a function capture with maximum arity 255" do
+      result = :erlang.make_fun(Module1, :fun_0, 255)
+
+      assert is_function(result, 255)
+    end
+
     test "creates a function capture for a non-existent module" do
       result = :erlang.make_fun(NonExistentModule, :some_fun, 1)
 
@@ -3800,6 +3806,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(3, "out of range"),
                    {:erlang, :make_fun, [Module1, :fun_0, -1]}
+    end
+
+    test "raises ArgumentError if the third argument exceeds maximum arity" do
+      assert_error ArgumentError,
+                   "argument error",
+                   {:erlang, :make_fun, [Module1, :fun_0, 256]}
     end
   end
 

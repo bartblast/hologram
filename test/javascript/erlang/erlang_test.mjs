@@ -6150,6 +6150,15 @@ describe("Erlang", () => {
       assert.deepStrictEqual(callResult, Type.integer(5));
     });
 
+    it("creates a function capture with maximum arity 255", () => {
+      const result = make_fun(module, Type.atom("fun_0"), Type.integer(255));
+
+      assert.isTrue(Type.isAnonymousFunction(result));
+      assert.equal(result.capturedModule, moduleText);
+      assert.equal(result.capturedFunction, "fun_0");
+      assert.equal(result.arity, 255);
+    });
+
     it("creates a function capture for a non-existent module", () => {
       const nonExistentModule = Type.alias("NonExistentModule");
 
@@ -6212,6 +6221,14 @@ describe("Erlang", () => {
         () => make_fun(module, Type.atom("fun_0"), Type.integer(-1)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument exceeds maximum arity", () => {
+      assertBoxedError(
+        () => make_fun(module, Type.atom("fun_0"), Type.integer(256)),
+        "ArgumentError",
+        "argument error",
       );
     });
   });
