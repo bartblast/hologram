@@ -292,6 +292,130 @@ describe("Erlang_Math", () => {
     });
   });
 
+  describe("log/1", () => {
+    const log = Erlang_Math["log/1"];
+
+    it("positive float", () => {
+      const number = Type.float(2.0);
+
+      const result = log(number);
+      const expected = Type.float(0.6931471805599453);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("one float", () => {
+      const number = Type.float(1.0);
+
+      const result = log(number);
+      const expected = Type.float(0.0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("Euler's number float", () => {
+      const number = Type.float(2.718281828459045);
+
+      const result = log(number);
+      const expected = Type.float(1.0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("positive integer", () => {
+      const number = Type.integer(2);
+
+      const result = log(number);
+      const expected = Type.float(0.6931471805599453);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("one integer", () => {
+      const number = Type.integer(1);
+
+      const result = log(number);
+      const expected = Type.float(0.0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("integer above Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER = 9_007_199_254_740_991
+      const number = Type.integer(9_007_199_254_740_992n);
+
+      const result = log(number);
+      const expected = Type.float(36.7368005696771);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("negative float", () => {
+      assertBoxedError(
+        () => log(Type.float(-2.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("unsigned zero float", () => {
+      assertBoxedError(
+        () => log(Type.float(0.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("positive signed zero float", () => {
+      assertBoxedError(
+        () => log(Type.float(+0.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("negative signed zero float", () => {
+      assertBoxedError(
+        () => log(Type.float(-0.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("negative integer", () => {
+      assertBoxedError(
+        () => log(Type.integer(-2)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("integer below Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER = -9_007_199_254_740_991
+      assertBoxedError(
+        () => log(Type.integer(-9_007_199_254_740_992n)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("zero integer", () => {
+      assertBoxedError(
+        () => log(Type.integer(0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("non-number argument", () => {
+      assertBoxedError(
+        () => log(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("pow/2", () => {
     const testedFun = Erlang_Math["pow/2"];
 

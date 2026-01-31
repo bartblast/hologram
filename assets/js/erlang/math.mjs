@@ -62,6 +62,25 @@ const Erlang_Math = {
   // End floor/1
   // Deps: []
 
+  // Start log/1
+  "log/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    const value = Type.isInteger(number) ? Number(number.value) : number.value;
+
+    if (value <= 0) {
+      Interpreter.raiseArithmeticError();
+    }
+
+    return Type.float(Math.log(value));
+  },
+  // End log/1
+  // Deps: []
+
   // Start pow/2
   "pow/2": (base, exponent) => {
     if (!Type.isNumber(base)) {
