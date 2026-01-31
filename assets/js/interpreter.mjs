@@ -190,6 +190,7 @@ export default class Interpreter {
     }
 
     if (
+      moduleProxy.__exports__ &&
       !moduleProxy.__exports__.has(functionArityStr) &&
       !Interpreter.isEqual(module, context.module)
     ) {
