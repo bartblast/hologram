@@ -2882,6 +2882,94 @@ describe("Erlang", () => {
     });
   });
 
+  describe("bsl/2", () => {
+    const testedFun = Erlang["bsl/2"];
+
+    it("common usage", () => {
+      // 1 = 0b00000001, 16 = 0b00010000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(1), Type.integer(4)),
+        Type.integer(16),
+      );
+    });
+
+    it("zero shift", () => {
+      // 247 = 0b11110111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(247), Type.integer(0)),
+        Type.integer(247),
+      );
+    });
+
+    it("shift right via negative shift", () => {
+      // 16 = 0b00010000, 8 = 0b00001000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(16), Type.integer(-1)),
+        Type.integer(8),
+      );
+    });
+
+    it("negative integer left shift", () => {
+      // -2 = 0b11111110, -4 = 0b11111100
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-2), Type.integer(1)),
+        Type.integer(-4),
+      );
+    });
+
+    it("large shift for positive integer", () => {
+      // 1 << 64 = 18_446_744_073_709_551_616
+      assert.deepStrictEqual(
+        testedFun(Type.integer(1), Type.integer(64)),
+        Type.integer(18_446_744_073_709_551_616n),
+      );
+    });
+
+    it("large shift for negative integer", () => {
+      // -1 << 64 = -18_446_744_073_709_551_616
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-1), Type.integer(64)),
+        Type.integer(-18_446_744_073_709_551_616n),
+      );
+    });
+
+    it("above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      //  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      // 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(9_007_199_254_740_992n), Type.integer(1)),
+        Type.integer(18_014_398_509_481_984n),
+      );
+    });
+
+    it("below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      //  -9_007_199_254_740_992 = 0b1111111111100000000000000000000000000000000000000000000000000000
+      // -18_014_398_509_481_984 = 0b1111111111000000000000000000000000000000000000000000000000000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-9_007_199_254_740_992n), Type.integer(1)),
+        Type.integer(-18_014_398_509_481_984n),
+      );
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(1.0), Type.integer(2)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bsl(1.0, 2)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.float(2.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bsl(1, 2.0)",
+      );
+    });
+  });
+
   describe("bsr/2", () => {
     const testedFun = Erlang["bsr/2"];
 
