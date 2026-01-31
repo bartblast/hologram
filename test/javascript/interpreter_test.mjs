@@ -4924,8 +4924,8 @@ describe("Interpreter", () => {
     });
 
     describe("match placeholder", () => {
-      // _var = 2
-      it("integer", () => {
+      it("on the left", () => {
+        // _placeholder = 2
         const result = Interpreter.matchOperator(
           Type.integer(2),
           Type.matchPlaceholder(),
@@ -4934,19 +4934,46 @@ describe("Interpreter", () => {
 
         assert.deepStrictEqual(result, Type.integer(2));
 
+        // Verify no variable was bound from the placeholder
         assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
       });
 
-      // :top = _placeholder
-      it("atom with right placeholder", () => {
-        const result = Interpreter.matchOperator(
-          Type.matchPlaceholder(),
-          Type.atom("top"),
+      it("on the right", () => {
+        const expectedVars = {...varsWithEmptyMatchedValues};
+        delete expectedVars.__matched__;
+
+        // fn 2 = _placeholder -> :ok end
+        const fun = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (context) => [
+                Interpreter.matchOperator(
+                  Type.matchPlaceholder(),
+                  Type.integer(2),
+                  context,
+                ),
+              ],
+              guards: [],
+              body: (context) => {
+                // Unlike "on the left" which tests matchOperator() directly, this test uses
+                // callAnonymousFunction() which calls updateVarsToMatchedValues() after matching,
+                // deleting __matched__ from context.vars.
+                // Verify no variable was bound from the placeholder.
+                assert.deepStrictEqual(context.vars, expectedVars);
+
+                return Type.atom("ok");
+              },
+            },
+          ],
           context,
         );
 
-        assert.deepStrictEqual(result, Type.atom("top"));
-        assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
+        const result = Interpreter.callAnonymousFunction(fun, [
+          Type.integer(2),
+        ]);
+
+        assert.deepStrictEqual(result, Type.atom("ok"));
       });
 
       // <<prefix::size(8), _rest::binary>> = "hello"
