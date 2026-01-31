@@ -3716,21 +3716,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe "make_ref/0" do
-    test "returns a reference" do
-      result = :erlang.make_ref()
-
-      assert is_reference(result)
-    end
-
-    test "consecutive calls return unique references" do
-      ref1 = :erlang.make_ref()
-      ref2 = :erlang.make_ref()
-
-      assert ref1 != ref2
-    end
-  end
-
   describe "make_fun/3" do
     test "creates a function capture from an Elixir module function with no args" do
       assert :erlang.make_fun(Module1, :fun_0, 0) == (&Module1.fun_0/0)
@@ -3800,6 +3785,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    "argument error",
                    {:erlang, :make_fun, [Module1, :fun_0, 256]}
+    end
+  end
+
+  describe "make_ref/0" do
+    test "returns a reference" do
+      result = :erlang.make_ref()
+
+      assert is_reference(result)
+    end
+
+    test "consecutive calls return unique references" do
+      ref1 = :erlang.make_ref()
+      ref2 = :erlang.make_ref()
+
+      assert ref1 != ref2
     end
   end
 

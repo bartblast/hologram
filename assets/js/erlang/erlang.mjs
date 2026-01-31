@@ -1615,23 +1615,6 @@ const Erlang = {
   // End localtime/0
   // Deps: []
 
-  // Start make_ref/0
-  "make_ref/0": () => {
-    const node = ERTS.nodeTable.CLIENT_NODE;
-    const creation = 0;
-
-    // TODO: implement ID words similarly to how it's done in Erlang
-    const idWords = [
-      Utils.randomUint32(),
-      Utils.randomUint32(),
-      ERTS.referenceSequence.next(),
-    ];
-
-    return Type.reference(node, creation, idWords);
-  },
-  // End make_ref/0
-  // Deps: []
-
   // Start make_fun/3
   "make_fun/3": (module, functionName, arity) => {
     if (!Type.isAtom(module)) {
@@ -1703,6 +1686,23 @@ const Erlang = {
     );
   },
   // End make_fun/3
+  // Deps: []
+
+  // Start make_ref/0
+  "make_ref/0": () => {
+    const node = ERTS.nodeTable.CLIENT_NODE;
+    const creation = 0;
+
+    // TODO: implement ID words similarly to how it's done in Erlang
+    const idWords = [
+      Utils.randomUint32(),
+      Utils.randomUint32(),
+      ERTS.referenceSequence.next(),
+    ];
+
+    return Type.reference(node, creation, idWords);
+  },
+  // End make_ref/0
   // Deps: []
 
   // Start make_tuple/2

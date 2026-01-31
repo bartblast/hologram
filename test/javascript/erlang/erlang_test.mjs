@@ -6067,23 +6067,6 @@ describe("Erlang", () => {
     });
   });
 
-  describe("make_ref/0", () => {
-    const make_ref = Erlang["make_ref/0"];
-
-    it("returns a reference", () => {
-      const result = make_ref();
-
-      assert.isTrue(Type.isReference(result));
-    });
-
-    it("consecutive calls return unique references", () => {
-      const ref1 = make_ref();
-      const ref2 = make_ref();
-
-      assert.isFalse(Interpreter.isEqual(ref1, ref2));
-    });
-  });
-
   describe("make_fun/3", () => {
     const make_fun = Erlang["make_fun/3"];
 
@@ -6230,6 +6213,23 @@ describe("Erlang", () => {
         "ArgumentError",
         "argument error",
       );
+    });
+  });
+
+  describe("make_ref/0", () => {
+    const make_ref = Erlang["make_ref/0"];
+
+    it("returns a reference", () => {
+      const result = make_ref();
+
+      assert.isTrue(Type.isReference(result));
+    });
+
+    it("consecutive calls return unique references", () => {
+      const ref1 = make_ref();
+      const ref2 = make_ref();
+
+      assert.isFalse(Interpreter.isEqual(ref1, ref2));
     });
   });
 
