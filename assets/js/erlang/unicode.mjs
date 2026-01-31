@@ -500,7 +500,6 @@ const Erlang_Unicode = {
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
       const textPrefix = Bitstring.toText(prefix);
-
       const normalizedPrefix =
         textPrefix === false
           ? prefix
@@ -797,6 +796,7 @@ const Erlang_Unicode = {
 
       // Main loop: scan forward, validating each sequence
       let pos = 0;
+
       while (pos < bytes.length) {
         const seqLength = getSequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
@@ -824,7 +824,6 @@ const Erlang_Unicode = {
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
       const textPrefix = Bitstring.toText(prefix);
-
       const normalizedPrefix =
         textPrefix === false
           ? prefix
@@ -848,7 +847,6 @@ const Erlang_Unicode = {
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
-
       const normalizedPrefix = Type.bitstring(validText.normalize("NFD"));
 
       return Type.tuple([Type.atom("error"), normalizedPrefix, invalidRest]);
@@ -974,6 +972,7 @@ const Erlang_Unicode = {
 
       // Main loop: scan forward, validating each sequence
       let pos = 0;
+
       while (pos < bytes.length) {
         const seqLength = getSequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
@@ -1001,7 +1000,6 @@ const Erlang_Unicode = {
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
       const textPrefix = Bitstring.toText(prefix);
-
       const normalizedPrefix =
         textPrefix === false
           ? prefix
@@ -1049,9 +1047,9 @@ const Erlang_Unicode = {
       );
     }
 
+    // Valid binary - check for UTF-8 validity then normalize
     const text = Bitstring.toText(converted);
 
-    // Valid binary - check for UTF-8 validity then normalize
     if (text === false) {
       const bytes = converted.bytes ?? new Uint8Array(0);
       return handleInvalidUtf8(bytes);
@@ -1140,19 +1138,17 @@ const Erlang_Unicode = {
 
         // Verify all continuation bytes have correct pattern (10xxxxxx)
         for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) {
-            return false;
-          }
+          if (!isValidContinuation(bytes[start + i])) return false;
         }
 
         // Decode and validate the code point value
         const codePoint = decodeCodePoint(start, length);
-
         return isValidCodePoint(codePoint, length);
       };
 
       // Main loop: scan forward, validating each sequence
       let pos = 0;
+
       while (pos < bytes.length) {
         const seqLength = getSequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
@@ -1180,7 +1176,6 @@ const Erlang_Unicode = {
     // invalid UTF-8 (returns error tuple with normalized prefix).
     const handleConversionError = (tag, prefix, rest) => {
       const textPrefix = Bitstring.toText(prefix);
-
       const normalizedPrefix =
         textPrefix === false
           ? prefix
@@ -1230,6 +1225,7 @@ const Erlang_Unicode = {
 
     // Valid binary - check for UTF-8 validity then normalize
     const text = Bitstring.toText(converted);
+
     if (text === false) {
       const bytes = converted.bytes ?? new Uint8Array(0);
       return handleInvalidUtf8(bytes);
