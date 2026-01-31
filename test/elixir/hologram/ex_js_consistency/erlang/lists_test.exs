@@ -832,6 +832,114 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keystore/4" do
+    test "appends the new tuple if tuples list is empty" do
+      assert :lists.keystore(:c, 1, [], {:x}) == [{:x}]
+    end
+
+    test "single tuple, no match" do
+      assert :lists.keystore(:c, 1, [{:a, 2, 3.0}], {:x}) == [{:a, 2, 3.0}, {:x}]
+    end
+
+    test "single tuple, match at first index" do
+      assert :lists.keystore(:a, 1, [{:a, 2, 3.0}], {:x}) == [{:x}]
+    end
+
+    test "single tuple, match at middle index" do
+      assert :lists.keystore(:b, 2, [{1, :b, 3.0}], {:x}) == [{:x}]
+    end
+
+    test "single tuple, match at last index" do
+      assert :lists.keystore(:c, 3, [{1, 2.0, :c}], {:x}) == [{:x}]
+    end
+
+    test "multiple tuples, no match" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keystore(:c, 1, tuples, {:x}) == [
+               {:a, 2, 3.0},
+               {:d, :e, :f},
+               {:g, :h, :i},
+               {:x}
+             ]
+    end
+
+    test "multiple tuples, match first tuple" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keystore(:a, 1, tuples, {:x}) == [{:x}, {:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match middle tuple" do
+      tuples = [{:d, :e, :f}, {:a, 2, 3.0}, {:g, :h, :i}]
+
+      assert :lists.keystore(:a, 1, tuples, {:x}) == [{:d, :e, :f}, {:x}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match last tuple" do
+      tuples = [{:d, :e, :f}, {:g, :h, :i}, {:a, 2, 3.0}]
+
+      assert :lists.keystore(:a, 1, tuples, {:x}) == [{:d, :e, :f}, {:g, :h, :i}, {:x}]
+    end
+
+    test "skips tuple when its size is smaller than the index" do
+      tuples = [{:a}, {:b, :a, :c}]
+
+      assert :lists.keystore(:a, 2, tuples, {:x}) == [{:a}, {:x}]
+    end
+
+    test "replaces only the first matching tuple" do
+      tuples = [{:a, 1}, {:a, 2}]
+
+      assert :lists.keystore(:a, 1, tuples, {:x}) == [{:x}, {:a, 2}]
+    end
+
+    test "applies non-strict comparison" do
+      assert :lists.keystore(2, 1, [{2.0}], {:x}) == [{:x}]
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.keystore/4", [:a, 2.0, [], {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keystore(:a, 2.0, [], {})
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
+      expected_msg = build_function_clause_error_msg(":lists.keystore/4", [:a, 0, [], {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keystore(:a, 0, [], {})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.keystore2/4", [:a, 1, {{:b}, {:c}}, {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keystore(:a, 1, {{:b}, {:c}}, {})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.keystore2/4", [:a, 1, {:d}, {}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keystore(:a, 1, [{:b}, {:c} | {:d}], {})
+      end
+    end
+
+    test "raises FunctionClauseError if the fourth argument (newTuple) is not a tuple" do
+      expected_msg = build_function_clause_error_msg(":lists.keystore/4", [:a, 1, [], :x])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keystore(:a, 1, [], :x)
+      end
+    end
+  end
+
   describe "keytake/3" do
     test "returns false if tuples list is empty" do
       assert :lists.keytake(:c, 1, []) == false
