@@ -277,7 +277,7 @@ describe("Erlang_Unicode", () => {
         HologramInterpreterError,
         "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
           `The following input was received: ["abc", 123, "xyz"]\n` +
-          "See what to do here: https://www.hologram.page/TODO",
+          "Check the implementation status here: https://hologram.page/reference/client-runtime",
       );
     });
 
@@ -287,7 +287,7 @@ describe("Erlang_Unicode", () => {
         HologramInterpreterError,
         "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
           "The following input was received: 123\n" +
-          "See what to do here: https://www.hologram.page/TODO",
+          "Check the implementation status here: https://hologram.page/reference/client-runtime",
       );
     });
   });
