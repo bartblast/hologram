@@ -3825,6 +3825,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  # On the server, node/0 returns `nonode@nohost` if the node is not alive,
+  # or the actual node name if it is. On the client it always returns `hologram_client`.
+  describe "node/0" do
+    test "returns local node" do
+      assert :erlang.node() == :nonode@nohost
+    end
+  end
+
   describe "not/1" do
     test "true" do
       assert :erlang.not(true) == false

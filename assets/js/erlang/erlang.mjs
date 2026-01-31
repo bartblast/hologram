@@ -1732,6 +1732,13 @@ const Erlang = {
   // End monotonic_time/1
   // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.monotonic_time/0]
 
+  // Start node/0
+  "node/0": () => {
+    return Type.atom(ERTS.nodeTable.CLIENT_NODE);
+  },
+  // End node/0
+  // Deps: []
+
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
