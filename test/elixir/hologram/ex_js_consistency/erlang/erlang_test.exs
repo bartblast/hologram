@@ -2025,6 +2025,64 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "bsl/2" do
+    test "common usage" do
+      # 1 = 0b00000001, 16 = 0b00010000
+      assert :erlang.bsl(1, 4) == 16
+    end
+
+    test "zero shift" do
+      # 247 = 0b11110111
+      assert :erlang.bsl(247, 0) == 247
+    end
+
+    test "shift right via negative shift" do
+      # 16 = 0b00010000, 8 = 0b00001000
+      assert :erlang.bsl(16, -1) == 8
+    end
+
+    test "negative integer left shift" do
+      # -2 = 0b11111110, -4 = 0b11111100
+      assert :erlang.bsl(-2, 1) == -4
+    end
+
+    test "large shift for positive integer" do
+      # 1 << 64 = 18_446_744_073_709_551_616
+      assert :erlang.bsl(1, 64) == 18_446_744_073_709_551_616
+    end
+
+    test "large shift for negative integer" do
+      # -1 << 64 = -18_446_744_073_709_551_616
+      assert :erlang.bsl(-1, 64) == -18_446_744_073_709_551_616
+    end
+
+    test "above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      #  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      # 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      assert :erlang.bsl(9_007_199_254_740_992, 1) == 18_014_398_509_481_984
+    end
+
+    test "below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      #  -9_007_199_254_740_992 = 0b1111111111100000000000000000000000000000000000000000000000000000
+      # -18_014_398_509_481_984 = 0b1111111111000000000000000000000000000000000000000000000000000000
+      assert :erlang.bsl(-9_007_199_254_740_992, 1) == -18_014_398_509_481_984
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsl(1.0, 2)",
+                   {:erlang, :bsl, [1.0, 2]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsl(1, 2.0)",
+                   {:erlang, :bsl, [1, 2.0]}
+    end
+  end
+
   describe "bsr/2" do
     test "common usage" do
       # 16 = 0b00010000, 8 = 0b00001000
