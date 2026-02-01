@@ -170,12 +170,7 @@ const Erlang_Unicode = {
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
-        );
+        Erlang_Unicode["_raise_invalid_chardata/0"]();
       }
     };
 
@@ -246,7 +241,7 @@ const Erlang_Unicode = {
     return Type.bitstring(normalized);
   },
   // End _characters_to_normalized_binary/2
-  // Deps: [:unicode._find_valid_utf8_prefix/1, :unicode.characters_to_binary/3]
+  // Deps: [:unicode._find_valid_utf8_prefix/1, :unicode._raise_invalid_chardata/0, :unicode.characters_to_binary/3]
 
   // Start characters_to_binary/1
   "characters_to_binary/1": (input) => {

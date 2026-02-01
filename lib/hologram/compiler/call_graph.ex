@@ -119,6 +119,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:string, :titlecase, 1}, {:lists, :flatten, 1}},
     {{:string, :titlecase, 1}, {:unicode_util, :cp, 1}},
     {{:unicode, :_characters_to_normalized_binary, 2}, {:unicode, :_find_valid_utf8_prefix, 1}},
+    {{:unicode, :_characters_to_normalized_binary, 2}, {:unicode, :_raise_invalid_chardata, 0}},
     {{:unicode, :_characters_to_normalized_binary, 2}, {:unicode, :characters_to_binary, 3}},
     {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
     {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}},
