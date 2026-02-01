@@ -11,16 +11,15 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Unicode = {
-// Start _characters_to_normalized_binary/2 (private helper)
+  // Start _characters_to_normalized_binary/2 (private helper)
   "_characters_to_normalized_binary/2": (data, normalizationForm) => {
     // Helpers
 
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
-      if (rest.data.length === 0 || !Type.isBinary(rest.data[0])) {
+      if (rest.data.length === 0 || !Type.isBinary(rest.data[0]))
         Erlang_Unicode["_raise_invalid_chardata/0"]();
-      }
     };
 
     // Handles error tuples from characters_to_binary/3.
@@ -34,10 +33,12 @@ const Erlang_Unicode = {
           : Type.bitstring(textPrefix.normalize(normalizationForm));
 
       if (Type.isList(rest)) {
-        validateListRest(rest);
-
-        // rest.data[0] is the binary with invalid UTF-8
-        return Type.tuple([tag, normalizedPrefix, rest.data[0]]);
+        // validateListRest(rest).data[0], is the binary with invalid UTF-8
+        return Type.tuple([
+          tag,
+          normalizedPrefix,
+          validateListRest(rest).data[0],
+        ]);
       }
 
       return Type.tuple([tag, normalizedPrefix, rest]);
@@ -80,10 +81,8 @@ const Erlang_Unicode = {
     // Valid binary - check for UTF-8 validity then normalize
     const text = Bitstring.toText(converted);
 
-    if (text === false) {
-      const bytes = converted.bytes ?? new Uint8Array(0);
-      return handleInvalidUtf8(bytes);
-    }
+    if (text === false)
+      return handleInvalidUtf8(converted.bytes ?? new Uint8Array(0));
 
     const normalized = text.normalize(normalizationForm);
 
@@ -110,7 +109,7 @@ const Erlang_Unicode = {
   },
   // End _convert_binary_to_codepoints/3
   // Deps: []
-  
+
   // Start _convert_codepoint_to_binary/1 (private helper)
   "_convert_codepoint_to_binary/1": (codepoint) => {
     const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
@@ -142,21 +141,17 @@ const Erlang_Unicode = {
     // Decodes a UTF-8 sequence starting at the given position.
     // Returns the decoded Unicode code point value.
     const decodeCodePoint = (start, length) => {
-      if (length === 1) {
-        return bytes[start];
-      }
+      if (length === 1) return bytes[start];
 
-      if (length === 2) {
+      if (length === 2)
         return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
-      }
 
-      if (length === 3) {
+      if (length === 3)
         return (
           ((bytes[start] & 0x0f) << 12) |
           ((bytes[start + 1] & 0x3f) << 6) |
           (bytes[start + 2] & 0x3f)
         );
-      }
 
       // length === 4
       return (
@@ -295,18 +290,9 @@ const Erlang_Unicode = {
       );
     }
 
-    if (Type.isBinary(input)) {
-      return input;
-    }
+    if (Type.isBinary(input)) return input;
 
-    if (!Type.isList(input)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
-    }
+    if (!Type.isList(input)) Erlang_Unicode["_raise_invalid_chardata/0"]();
 
     const flatInput = Erlang_Lists["flatten/1"](input);
     const chunks = [];
@@ -330,12 +316,7 @@ const Erlang_Unicode = {
           ]);
         }
       } else {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "not valid character data (an iodata term)",
-          ),
-        );
+        Erlang_Unicode["_raise_invalid_chardata/0"]();
       }
     }
 
@@ -378,9 +359,7 @@ const Erlang_Unicode = {
             )
           : [];
 
-      if (isTruncated) {
-        return createIncompleteTuple(codepoints, invalidRest);
-      }
+      if (isTruncated) return createIncompleteTuple(codepoints, invalidRest);
 
       return createErrorTuple(codepoints, invalidRest);
     };
@@ -403,10 +382,8 @@ const Erlang_Unicode = {
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
       const {isTruncated} = Erlang_Unicode["_find_valid_utf8_prefix/1"](bytes);
 
-      if (isTruncated) {
-        // Incomplete: rest is the binary directly (not wrapped in list)
-        return createIncompleteTuple(codepoints, invalidBinary);
-      }
+      // Incomplete: rest is the binary directly (not wrapped in list)
+      if (isTruncated) return createIncompleteTuple(codepoints, invalidBinary);
 
       // Error: wrap the original invalid binary in a list, matching Erlang behavior
       const restList = Type.list([invalidBinary]);
@@ -441,9 +418,8 @@ const Erlang_Unicode = {
     // Returns { type, data } object: type is 'valid', 'utf8error', 'codepointerror', or 'invalid'.
     const processElement = (elem, chunks, remainingElems) => {
       // Guard: reject invalid types
-      if (!Type.isBinary(elem) && !Type.isInteger(elem)) {
+      if (!Type.isBinary(elem) && !Type.isInteger(elem))
         return {type: "invalid"};
-      }
 
       // Process binary elements
       if (Type.isBinary(elem)) {
@@ -475,17 +451,13 @@ const Erlang_Unicode = {
     const isBinary = Type.isBinary(data);
     const isList = Type.isList(data);
 
-    if (!isBinary && !isList) {
-      Erlang_Unicode["_raise_invalid_chardata/0"]();
-    }
+    if (!isBinary && !isList) Erlang_Unicode["_raise_invalid_chardata/0"]();
 
     // Fast path for binary input
     if (isBinary) {
       const text = Bitstring.toText(data);
 
-      if (text === false) {
-        return handleInvalidUtf8FromBinary(data);
-      }
+      if (text === false) return handleInvalidUtf8FromBinary(data);
 
       const codepoints = Erlang_Unicode["_convert_binary_to_codepoints/3"](
         data,
@@ -514,9 +486,7 @@ const Erlang_Unicode = {
     const chunks = listResult.data;
 
     // All elements valid - concatenate and convert to codepoints
-    if (chunks.length === 0) {
-      return Type.list([]);
-    }
+    if (chunks.length === 0) return Type.list([]);
 
     const binary = Bitstring.concat(chunks);
     const codepoints = Erlang_Unicode["_convert_binary_to_codepoints/3"](
@@ -554,9 +524,7 @@ const Erlang_Unicode = {
     // in binaries returns tuples, not exceptions), even if no valid data exists.
     const handleInvalidUtf8 = (chunks, invalidBinary) => {
       // Early return for no valid prefix
-      if (chunks.length === 0) {
-        return createErrorTuple([], invalidBinary);
-      }
+      if (chunks.length === 0) return createErrorTuple([], invalidBinary);
 
       // Normalize valid prefix and return error tuple
       const validBinary = Bitstring.concat(chunks);
@@ -573,9 +541,8 @@ const Erlang_Unicode = {
     // Returns { type, data } object: type is 'valid', 'error', or 'invalid'.
     const processElement = (elem, chunks) => {
       // Guard: reject invalid types
-      if (!Type.isBinary(elem) && !Type.isInteger(elem)) {
+      if (!Type.isBinary(elem) && !Type.isInteger(elem))
         return {type: "invalid"};
-      }
 
       // Process binary elements (no nested ifs - use ternary for early exit)
       if (Type.isBinary(elem)) {
@@ -588,9 +555,7 @@ const Erlang_Unicode = {
 
       // Process integer elements (guaranteed integer at this point)
       const isValidCodepoint = Bitstring.validateCodePoint(elem.value);
-      if (!isValidCodepoint) {
-        Erlang_Unicode["_raise_invalid_chardata/0"]();
-      }
+      if (!isValidCodepoint) Erlang_Unicode["_raise_invalid_chardata/0"]();
 
       return {
         type: "valid",
@@ -604,9 +569,7 @@ const Erlang_Unicode = {
     const isBinary = Type.isBinary(chardata);
     const isList = Type.isList(chardata);
 
-    if (!isBinary && !isList) {
-      Erlang_Unicode["_raise_invalid_chardata/0"]();
-    }
+    if (!isBinary && !isList) Erlang_Unicode["_raise_invalid_chardata/0"]();
 
     // Fast path for binary input
     if (isBinary) {
