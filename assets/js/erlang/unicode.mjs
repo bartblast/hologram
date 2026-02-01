@@ -265,7 +265,7 @@ const Erlang_Unicode = {
   // End characters_to_binary/3
   // Deps: [:lists.flatten/1]
 
-// Start characters_to_list/1
+  // Start characters_to_list/1
   "characters_to_list/1": (data) => {
     // Helpers
 
