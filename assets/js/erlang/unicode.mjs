@@ -131,6 +131,8 @@ const Erlang_Unicode = {
     // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
     const getSequenceLength = (leaderByte) => {
       if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
+      if (leaderByte === 0xc0 || leaderByte === 0xc1) return -1; // Overlong encoding leaders
+      if (leaderByte >= 0xf5) return -1; // Beyond valid UTF-8 range
       if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
       if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
       if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
