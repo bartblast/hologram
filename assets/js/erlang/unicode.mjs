@@ -162,6 +162,28 @@ const Erlang_Unicode = {
   },
   // End _convert_binary_to_codepoints/3
 
+  // Start _process_chardata_list/3 (private helper)
+  "_process_chardata_list/3": (flatData, processElement, onEarlyReturn) => {
+    const chunks = [];
+
+    for (let i = 0; i < flatData.length; ++i) {
+      const remainingElems = flatData.slice(i + 1);
+      const result = processElement(flatData[i], chunks, remainingElems);
+
+      if (result.type === "invalid")
+        Erlang_Unicode["_raise_invalid_chardata/0"]();
+
+      const earlyReturn = onEarlyReturn(result);
+      if (earlyReturn !== null) return {type: "early", data: earlyReturn};
+
+      chunks.push(result.data);
+    }
+
+    return {type: "ok", data: chunks};
+  },
+  // End _process_chardata_list/3
+  // Deps: [:unicode._raise_invalid_chardata/0]
+
   // Start _characters_to_normalized_binary/2 (private helper)
   "_characters_to_normalized_binary/2": (data, normalizationForm) => {
     // Helpers
@@ -472,24 +494,20 @@ const Erlang_Unicode = {
 
     // List path (guaranteed to be list at this point)
     const flatData = Erlang_Lists["flatten/1"](data).data;
-    const chunks = [];
+    const listResult = Erlang_Unicode["_process_chardata_list/3"](
+      flatData,
+      (elem, chunks, remainingElems) =>
+        processElement(elem, chunks, remainingElems),
+      (result) => {
+        return result.type === "utf8error" || result.type === "codepointerror"
+          ? result.data
+          : null;
+      },
+    );
 
-    // Process elements: concatenate all valid data first, then convert to codepoints.
-    for (let i = 0; i < flatData.length; ++i) {
-      const remainingElems = flatData.slice(i + 1);
-      const result = processElement(flatData[i], chunks, remainingElems);
+    if (listResult.type === "early") return listResult.data;
 
-      if (result.type === "utf8error" || result.type === "codepointerror") {
-        return result.data;
-      }
-
-      if (result.type === "invalid") {
-        Erlang_Unicode["_raise_invalid_chardata/0"]();
-      }
-
-      // result.type === "valid" - accumulate
-      chunks.push(result.data);
-    }
+    const chunks = listResult.data;
 
     // All elements valid - concatenate and convert to codepoints
     if (chunks.length === 0) {
@@ -506,7 +524,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_list/1
-  // Deps: [:lists.flatten/1, :unicode._convert_binary_to_codepoints/3, :unicode._convert_codepoint_to_binary/1, :unicode._find_valid_utf8_prefix/1, :unicode._raise_invalid_chardata/0]
+  // Deps: [:lists.flatten/1, :unicode._convert_binary_to_codepoints/3, :unicode._convert_codepoint_to_binary/1, :unicode._find_valid_utf8_prefix/1, :unicode._process_chardata_list/3, :unicode._raise_invalid_chardata/0]
 
   // Start characters_to_nfc_binary/1
   "characters_to_nfc_binary/1": (data) => {
@@ -618,24 +636,17 @@ const Erlang_Unicode = {
 
     // List path (guaranteed to be list at this point)
     const flatData = Erlang_Lists["flatten/1"](chardata).data;
-    const chunks = [];
+    const listResult = Erlang_Unicode["_process_chardata_list/3"](
+      flatData,
+      (elem, chunks) => processElement(elem, chunks),
+      (result) => {
+        return result.type === "error" ? result.data : null;
+      },
+    );
 
-    // Process elements: concatenate all valid data first (combining characters
-    // may span multiple elements), then normalize. O(n) single pass.
-    for (let i = 0; i < flatData.length; ++i) {
-      const result = processElement(flatData[i], chunks);
+    if (listResult.type === "early") return listResult.data;
 
-      if (result.type === "error") {
-        return result.data;
-      }
-
-      if (result.type === "invalid") {
-        Erlang_Unicode["_raise_invalid_chardata/0"]();
-      }
-
-      // result.type === "valid" - accumulate
-      chunks.push(result.data);
-    }
+    const chunks = listResult.data;
 
     // All elements valid - concatenate, normalize, and return
     const binary = Bitstring.concat(chunks);
@@ -648,7 +659,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_nfc_list/1
-  // Deps: [:lists.flatten/1, :unicode._convert_binary_to_codepoints/3, :unicode._convert_codepoint_to_binary/1, :unicode._raise_invalid_chardata/0, :unicode.characters_to_nfc_binary/1]
+  // Deps: [:lists.flatten/1, :unicode._convert_binary_to_codepoints/3, :unicode._convert_codepoint_to_binary/1, :unicode._process_chardata_list/3, :unicode._raise_invalid_chardata/0, :unicode.characters_to_nfc_binary/1]
 
   // Start characters_to_nfd_binary/1
   "characters_to_nfd_binary/1": (data) => {
