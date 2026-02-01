@@ -126,6 +126,17 @@ const Erlang_Unicode = {
   },
   // End _find_valid_utf8_prefix/1
 
+  // Start _raise_invalid_chardata/0 (private helper)
+  "_raise_invalid_chardata/0": () => {
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(
+        1,
+        "not valid character data (an iodata term)",
+      ),
+    );
+  },
+  // End _raise_invalid_chardata/0
+
   // Start _characters_to_normalized_binary/2 (private helper)
   "_characters_to_normalized_binary/2": (data, normalizationForm) => {
     // Helpers
@@ -409,15 +420,6 @@ const Erlang_Unicode = {
       return {type: "valid", data: convertCodepointToBinary(elem)};
     };
 
-    const raiseInvalidChardataError = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
-    };
-
     // Main logic
 
     // Guard: reject non-list, non-binary input early
@@ -425,7 +427,7 @@ const Erlang_Unicode = {
     const isList = Type.isList(data);
 
     if (!isBinary && !isList) {
-      raiseInvalidChardataError();
+      Erlang_Unicode["_raise_invalid_chardata/0"]();
     }
 
     // Fast path for binary input
@@ -455,7 +457,7 @@ const Erlang_Unicode = {
       }
 
       if (result.type === "invalid") {
-        raiseInvalidChardataError();
+        Erlang_Unicode["_raise_invalid_chardata/0"]();
       }
 
       // result.type === "valid" - accumulate
@@ -473,7 +475,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_list/1
-  // Deps: [:lists.flatten/1, :unicode._find_valid_utf8_prefix/1]
+  // Deps: [:lists.flatten/1, :unicode._find_valid_utf8_prefix/1, :unicode._raise_invalid_chardata/0]
 
   // Start characters_to_nfc_binary/1
   "characters_to_nfc_binary/1": (data) => {
@@ -553,19 +555,10 @@ const Erlang_Unicode = {
       // Process integer elements (guaranteed integer at this point)
       const isValidCodepoint = Bitstring.validateCodePoint(elem.value);
       if (!isValidCodepoint) {
-        raiseInvalidChardataError();
+        Erlang_Unicode["_raise_invalid_chardata/0"]();
       }
 
       return {type: "valid", data: convertCodepointToBinary(elem)};
-    };
-
-    const raiseInvalidChardataError = () => {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not valid character data (an iodata term)",
-        ),
-      );
     };
 
     // Main logic
@@ -575,7 +568,7 @@ const Erlang_Unicode = {
     const isList = Type.isList(chardata);
 
     if (!isBinary && !isList) {
-      raiseInvalidChardataError();
+      Erlang_Unicode["_raise_invalid_chardata/0"]();
     }
 
     // Fast path for binary input
@@ -614,7 +607,7 @@ const Erlang_Unicode = {
       }
 
       if (result.type === "invalid") {
-        raiseInvalidChardataError();
+        Erlang_Unicode["_raise_invalid_chardata/0"]();
       }
 
       // result.type === "valid" - accumulate
@@ -628,7 +621,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_nfc_list/1
-  // Deps: [:lists.flatten/1, :unicode.characters_to_nfc_binary/1]
+  // Deps: [:lists.flatten/1, :unicode._raise_invalid_chardata/0, :unicode.characters_to_nfc_binary/1]
 
   // Start characters_to_nfd_binary/1
   "characters_to_nfd_binary/1": (data) => {
