@@ -20,6 +20,8 @@ const Erlang_Unicode = {
     const validateListRest = (rest) => {
       if (rest.data.length === 0 || !Type.isBinary(rest.data[0]))
         Erlang_Unicode["_raise_invalid_chardata/0"]();
+
+      return rest;
     };
 
     // Handles error tuples from characters_to_binary/3.
