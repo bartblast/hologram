@@ -137,6 +137,13 @@ const Erlang_Unicode = {
   },
   // End _raise_invalid_chardata/0
 
+  // Start _convert_codepoint_to_binary/1 (private helper)
+  "_convert_codepoint_to_binary/1": (codepoint) => {
+    const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
+    return Bitstring.fromSegments([segment]);
+  },
+  // End _convert_codepoint_to_binary/1
+
   // Start _characters_to_normalized_binary/2 (private helper)
   "_characters_to_normalized_binary/2": (data, normalizationForm) => {
     // Helpers
@@ -310,12 +317,6 @@ const Erlang_Unicode = {
       return Array.from(text).map((char) => Type.integer(char.codePointAt(0)));
     };
 
-    // Converts a single codepoint integer to a UTF-8 encoded binary.
-    const convertCodepointToBinary = (codepoint) => {
-      const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
-      return Bitstring.fromSegments([segment]);
-    };
-
     // Creates an error tuple: {:error, converted_so_far, rest}
     const createErrorTuple = (codepoints, rest) => {
       return Type.tuple([Type.atom("error"), Type.list(codepoints), rest]);
@@ -417,7 +418,10 @@ const Erlang_Unicode = {
         };
       }
 
-      return {type: "valid", data: convertCodepointToBinary(elem)};
+      return {
+        type: "valid",
+        data: Erlang_Unicode["_convert_codepoint_to_binary/1"](elem),
+      };
     };
 
     // Main logic
@@ -475,7 +479,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_list/1
-  // Deps: [:lists.flatten/1, :unicode._find_valid_utf8_prefix/1, :unicode._raise_invalid_chardata/0]
+  // Deps: [:lists.flatten/1, :unicode._convert_codepoint_to_binary/1, :unicode._find_valid_utf8_prefix/1, :unicode._raise_invalid_chardata/0]
 
   // Start characters_to_nfc_binary/1
   "characters_to_nfc_binary/1": (data) => {
@@ -503,12 +507,6 @@ const Erlang_Unicode = {
       return Array.from(normalized).map((char) =>
         Type.integer(char.codePointAt(0)),
       );
-    };
-
-    // Converts a single codepoint integer to a UTF-8 encoded binary.
-    const convertCodepointToBinary = (codepoint) => {
-      const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
-      return Bitstring.fromSegments([segment]);
     };
 
     // Creates an error tuple: {:error, normalized_so_far, rest}
@@ -558,7 +556,10 @@ const Erlang_Unicode = {
         Erlang_Unicode["_raise_invalid_chardata/0"]();
       }
 
-      return {type: "valid", data: convertCodepointToBinary(elem)};
+      return {
+        type: "valid",
+        data: Erlang_Unicode["_convert_codepoint_to_binary/1"](elem),
+      };
     };
 
     // Main logic
@@ -621,7 +622,7 @@ const Erlang_Unicode = {
     return Type.list(codepoints);
   },
   // End characters_to_nfc_list/1
-  // Deps: [:lists.flatten/1, :unicode._raise_invalid_chardata/0, :unicode.characters_to_nfc_binary/1]
+  // Deps: [:lists.flatten/1, :unicode._convert_codepoint_to_binary/1, :unicode._raise_invalid_chardata/0, :unicode.characters_to_nfc_binary/1]
 
   // Start characters_to_nfd_binary/1
   "characters_to_nfd_binary/1": (data) => {
