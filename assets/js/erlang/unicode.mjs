@@ -125,6 +125,7 @@ const Erlang_Unicode = {
     return {validLength: pos, isTruncated: isTruncatedSequence(pos)};
   },
   // End _find_valid_utf8_prefix/1
+  // Deps: []
 
   // Start _raise_invalid_chardata/0 (private helper)
   "_raise_invalid_chardata/0": () => {
@@ -136,6 +137,7 @@ const Erlang_Unicode = {
     );
   },
   // End _raise_invalid_chardata/0
+  // Deps: []
 
   // Start _convert_codepoint_to_binary/1 (private helper)
   "_convert_codepoint_to_binary/1": (codepoint) => {
@@ -143,6 +145,7 @@ const Erlang_Unicode = {
     return Bitstring.fromSegments([segment]);
   },
   // End _convert_codepoint_to_binary/1
+  // Deps: []
 
   // Start _convert_binary_to_codepoints/3 (private helper)
   "_convert_binary_to_codepoints/3": (
@@ -161,6 +164,7 @@ const Erlang_Unicode = {
     );
   },
   // End _convert_binary_to_codepoints/3
+  // Deps: []
 
   // Start _process_chardata_list/3 (private helper)
   "_process_chardata_list/3": (flatData, processElement, onEarlyReturn) => {
