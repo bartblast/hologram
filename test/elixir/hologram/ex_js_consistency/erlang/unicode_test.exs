@@ -159,6 +159,602 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
       assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
     end
+
+    test "handles large input" do
+      str = String.duplicate("abcdefghij", 100)
+      large_input = str
+
+      assert :unicode.characters_to_binary(large_input, :utf8, :utf8) == str
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = ["hello", " ", 0x3042, " world"]
+
+      expected = <<"hello ", 0x3042::utf8, " world">>
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "returns error tuple on invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, <<"abc">>, [invalid_binary]}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, <<"a">>, [invalid_binary]}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, <<"a">>, [invalid_binary]}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, <<"a">>, [invalid_binary]}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "returns incomplete tuple for truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+
+      input = ["a", incomplete_binary]
+
+      expected = {:incomplete, <<"a">>, incomplete_binary}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "returns error tuple for single invalid binary not wrapped in a list" do
+      invalid_binary = <<255, 255>>
+      expected = {:error, <<>>, invalid_binary}
+
+      assert :unicode.characters_to_binary(invalid_binary, :utf8, :utf8) == expected
+    end
+
+    test "returns incomplete tuple for single truncated binary not wrapped in a list" do
+      # First byte of a 2-byte sequence (incomplete)
+      incomplete_binary = <<0xC3>>
+
+      expected = {:incomplete, <<>>, incomplete_binary}
+
+      assert :unicode.characters_to_binary(incomplete_binary, :utf8, :utf8) == expected
+    end
+
+    test "returns error tuple when invalid UTF-8 appears after valid prefix in binary" do
+      invalid_binary = <<"A", 0xC3, 0x28>>
+
+      expected = {:error, "A", <<0xC3, 0x28>>}
+
+      assert :unicode.characters_to_binary(invalid_binary, :utf8, :utf8) == expected
+    end
+
+    test "returns incomplete tuple when truncated UTF-8 appears after valid prefix in binary" do
+      incomplete_binary = <<"A", 0xC3>>
+
+      expected = {:incomplete, "A", <<0xC3>>}
+
+      assert :unicode.characters_to_binary(incomplete_binary, :utf8, :utf8) == expected
+    end
+
+    test "returns error tuple when invalid UTF-8 appears after valid prefix in list" do
+      invalid_binary = <<"B", 0xC3, 0x28>>
+      input = ["A", invalid_binary]
+
+      expected = {:error, "AB", [<<0xC3, 0x28>>]}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "returns incomplete tuple when truncated UTF-8 appears after valid prefix in list" do
+      incomplete_binary = <<"B", 0xC3>>
+      input = ["A", incomplete_binary]
+
+      expected = {:incomplete, "AB", <<0xC3>>}
+
+      assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
+    end
+
+    test "converts UTF-8 input to latin1 output" do
+      assert :unicode.characters_to_binary("Å", :utf8, :latin1) == <<0xC5>>
+    end
+
+    test "converts latin1 input to UTF-8 output" do
+      assert :unicode.characters_to_binary(<<0xC5>>, :latin1, :utf8) == "Å"
+    end
+
+    test "rejects out-of-range codepoints when encoding to latin1 from binary" do
+      # U+0100 (Ā) is beyond latin1 range
+      assert :unicode.characters_to_binary("Ā", :utf8, :latin1) == {:error, "", "Ā"}
+    end
+
+    test "rejects out-of-range codepoints when encoding to latin1 from integer list" do
+      assert :unicode.characters_to_binary([256], :utf8, :latin1) == {:error, "", [[256]]}
+    end
+
+    test "encodes valid prefix when encountering out-of-range codepoint for latin1" do
+      assert :unicode.characters_to_binary([65, 66, 256], :utf8, :latin1) ==
+               {:error, "AB", [[256]]}
+    end
+
+    test "converts UTF-8 input to UTF-16 output" do
+      assert :unicode.characters_to_binary("A", :utf8, {:utf16, :big}) == <<0x00, 0x41>>
+      assert :unicode.characters_to_binary("A", :utf8, {:utf16, :little}) == <<0x41, 0x00>>
+    end
+
+    test "converts UTF-8 input to UTF-32 output" do
+      assert :unicode.characters_to_binary("A", :utf8, {:utf32, :big}) ==
+               <<0x00, 0x00, 0x00, 0x41>>
+
+      assert :unicode.characters_to_binary("A", :utf8, {:utf32, :little}) ==
+               <<0x41, 0x00, 0x00, 0x00>>
+    end
+
+    test "bare :utf16 atom defaults to big-endian" do
+      assert :unicode.characters_to_binary("A", :utf8, :utf16) ==
+               <<0x00, 0x41>>
+    end
+
+    test "bare :utf32 atom defaults to big-endian" do
+      assert :unicode.characters_to_binary("A", :utf8, :utf32) ==
+               <<0x00, 0x00, 0x00, 0x41>>
+    end
+
+    test "explicit little-endian tuples match only little-endian" do
+      # UTF-16: little-endian differs from big-endian
+      assert :unicode.characters_to_binary("A", :utf8, {:utf16, :little}) ==
+               <<0x41, 0x00>>
+
+      assert :unicode.characters_to_binary("A", :utf8, {:utf16, :big}) ==
+               <<0x00, 0x41>>
+
+      assert :unicode.characters_to_binary("A", :utf8, {:utf16, :little}) !=
+               :unicode.characters_to_binary("A", :utf8, {:utf16, :big})
+
+      # UTF-32: little-endian differs from big-endian
+      assert :unicode.characters_to_binary("A", :utf8, {:utf32, :little}) ==
+               <<0x41, 0x00, 0x00, 0x00>>
+
+      assert :unicode.characters_to_binary("A", :utf8, {:utf32, :big}) ==
+               <<0x00, 0x00, 0x00, 0x41>>
+
+      assert :unicode.characters_to_binary("A", :utf8, {:utf32, :little}) !=
+               :unicode.characters_to_binary("A", :utf8, {:utf32, :big})
+    end
+
+    # Input encoding tests
+    test "converts UTF-16 BE input to UTF-8 output" do
+      assert :unicode.characters_to_binary(<<0x00, 0x41>>, {:utf16, :big}, :utf8) == "A"
+    end
+
+    test "converts UTF-16 LE input to UTF-8 output" do
+      assert :unicode.characters_to_binary(<<0x41, 0x00>>, {:utf16, :little}, :utf8) == "A"
+    end
+
+    test "converts UTF-32 BE input to UTF-8 output" do
+      assert :unicode.characters_to_binary(<<0x00, 0x00, 0x00, 0x41>>, {:utf32, :big}, :utf8) ==
+               "A"
+    end
+
+    test "converts UTF-32 LE input to UTF-8 output" do
+      assert :unicode.characters_to_binary(<<0x41, 0x00, 0x00, 0x00>>, {:utf32, :little}, :utf8) ==
+               "A"
+    end
+
+    test "bare :utf16 input defaults to big-endian" do
+      assert :unicode.characters_to_binary(<<0x00, 0x41>>, :utf16, :utf8) == "A"
+    end
+
+    test "bare :utf32 input defaults to big-endian" do
+      assert :unicode.characters_to_binary(<<0x00, 0x00, 0x00, 0x41>>, :utf32, :utf8) == "A"
+    end
+
+    test "converts UTF-16 BE multi-byte character to UTF-8" do
+      # U+4E2D (中) in UTF-16 BE
+      assert :unicode.characters_to_binary(<<0x4E, 0x2D>>, {:utf16, :big}, :utf8) == "中"
+    end
+
+    test "converts UTF-16 BE surrogate pair to UTF-8" do
+      # U+1F600 (😀) in UTF-16 BE: high surrogate 0xD83D, low surrogate 0xDE00
+      assert :unicode.characters_to_binary(
+               <<0xD8, 0x3D, 0xDE, 0x00>>,
+               {:utf16, :big},
+               :utf8
+             ) == "😀"
+    end
+
+    test "converts UTF-16 LE surrogate pair to UTF-8" do
+      # U+1F600 (😀) in UTF-16 LE
+      assert :unicode.characters_to_binary(
+               <<0x3D, 0xD8, 0x00, 0xDE>>,
+               {:utf16, :little},
+               :utf8
+             ) == "😀"
+    end
+
+    test "returns incomplete for truncated UTF-16 BE sequence (1 byte)" do
+      assert :unicode.characters_to_binary(<<0x00>>, {:utf16, :big}, :utf8) ==
+               {:incomplete, "", <<0x00>>}
+    end
+
+    test "returns incomplete for truncated UTF-16 BE sequence after valid prefix" do
+      assert :unicode.characters_to_binary(<<0x00, 0x41, 0x00>>, {:utf16, :big}, :utf8) ==
+               {:incomplete, "A", <<0x00>>}
+    end
+
+    test "returns incomplete for truncated UTF-16 BE surrogate pair (3 bytes)" do
+      # High surrogate 0xD83D + partial low surrogate
+      assert :unicode.characters_to_binary(
+               <<0xD8, 0x3D, 0xDE>>,
+               {:utf16, :big},
+               :utf8
+             ) == {:incomplete, "", <<0xD8, 0x3D, 0xDE>>}
+    end
+
+    test "returns error for invalid UTF-16 BE high surrogate alone" do
+      # High surrogate without low surrogate (followed by regular char)
+      assert :unicode.characters_to_binary(
+               <<0xD8, 0x00, 0x00, 0x41>>,
+               {:utf16, :big},
+               :utf8
+             ) == {:error, "", <<0xD8, 0x00, 0x00, 0x41>>}
+    end
+
+    test "returns incomplete for invalid UTF-16 BE high surrogate after valid prefix" do
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x41, 0xD8, 0x00>>,
+               {:utf16, :big},
+               :utf8
+             ) == {:incomplete, "A", <<0xD8, 0x00>>}
+    end
+
+    test "returns error for invalid UTF-16 BE low surrogate alone" do
+      # Low surrogate without high surrogate
+      assert :unicode.characters_to_binary(<<0xDC, 0x00>>, {:utf16, :big}, :utf8) ==
+               {:error, "", <<0xDC, 0x00>>}
+    end
+
+    test "returns incomplete for truncated UTF-32 BE sequence (3 bytes)" do
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0x00>>,
+               {:utf32, :big},
+               :utf8
+             ) == {:incomplete, "", <<0x00, 0x00, 0x00>>}
+    end
+
+    test "returns incomplete for truncated UTF-32 BE sequence after valid prefix" do
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0x00, 0x41, 0x00, 0x00, 0x00>>,
+               {:utf32, :big},
+               :utf8
+             ) == {:incomplete, "A", <<0x00, 0x00, 0x00>>}
+    end
+
+    test "returns error for invalid UTF-32 BE codepoint beyond U+10FFFF" do
+      # U+110000 (beyond valid Unicode range)
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x11, 0x00, 0x00>>,
+               {:utf32, :big},
+               :utf8
+             ) == {:error, "", <<0x00, 0x11, 0x00, 0x00>>}
+    end
+
+    test "returns error for invalid UTF-32 BE codepoint after valid prefix" do
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0x00, 0x41, 0x00, 0x11, 0x00, 0x00>>,
+               {:utf32, :big},
+               :utf8
+             ) == {:error, "A", <<0x00, 0x11, 0x00, 0x00>>}
+    end
+
+    test "returns error for UTF-32 BE surrogate range codepoint" do
+      # U+D800 (surrogate range, invalid in UTF-32)
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0xD8, 0x00>>,
+               {:utf32, :big},
+               :utf8
+             ) == {:error, "", <<0x00, 0x00, 0xD8, 0x00>>}
+    end
+
+    test "converts multiple UTF-16 BE characters to UTF-8" do
+      # "AB" in UTF-16 BE
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x41, 0x00, 0x42>>,
+               {:utf16, :big},
+               :utf8
+             ) == "AB"
+    end
+
+    test "converts UTF-16 BE input to latin1 output" do
+      # "A" in UTF-16 BE to latin1
+      assert :unicode.characters_to_binary(<<0x00, 0x41>>, {:utf16, :big}, :latin1) == "A"
+    end
+
+    test "converts UTF-32 LE input to UTF-16 BE output" do
+      # "A" from UTF-32 LE to UTF-16 BE
+      assert :unicode.characters_to_binary(
+               <<0x41, 0x00, 0x00, 0x00>>,
+               {:utf32, :little},
+               {:utf16, :big}
+             ) == <<0x00, 0x41>>
+    end
+
+    # Comprehensive input/output encoding combinations
+    test "converts latin1 input to latin1 output (identity)" do
+      # Å in latin1 - when input and output are both latin1, returns raw bytes
+      assert :unicode.characters_to_binary(<<0xC5>>, :latin1, :latin1) == <<0xC5>>
+    end
+
+    test "converts UTF-8 input to UTF-8 output (identity)" do
+      assert :unicode.characters_to_binary("Å", :utf8, :utf8) == "Å"
+    end
+
+    test "converts latin1 input to UTF-8 output (all latin1 range)" do
+      # Test with latin1-only characters (0xA0-0xFF range)
+      assert :unicode.characters_to_binary(
+               <<0xA0, 0xC5, 0xFF>>,
+               :latin1,
+               :utf8
+             ) == <<0xC2, 0xA0, 0xC3, 0x85, 0xC3, 0xBF>>
+    end
+
+    test "converts latin1 input to UTF-16 BE output" do
+      # latin1 Å (0xC5) → UTF-16 BE (U+00C5)
+      assert :unicode.characters_to_binary(<<0xC5>>, :latin1, {:utf16, :big}) ==
+               <<0x00, 0xC5>>
+    end
+
+    test "converts latin1 input to UTF-16 LE output" do
+      # latin1 Å (0xC5) → UTF-16 LE (U+00C5)
+      assert :unicode.characters_to_binary(<<0xC5>>, :latin1, {:utf16, :little}) ==
+               <<0xC5, 0x00>>
+    end
+
+    test "converts latin1 input to UTF-32 BE output" do
+      # latin1 Å (0xC5) → UTF-32 BE (U+00C5)
+      assert :unicode.characters_to_binary(<<0xC5>>, :latin1, {:utf32, :big}) ==
+               <<0x00, 0x00, 0x00, 0xC5>>
+    end
+
+    test "converts latin1 input to UTF-32 LE output" do
+      # latin1 Å (0xC5) → UTF-32 LE (U+00C5)
+      assert :unicode.characters_to_binary(<<0xC5>>, :latin1, {:utf32, :little}) ==
+               <<0xC5, 0x00, 0x00, 0x00>>
+    end
+
+    test "converts UTF-16 BE input to UTF-16 LE output" do
+      # U+4E2D (中) in UTF-16 BE → UTF-16 LE
+      assert :unicode.characters_to_binary(<<0x4E, 0x2D>>, {:utf16, :big}, {:utf16, :little}) ==
+               <<0x2D, 0x4E>>
+    end
+
+    test "converts UTF-16 BE input to UTF-32 BE output" do
+      # U+4E2D (中) in UTF-16 BE → UTF-32 BE
+      assert :unicode.characters_to_binary(<<0x4E, 0x2D>>, {:utf16, :big}, {:utf32, :big}) ==
+               <<0x00, 0x00, 0x4E, 0x2D>>
+    end
+
+    test "converts UTF-16 BE input to UTF-32 LE output" do
+      # U+4E2D (中) in UTF-16 BE → UTF-32 LE
+      assert :unicode.characters_to_binary(<<0x4E, 0x2D>>, {:utf16, :big}, {:utf32, :little}) ==
+               <<0x2D, 0x4E, 0x00, 0x00>>
+    end
+
+    test "converts UTF-16 BE input to latin1 output (ASCII subset)" do
+      # U+0041 (A) in UTF-16 BE → latin1
+      assert :unicode.characters_to_binary(<<0x00, 0x41>>, {:utf16, :big}, :latin1) == "A"
+    end
+
+    test "converts UTF-16 LE input to latin1 output (ASCII subset)" do
+      # U+0041 (A) in UTF-16 LE → latin1
+      assert :unicode.characters_to_binary(<<0x41, 0x00>>, {:utf16, :little}, :latin1) == "A"
+    end
+
+    test "converts UTF-16 LE input to UTF-16 BE output" do
+      # U+4E2D (中) in UTF-16 LE → UTF-16 BE
+      assert :unicode.characters_to_binary(<<0x2D, 0x4E>>, {:utf16, :little}, {:utf16, :big}) ==
+               <<0x4E, 0x2D>>
+    end
+
+    test "converts UTF-16 LE input to UTF-32 BE output" do
+      # U+4E2D (中) in UTF-16 LE → UTF-32 BE
+      assert :unicode.characters_to_binary(<<0x2D, 0x4E>>, {:utf16, :little}, {:utf32, :big}) ==
+               <<0x00, 0x00, 0x4E, 0x2D>>
+    end
+
+    test "converts UTF-16 LE input to UTF-32 LE output" do
+      # U+4E2D (中) in UTF-16 LE → UTF-32 LE
+      assert :unicode.characters_to_binary(
+               <<0x2D, 0x4E>>,
+               {:utf16, :little},
+               {:utf32, :little}
+             ) == <<0x2D, 0x4E, 0x00, 0x00>>
+    end
+
+    test "converts UTF-32 BE input to UTF-16 BE output" do
+      # U+4E2D (中) in UTF-32 BE → UTF-16 BE
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0x4E, 0x2D>>,
+               {:utf32, :big},
+               {:utf16, :big}
+             ) == <<0x4E, 0x2D>>
+    end
+
+    test "converts UTF-32 BE input to UTF-16 LE output" do
+      # U+4E2D (中) in UTF-32 BE → UTF-16 LE
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0x4E, 0x2D>>,
+               {:utf32, :big},
+               {:utf16, :little}
+             ) == <<0x2D, 0x4E>>
+    end
+
+    test "converts UTF-32 BE input to UTF-32 LE output" do
+      # U+4E2D (中) in UTF-32 BE → UTF-32 LE
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0x4E, 0x2D>>,
+               {:utf32, :big},
+               {:utf32, :little}
+             ) == <<0x2D, 0x4E, 0x00, 0x00>>
+    end
+
+    test "converts UTF-32 BE input to latin1 output (ASCII subset)" do
+      # U+0041 (A) in UTF-32 BE → latin1
+      assert :unicode.characters_to_binary(
+               <<0x00, 0x00, 0x00, 0x41>>,
+               {:utf32, :big},
+               :latin1
+             ) == "A"
+    end
+
+    test "converts UTF-32 LE input to UTF-16 LE output" do
+      # U+4E2D (中) in UTF-32 LE → UTF-16 LE
+      assert :unicode.characters_to_binary(
+               <<0x2D, 0x4E, 0x00, 0x00>>,
+               {:utf32, :little},
+               {:utf16, :little}
+             ) == <<0x2D, 0x4E>>
+    end
+
+    test "converts UTF-32 LE input to UTF-32 BE output" do
+      # U+4E2D (中) in UTF-32 LE → UTF-32 BE
+      assert :unicode.characters_to_binary(
+               <<0x2D, 0x4E, 0x00, 0x00>>,
+               {:utf32, :little},
+               {:utf32, :big}
+             ) == <<0x00, 0x00, 0x4E, 0x2D>>
+    end
+
+    test "converts UTF-32 LE input to latin1 output (ASCII subset)" do
+      # U+0041 (A) in UTF-32 LE → latin1
+      assert :unicode.characters_to_binary(
+               <<0x41, 0x00, 0x00, 0x00>>,
+               {:utf32, :little},
+               :latin1
+             ) == "A"
+    end
+
+    test "treats :unicode input encoding like :utf8" do
+      assert :unicode.characters_to_binary(<<"A", 0xFF>>, :unicode, :utf8) ==
+               {:error, "A", <<0xFF>>}
+    end
+
+    test "treats :unicode output encoding like :utf8" do
+      assert :unicode.characters_to_binary("A", :utf8, :unicode) == "A"
+    end
+
+    test "treats :unicode input and output like :utf8" do
+      assert :unicode.characters_to_binary("A", :unicode, :unicode) == "A"
+    end
+
+    test "encodes latin1 integer list to UTF-8 when output is utf8" do
+      assert :unicode.characters_to_binary([255], :latin1, :utf8) == "ÿ"
+    end
+
+    test "encodes latin1 integer list to latin1 when output is latin1" do
+      assert :unicode.characters_to_binary([255], :latin1, :latin1) == <<255>>
+    end
+
+    test "returns error tuple for UTF-16 surrogate codepoint in list" do
+      assert :unicode.characters_to_binary([0xD800], :utf8, :utf8) ==
+               {:error, "", [0xD800]}
+    end
+
+    test "rejects UTF-32 codepoint with high byte >= 0x80 (above U+10FFFF)" do
+      # Invalid UTF-32: 0x80000000 is above Unicode maximum U+10FFFF
+      # Big-endian representation of 0x80000000
+      invalid_utf32 = <<0x80, 0x00, 0x00, 0x00>>
+
+      result = :unicode.characters_to_binary(invalid_utf32, {:utf32, :big}, :utf8)
+
+      assert result == {:error, "", <<0x80, 0x00, 0x00, 0x00>>}
+    end
+
+    test "encodes emoji (supplementary plane) to UTF-16 big-endian with surrogate pairs" do
+      # U+1F600 (😀) requires surrogate pair in UTF-16
+      emoji = "😀"
+
+      result = :unicode.characters_to_binary(emoji, :utf8, {:utf16, :big})
+
+      # High surrogate: 0xD83D, Low surrogate: 0xDE00
+      assert result == <<0xD8, 0x3D, 0xDE, 0x00>>
+    end
+
+    test "encodes emoji (supplementary plane) to UTF-16 little-endian with surrogate pairs" do
+      # U+1F600 (😀) requires surrogate pair in UTF-16
+      emoji = "😀"
+
+      result = :unicode.characters_to_binary(emoji, :utf8, {:utf16, :little})
+
+      # Little-endian: low byte first for each 16-bit unit
+      # High surrogate: 0xD83D -> 0x3D, 0xD8
+      # Low surrogate: 0xDE00 -> 0x00, 0xDE
+      assert result == <<0x3D, 0xD8, 0x00, 0xDE>>
+    end
+
+    test "encodes multiple emoji characters to UTF-16 big-endian" do
+      # Two emoji: 😀 (U+1F600) and 🎉 (U+1F389)
+      emojis = "😀🎉"
+
+      result = :unicode.characters_to_binary(emojis, :utf8, {:utf16, :big})
+
+      # 😀: 0xD83D 0xDE00
+      # 🎉: 0xD83C 0xDF89
+      assert result == <<0xD8, 0x3D, 0xDE, 0x00, 0xD8, 0x3C, 0xDF, 0x89>>
+    end
+
+    test "encodes BMP character mixed with emoji to UTF-16 big-endian" do
+      # 'A' (U+0041) is BMP, 😀 (U+1F600) is supplementary
+      mixed = "A😀"
+
+      result = :unicode.characters_to_binary(mixed, :utf8, {:utf16, :big})
+
+      # A: 0x0041 (2 bytes)
+      # 😀: 0xD83D 0xDE00 (4 bytes)
+      assert result == <<0x00, 0x41, 0xD8, 0x3D, 0xDE, 0x00>>
+    end
+  end
+
+  describe "bom_to_encoding/1" do
+    test "detects UTF-8 BOM" do
+      assert :unicode.bom_to_encoding(<<0xEF, 0xBB, 0xBF, 0x41>>) == {:utf8, 3}
+    end
+
+    test "detects UTF-16 BOMs" do
+      assert :unicode.bom_to_encoding(<<0xFE, 0xFF, 0x00, 0x41>>) == {{:utf16, :big}, 2}
+      assert :unicode.bom_to_encoding(<<0xFF, 0xFE, 0x41, 0x00>>) == {{:utf16, :little}, 2}
+    end
+
+    test "detects UTF-32 BOMs" do
+      assert :unicode.bom_to_encoding(<<0x00, 0x00, 0xFE, 0xFF, 0x00>>) == {{:utf32, :big}, 4}
+      assert :unicode.bom_to_encoding(<<0xFF, 0xFE, 0x00, 0x00, 0x00>>) == {{:utf32, :little}, 4}
+    end
+
+    test "defaults to latin1 without BOM" do
+      assert :unicode.bom_to_encoding(<<0x41>>) == {:latin1, 0}
+    end
   end
 
   describe "characters_to_list/1" do
