@@ -10,7 +10,7 @@ Erlang's time system is built on this core relationship:
 Erlang System Time = Erlang Monotonic Time + Time Offset
 ```
 
-This means the functions are interconnected, and we should structure our implementations to reflect these dependencies.
+In Erlang, this formula is fundamental because Erlang System Time and OS System Time can differ due to Erlang's time correction mechanisms. However, in our JavaScript implementation, we don't have time correction — both `:erlang.system_time/0` and `:os.system_time/0` map directly to `Date.now()`. Therefore, we delegate `:erlang.system_time/0` to `:os.system_time/0` for efficiency (one JS call instead of two). The formula still holds implicitly: `time_offset` is derived as `system_time - monotonic_time`, so the relationship remains mathematically consistent.
 
 ## Architecture
 
@@ -40,7 +40,7 @@ Supported units: `second`, `millisecond`, `microsecond`, `nanosecond`, `native`
 | Function | Implementation |
 |----------|----------------|
 | `:erlang.time_offset/0` | `os.system_time() - erlang.monotonic_time()` |
-| `:erlang.system_time/0` | Delegate to `:os.system_time/0` |
+| `:erlang.system_time/0` | Delegate to `:os.system_time/0` (see Background for rationale) |
 
 ### Layer 4: Unit variants
 
