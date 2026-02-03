@@ -2952,11 +2952,22 @@ describe("Erlang", () => {
         ];
         const header = new Uint8Array([131, 105, ...arityBytes]);
 
-        // Create element bytes: each element is SMALL_INTEGER_EXT (tag 97) + value
-        // Values 1 to 300, but modulo 256 for values > 255
+        // Create element bytes: use SMALL_INTEGER_EXT (tag 97) for values <=255,
+        // INTEGER_EXT (tag 98) for values >255
         const elementBytes = [];
         for (let i = 1; i <= arity; i++) {
-          elementBytes.push(97, i & 0xff); // SMALL_INTEGER_EXT + value (wraps at 256)
+          if (i <= 255) {
+            elementBytes.push(97, i); // SMALL_INTEGER_EXT + value
+          } else {
+            // INTEGER_EXT (tag 98) + 4 bytes big-endian signed integer
+            elementBytes.push(
+              98,
+              (i >> 24) & 0xff,
+              (i >> 16) & 0xff,
+              (i >> 8) & 0xff,
+              i & 0xff,
+            );
+          }
         }
 
         const binary = Bitstring.fromBytes(
@@ -2967,6 +2978,8 @@ describe("Erlang", () => {
         assert.strictEqual(Type.isTuple(result), true);
         assert.strictEqual(result.data.length, arity);
         assert.deepStrictEqual(result.data[0], Type.integer(1));
+        assert.deepStrictEqual(result.data[255], Type.integer(256)); // Verify no wraparound
+        assert.deepStrictEqual(result.data[299], Type.integer(300)); // Verify last element
       });
 
       it("decodes empty tuple", async () => {
@@ -3288,6 +3301,96 @@ describe("Erlang", () => {
         assert.strictEqual(result.type, "reference");
         assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.strictEqual(result.creation, 0);
+        assert.deepStrictEqual(result.idWords, [1, 2, 3]);
+      });
+      it("decodes REFERENCE_EXT with SMALL_ATOM_UTF8_EXT", async () => {
+        // REFERENCE_EXT with SMALL_ATOM_UTF8_EXT node (deprecated format)
+        // 131 - VERSION_NUMBER
+        // 101 - REFERENCE_EXT
+        // 119 - SMALL_ATOM_UTF8_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // 0, 0, 0, 42 - single ID word (32-bit)
+        // 1 - creation (8-bit)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 101, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 0, 42, 1,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 1);
+        assert.deepStrictEqual(result.idWords, [42]);
+      });
+
+      it("decodes REFERENCE_EXT with ATOM_EXT", async () => {
+        // REFERENCE_EXT with ATOM_EXT node (deprecated format)
+        // 131 - VERSION_NUMBER
+        // 101 - REFERENCE_EXT
+        // 100 - ATOM_EXT
+        // 0, 13 - node name length (16-bit)
+        // "nonode@nohost" - node name
+        // 0, 0, 0, 123 - single ID word (32-bit)
+        // 2 - creation (8-bit)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 101, 100, 0, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
+            104, 111, 115, 116, 0, 0, 0, 123, 2,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 2);
+        assert.deepStrictEqual(result.idWords, [123]);
+      });
+
+      it("decodes REFERENCE_EXT with SMALL_ATOM_EXT", async () => {
+        // REFERENCE_EXT with SMALL_ATOM_EXT node (deprecated format)
+        // 131 - VERSION_NUMBER
+        // 101 - REFERENCE_EXT
+        // 115 - SMALL_ATOM_EXT
+        // 13 - node name length
+        // "nonode@nohost" - node name
+        // 0, 0, 1, 200 - single ID word (32-bit)
+        // 3 - creation (8-bit)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 101, 115, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 1, 200, 3,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 3);
+        assert.deepStrictEqual(result.idWords, [456]);
+      });
+
+      it("decodes NEW_REFERENCE_EXT with ATOM_EXT", async () => {
+        // NEW_REFERENCE_EXT with ATOM_EXT node (deprecated format)
+        // 131 - VERSION_NUMBER
+        // 114 - NEW_REFERENCE_EXT
+        // 0, 3 - number of ID words (16-bit big-endian)
+        // 100 - ATOM_EXT
+        // 0, 13 - node name length (16-bit)
+        // "nonode@nohost" - node name
+        // 1 - creation (8-bit)
+        // 0, 0, 0, 1 - ID word 1 (32-bit)
+        // 0, 0, 0, 2 - ID word 2 (32-bit)
+        // 0, 0, 0, 3 - ID word 3 (32-bit)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 114, 0, 3, 100, 0, 13, 110, 111, 110, 111, 100, 101, 64, 110,
+            111, 104, 111, 115, 116, 1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 1);
         assert.deepStrictEqual(result.idWords, [1, 2, 3]);
       });
     });

@@ -618,6 +618,7 @@ const Erlang = {
     const INTEGER_EXT = 98;
     const FLOAT_EXT = 99;
     const ATOM_EXT = 100;
+    const REFERENCE_EXT = 101;
     const PORT_EXT = 102;
     const PID_EXT = 103;
     const SMALL_TUPLE_EXT = 104;
@@ -744,6 +745,9 @@ const Erlang = {
 
         case BIT_BINARY_EXT:
           return decodeBitBinary(dataView, bytes, offset + 1);
+
+        case REFERENCE_EXT:
+          return await decodeReference(dataView, bytes, offset + 1);
 
         case NEW_REFERENCE_EXT:
           return await decodeNewReference(dataView, bytes, offset + 1);
@@ -1148,22 +1152,64 @@ const Erlang = {
     };
 
     // Reference decoders
+    //
+    // REFERENCE_EXT (tag 101) - Deprecated format for backward compatibility
+    // Format: Node | ID | Creation
+    // Where:
+    // - Node: atom (encoded with various atom formats)
+    // - ID: single 32-bit word
+    // - Creation: 8-bit value (only 2 bits significant)
+    //
+    // This format was used in older Erlang versions and is kept for
+    // compatibility with legacy external term format data.
 
-    const decodeNewReference = async (dataView, bytes, offset) => {
-      const len = dataView.getUint16(offset);
-      let currentOffset = offset + 2;
+    // Common reference decoder helper
+    const decodeReferenceWithOptions = async (
+      dataView,
+      bytes,
+      offset,
+      options,
+    ) => {
+      let currentOffset = offset;
+
+      // Read length prefix if present
+      let idWordCount = 1; // Default for REFERENCE_EXT
+      if (options.hasLengthPrefix) {
+        idWordCount = dataView.getUint16(currentOffset);
+        currentOffset += 2;
+      }
 
       // Decode node name (atom)
       const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
-      const creation = dataView.getUint8(currentOffset);
-      currentOffset += 1;
+      // For REFERENCE_EXT: read ID words first, then creation
+      // For NEW/NEWER_REFERENCE_EXT: read creation first, then ID words
+      let creation, idWords;
 
-      const idWords = [];
-      for (let i = 0; i < len; i++) {
-        idWords.push(dataView.getUint32(currentOffset));
-        currentOffset += 4;
+      if (options.hasLengthPrefix) {
+        // NEW_REFERENCE_EXT and NEWER_REFERENCE_EXT: Creation | ID words
+        creation =
+          options.creationSize === 4
+            ? dataView.getUint32(currentOffset)
+            : dataView.getUint8(currentOffset);
+        currentOffset += options.creationSize;
+
+        idWords = [];
+        for (let i = 0; i < idWordCount; i++) {
+          idWords.push(dataView.getUint32(currentOffset));
+          currentOffset += 4;
+        }
+      } else {
+        // REFERENCE_EXT: ID | Creation
+        idWords = [];
+        for (let i = 0; i < idWordCount; i++) {
+          idWords.push(dataView.getUint32(currentOffset));
+          currentOffset += 4;
+        }
+
+        creation = dataView.getUint8(currentOffset);
+        currentOffset += 1;
       }
 
       return {
@@ -1172,27 +1218,25 @@ const Erlang = {
       };
     };
 
+    const decodeReference = async (dataView, bytes, offset) => {
+      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: false,
+        creationSize: 1,
+      });
+    };
+
+    const decodeNewReference = async (dataView, bytes, offset) => {
+      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: true,
+        creationSize: 1,
+      });
+    };
+
     const decodeNewerReference = async (dataView, bytes, offset) => {
-      const len = dataView.getUint16(offset);
-      let currentOffset = offset + 2;
-
-      // Decode node name (atom)
-      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
-      currentOffset = nodeResult.newOffset;
-
-      const creation = dataView.getUint32(currentOffset);
-      currentOffset += 4;
-
-      const idWords = [];
-      for (let i = 0; i < len; i++) {
-        idWords.push(dataView.getUint32(currentOffset));
-        currentOffset += 4;
-      }
-
-      return {
-        term: Type.reference(nodeResult.term, creation, idWords),
-        newOffset: currentOffset,
-      };
+      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: true,
+        creationSize: 4,
+      });
     };
 
     // PID decoders

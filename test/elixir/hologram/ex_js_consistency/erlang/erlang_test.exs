@@ -2133,10 +2133,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == bitstring
     end
 
+    test "decodes REFERENCE_EXT" do
+      binary =
+        <<131, 101, 119, 13, "nonode@nohost", 0, 0, 0, 42, 1>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
     test "decodes NEW_REFERENCE_EXT" do
       # Create a reference and encode/decode it
       ref = make_ref()
       binary = :erlang.term_to_binary(ref)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes NEW_REFERENCE_EXT with ATOM_EXT" do
+      binary =
+        <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3>>
+
       decoded = :erlang.binary_to_term(binary)
       assert is_reference(decoded)
     end
