@@ -2333,6 +2333,128 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "invalid external representation of a term"),
                    {:erlang, :binary_to_term, [binary]}
     end
+
+    # Consistency tests for specific external term formats
+
+    test "STRING_EXT format with various byte values" do
+      # Test STRING_EXT (tag 107) with different byte ranges
+      test_cases = [
+        [0, 1, 2],
+        [255, 254, 253],
+        # ABC
+        [65, 66, 67],
+        [128, 129, 130],
+        # empty string
+        []
+      ]
+
+      for bytes <- test_cases do
+        binary = :erlang.term_to_binary(bytes)
+        assert :erlang.binary_to_term(binary) == bytes
+      end
+    end
+
+    test "ATOM_EXT format with Latin-1 atoms" do
+      # Test ATOM_EXT (tag 100) with various atom names
+      test_atoms = [
+        :test,
+        :hello_world,
+        :a,
+        # empty atom
+        :"",
+        :"special-atom!@#",
+        :atom_with_underscores_123
+      ]
+
+      for atom <- test_atoms do
+        # Manually construct ATOM_EXT binary
+        name = Atom.to_string(atom)
+        binary = <<131, 100, byte_size(name)::16, name::binary>>
+        assert :erlang.binary_to_term(binary) == atom
+      end
+    end
+
+    test "SMALL_ATOM_UTF8_EXT format with UTF-8 atoms" do
+      # Test SMALL_ATOM_UTF8_EXT (tag 119) with UTF-8 characters
+      test_atoms = [
+        :élixir,
+        :café,
+        :测试,
+        :"🚀",
+        :ñoño,
+        # regular ASCII for comparison
+        :test
+      ]
+
+      for atom <- test_atoms do
+        binary = :erlang.term_to_binary(atom)
+        assert :erlang.binary_to_term(binary) == atom
+      end
+    end
+
+    test "BINARY_EXT format with various binary data" do
+      # Test BINARY_EXT (tag 109) with different binary content
+      test_binaries = [
+        "",
+        "hello",
+        "world with spaces",
+        "binary\0with\0nulls",
+        "UTF-8: élixir café 测试 🚀",
+        <<0, 1, 2, 255, 254, 253>>,
+        # larger binary
+        String.duplicate("x", 1000)
+      ]
+
+      for bin <- test_binaries do
+        binary = :erlang.term_to_binary(bin)
+        assert :erlang.binary_to_term(binary) == bin
+      end
+    end
+
+    test "BIT_BINARY_EXT format with partial bytes" do
+      # Test BIT_BINARY_EXT (tag 77) with various bit lengths
+      test_bitstrings = [
+        <<1::1>>,
+        <<1::3>>,
+        <<15::4>>,
+        <<31::5>>,
+        # full byte
+        <<255::8>>,
+        # mixed bytes and bits
+        <<1, 2, 3::6>>,
+        # multiple bytes + 1 bit
+        <<255, 255, 1::1>>
+      ]
+
+      for bitstring <- test_bitstrings do
+        binary = :erlang.term_to_binary(bitstring)
+        assert :erlang.binary_to_term(binary) == bitstring
+      end
+    end
+
+    test "FLOAT_EXT format (deprecated string format)" do
+      # Test FLOAT_EXT (tag 99) - manually constructed deprecated format
+      test_floats = [
+        1.5,
+        -2.5,
+        3.14159,
+        0.0,
+        -0.0,
+        1.0e10,
+        1.23e-5
+      ]
+
+      for float_val <- test_floats do
+        # Manually construct FLOAT_EXT binary (31-byte null-terminated string)
+        iodata = :io_lib.format("~.20e", [float_val])
+        float_str = IO.iodata_to_binary(iodata)
+        padded = String.pad_trailing(float_str, 31, <<0>>)
+        binary = <<131, 99, padded::binary>>
+
+        decoded = :erlang.binary_to_term(binary)
+        assert_in_delta decoded, float_val, 1.0e-15
+      end
+    end
   end
 
   describe "bit_size/1" do

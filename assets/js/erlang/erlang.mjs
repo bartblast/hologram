@@ -788,17 +788,6 @@ const Erlang = {
     // The decompressed data contains the ETF representation of the term without the version byte
 
     const decodeCompressed = async (dataView, bytes, offset) => {
-      // Disallow nested COMPRESSED: verify it is only used at top-level
-      // For top-level usage, offset should be 2 (version byte + COMPRESSED tag consumed)
-      if (offset !== 2) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
-
       if (offset + 4 > bytes.length) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
@@ -832,11 +821,12 @@ const Erlang = {
 
         const result = await decodeTerm(decompressedView, decompressed, 0);
 
-        // Return with newOffset pointing to end of original bytes since
-        // COMPRESSED must consume the entire remaining buffer at top-level
+        // Compute newOffset relative to the original bytes buffer
+        const newOffset = offset + 4 + compressedData.length;
+
         return {
           term: result.term,
-          newOffset: bytes.length,
+          newOffset: newOffset,
         };
       } catch (error) {
         console.error("Decode error:", error);
