@@ -742,7 +742,9 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
   # NFD_BINARY: Decomposition form
   # Tests: only behaviors unique to NFD (decomposition, decomposed preservation, error tuple prefix decomposition)
   # Structural and error handling coverage inherited from NFC_BINARY
+  # Canonical decomposition form
   describe "characters_to_nfd_binary/1" do
+    # === NFD-SPECIFIC TESTS ===
     test "decomposes combining characters to NFD" do
       assert :unicode.characters_to_nfd_binary("å") == "a\u030a"
     end
@@ -777,12 +779,180 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
       assert :unicode.characters_to_nfd_binary(input) == expected
     end
+
+    # === COMMON STRUCTURAL TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "handles empty binary" do
+      assert :unicode.characters_to_nfd_binary("") == ""
+    end
+
+    test "handles empty list" do
+      assert :unicode.characters_to_nfd_binary([]) == ""
+    end
+
+    test "handles deeply nested lists" do
+      input = [[["å"]]]
+
+      assert :unicode.characters_to_nfd_binary(input) == "a\u030a"
+    end
+
+    test "handles large input" do
+      large_input = String.duplicate("abcdefghij", 100)
+
+      assert :unicode.characters_to_nfd_binary(large_input) == large_input
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = ["hello", " ", "å", " world"]
+
+      assert :unicode.characters_to_nfd_binary(input) == "hello a\u030a world"
+    end
+
+    test "preserves non-combining characters" do
+      input = [0x3042, 0x3044]
+
+      assert :unicode.characters_to_nfd_binary(input) == "あい"
+    end
+
+    # === COMMON UTF-8 VALIDATION TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "rejects invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+
+      input = ["a", incomplete_binary]
+
+      expected = {:error, "a", incomplete_binary}
+
+      assert :unicode.characters_to_nfd_binary(input) == expected
+    end
+
+    test "rejects single invalid binary not wrapped in a list" do
+      invalid_binary = <<255, 255>>
+      result = :unicode.characters_to_nfd_binary(invalid_binary)
+
+      expected = {:error, "", invalid_binary}
+
+      assert result == expected
+    end
+
+    # === COMMON ERROR HANDLING TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point before normalization" do
+      input = [97, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = ["å", 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on negative integer code point" do
+      input = [-1]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfd_binary(input)
+      end
+    end
   end
 
   # NFKC_BINARY: Composed form with compatibility transformations
   # Tests: composition (like NFC) + compatibility character/ligature/width normalization
   # Structural and error handling coverage inherited from NFC_BINARY
+  # Compatibility composition form
   describe "characters_to_nfkc_binary/1" do
+    # === NFKC-SPECIFIC TESTS ===
     test "normalizes combining characters to NFKC (composition)" do
       # NFKC performs composition like NFC
       assert :unicode.characters_to_nfkc_binary("a\u030a") == "å"
@@ -815,13 +985,198 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
       assert :unicode.characters_to_nfkc_binary(input) == "32"
     end
+
+    # === COMMON STRUCTURAL TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "handles already normalized text" do
+      assert :unicode.characters_to_nfkc_binary("åäö") == "åäö"
+    end
+
+    test "normalizes nested chardata" do
+      input = ["abc..", ["a", 0x030A], "a", [0x0308], "o", 0x0308]
+
+      assert :unicode.characters_to_nfkc_binary(input) == "abc..åäö"
+    end
+
+    test "handles empty binary" do
+      assert :unicode.characters_to_nfkc_binary("") == ""
+    end
+
+    test "handles empty list" do
+      assert :unicode.characters_to_nfkc_binary([]) == ""
+    end
+
+    test "handles deeply nested lists" do
+      input = [[["a", 0x030A]]]
+
+      assert :unicode.characters_to_nfkc_binary(input) == "å"
+    end
+
+    test "handles multiple combining marks" do
+      input = ["o", 0x0308, 0x0304]
+
+      # Normalized form combines these in canonical order
+      assert :unicode.characters_to_nfkc_binary(input) == "ȫ"
+    end
+
+    test "handles large input" do
+      large_input = String.duplicate("abcdefghij", 100)
+
+      assert :unicode.characters_to_nfkc_binary(large_input) == large_input
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = ["hello", " ", "a", 0x030A, " world"]
+
+      assert :unicode.characters_to_nfkc_binary(input) == "hello å world"
+    end
+
+    test "preserves non-combining characters" do
+      input = [0x3042, 0x3044]
+
+      assert :unicode.characters_to_nfkc_binary(input) == "あい"
+    end
+
+    # === COMMON UTF-8 VALIDATION TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "rejects invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+
+      input = ["a", incomplete_binary]
+
+      expected = {:error, "a", incomplete_binary}
+
+      assert :unicode.characters_to_nfkc_binary(input) == expected
+    end
+
+    test "rejects single invalid binary not wrapped in a list" do
+      invalid_binary = <<255, 255>>
+      result = :unicode.characters_to_nfkc_binary(invalid_binary)
+
+      expected = {:error, "", invalid_binary}
+
+      assert result == expected
+    end
+
+    # === COMMON ERROR HANDLING TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point before normalization" do
+      input = [97, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = ["a", 0x030A, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on negative integer code point" do
+      input = [-1]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkc_binary(input)
+      end
+    end
   end
 
   # NFKD_BINARY: Decomposed form with compatibility transformations
   # Tests: one canonical decomposition test + compatibility character/ligature/width transformations
   # Full canonical decomposition coverage (nested chardata, error tuple prefix) tested in NFD_BINARY
   # Structural and error handling coverage inherited from NFC_BINARY
+  # Compatibility decomposition form
   describe "characters_to_nfkd_binary/1" do
+    # === NFKD-SPECIFIC TESTS ===
     test "decomposes already normalized precomposed characters" do
       # Input: precomposed "å" (U+00E5)
       # NFKD: decomposes to "a" + combining ring above (U+0061 + U+030A)
@@ -847,6 +1202,203 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       input = "\uFF21"
 
       assert :unicode.characters_to_nfkd_binary(input) == "A"
+    end
+
+    # === COMMON STRUCTURAL TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "handles already decomposed text" do
+      # "a\u030a" is already in NFD form
+      input = "a\u030a"
+
+      assert :unicode.characters_to_nfkd_binary(input) == input
+    end
+
+    test "decomposes nested chardata" do
+      input = [<<"abc..">>, [<<"a">>, 0x030A], <<"a">>, [0x0308], <<"o">>, 0x0308]
+
+      assert :unicode.characters_to_nfkd_binary(input) == "abc..a\u030aa\u0308o\u0308"
+    end
+
+    test "handles empty binary" do
+      assert :unicode.characters_to_nfkd_binary("") == ""
+    end
+
+    test "handles empty list" do
+      assert :unicode.characters_to_nfkd_binary([]) == ""
+    end
+
+    test "handles deeply nested lists" do
+      input = [[["å"]]]
+
+      assert :unicode.characters_to_nfkd_binary(input) == "a\u030a"
+    end
+
+    test "handles multiple combining marks" do
+      input = [<<"o">>, 0x0308, 0x0304]
+
+      # NFKD preserves combining marks in canonical order
+      assert :unicode.characters_to_nfkd_binary(input) == "o\u0308\u0304"
+    end
+
+    test "handles large input" do
+      large_input = String.duplicate("abcdefghij", 100)
+
+      assert :unicode.characters_to_nfkd_binary(large_input) == large_input
+    end
+
+    test "handles mixed ASCII and Unicode" do
+      input = ["hello", " ", "å", " world"]
+
+      assert :unicode.characters_to_nfkd_binary(input) == "hello a\u030a world"
+    end
+
+    test "preserves non-combining characters" do
+      input = [0x3042, 0x3044]
+
+      assert :unicode.characters_to_nfkd_binary(input) == "あい"
+    end
+
+    test "normalizes prefix in error tuple" do
+      # Prefix contains precomposed "å" (U+00E5) which should be normalized to "a" + U+030A
+      invalid_binary = <<255, 255>>
+
+      input = ["å", invalid_binary]
+
+      expected = {:error, "a\u030a", invalid_binary}
+
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    # === COMMON UTF-8 VALIDATION TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "rejects invalid UTF-8 in binary" do
+      invalid_binary = <<255, 255>>
+      input = ["abc", invalid_binary]
+      expected = {:error, "abc", invalid_binary}
+
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects overlong UTF-8 sequence in binary" do
+      # Overlong encoding of NUL: 0xC0 0x80 (invalid)
+      invalid_binary = <<0xC0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects UTF-16 surrogate range in binary" do
+      # CESU-8 style encoding of U+D800: 0xED 0xA0 0x80 (invalid in UTF-8)
+      invalid_binary = <<0xED, 0xA0, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects code points above U+10FFFF in binary" do
+      # Leader 0xF5 starts sequences above Unicode max (invalid)
+      invalid_binary = <<0xF5, 0x80, 0x80, 0x80>>
+
+      input = ["a", invalid_binary]
+
+      expected = {:error, "a", invalid_binary}
+
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects truncated UTF-8 sequence" do
+      # First two bytes of a 3-byte sequence (incomplete)
+      incomplete_binary = <<0xE4, 0xB8>>
+
+      input = ["a", incomplete_binary]
+
+      expected = {:error, "a", incomplete_binary}
+
+      assert :unicode.characters_to_nfkd_binary(input) == expected
+    end
+
+    test "rejects single invalid binary not wrapped in a list" do
+      invalid_binary = <<255, 255>>
+      result = :unicode.characters_to_nfkd_binary(invalid_binary)
+
+      expected = {:error, "", invalid_binary}
+
+      assert result == expected
+    end
+
+    # === COMMON ERROR HANDLING TESTS ===
+    # Inherited from NFC_BINARY
+
+    test "raises ArgumentError when input is not a list or a bitstring" do
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(:abc)
+      end
+    end
+
+    test "raises ArgumentError when input is a non-binary bitstring" do
+      input = <<1::1, 0::1, 1::1>>
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError when input list contains invalid types" do
+      input = [123.45, :abc]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point before normalization" do
+      input = [97, 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on invalid code point after normalization" do
+      input = ["å", 0x110000]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(input)
+      end
+    end
+
+    test "raises ArgumentError on negative integer code point" do
+      input = [-1]
+
+      expected_msg =
+        build_argument_error_msg(1, "not valid character data (an iodata term)")
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :unicode.characters_to_nfkd_binary(input)
+      end
     end
   end
 end
