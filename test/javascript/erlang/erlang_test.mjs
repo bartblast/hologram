@@ -14,6 +14,7 @@ import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fix
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import Erlang_Os from "../../../assets/js/erlang/os.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
