@@ -204,6 +204,8 @@ const Erlang_Unicode = {
     // Checks if there's a truncated (incomplete) sequence at position.
     // Returns true if bytes could be a valid prefix of a UTF-8 sequence.
     const isTruncatedSequence = (start) => {
+      if (start < 0 || start >= bytes.length) return false;
+
       const leaderByte = bytes[start];
       const expectedLength = getSequenceLength(leaderByte);
 
