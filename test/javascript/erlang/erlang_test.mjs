@@ -3198,7 +3198,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "float string exceeds available bytes",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
     });
@@ -3677,6 +3680,16 @@ describe("Erlang", () => {
       it("raises ArgumentError if argument is not a binary", async () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(Type.atom("test")),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        );
+      });
+
+      it("raises ArgumentError if argument is a non-binary bitstring", async () => {
+        const bits = Bitstring.fromBits([1, 0, 1]);
+
+        await assertBoxedErrorAsync(
+          () => binary_to_term(bits),
           "ArgumentError",
           Interpreter.buildArgumentErrorMsg(1, "not a binary"),
         );

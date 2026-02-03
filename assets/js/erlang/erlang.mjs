@@ -1081,7 +1081,12 @@ const Erlang = {
     const decodeFloatExt = (dataView, bytes, offset) => {
       // FLOAT_EXT: 31-byte null-terminated string (deprecated format)
       if (offset + 31 > bytes.length) {
-        Interpreter.raiseArgumentError("float string exceeds available bytes");
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
       }
       const floatBytes = bytes.slice(offset, offset + 31);
       const decoder = new TextDecoder("latin1");
@@ -1128,7 +1133,7 @@ const Erlang = {
       const bitstring = Bitstring.fromBytes(new Uint8Array(binaryBytes));
 
       // Adjust leftoverBitCount based on the bits field
-      // If bits is 0, all bytes are full (leftoverBitCount = 0)
+      // If bits is 8, all bytes are full (leftoverBitCount = 0)
       // If bits is 1-7, the last byte is partial (leftoverBitCount = bits)
       if (bits > 0 && bits < 8) {
         bitstring.leftoverBitCount = bits;
