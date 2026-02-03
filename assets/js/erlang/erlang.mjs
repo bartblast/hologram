@@ -718,6 +718,7 @@ const Erlang = {
   // Deps: []
 
   // Start convert_time_unit/3
+  // See: docs/erlang_time_functions_porting_strategy.md
   "convert_time_unit/3": (time, fromUnit, toUnit) => {
     // :native and :perf_counter are technically platform-dependent in Erlang/OTP,
     // but in practice they're nanoseconds on all major platforms (Linux, macOS, Windows).
@@ -1588,6 +1589,7 @@ const Erlang = {
   // Deps: []
 
   // Start localtime/0
+  // See: docs/erlang_time_functions_porting_strategy.md
   "localtime/0": () => {
     const now = new Date();
 
@@ -2014,6 +2016,7 @@ const Erlang = {
   // Deps: []
 
   // Start time_offset/0
+  // See: docs/erlang_time_functions_porting_strategy.md
   "time_offset/0": () => {
     return Erlang["time_offset/1"](Type.atom("native"));
   },
@@ -2021,6 +2024,7 @@ const Erlang = {
   // Deps: [:erlang.time_offset/1]
 
   // Start time_offset/1
+  // See: docs/erlang_time_functions_porting_strategy.md
   "time_offset/1": (unit) => {
     const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
     const monoTimeNs = BigInt(Math.round(performance.now() * 1_000_000));

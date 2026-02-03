@@ -9,7 +9,7 @@ import Type from "../type.mjs";
 
 const Erlang_Os = {
   // Start system_time/0
-  // Returns the current system time in native time unit (nanoseconds).
+  // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/0": () => {
     // Date.now() returns milliseconds since Unix epoch.
     return Type.integer(BigInt(Date.now()) * 1_000_000n);
@@ -18,6 +18,7 @@ const Erlang_Os = {
   // Deps: []
 
   // Start system_time/1
+  // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/1": (unit) => {
     Erlang["_validate_time_unit/2"](unit, 1);
     const nativeTime = Erlang_Os["system_time/0"]();
