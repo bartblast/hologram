@@ -11,7 +11,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
+import { defineModule1Fixture as defineErlangModule1Fixture } from "../support/fixtures/ex_js_consistency/erlang/module_1.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -1419,7 +1419,7 @@ describe("Erlang", () => {
 
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1433,7 +1433,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1459,7 +1459,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(
@@ -3608,7 +3608,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3630,7 +3633,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3659,7 +3665,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
     });
@@ -3669,7 +3678,7 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(Type.atom("test")),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
         );
       });
 
@@ -3678,7 +3687,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3687,7 +3699,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3697,7 +3712,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3707,7 +3725,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3717,7 +3738,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3753,7 +3777,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3765,7 +3792,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3777,7 +3807,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3813,7 +3846,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3825,7 +3861,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3851,7 +3890,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3861,7 +3903,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3873,7 +3918,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3886,7 +3934,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
 
@@ -3898,7 +3949,10 @@ describe("Erlang", () => {
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
-          "errors were found at the given arguments:\n\n  * 1st argument: invalid external representation of a term\n",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       });
     });
@@ -7584,7 +7638,7 @@ describe("Erlang", () => {
 
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -7598,7 +7652,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -7624,7 +7678,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(
