@@ -21,13 +21,13 @@ describe("Erlang_Os", () => {
     const systemTime = Erlang_Os["system_time/0"];
 
     it("returns current system time in native time unit (nanoseconds)", () => {
-      const beforeMs = Date.now();
+      const beforeNs = BigInt(Date.now()) * 1_000_000n;
       const result = systemTime();
-      const afterMs = Date.now();
+      const afterNs = BigInt(Date.now()) * 1_000_000n;
 
       assert.isTrue(Type.isInteger(result));
-      assert.isAtLeast(result.value, BigInt(beforeMs) * 1_000_000n);
-      assert.isAtMost(result.value, BigInt(afterMs + 1) * 1_000_000n);
+      assert.isAtLeast(result.value, beforeNs);
+      assert.isAtMost(result.value, afterNs);
     });
   });
 

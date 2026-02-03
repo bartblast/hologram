@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Os from "../erlang/os.mjs";
 import ERTS from "../erts.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
@@ -717,6 +718,7 @@ const Erlang = {
   // Deps: []
 
   // Start convert_time_unit/3
+  // See: docs/erlang_time_functions_porting_strategy.md
   "convert_time_unit/3": (time, fromUnit, toUnit) => {
     // :native and :perf_counter are technically platform-dependent in Erlang/OTP,
     // but in practice they're nanoseconds on all major platforms (Linux, macOS, Windows).
@@ -1587,6 +1589,7 @@ const Erlang = {
   // Deps: []
 
   // Start localtime/0
+  // See: docs/erlang_time_functions_porting_strategy.md
   "localtime/0": () => {
     const now = new Date();
 
@@ -1767,6 +1770,7 @@ const Erlang = {
   // Deps: []
 
   // Start monotonic_time/0
+  // See: docs/erlang_time_functions_porting_strategy.md
   "monotonic_time/0": () => {
     // performance.now() returns milliseconds with sub-ms precision.
     // We convert to nanoseconds (multiply by 1_000_000).
@@ -1794,6 +1798,7 @@ const Erlang = {
   // Deps: []
 
   // Start monotonic_time/1
+  // See: docs/erlang_time_functions_porting_strategy.md
   "monotonic_time/1": (unit) => {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
@@ -1977,6 +1982,14 @@ const Erlang = {
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
 
+  // Start system_time/0
+  // See: docs/erlang_time_functions_porting_strategy.md
+  "system_time/0": () => {
+    return Erlang_Os["system_time/0"]();
+  },
+  // End system_time/0
+  // Deps: [:os.system_time/0]
+
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
@@ -2005,6 +2018,7 @@ const Erlang = {
   // Deps: []
 
   // Start time_offset/0
+  // See: docs/erlang_time_functions_porting_strategy.md
   "time_offset/0": () => {
     return Erlang["time_offset/1"](Type.atom("native"));
   },
@@ -2012,6 +2026,7 @@ const Erlang = {
   // Deps: [:erlang.time_offset/1]
 
   // Start time_offset/1
+  // See: docs/erlang_time_functions_porting_strategy.md
   "time_offset/1": (unit) => {
     const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
     const monoTimeNs = BigInt(Math.round(performance.now() * 1_000_000));

@@ -14,6 +14,7 @@ import {defineModule1Fixture as defineErlangModule1Fixture} from "../support/fix
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import Erlang_Os from "../../../assets/js/erlang/os.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -6827,6 +6828,20 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
+    });
+  });
+
+  describe("system_time/0", () => {
+    const system_time = Erlang["system_time/0"];
+
+    it("returns current system time in native time unit (nanoseconds)", () => {
+      const beforeNs = Erlang_Os["system_time/0"]();
+      const result = system_time();
+      const afterNs = Erlang_Os["system_time/0"]();
+
+      assert.isTrue(Type.isInteger(result));
+      assert.isAtLeast(result.value, beforeNs.value);
+      assert.isAtMost(result.value, afterNs.value);
     });
   });
 

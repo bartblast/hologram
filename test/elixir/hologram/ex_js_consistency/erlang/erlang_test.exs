@@ -4152,6 +4152,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "system_time/0" do
+    test "returns current system time in native time unit (nanoseconds)" do
+      before_ns = :os.system_time(:nanosecond)
+      result = :erlang.system_time()
+      after_ns = :os.system_time(:nanosecond)
+
+      assert is_integer(result)
+      assert result >= before_ns
+      assert result <= after_ns
+    end
+  end
+
   describe "tl/1" do
     test "proper list, 1 item" do
       assert :erlang.tl([1]) == []

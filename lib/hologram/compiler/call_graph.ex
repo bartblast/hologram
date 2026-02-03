@@ -61,6 +61,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :monotonic_time, 1}, {:erlang, :convert_time_unit, 3}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :monotonic_time, 0}},
     {{:erlang, :split_binary, 2}, {:erlang, :byte_size, 1}},
+    {{:erlang, :system_time, 0}, {:os, :system_time, 0}},
     {{:erlang, :time_offset, 0}, {:erlang, :time_offset, 1}},
     {{:erlang, :time_offset, 1}, {:erlang, :convert_time_unit, 3}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :join, 1}},
