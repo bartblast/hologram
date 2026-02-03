@@ -638,7 +638,7 @@ const Erlang = {
     const V4_PORT_EXT = 120;
 
     // Decompresses zlib-compressed data using native DecompressionStream API
-    // Returns a Promise that resolves to a Uint8Array with the decompressed data
+    // Returns a Promise that resolves to {data: Uint8Array, bytesRead: number}
     // Throws an error if decompression fails
     const zlibInflate = async (compressedData) => {
       const stream = new ReadableStream({
@@ -673,7 +673,12 @@ const Erlang = {
         throw new Error(`Decompression failed: ${err.message}`);
       }
 
-      return Utils.concatUint8Arrays(chunks);
+      // NOTE: This is a simplified approach - in a full implementation,
+      // we would need to parse the zlib stream to determine exact bytes consumed
+      return {
+        data: Utils.concatUint8Arrays(chunks),
+        bytesRead: compressedData.length,
+      };
     };
 
     const decodeTerm = async (dataView, bytes, offset) => {
@@ -802,7 +807,8 @@ const Erlang = {
 
       try {
         // Use native DecompressionStream for zlib decompression
-        const decompressed = await zlibInflate(compressedData);
+        const {data: decompressed, bytesRead} =
+          await zlibInflate(compressedData);
 
         if (decompressed.length !== uncompressedSize) {
           Interpreter.raiseArgumentError(
@@ -821,15 +827,23 @@ const Erlang = {
 
         const result = await decodeTerm(decompressedView, decompressed, 0);
 
+        if (result.newOffset !== decompressed.length) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
         // Compute newOffset relative to the original bytes buffer
-        const newOffset = offset + 4 + compressedData.length;
+        const newOffset = offset + 4 + bytesRead;
 
         return {
           term: result.term,
           newOffset: newOffset,
         };
-      } catch (error) {
-        console.error("Decode error:", error);
+      } catch {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
             1,
@@ -861,6 +875,15 @@ const Erlang = {
       const n = dataView.getUint8(offset);
       const sign = dataView.getUint8(offset + 1);
 
+      if (sign !== 0 && sign !== 1) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       let value = 0n;
       for (let i = 0; i < n; i++) {
         const byte = BigInt(bytes[offset + 2 + i]);
@@ -880,6 +903,15 @@ const Erlang = {
     const decodeLargeBig = (dataView, bytes, offset) => {
       const n = dataView.getUint32(offset);
       const sign = dataView.getUint8(offset + 4);
+
+      if (sign !== 0 && sign !== 1) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
 
       let value = 0n;
       for (let i = 0; i < n; i++) {
@@ -903,7 +935,10 @@ const Erlang = {
       const length = dataView.getUint16(offset);
       if (offset + 2 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          "invalid external representation of a term",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       }
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
@@ -922,7 +957,10 @@ const Erlang = {
       const length = dataView.getUint8(offset);
       if (offset + 1 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          `atom length exceeds available bytes: ${length}`,
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       }
       const atomBytes = bytes.slice(offset + 1, offset + 1 + length);
@@ -942,7 +980,10 @@ const Erlang = {
       const length = dataView.getUint32(offset);
       if (offset + 4 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          `binary length exceeds available bytes: ${length}`,
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       }
       const binaryBytes = bytes.slice(offset + 4, offset + 4 + length);
@@ -995,7 +1036,10 @@ const Erlang = {
       const length = dataView.getUint16(offset);
       if (offset + 2 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          "invalid external representation of a term",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       }
       const elements = [];
@@ -1125,7 +1169,10 @@ const Erlang = {
 
       if (offset + 5 + length > bytes.length) {
         Interpreter.raiseArgumentError(
-          `bit binary length exceeds available bytes: ${length}`,
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
         );
       }
 
@@ -1398,6 +1445,14 @@ const Erlang = {
       }
 
       const result = await decodeTerm(dataView, bytes, 1);
+      if (result.newOffset !== bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
       return result.term;
     } catch (err) {
       if (err instanceof RangeError || err instanceof TypeError) {
