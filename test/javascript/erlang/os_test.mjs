@@ -27,7 +27,7 @@ describe("Erlang_Os", () => {
 
       assert.isTrue(Type.isInteger(result));
       assert.isAtLeast(result.value, BigInt(beforeMs) * 1_000_000n);
-      assert.isAtMost(result.value, BigInt(afterMs + 1) * 1_000_000n);
+      assert.isAtMost(result.value, BigInt(afterMs) * 1_000_000n);
     });
   });
 
