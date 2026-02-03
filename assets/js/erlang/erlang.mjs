@@ -1770,6 +1770,7 @@ const Erlang = {
   // Deps: []
 
   // Start monotonic_time/0
+  // See: docs/erlang_time_functions_porting_strategy.md
   "monotonic_time/0": () => {
     // performance.now() returns milliseconds with sub-ms precision.
     // We convert to nanoseconds (multiply by 1_000_000).
@@ -1797,6 +1798,7 @@ const Erlang = {
   // Deps: []
 
   // Start monotonic_time/1
+  // See: docs/erlang_time_functions_porting_strategy.md
   "monotonic_time/1": (unit) => {
     // TODO: unit is validated twice - here (for correct arg index in error message)
     // and in convert_time_unit/3. This could be optimized in the future.
