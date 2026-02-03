@@ -6845,6 +6845,21 @@ describe("Erlang", () => {
     });
   });
 
+  // Simplified tests since JS port delegates to :os.system_time/1
+  describe("system_time/1", () => {
+    const system_time = Erlang["system_time/1"];
+
+    // Note: Elixir test is named "returns current system time in the given time unit"
+    it("delegates to :os.system_time/1", () => {
+      const unit = Type.atom("microsecond");
+
+      assert.deepStrictEqual(
+        system_time(unit),
+        Erlang_Os["system_time/1"](unit),
+      );
+    });
+  });
+
   describe("tl/1", () => {
     const tl = Erlang["tl/1"];
 

@@ -1990,6 +1990,14 @@ const Erlang = {
   // End system_time/0
   // Deps: [:os.system_time/0]
 
+  // Start system_time/1
+  // See: docs/erlang_time_functions_porting_strategy.md
+  "system_time/1": (unit) => {
+    return Erlang_Os["system_time/1"](unit);
+  },
+  // End system_time/1
+  // Deps: [:os.system_time/1]
+
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {

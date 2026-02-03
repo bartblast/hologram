@@ -4164,6 +4164,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  # Simplified tests since JS port delegates to :os.system_time/1
+  describe "system_time/1" do
+    # Note: JS test is named "delegates to :os.system_time/1"
+    test "returns current system time in the given time unit" do
+      unit = :microsecond
+      result = :erlang.system_time(unit)
+      expected = :os.system_time(unit)
+
+      assert is_integer(result)
+      assert abs(result - expected) < 10_000
+    end
+  end
+
   describe "tl/1" do
     test "proper list, 1 item" do
       assert :erlang.tl([1]) == []
