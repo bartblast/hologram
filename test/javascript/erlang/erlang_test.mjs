@@ -6830,6 +6830,20 @@ describe("Erlang", () => {
     });
   });
 
+  describe("system_time/0", () => {
+    const system_time = Erlang["system_time/0"];
+
+    it("returns current system time in native time unit (nanoseconds)", () => {
+      const beforeNs = Erlang_Os["system_time/0"]();
+      const result = system_time();
+      const afterNs = Erlang_Os["system_time/0"]();
+
+      assert.isTrue(Type.isInteger(result));
+      assert.isAtLeast(result.value, beforeNs.value);
+      assert.isAtMost(result.value, afterNs.value);
+    });
+  });
+
   describe("tl/1", () => {
     const tl = Erlang["tl/1"];
 

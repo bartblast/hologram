@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Os from "../erlang/os.mjs";
 import ERTS from "../erts.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
@@ -1976,6 +1977,14 @@ const Erlang = {
   },
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
+
+  // Start system_time/0
+  // See: docs/erlang_time_functions_porting_strategy.md
+  "system_time/0": () => {
+    return Erlang_Os["system_time/0"]();
+  },
+  // End system_time/0
+  // Deps: [:os.system_time/0]
 
   // Start tl/1
   "tl/1": (list) => {
