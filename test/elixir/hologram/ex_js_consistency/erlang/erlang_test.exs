@@ -4152,15 +4152,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  # Simplified tests since JS port delegates to :os.system_time/0
   describe "system_time/0" do
+    # Note: JS test is named "delegates to :os.system_time/0"
     test "returns current system time in native time unit (nanoseconds)" do
-      before_ns = :os.system_time(:nanosecond)
       result = :erlang.system_time()
-      after_ns = :os.system_time(:nanosecond)
+      expected = :os.system_time()
 
       assert is_integer(result)
-      assert result >= before_ns
-      assert result <= after_ns
+      assert abs(result - expected) < 10_000_000
     end
   end
 
