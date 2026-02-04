@@ -4776,6 +4776,267 @@ describe("Erlang", () => {
     });
   });
 
+  describe("fun_info/1", () => {
+    const fun_info = Erlang["fun_info/1"];
+
+    beforeEach(() => {
+      ERTS.funSequence.reset();
+    });
+
+    it("external function, arity 0", () => {
+      const fun = Type.functionCapture(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        "fun_0",
+        0,
+        [],
+        contextFixture(),
+      );
+
+      const result = fun_info(fun);
+
+      const expected = Type.list([
+        Type.tuple([
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1"),
+        ]),
+        Type.tuple([Type.atom("name"), Type.atom("fun_0")]),
+        Type.tuple([Type.atom("arity"), Type.integer(0)]),
+        Type.tuple([Type.atom("env"), Type.list()]),
+        Type.tuple([Type.atom("type"), Type.atom("external")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("external function, arity 1", () => {
+      const fun = Type.functionCapture(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        "fun_1",
+        1,
+        [],
+        contextFixture(),
+      );
+
+      const result = fun_info(fun);
+
+      const expected = Type.list([
+        Type.tuple([
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1"),
+        ]),
+        Type.tuple([Type.atom("name"), Type.atom("fun_1")]),
+        Type.tuple([Type.atom("arity"), Type.integer(1)]),
+        Type.tuple([Type.atom("env"), Type.list()]),
+        Type.tuple([Type.atom("type"), Type.atom("external")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("external function, arity 2", () => {
+      const fun = Type.functionCapture(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        "fun_2",
+        2,
+        [],
+        contextFixture(),
+      );
+
+      const result = fun_info(fun);
+
+      const expected = Type.list([
+        Type.tuple([
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1"),
+        ]),
+        Type.tuple([Type.atom("name"), Type.atom("fun_2")]),
+        Type.tuple([Type.atom("arity"), Type.integer(2)]),
+        Type.tuple([Type.atom("env"), Type.list()]),
+        Type.tuple([Type.atom("type"), Type.atom("external")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("external function, Erlang module", () => {
+      const fun = Type.functionCapture(
+        ":erlang",
+        "abs",
+        1,
+        [],
+        contextFixture(),
+      );
+
+      const result = fun_info(fun);
+
+      const expected = Type.list([
+        Type.tuple([Type.atom("module"), Type.atom("erlang")]),
+        Type.tuple([Type.atom("name"), Type.atom("abs")]),
+        Type.tuple([Type.atom("arity"), Type.integer(1)]),
+        Type.tuple([Type.atom("env"), Type.list()]),
+        Type.tuple([Type.atom("type"), Type.atom("external")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("local function, arity 0, empty env", () => {
+      const fun = Type.anonymousFunction(
+        0,
+        [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Type.integer(123),
+          },
+        ],
+        contextFixture({
+          module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        }),
+      );
+
+      const result = fun_info(fun);
+
+      const expected = Type.list([
+        Type.tuple([Type.atom("pid"), ERTS.INIT_PID]),
+        Type.tuple([
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1"),
+        ]),
+        Type.tuple([Type.atom("new_index"), Type.integer(1)]),
+        Type.tuple([
+          Type.atom("new_uniq"),
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {
+              type: "integer",
+              size: Type.integer(128),
+            }),
+          ]),
+        ]),
+        Type.tuple([Type.atom("index"), Type.integer(1)]),
+        Type.tuple([Type.atom("uniq"), Type.integer(1)]),
+        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/0")]),
+        Type.tuple([Type.atom("arity"), Type.integer(0)]),
+        Type.tuple([Type.atom("env"), Type.list()]),
+        Type.tuple([Type.atom("type"), Type.atom("local")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("local function, arity 1, closure reference", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) =>
+              Erlang["+/2"](context.vars.x, context.vars.my_var),
+          },
+        ],
+        contextFixture({
+          module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+          vars: {my_var: Type.integer(123)},
+        }),
+      );
+
+      const result = fun_info(fun);
+
+      const expected = Type.list([
+        Type.tuple([Type.atom("pid"), ERTS.INIT_PID]),
+        Type.tuple([
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1"),
+        ]),
+        Type.tuple([Type.atom("new_index"), Type.integer(1)]),
+        Type.tuple([
+          Type.atom("new_uniq"),
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {
+              type: "integer",
+              size: Type.integer(128),
+            }),
+          ]),
+        ]),
+        Type.tuple([Type.atom("index"), Type.integer(1)]),
+        Type.tuple([Type.atom("uniq"), Type.integer(1)]),
+        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/1")]),
+        Type.tuple([Type.atom("arity"), Type.integer(1)]),
+        Type.tuple([Type.atom("env"), Type.list([Type.integer(123)])]),
+        Type.tuple([Type.atom("type"), Type.atom("local")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("local function, arity 2, multiple closure references", () => {
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("x"),
+              Type.variablePattern("y"),
+            ],
+            guards: [],
+            body: (context) =>
+              Erlang["+/2"](
+                Erlang["+/2"](
+                  Erlang["+/2"](context.vars.x, context.vars.y),
+                  context.vars.var_a,
+                ),
+                context.vars.var_b,
+              ),
+          },
+        ],
+        contextFixture({
+          module: "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+          vars: {var_a: Type.integer(10), var_b: Type.integer(20)},
+        }),
+      );
+
+      const result = fun_info(fun);
+
+      const expected = Type.list([
+        Type.tuple([Type.atom("pid"), ERTS.INIT_PID]),
+        Type.tuple([
+          Type.atom("module"),
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1"),
+        ]),
+        Type.tuple([Type.atom("new_index"), Type.integer(1)]),
+        Type.tuple([
+          Type.atom("new_uniq"),
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {
+              type: "integer",
+              size: Type.integer(128),
+            }),
+          ]),
+        ]),
+        Type.tuple([Type.atom("index"), Type.integer(1)]),
+        Type.tuple([Type.atom("uniq"), Type.integer(1)]),
+        Type.tuple([Type.atom("name"), Type.atom("anonymous function fn/2")]),
+        Type.tuple([Type.atom("arity"), Type.integer(2)]),
+        Type.tuple([
+          Type.atom("env"),
+          Type.list([Type.integer(10), Type.integer(20)]),
+        ]),
+        Type.tuple([Type.atom("type"), Type.atom("local")]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a fun", () => {
+      assertBoxedError(
+        () => fun_info(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 

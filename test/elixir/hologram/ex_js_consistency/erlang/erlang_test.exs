@@ -3079,6 +3079,106 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "fun_info/1" do
+    test "external function, arity 0" do
+      assert :erlang.fun_info(&Module1.fun_0/0) == [
+               module: Module1,
+               name: :fun_0,
+               arity: 0,
+               env: [],
+               type: :external
+             ]
+    end
+
+    test "external function, arity 1" do
+      assert :erlang.fun_info(&Module1.fun_1/1) == [
+               module: Module1,
+               name: :fun_1,
+               arity: 1,
+               env: [],
+               type: :external
+             ]
+    end
+
+    test "external function, arity 2" do
+      assert :erlang.fun_info(&Module1.fun_2/2) == [
+               module: Module1,
+               name: :fun_2,
+               arity: 2,
+               env: [],
+               type: :external
+             ]
+    end
+
+    test "external function, Erlang module" do
+      assert :erlang.fun_info(&:erlang.abs/1) == [
+               module: :erlang,
+               name: :abs,
+               arity: 1,
+               env: [],
+               type: :external
+             ]
+    end
+
+    test "local function, arity 0, empty env" do
+      fun = fn -> 123 end
+      result = :erlang.fun_info(fun)
+
+      assert Keyword.keys(result) == [
+               :pid,
+               :module,
+               :new_index,
+               :new_uniq,
+               :index,
+               :uniq,
+               :name,
+               :arity,
+               :env,
+               :type
+             ]
+
+      assert {:pid, pid("0.0.0")} in result
+      assert {:module, __MODULE__} in result
+      assert {:name, :"-test fun_info/1 local function, arity 0, empty env/1-fun-0-"} in result
+      assert {:arity, 0} in result
+      assert {:env, []} in result
+      assert {:type, :local} in result
+
+      # Verify types of dynamic fields
+      assert is_integer(Keyword.get(result, :index))
+      assert is_integer(Keyword.get(result, :new_index))
+      assert is_binary(Keyword.get(result, :new_uniq))
+      assert is_integer(Keyword.get(result, :uniq))
+    end
+
+    test "local function, arity 1, closure reference" do
+      my_var = wrap_term(123)
+      fun = fn x -> x + my_var end
+      result = :erlang.fun_info(fun)
+
+      assert {:arity, 1} in result
+      assert {:env, [123]} in result
+      assert {:type, :local} in result
+    end
+
+    test "local function, arity 2, multiple closure references" do
+      var_a = wrap_term(10)
+      var_b = wrap_term(20)
+      fun = fn x, y -> x + y + var_a + var_b end
+      result = :erlang.fun_info(fun)
+
+      assert {:arity, 2} in result
+      assert {:env, [10, 20]} in result
+      assert {:type, :local} in result
+    end
+
+    test "raises ArgumentError if the argument is not a fun" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun"),
+                   {:erlang, :fun_info, [:abc]}
+    end
+  end
+
   describe "hd/1" do
     test "returns the first item in the list" do
       assert :erlang.hd([1, 2, 3]) === 1
