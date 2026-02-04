@@ -1113,8 +1113,14 @@ const Erlang = {
     const isExternal = fun.capturedModule !== null;
 
     if (isExternal) {
+      // Erlang modules are prefixed with ":" (e.g. ":erlang"), Elixir modules are not
+      const isErlangModule = fun.capturedModule.startsWith(":");
+
+      const module = isErlangModule
+        ? Type.atom(fun.capturedModule.slice(1))
+        : Type.alias(fun.capturedModule);
+
       const env = Type.list();
-      const module = Type.alias(fun.capturedModule);
       const name = Type.atom(fun.capturedFunction);
       const type = Type.atom("external");
 
@@ -1155,16 +1161,16 @@ const Erlang = {
     const pid = ERTS.INIT_PID;
 
     return Type.list([
-      Type.tuple([Type.atom("arity"), arity]),
-      Type.tuple([Type.atom("env"), env]),
-      Type.tuple([Type.atom("index"), index]),
+      Type.tuple([Type.atom("pid"), pid]),
       Type.tuple([Type.atom("module"), module]),
-      Type.tuple([Type.atom("name"), name]),
       Type.tuple([Type.atom("new_index"), newIndex]),
       Type.tuple([Type.atom("new_uniq"), newUniq]),
-      Type.tuple([Type.atom("pid"), pid]),
-      Type.tuple([Type.atom("type"), type]),
+      Type.tuple([Type.atom("index"), index]),
       Type.tuple([Type.atom("uniq"), uniq]),
+      Type.tuple([Type.atom("name"), name]),
+      Type.tuple([Type.atom("arity"), arity]),
+      Type.tuple([Type.atom("env"), env]),
+      Type.tuple([Type.atom("type"), type]),
     ]);
   },
   // End fun_info/1
