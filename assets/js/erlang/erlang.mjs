@@ -1083,66 +1083,6 @@ const Erlang = {
   // End float_to_binary/2
   // Deps: []
 
-  // // Start fun_info/1
-  // "fun_info/1": (fun) => {
-  //   if (!Type.isAnonymousFunction(fun)) {
-  //     Interpreter.raiseArgumentError(
-  //       Interpreter.buildArgumentErrorMsg(1, "not a fun"),
-  //     );
-  //   }
-
-  //   const isExternal =
-  //     fun.capturedModule !== null && fun.capturedFunction !== null;
-
-  //   const result = [];
-
-  //   // Always present: arity
-  //   result.push(Type.tuple([Type.atom("arity"), Type.integer(fun.arity)]));
-
-  //   // Always present: env (environment/captured variables)
-  //   const envVars = fun.context.vars || {};
-  //   const envList = Object.keys(envVars).map((key) => {
-  //     const varName = Type.atom(key);
-  //     return Type.tuple([varName, envVars[key]]);
-  //   });
-  //   result.push(Type.tuple([Type.atom("env"), Type.list(envList)]));
-
-  //   // Always present: module
-  //   // For external funs: use capturedModule
-  //   // For local funs: use the module from context (where the function was defined)
-  //   const module =
-  //     fun.capturedModule !== null
-  //       ? Type.atom(fun.capturedModule)
-  //       : fun.context.module !== null && fun.context.module !== undefined
-  //         ? Type.atom(fun.context.module)
-  //         : Type.atom("undefined");
-  //   result.push(Type.tuple([Type.atom("module"), module]));
-
-  //   // Always present: name
-  //   const name =
-  //     fun.capturedFunction !== null
-  //       ? Type.atom(fun.capturedFunction)
-  //       : Type.atom("undefined");
-  //   result.push(Type.tuple([Type.atom("name"), name]));
-
-  //   // Always present: type
-  //   const funType = isExternal ? Type.atom("external") : Type.atom("local");
-  //   result.push(Type.tuple([Type.atom("type"), funType]));
-
-  //   // Additional items: index, new_index, new_uniq, uniq, pid
-  //   // For external funs, these are undefined
-  //   // For local funs, these are also undefined in Hologram (not available)
-  //   const undefinedAtom = Type.atom("undefined");
-  //   result.push(Type.tuple([Type.atom("index"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("new_index"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("new_uniq"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("uniq"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("pid"), undefinedAtom]));
-
-  //   return Type.list(result);
-  // },
-  // // End fun_info/1
-
   // Start floor/1
   "floor/1": (number) => {
     if (!Type.isNumber(number)) {
