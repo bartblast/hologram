@@ -1125,10 +1125,10 @@ const Erlang = {
       const type = Type.atom("external");
 
       return Type.list([
-        Type.tuple([Type.atom("arity"), arity]),
-        Type.tuple([Type.atom("env"), env]),
         Type.tuple([Type.atom("module"), module]),
         Type.tuple([Type.atom("name"), name]),
+        Type.tuple([Type.atom("arity"), arity]),
+        Type.tuple([Type.atom("env"), env]),
         Type.tuple([Type.atom("type"), type]),
       ]);
     }
