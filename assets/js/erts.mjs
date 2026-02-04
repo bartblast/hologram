@@ -6,8 +6,9 @@ import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
 
 export default class ERTS {
-  // Lazy getter for INIT_PID to avoid circular dependency with Type.
-  // Type imports ERTS, so we can't call Type.pid() at class definition time.
+  // The PID of the init process (#PID<0.0.0>), which is the first process started
+  // by the Erlang runtime.
+  // Lazy getter to avoid circular dependency with Type.
   static #initPid = null;
   static get INIT_PID() {
     if (!$.#initPid) {
