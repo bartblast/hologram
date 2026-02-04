@@ -8,7 +8,6 @@ import {
 
 import ERTS from "../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
-import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -63,7 +62,7 @@ describe("Type", () => {
   });
 
   it("anonymousFunction()", () => {
-    Sequence.reset();
+    ERTS.funSequence.reset();
 
     const arity = 3;
     const clauses = ["clause_dummy_1", "clause_dummy_2"];
@@ -81,7 +80,7 @@ describe("Type", () => {
       capturedModule: null,
       clauses: clauses,
       context: context,
-      uniqueId: 1,
+      uniq: 1,
     };
 
     assert.deepStrictEqual(result, expected);
@@ -421,7 +420,7 @@ describe("Type", () => {
   // TODO: refactor test names - use the same pattern as for reference type
   describe("encodeMapKey()", () => {
     it("encodes boxed anonymous function value as map key", () => {
-      Sequence.reset();
+      ERTS.funSequence.reset();
 
       const anonymousFunction = Type.anonymousFunction(
         "dummyArity",
@@ -539,7 +538,7 @@ describe("Type", () => {
   });
 
   it("functionCapture()", () => {
-    Sequence.reset();
+    ERTS.funSequence.reset();
 
     const capturedModule = "MyModule";
     const capturedFunction = "my_fun";
@@ -566,7 +565,7 @@ describe("Type", () => {
       capturedModule: capturedModule,
       clauses: clauses,
       context: contextFixture({module: "Aaa.Bbb", vars: {}}),
-      uniqueId: 1,
+      uniq: 1,
     };
 
     assert.deepStrictEqual(result, expected);

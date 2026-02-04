@@ -1083,66 +1083,6 @@ const Erlang = {
   // End float_to_binary/2
   // Deps: []
 
-  // // Start fun_info/1
-  // "fun_info/1": (fun) => {
-  //   if (!Type.isAnonymousFunction(fun)) {
-  //     Interpreter.raiseArgumentError(
-  //       Interpreter.buildArgumentErrorMsg(1, "not a fun"),
-  //     );
-  //   }
-
-  //   const isExternal =
-  //     fun.capturedModule !== null && fun.capturedFunction !== null;
-
-  //   const result = [];
-
-  //   // Always present: arity
-  //   result.push(Type.tuple([Type.atom("arity"), Type.integer(fun.arity)]));
-
-  //   // Always present: env (environment/captured variables)
-  //   const envVars = fun.context.vars || {};
-  //   const envList = Object.keys(envVars).map((key) => {
-  //     const varName = Type.atom(key);
-  //     return Type.tuple([varName, envVars[key]]);
-  //   });
-  //   result.push(Type.tuple([Type.atom("env"), Type.list(envList)]));
-
-  //   // Always present: module
-  //   // For external funs: use capturedModule
-  //   // For local funs: use the module from context (where the function was defined)
-  //   const module =
-  //     fun.capturedModule !== null
-  //       ? Type.atom(fun.capturedModule)
-  //       : fun.context.module !== null && fun.context.module !== undefined
-  //         ? Type.atom(fun.context.module)
-  //         : Type.atom("undefined");
-  //   result.push(Type.tuple([Type.atom("module"), module]));
-
-  //   // Always present: name
-  //   const name =
-  //     fun.capturedFunction !== null
-  //       ? Type.atom(fun.capturedFunction)
-  //       : Type.atom("undefined");
-  //   result.push(Type.tuple([Type.atom("name"), name]));
-
-  //   // Always present: type
-  //   const funType = isExternal ? Type.atom("external") : Type.atom("local");
-  //   result.push(Type.tuple([Type.atom("type"), funType]));
-
-  //   // Additional items: index, new_index, new_uniq, uniq, pid
-  //   // For external funs, these are undefined
-  //   // For local funs, these are also undefined in Hologram (not available)
-  //   const undefinedAtom = Type.atom("undefined");
-  //   result.push(Type.tuple([Type.atom("index"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("new_index"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("new_uniq"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("uniq"), undefinedAtom]));
-  //   result.push(Type.tuple([Type.atom("pid"), undefinedAtom]));
-
-  //   return Type.list(result);
-  // },
-  // // End fun_info/1
-
   // Start floor/1
   "floor/1": (number) => {
     if (!Type.isNumber(number)) {
@@ -1158,6 +1098,82 @@ const Erlang = {
     return Type.integer(Math.floor(number.value));
   },
   // End floor/1
+  // Deps: []
+
+  // Start fun_info/1
+  "fun_info/1": (fun) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+      );
+    }
+
+    const arity = Type.integer(fun.arity);
+
+    const isExternal = fun.capturedModule !== null;
+
+    if (isExternal) {
+      // Erlang modules are prefixed with ":" (e.g. ":erlang"), Elixir modules are not
+      const isErlangModule = fun.capturedModule.startsWith(":");
+
+      const module = isErlangModule
+        ? Type.atom(fun.capturedModule.slice(1))
+        : Type.alias(fun.capturedModule);
+
+      const env = Type.list();
+      const name = Type.atom(fun.capturedFunction);
+      const type = Type.atom("external");
+
+      return Type.list([
+        Type.tuple([Type.atom("module"), module]),
+        Type.tuple([Type.atom("name"), name]),
+        Type.tuple([Type.atom("arity"), arity]),
+        Type.tuple([Type.atom("env"), env]),
+        Type.tuple([Type.atom("type"), type]),
+      ]);
+    }
+
+    // Local fun
+
+    const env = Type.list(Object.values(fun.context.vars));
+    const module = fun.context.module;
+    const type = Type.atom("local");
+
+    // fun.uniq is a unique integer for this fun (from ERTS.funSequence).
+    // We derive index, new_index, uniq, and new_uniq from it.
+    // In Erlang, index/new_index are per-module indices into the fun table,
+    // and uniq/new_uniq are calculated from compiled code.
+    // TODO: When hot code reloading is implemented, index/new_index should be
+    // per-module indices, and uniq/new_uniq should be based on compiled code hash.
+    const index = Type.integer(fun.uniq);
+    const newIndex = Type.integer(fun.uniq);
+    const uniq = Type.integer(fun.uniq);
+
+    // Generate new_uniq as a 16-byte (128-bit) binary derived from fun.uniq
+    const newUniq = Type.bitstring([
+      Type.bitstringSegment(Type.integer(fun.uniq), {
+        type: "integer",
+        size: Type.integer(128),
+      }),
+    ]);
+
+    const name = Type.atom(Interpreter.inspect(fun));
+    const pid = ERTS.INIT_PID;
+
+    return Type.list([
+      Type.tuple([Type.atom("pid"), pid]),
+      Type.tuple([Type.atom("module"), module]),
+      Type.tuple([Type.atom("new_index"), newIndex]),
+      Type.tuple([Type.atom("new_uniq"), newUniq]),
+      Type.tuple([Type.atom("index"), index]),
+      Type.tuple([Type.atom("uniq"), uniq]),
+      Type.tuple([Type.atom("name"), name]),
+      Type.tuple([Type.atom("arity"), arity]),
+      Type.tuple([Type.atom("env"), env]),
+      Type.tuple([Type.atom("type"), type]),
+    ]);
+  },
+  // End fun_info/1
   // Deps: []
 
   // Start hd/1

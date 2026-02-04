@@ -6,8 +6,8 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import ERTS from "../../assets/js/erts.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
-import Sequence from "../../assets/js/sequence.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -88,7 +88,7 @@ describe("Serializer", () => {
 
       describe("function", () => {
         beforeEach(() => {
-          Sequence.reset();
+          ERTS.funSequence.reset();
         });
 
         const context = contextFixture({
@@ -125,7 +125,7 @@ describe("Serializer", () => {
               );
 
               const expected =
-                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}]';
+                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniq":1}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -163,7 +163,7 @@ describe("Serializer", () => {
               };
 
               const expected =
-                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}}]';
+                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniq":1}}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -203,7 +203,7 @@ describe("Serializer", () => {
               );
 
               const expected =
-                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"}},"uniqueId":1}]';
+                '[3,{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"}},"uniq":1}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -245,7 +245,7 @@ describe("Serializer", () => {
               };
 
               const expected =
-                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"}},"uniqueId":1}}]';
+                '[3,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"}},"uniq":1}}]';
 
               assert.equal(serialize(term, "client"), expected);
             });

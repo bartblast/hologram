@@ -7,4 +7,8 @@ export default class Sequence {
   next() {
     return ++this.value;
   }
+
+  reset() {
+    this.value = 0;
+  }
 }

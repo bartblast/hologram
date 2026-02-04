@@ -3079,139 +3079,105 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  # describe "fun_info/1" do
-  #   test "external function (function capture)" do
-  #     fun = &String.length/1
-  #     info = :erlang.fun_info(fun)
+  describe "fun_info/1" do
+    test "external function, arity 0" do
+      assert :erlang.fun_info(&Module1.fun_0/0) == [
+               module: Module1,
+               name: :fun_0,
+               arity: 0,
+               env: [],
+               type: :external
+             ]
+    end
 
-  #     # Convert to map for easier checking
-  #     info_map = Enum.into(info, %{})
+    test "external function, arity 1" do
+      assert :erlang.fun_info(&Module1.fun_1/1) == [
+               module: Module1,
+               name: :fun_1,
+               arity: 1,
+               env: [],
+               type: :external
+             ]
+    end
 
-  #     # Required items
-  #     assert Map.has_key?(info_map, :arity)
-  #     assert info_map[:arity] == 1
+    test "external function, arity 2" do
+      assert :erlang.fun_info(&Module1.fun_2/2) == [
+               module: Module1,
+               name: :fun_2,
+               arity: 2,
+               env: [],
+               type: :external
+             ]
+    end
 
-  #     assert Map.has_key?(info_map, :env)
-  #     assert is_list(info_map[:env])
+    test "external function, Erlang module" do
+      assert :erlang.fun_info(&:erlang.abs/1) == [
+               module: :erlang,
+               name: :abs,
+               arity: 1,
+               env: [],
+               type: :external
+             ]
+    end
 
-  #     assert Map.has_key?(info_map, :module)
-  #     assert info_map[:module] == String
+    test "local function, arity 0, empty env" do
+      fun = fn -> 123 end
+      result = :erlang.fun_info(fun)
 
-  #     assert Map.has_key?(info_map, :name)
-  #     assert info_map[:name] == :length
+      assert Keyword.keys(result) == [
+               :pid,
+               :module,
+               :new_index,
+               :new_uniq,
+               :index,
+               :uniq,
+               :name,
+               :arity,
+               :env,
+               :type
+             ]
 
-  #     assert Map.has_key?(info_map, :type)
-  #     assert info_map[:type] == :external
+      assert {:pid, pid("0.0.0")} in result
+      assert {:module, __MODULE__} in result
+      assert {:name, :"-test fun_info/1 local function, arity 0, empty env/1-fun-0-"} in result
+      assert {:arity, 0} in result
+      assert {:env, []} in result
+      assert {:type, :local} in result
 
-  #     # Additional items may or may not be present depending on Erlang version
-  #     # For external funs, these are typically undefined if present
-  #     if Map.has_key?(info_map, :index) do
-  #       assert info_map[:index] == :undefined
-  #     end
+      # Verify types of dynamic fields
+      assert is_integer(Keyword.get(result, :index))
+      assert is_integer(Keyword.get(result, :new_index))
+      assert is_binary(Keyword.get(result, :new_uniq))
+      assert is_integer(Keyword.get(result, :uniq))
+    end
 
-  #     if Map.has_key?(info_map, :new_index) do
-  #       assert info_map[:new_index] == :undefined
-  #     end
+    test "local function, arity 1, closure reference" do
+      my_var = wrap_term(123)
+      fun = fn x -> x + my_var end
+      result = :erlang.fun_info(fun)
 
-  #     if Map.has_key?(info_map, :new_uniq) do
-  #       assert info_map[:new_uniq] == :undefined
-  #     end
+      assert {:arity, 1} in result
+      assert {:env, [123]} in result
+      assert {:type, :local} in result
+    end
 
-  #     if Map.has_key?(info_map, :uniq) do
-  #       assert info_map[:uniq] == :undefined
-  #     end
+    test "local function, arity 2, multiple closure references" do
+      var_a = wrap_term(10)
+      var_b = wrap_term(20)
+      fun = fn x, y -> x + y + var_a + var_b end
+      result = :erlang.fun_info(fun)
 
-  #     if Map.has_key?(info_map, :pid) do
-  #       assert info_map[:pid] == :undefined
-  #     end
-  #   end
+      assert {:arity, 2} in result
+      assert {:env, [10, 20]} in result
+      assert {:type, :local} in result
+    end
 
-  #   test "local function (anonymous function)" do
-  #     x = 1
-  #     y = 2
-  #     fun = fn z -> x + y + z end
-  #     info = :erlang.fun_info(fun)
-
-  #     # Convert to map for easier checking
-  #     info_map = Enum.into(info, %{})
-
-  #     # Required items
-  #     assert Map.has_key?(info_map, :arity)
-  #     assert info_map[:arity] == 1
-
-  #     assert Map.has_key?(info_map, :env)
-  #     assert is_list(info_map[:env])
-  #     # Note: Environment variables may not be preserved when functions are serialized
-  #     # from Elixir to JavaScript, so we only check structure, not specific values
-  #     # Check that env is a list (may be empty if vars aren't serialized)
-  #     assert is_list(info_map[:env])
-
-  #     assert Map.has_key?(info_map, :module)
-  #     # For local funs, module is the module where the function was defined
-  #     assert is_atom(info_map[:module])
-
-  #     assert Map.has_key?(info_map, :name)
-  #     # For local funs, Erlang generates a name (not :undefined)
-  #     # The name is an atom, typically in the format "-function_name/arity-fun-N-"
-  #     assert is_atom(info_map[:name])
-
-  #     assert Map.has_key?(info_map, :type)
-  #     assert info_map[:type] == :local
-
-  #     # Additional items may or may not be present depending on Erlang version
-  #     # For local funs, these typically have values if present
-  #     if Map.has_key?(info_map, :index) do
-  #       assert is_integer(info_map[:index])
-  #     end
-
-  #     if Map.has_key?(info_map, :new_index) do
-  #       assert is_integer(info_map[:new_index])
-  #     end
-
-  #     if Map.has_key?(info_map, :new_uniq) do
-  #       # new_uniq is a binary (16 bytes), not an integer
-  #       assert is_binary(info_map[:new_uniq])
-  #       assert byte_size(info_map[:new_uniq]) == 16
-  #     end
-
-  #     if Map.has_key?(info_map, :uniq) do
-  #       # uniq is an integer, not a binary
-  #       assert is_integer(info_map[:uniq])
-  #     end
-
-  #     if Map.has_key?(info_map, :pid) do
-  #       assert is_pid(info_map[:pid])
-  #     end
-  #   end
-
-  #   test "anonymous function with no captured variables" do
-  #     fun = fn -> 42 end
-  #     info = :erlang.fun_info(fun)
-
-  #     info_map = Enum.into(info, %{})
-
-  #     assert Map.has_key?(info_map, :env)
-  #     assert info_map[:env] == []
-  #   end
-
-  #   test "raises ArgumentError if the argument is not a function" do
-  #     assert_error ArgumentError,
-  #                  build_argument_error_msg(1, "not a fun"),
-  #                  {:erlang, :fun_info, [:not_a_function]}
-  #   end
-
-  #   test "raises ArgumentError if the argument is an integer" do
-  #     assert_error ArgumentError,
-  #                  build_argument_error_msg(1, "not a fun"),
-  #                  {:erlang, :fun_info, [123]}
-  #   end
-
-  #   test "raises ArgumentError if the argument is a list" do
-  #     assert_error ArgumentError,
-  #                  build_argument_error_msg(1, "not a fun"),
-  #                  {:erlang, :fun_info, [[1, 2, 3]]}
-  #   end
-  # end
+    test "raises ArgumentError if the argument is not a fun" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun"),
+                   {:erlang, :fun_info, [:abc]}
+    end
+  end
 
   describe "hd/1" do
     test "returns the first item in the list" do

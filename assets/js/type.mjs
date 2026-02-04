@@ -4,7 +4,6 @@ import Bitstring from "./bitstring.mjs";
 import ERTS from "./erts.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
-import Sequence from "./sequence.mjs";
 import Serializer from "./serializer.mjs";
 import Utils from "./utils.mjs";
 
@@ -48,7 +47,7 @@ export default class Type {
       capturedModule: null,
       clauses: clauses,
       context: Interpreter.cloneContext(context),
-      uniqueId: Sequence.next(),
+      uniq: ERTS.funSequence.next(),
     };
   }
 
@@ -206,7 +205,7 @@ export default class Type {
       capturedModule: capturedModule,
       clauses: clauses,
       context: Interpreter.buildContext({module: context.module, vars: {}}),
-      uniqueId: Sequence.next(),
+      uniq: ERTS.funSequence.next(),
     };
   }
 
@@ -505,7 +504,7 @@ export default class Type {
   }
 
   static #encodeAnonymousFunctionTypeMapKey(anonymousFunction) {
-    return "anonymous_function(" + anonymousFunction.uniqueId + ")";
+    return "anonymous_function(" + anonymousFunction.uniq + ")";
   }
 
   static #encodeEnumTypeMapKey(term) {
