@@ -8,6 +8,10 @@ export default class ERTS {
   static binaryPatternRegistry = BinaryPatternRegistry;
   static ets = {};
 
+  // Sequence for anonymous function `uniq` field.
+  // Used to derive fun_info/1 fields: index, new_index, uniq, new_uniq.
+  static funSequence = new Sequence();
+
   static graphemeSegmenter = new Intl.Segmenter(undefined, {
     granularity: "grapheme",
   });
