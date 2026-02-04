@@ -1898,6 +1898,28 @@ const Erlang = {
   // End rem/2
   // Deps: []
 
+  // Start round/1
+  "round/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    // Erlang rounds half away from zero (5.5 -> 6, -5.5 -> -6)
+    // JavaScript Math.round rounds half toward positive infinity (5.5 -> 6, -5.5 -> -5)
+    // Use sign * round(abs) to get correct behavior
+    // Adding 0 converts -0 to 0
+    const value = number.value;
+    return Type.integer(Math.sign(value) * Math.round(Math.abs(value)) + 0);
+  },
+  // End round/1
+  // Deps: []
+
   // Start setelement/3
   "setelement/3": (index, tuple, value) => {
     if (!Type.isInteger(index)) {
