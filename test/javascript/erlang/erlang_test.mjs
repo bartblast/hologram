@@ -5037,6 +5037,127 @@ describe("Erlang", () => {
     });
   });
 
+  describe("fun_info/2", () => {
+    const fun_info = Erlang["fun_info/2"];
+
+    it("external function, item present", () => {
+      const fun = Type.functionCapture(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        "fun_1",
+        1,
+        [],
+        contextFixture(),
+      );
+
+      const result = fun_info(fun, Type.atom("arity"));
+      const expected = Type.tuple([Type.atom("arity"), Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("external function, item available only for local functions returns undefined", () => {
+      const fun = Type.functionCapture(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        "fun_1",
+        1,
+        [],
+        contextFixture(),
+      );
+
+      const result = fun_info(fun, Type.atom("pid"));
+      const expected = Type.tuple([Type.atom("pid"), Type.atom("undefined")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("local function, item present", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => Erlang["+/2"](context.vars.x, Type.integer(1)),
+          },
+        ],
+        contextFixture({
+          module: Type.alias(
+            "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+          ),
+        }),
+      );
+
+      const result = fun_info(fun, Type.atom("arity"));
+      const expected = Type.tuple([Type.atom("arity"), Type.integer(1)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first arg is not a fun", () => {
+      assertBoxedError(
+        () => fun_info(Type.atom("abc"), Type.atom("arity")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+      );
+    });
+
+    it("raises ArgumentError if the second arg is not an atom", () => {
+      const fun = Type.functionCapture(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        "fun_1",
+        1,
+        [],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => fun_info(fun, Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+      );
+    });
+
+    it("external function, invalid item raises ArgumentError", () => {
+      const fun = Type.functionCapture(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+        "fun_1",
+        1,
+        [],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => fun_info(fun, Type.atom("invalid_item")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+      );
+    });
+
+    it("local function, invalid item raises ArgumentError", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => Erlang["+/2"](context.vars.x, Type.integer(1)),
+          },
+        ],
+        contextFixture({
+          module: Type.alias(
+            "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1",
+          ),
+        }),
+      );
+
+      assertBoxedError(
+        () => fun_info(fun, Type.atom("invalid_item")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
