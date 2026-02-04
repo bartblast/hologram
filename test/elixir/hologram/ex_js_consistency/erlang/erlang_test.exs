@@ -3179,6 +3179,48 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "fun_info/2" do
+    test "external function, item present" do
+      assert :erlang.fun_info(&Module1.fun_1/1, :arity) == {:arity, 1}
+    end
+
+    test "external function, item available only for local functions returns undefined" do
+      assert :erlang.fun_info(&Module1.fun_1/1, :pid) == {:pid, :undefined}
+    end
+
+    test "local function, item present" do
+      fun = fn x -> x + 1 end
+
+      assert :erlang.fun_info(fun, :arity) == {:arity, 1}
+    end
+
+    test "raises ArgumentError if the first arg is not a fun" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun"),
+                   {:erlang, :fun_info, [:abc, :arity]}
+    end
+
+    test "raises ArgumentError if the second arg is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid item"),
+                   {:erlang, :fun_info, [&Module1.fun_1/1, 123]}
+    end
+
+    test "external function, invalid item raises ArgumentError" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid item"),
+                   {:erlang, :fun_info, [&Module1.fun_1/1, :invalid_item]}
+    end
+
+    test "local function, invalid item raises ArgumentError" do
+      fun = fn x -> x + 1 end
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "invalid item"),
+                   {:erlang, :fun_info, [fun, :invalid_item]}
+    end
+  end
+
   describe "hd/1" do
     test "returns the first item in the list" do
       assert :erlang.hd([1, 2, 3]) === 1

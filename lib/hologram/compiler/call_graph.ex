@@ -52,6 +52,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :convert_time_unit, 3}, {:erlang, :_validate_time_unit, 2}},
     {{:erlang, :error, 1}, {:erlang, :error, 2}},
     {{:erlang, :float_to_list, 2}, {:erlang, :float_to_binary, 2}},
+    {{:erlang, :fun_info, 2}, {:erlang, :fun_info, 1}},
     {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
     {{:erlang, :integer_to_list, 1}, {:erlang, :integer_to_list, 2}},
     {{:erlang, :iolist_to_binary, 1}, {:lists, :flatten, 1}},

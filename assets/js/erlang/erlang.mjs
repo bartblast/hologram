@@ -1176,6 +1176,42 @@ const Erlang = {
   // End fun_info/1
   // Deps: []
 
+  // Start fun_info/2
+  "fun_info/2": (fun, item) => {
+    const validItems = new Set([
+      "arity",
+      "env",
+      "index",
+      "module",
+      "name",
+      "new_index",
+      "new_uniq",
+      "pid",
+      "type",
+      "uniq",
+    ]);
+
+    const info = Erlang["fun_info/1"](fun);
+
+    if (!Type.isAtom(item) || !validItems.has(item.value)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+      );
+    }
+
+    const result = info.data.find(
+      (tuple) => tuple.data[0].value === item.value,
+    );
+
+    if (result === undefined) {
+      return Type.tuple([item, Type.atom("undefined")]);
+    }
+
+    return result;
+  },
+  // End fun_info/2
+  // Deps: [:erlang.fun_info/1]
+
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
