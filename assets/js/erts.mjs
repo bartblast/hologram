@@ -3,8 +3,19 @@
 import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import Sequence from "./common/sequence.mjs";
+import Type from "./type.mjs";
 
 export default class ERTS {
+  // Lazy getter for INIT_PID to avoid circular dependency with Type.
+  // Type imports ERTS, so we can't call Type.pid() at class definition time.
+  static #initPid = null;
+  static get INIT_PID() {
+    if (!$.#initPid) {
+      $.#initPid = Type.pid(NodeTable.CLIENT_NODE, [0, 0, 0], "client");
+    }
+    return $.#initPid;
+  }
+
   static binaryPatternRegistry = BinaryPatternRegistry;
   static ets = {};
 
@@ -23,3 +34,5 @@ export default class ERTS {
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
 }
+
+const $ = ERTS;
