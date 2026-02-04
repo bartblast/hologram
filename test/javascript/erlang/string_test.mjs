@@ -18,6 +18,279 @@ defineGlobalErlangAndElixirModules();
 // Always update both together.
 
 describe("Erlang_String", () => {
+  describe("find/3", () => {
+    const find = Erlang_String["find/3"];
+
+    describe("direction variations", () => {
+      it("with direction :leading finds first occurrence", () => {
+        const result = find(
+          Type.bitstring("ab..cd..ef"),
+          Type.bitstring(".."),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("..cd..ef"));
+      });
+
+      it("with direction :trailing finds last occurrence", () => {
+        const result = find(
+          Type.bitstring("ab..cd..ef"),
+          Type.bitstring(".."),
+          Type.atom("trailing"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("..ef"));
+      });
+    });
+
+    describe("pattern not found", () => {
+      it("returns :nomatch with :leading direction", () => {
+        const result = find(
+          Type.bitstring("ab..cd..ef"),
+          Type.bitstring("x"),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.atom("nomatch"));
+      });
+
+      it("returns :nomatch with :trailing direction", () => {
+        const result = find(
+          Type.bitstring("ab..cd..ef"),
+          Type.bitstring("x"),
+          Type.atom("trailing"),
+        );
+
+        assert.deepStrictEqual(result, Type.atom("nomatch"));
+      });
+    });
+
+    describe("pattern position edge cases", () => {
+      it("when pattern is at the start of the string", () => {
+        const result = find(
+          Type.bitstring("..abcd"),
+          Type.bitstring(".."),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("..abcd"));
+      });
+
+      it("when pattern is at the end of the string", () => {
+        const result = find(
+          Type.bitstring("abcd.."),
+          Type.bitstring(".."),
+          Type.atom("trailing"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring(".."));
+      });
+
+      it("with single character pattern", () => {
+        const result = find(
+          Type.bitstring("ab..cd..ef"),
+          Type.bitstring("."),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("..cd..ef"));
+      });
+    });
+
+    describe("input edge cases", () => {
+      it("with empty pattern returns string as-is", () => {
+        const result = find(
+          Type.bitstring("Hello World"),
+          Type.bitstring(""),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("Hello World"));
+      });
+
+      it("with empty string and empty pattern", () => {
+        const result = find(
+          Type.bitstring(""),
+          Type.bitstring(""),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring(""));
+      });
+
+      it("with empty string and non-empty pattern", () => {
+        const result = find(
+          Type.bitstring(""),
+          Type.bitstring("x"),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.atom("nomatch"));
+      });
+
+      it("with unicode pattern", () => {
+        const result = find(
+          Type.bitstring("Hello 👋 World 👋 End"),
+          Type.bitstring("👋"),
+          Type.atom("trailing"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("👋 End"));
+      });
+
+      it("when pattern equals string", () => {
+        const result = find(
+          Type.bitstring("abc"),
+          Type.bitstring("abc"),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("abc"));
+      });
+    });
+
+    describe("charlist input", () => {
+      it("with charlist string and charlist pattern", () => {
+        const result = find(
+          Type.charlist("ab..cd..ef"),
+          Type.charlist(".."),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.charlist("..cd..ef"));
+      });
+
+      it("with charlist string and binary pattern", () => {
+        const result = find(
+          Type.charlist("ab..cd..ef"),
+          Type.bitstring(".."),
+          Type.atom("trailing"),
+        );
+
+        assert.deepStrictEqual(result, Type.charlist("..ef"));
+      });
+
+      it("with binary string and charlist pattern", () => {
+        const result = find(
+          Type.bitstring("ab..cd..ef"),
+          Type.charlist(".."),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("..cd..ef"));
+      });
+
+      it("returns :nomatch for charlist when pattern not found", () => {
+        const result = find(
+          Type.charlist("ab..cd..ef"),
+          Type.charlist("x"),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.atom("nomatch"));
+      });
+
+      it("with empty pattern returns charlist as-is", () => {
+        const result = find(
+          Type.charlist("Hello World"),
+          Type.charlist(""),
+          Type.atom("leading"),
+        );
+
+        assert.deepStrictEqual(result, Type.charlist("Hello World"));
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises MatchError if the first argument is not valid chardata", () => {
+        const invalidArg = Type.atom("abc");
+
+        assertBoxedError(
+          () => find(invalidArg, Type.bitstring("_"), Type.atom("leading")),
+          "MatchError",
+          Interpreter.buildMatchErrorMsg(invalidArg),
+        );
+      });
+
+      it("raises MatchError if the first argument is a non-binary bitstring", () => {
+        const nonBinaryBitstring = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () =>
+            find(nonBinaryBitstring, Type.bitstring("x"), Type.atom("leading")),
+          "MatchError",
+          Interpreter.buildMatchErrorMsg(nonBinaryBitstring),
+        );
+      });
+
+      it("raises ArgumentError if the second argument is not valid chardata", () => {
+        assertBoxedError(
+          () =>
+            find(
+              Type.bitstring("Hello World"),
+              Type.atom("abc"),
+              Type.atom("leading"),
+            ),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not valid character data (an iodata term)",
+          ),
+        );
+      });
+
+      it("raises ArgumentError if the second argument is a non-binary bitstring", () => {
+        assertBoxedError(
+          () =>
+            find(
+              Type.bitstring("Hello World"),
+              Type.bitstring([1, 0, 1]),
+              Type.atom("leading"),
+            ),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not valid character data (an iodata term)",
+          ),
+        );
+      });
+
+      it("raises FunctionClauseError if the third argument is not an atom", () => {
+        assertBoxedError(
+          () =>
+            find(
+              Type.bitstring("Hello World"),
+              Type.bitstring(" "),
+              Type.bitstring("leading"),
+            ),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+            Type.bitstring("Hello World"),
+            Type.bitstring(" "),
+            Type.bitstring("leading"),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError if the third argument is an unrecognized atom", () => {
+        assertBoxedError(
+          () =>
+            find(
+              Type.bitstring("Hello World"),
+              Type.bitstring(" "),
+              Type.atom("all"),
+            ),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+            Type.bitstring("Hello World"),
+            Type.bitstring(" "),
+            Type.atom("all"),
+          ]),
+        );
+      });
+    });
+  });
+
   describe("join/2", () => {
     const join = Erlang_String["join/2"];
 

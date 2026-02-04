@@ -11,6 +11,82 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_String = {
+  // Start find/3
+  "find/3": (string, searchPattern, direction) => {
+    let stringBinary;
+
+    try {
+      stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
+    } catch {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    }
+
+    if (Type.isTuple(stringBinary)) {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    }
+
+    const patternBinary =
+      Erlang_Unicode["characters_to_binary/1"](searchPattern);
+
+    if (Type.isTuple(patternBinary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
+
+    if (!Type.isAtom(direction)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+          string,
+          searchPattern,
+          direction,
+        ]),
+      );
+    }
+
+    const directionValue = direction.value;
+
+    if (!["leading", "trailing"].includes(directionValue)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":string.find/3", [
+          string,
+          searchPattern,
+          direction,
+        ]),
+      );
+    }
+
+    const stringText = Bitstring.toText(stringBinary);
+    const patternText = Bitstring.toText(patternBinary);
+
+    // Empty pattern returns the string as-is
+    if (Bitstring.isEmpty(patternBinary)) {
+      return Type.isList(string)
+        ? Type.charlist(stringText)
+        : Type.bitstring(stringText);
+    }
+
+    // Find the pattern
+    const index =
+      directionValue === "trailing"
+        ? stringText.lastIndexOf(patternText)
+        : stringText.indexOf(patternText);
+
+    if (index === -1) {
+      return Type.atom("nomatch");
+    }
+
+    // Return the remainder from the match position (inclusive of pattern)
+    const result = stringText.slice(index);
+
+    return Type.isList(string) ? Type.charlist(result) : Type.bitstring(result);
+  },
+  // End find/3
+  // Deps: [:unicode.characters_to_binary/1]
+
   // Start join/2
   "join/2": function (list, separator) {
     if (!Type.isList(list)) {
