@@ -4044,6 +4044,95 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "round/1" do
+    test "rounds positive float with fractional part less than 0.5 down" do
+      assert :erlang.round(1.23) == 1
+    end
+
+    test "rounds positive float with fractional part greater than 0.5 up" do
+      assert :erlang.round(1.67) == 2
+    end
+
+    test "rounds positive float with fractional part equal to 0.5 away from zero (up)" do
+      assert :erlang.round(5.5) == 6
+    end
+
+    test "rounds negative float with fractional part less than 0.5 up toward zero" do
+      assert :erlang.round(-1.23) == -1
+    end
+
+    test "rounds negative float with fractional part greater than 0.5 down away from zero" do
+      assert :erlang.round(-1.67) == -2
+    end
+
+    test "rounds negative float with fractional part equal to 0.5 away from zero (down)" do
+      assert :erlang.round(-5.5) == -6
+    end
+
+    test "keeps positive float without fractional part unchanged" do
+      assert :erlang.round(1.0) == 1
+    end
+
+    test "keeps negative float without fractional part unchanged" do
+      assert :erlang.round(-1.0) == -1
+    end
+
+    test "keeps signed negative zero float unchanged" do
+      assert :erlang.round(-0.0) == 0
+    end
+
+    test "keeps signed positive zero float unchanged" do
+      assert :erlang.round(+0.0) == 0
+    end
+
+    test "keeps unsigned zero float unchanged" do
+      assert :erlang.round(0.0) == 0
+    end
+
+    test "rounds 0.5 away from zero" do
+      assert :erlang.round(0.5) == 1
+    end
+
+    test "rounds -0.5 away from zero" do
+      assert :erlang.round(-0.5) == -1
+    end
+
+    test "keeps positive integer unchanged" do
+      assert :erlang.round(1) == 1
+    end
+
+    test "keeps negative integer unchanged" do
+      assert :erlang.round(-1) == -1
+    end
+
+    test "keeps zero integer unchanged" do
+      assert :erlang.round(0) == 0
+    end
+
+    test "handles MAX_SAFE_INTEGER float" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      assert :erlang.round(9_007_199_254_740_991.0) == 9_007_199_254_740_991
+    end
+
+    test "handles MIN_SAFE_INTEGER float" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      assert :erlang.round(-9_007_199_254_740_991.0) == -9_007_199_254_740_991
+    end
+
+    test "handles large float that loses precision" do
+      # This demonstrates that float representation limits apply before rounding
+      # 36_028_797_018_963_969.0 cannot be represented exactly as a float
+      # It's stored as 36_028_797_018_963_968.0
+      assert :erlang.round(36_028_797_018_963_969.0) == 36_028_797_018_963_968
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :round, [:abc]}
+    end
+  end
+
   describe "setelement/3" do
     test "replaces a middle element" do
       assert :erlang.setelement(2, {1, 2, 3}, :a) === {1, :a, 3}

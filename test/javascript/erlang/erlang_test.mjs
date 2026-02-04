@@ -6662,6 +6662,147 @@ describe("Erlang", () => {
     });
   });
 
+  describe("round/1", () => {
+    const testedFun = Erlang["round/1"];
+
+    it("rounds positive float with fractional part less than 0.5 down", () => {
+      const result = testedFun(Type.float(1.23));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("rounds positive float with fractional part greater than 0.5 up", () => {
+      const result = testedFun(Type.float(1.67));
+
+      assert.deepStrictEqual(result, integer2);
+    });
+
+    it("rounds positive float with fractional part equal to 0.5 away from zero (up)", () => {
+      const result = testedFun(Type.float(5.5));
+
+      assert.deepStrictEqual(result, integer6);
+    });
+
+    it("rounds negative float with fractional part less than 0.5 up toward zero", () => {
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rounds negative float with fractional part greater than 0.5 down away from zero", () => {
+      const result = testedFun(Type.float(-1.67));
+      const expected = Type.integer(-2);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rounds negative float with fractional part equal to 0.5 away from zero (down)", () => {
+      const result = testedFun(Type.float(-5.5));
+      const expected = Type.integer(-6);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps positive float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(1.0));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(-1.0));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps signed negative zero float unchanged", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps signed positive zero float unchanged", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps unsigned zero float unchanged", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("rounds 0.5 away from zero", () => {
+      const result = testedFun(Type.float(0.5));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("rounds -0.5 away from zero", () => {
+      const result = testedFun(Type.float(-0.5));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(integer1);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const integer = Type.integer(-1);
+      const result = testedFun(integer);
+
+      assert.deepStrictEqual(result, integer);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("handles MAX_SAFE_INTEGER float", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      const result = testedFun(Type.float(9_007_199_254_740_991.0));
+      const expected = Type.integer(9_007_199_254_740_991n);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles MIN_SAFE_INTEGER float", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      const result = testedFun(Type.float(-9_007_199_254_740_991.0));
+      const expected = Type.integer(-9_007_199_254_740_991n);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles large float that loses precision", () => {
+      // This demonstrates that float representation limits apply before rounding
+      // 36_028_797_018_963_969.0 cannot be represented exactly as a float
+      // It's stored as 36_028_797_018_963_968.0
+      // eslint-disable-next-line no-loss-of-precision
+      const result = testedFun(Type.float(36_028_797_018_963_969.0));
+      const expected = Type.integer(36_028_797_018_963_968n);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("setelement/3", () => {
     const setelement = Erlang["setelement/3"];
 
@@ -7069,9 +7210,9 @@ describe("Erlang", () => {
 
     it("demonstrates floating-point precision limits for large numbers", () => {
       // eslint-disable-next-line no-loss-of-precision
-      const result = testedFun(Type.float(36028797018963969.0));
+      const result = testedFun(Type.float(36_028_797_018_963_969.0));
 
-      const expected = Type.integer(36028797018963968n);
+      const expected = Type.integer(36_028_797_018_963_968n);
 
       assert.deepStrictEqual(result, expected);
     });
