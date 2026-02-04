@@ -114,6 +114,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:sets, :new, 1}, {:sets, :_validate_opts, 1}},
     {{:sets, :size, 1}, {:erlang, :map_size, 1}},
     {{:sets, :to_list, 1}, {:maps, :keys, 1}},
+    {{:string, :find, 3}, {:unicode, :characters_to_binary, 1}},
     {{:string, :replace, 3}, {:string, :replace, 4}},
     {{:string, :replace, 4}, {:unicode, :characters_to_binary, 1}},
     {{:string, :split, 2}, {:string, :split, 3}},

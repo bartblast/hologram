@@ -9,6 +9,136 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
 
   @moduletag :consistency
 
+  describe "find/3" do
+    # Direction variations
+
+    test "with direction :leading finds first occurrence" do
+      assert :string.find("ab..cd..ef", "..", :leading) == "..cd..ef"
+    end
+
+    test "with direction :trailing finds last occurrence" do
+      assert :string.find("ab..cd..ef", "..", :trailing) == "..ef"
+    end
+
+    # Pattern not found
+
+    test "returns :nomatch with :leading direction" do
+      assert :string.find("ab..cd..ef", "x", :leading) == :nomatch
+    end
+
+    test "returns :nomatch with :trailing direction" do
+      assert :string.find("ab..cd..ef", "x", :trailing) == :nomatch
+    end
+
+    # Pattern position edge cases
+
+    test "when pattern is at the start of the string" do
+      assert :string.find("..abcd", "..", :leading) == "..abcd"
+    end
+
+    test "when pattern is at the end of the string" do
+      assert :string.find("abcd..", "..", :trailing) == ".."
+    end
+
+    test "with single character pattern" do
+      assert :string.find("ab..cd..ef", ".", :leading) == "..cd..ef"
+    end
+
+    # Input edge cases
+
+    test "with empty pattern returns string as-is" do
+      assert :string.find("Hello World", "", :leading) == "Hello World"
+    end
+
+    test "with empty string and empty pattern" do
+      assert :string.find("", "", :leading) == ""
+    end
+
+    test "with empty string and non-empty pattern" do
+      assert :string.find("", "x", :leading) == :nomatch
+    end
+
+    test "with unicode pattern" do
+      assert :string.find("Hello 👋 World 👋 End", "👋", :trailing) == "👋 End"
+    end
+
+    test "when pattern equals string" do
+      assert :string.find("abc", "abc", :leading) == "abc"
+    end
+
+    # Charlist input
+
+    test "with charlist string and charlist pattern" do
+      assert :string.find(~c"ab..cd..ef", ~c"..", :leading) == ~c"..cd..ef"
+    end
+
+    test "with charlist string and binary pattern" do
+      assert :string.find(~c"ab..cd..ef", "..", :trailing) == ~c"..ef"
+    end
+
+    test "with binary string and charlist pattern" do
+      assert :string.find("ab..cd..ef", ~c"..", :leading) == "..cd..ef"
+    end
+
+    test "returns :nomatch for charlist when pattern not found" do
+      assert :string.find(~c"ab..cd..ef", ~c"x", :leading) == :nomatch
+    end
+
+    test "with empty pattern returns charlist as-is" do
+      assert :string.find(~c"Hello World", ~c"", :leading) == ~c"Hello World"
+    end
+
+    # Error cases
+
+    test "raises MatchError if the first argument is not valid chardata" do
+      assert_error MatchError, build_match_error_msg(:abc), fn ->
+        :string.find(:abc, "_", :leading)
+      end
+    end
+
+    test "raises MatchError if the first argument is a non-binary bitstring" do
+      assert_error MatchError, build_match_error_msg(<<1::3>>), fn ->
+        :string.find(<<1::3>>, "x", :leading)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not valid chardata" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.find("Hello World", :abc, :leading)
+                   end
+    end
+
+    test "raises ArgumentError if the second argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.find("Hello World", <<1::3>>, :leading)
+                   end
+    end
+
+    test "raises FunctionClauseError if the third argument is not an atom" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":string.find/3", [
+                     "Hello World",
+                     " ",
+                     "leading"
+                   ]),
+                   fn ->
+                     :string.find("Hello World", " ", "leading")
+                   end
+    end
+
+    test "raises FunctionClauseError if the third argument is an unrecognized atom" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":string.find/3", ["Hello World", " ", :all]),
+                   fn ->
+                     :string.find("Hello World", " ", :all)
+                   end
+    end
+  end
+
   describe "join/2" do
     test "single element" do
       assert :string.join([~c"hello"], ~c", ") == ~c"hello"
