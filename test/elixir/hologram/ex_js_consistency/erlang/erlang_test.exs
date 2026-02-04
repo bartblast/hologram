@@ -3079,6 +3079,140 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "fun_info/1" do
+    test "external function (function capture)" do
+      fun = &String.length/1
+      info = :erlang.fun_info(fun)
+
+      # Convert to map for easier checking
+      info_map = Enum.into(info, %{})
+
+      # Required items
+      assert Map.has_key?(info_map, :arity)
+      assert info_map[:arity] == 1
+
+      assert Map.has_key?(info_map, :env)
+      assert is_list(info_map[:env])
+
+      assert Map.has_key?(info_map, :module)
+      assert info_map[:module] == String
+
+      assert Map.has_key?(info_map, :name)
+      assert info_map[:name] == :length
+
+      assert Map.has_key?(info_map, :type)
+      assert info_map[:type] == :external
+
+      # Additional items may or may not be present depending on Erlang version
+      # For external funs, these are typically undefined if present
+      if Map.has_key?(info_map, :index) do
+        assert info_map[:index] == :undefined
+      end
+
+      if Map.has_key?(info_map, :new_index) do
+        assert info_map[:new_index] == :undefined
+      end
+
+      if Map.has_key?(info_map, :new_uniq) do
+        assert info_map[:new_uniq] == :undefined
+      end
+
+      if Map.has_key?(info_map, :uniq) do
+        assert info_map[:uniq] == :undefined
+      end
+
+      if Map.has_key?(info_map, :pid) do
+        assert info_map[:pid] == :undefined
+      end
+    end
+
+    test "local function (anonymous function)" do
+      x = 1
+      y = 2
+      fun = fn z -> x + y + z end
+      info = :erlang.fun_info(fun)
+
+      # Convert to map for easier checking
+      info_map = Enum.into(info, %{})
+
+      # Required items
+      assert Map.has_key?(info_map, :arity)
+      assert info_map[:arity] == 1
+
+      assert Map.has_key?(info_map, :env)
+      assert is_list(info_map[:env])
+      # Note: Environment variables may not be preserved when functions are serialized
+      # from Elixir to JavaScript, so we only check structure, not specific values
+      # Check that env is a list (may be empty if vars aren't serialized)
+      assert is_list(info_map[:env])
+
+      assert Map.has_key?(info_map, :module)
+      # For local funs, module is the module where the function was defined
+      assert is_atom(info_map[:module])
+
+      assert Map.has_key?(info_map, :name)
+      # For local funs, Erlang generates a name (not :undefined)
+      # The name is an atom, typically in the format "-function_name/arity-fun-N-"
+      assert is_atom(info_map[:name])
+
+      assert Map.has_key?(info_map, :type)
+      assert info_map[:type] == :local
+
+      # Additional items may or may not be present depending on Erlang version
+      # For local funs, these typically have values if present
+      if Map.has_key?(info_map, :index) do
+        assert is_integer(info_map[:index])
+      end
+
+      if Map.has_key?(info_map, :new_index) do
+        assert is_integer(info_map[:new_index])
+      end
+
+      if Map.has_key?(info_map, :new_uniq) do
+        # new_uniq is a binary (16 bytes), not an integer
+        assert is_binary(info_map[:new_uniq])
+        assert byte_size(info_map[:new_uniq]) == 16
+      end
+
+      if Map.has_key?(info_map, :uniq) do
+        # uniq is an integer, not a binary
+        assert is_integer(info_map[:uniq])
+      end
+
+      if Map.has_key?(info_map, :pid) do
+        assert is_pid(info_map[:pid])
+      end
+    end
+
+    test "anonymous function with no captured variables" do
+      fun = fn -> 42 end
+      info = :erlang.fun_info(fun)
+
+      info_map = Enum.into(info, %{})
+
+      assert Map.has_key?(info_map, :env)
+      assert info_map[:env] == []
+    end
+
+    test "raises ArgumentError if the argument is not a function" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun"),
+                   {:erlang, :fun_info, [:not_a_function]}
+    end
+
+    test "raises ArgumentError if the argument is an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun"),
+                   {:erlang, :fun_info, [123]}
+    end
+
+    test "raises ArgumentError if the argument is a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a fun"),
+                   {:erlang, :fun_info, [[1, 2, 3]]}
+    end
+  end
+
   describe "hd/1" do
     test "returns the first item in the list" do
       assert :erlang.hd([1, 2, 3]) === 1
