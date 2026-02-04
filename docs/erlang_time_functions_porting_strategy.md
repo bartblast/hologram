@@ -44,13 +44,13 @@ Supported units: `second`, `millisecond`, `microsecond`, `nanosecond`, `native`
 
 ### Layer 4: Unit variants
 
-All `/1` variants should delegate to their `/0` counterpart + `convert_time_unit/3`:
+Most `/1` variants delegate to their `/0` counterpart + `convert_time_unit/3`:
 
 | Function | Implementation |
 |----------|----------------|
 | `:os.system_time/1` | `convert_time_unit(os.system_time(), :native, unit)` |
 | `:erlang.monotonic_time/1` | `convert_time_unit(erlang.monotonic_time(), :native, unit)` |
-| `:erlang.system_time/1` | `convert_time_unit(erlang.system_time(), :native, unit)` |
+| `:erlang.system_time/1` | Delegate to `:os.system_time/1` (same rationale as `/0` variant) |
 | `:erlang.time_offset/1` | `convert_time_unit(erlang.time_offset(), :native, unit)` |
 
 ### Layer 5: Independent
@@ -78,6 +78,7 @@ Layer 3 (Derived):
 
 Layer 4 (Unit variants):
     :foo/0 + :erlang.convert_time_unit/3  ──►  :foo/1
+    :os.system_time/1  ───────────────────►  :erlang.system_time/1
 ```
 
 ## Implementation Order

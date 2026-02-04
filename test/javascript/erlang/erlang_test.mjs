@@ -6831,10 +6831,12 @@ describe("Erlang", () => {
     });
   });
 
+  // Simplified tests since JS port delegates to :os.system_time/0
   describe("system_time/0", () => {
     const system_time = Erlang["system_time/0"];
 
-    it("returns current system time in native time unit (nanoseconds)", () => {
+    // Note: Elixir test is named "returns current system time in native time unit (nanoseconds)"
+    it("delegates to :os.system_time/0", () => {
       const beforeNs = Erlang_Os["system_time/0"]();
       const result = system_time();
       const afterNs = Erlang_Os["system_time/0"]();
@@ -6842,6 +6844,23 @@ describe("Erlang", () => {
       assert.isTrue(Type.isInteger(result));
       assert.isAtLeast(result.value, beforeNs.value);
       assert.isAtMost(result.value, afterNs.value);
+    });
+  });
+
+  // Simplified tests since JS port delegates to :os.system_time/1
+  describe("system_time/1", () => {
+    const system_time = Erlang["system_time/1"];
+
+    // Note: Elixir test is named "returns current system time in the given time unit"
+    it("delegates to :os.system_time/1", () => {
+      const unit = Type.atom("microsecond");
+      const beforeUs = Erlang_Os["system_time/1"](unit);
+      const result = system_time(unit);
+      const afterUs = Erlang_Os["system_time/1"](unit);
+
+      assert.isTrue(Type.isInteger(result));
+      assert.isAtLeast(result.value, beforeUs.value);
+      assert.isAtMost(result.value, afterUs.value);
     });
   });
 
