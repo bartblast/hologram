@@ -6,11 +6,11 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 /*
 Serializer Format Changelog
 
-Release 0.5.0: switched to version 2.
+Release 0.7.0: switched to version 3.
 */
 
 export default class Serializer {
-  static CURRENT_VERSION = 2;
+  static CURRENT_VERSION = 3;
 
   // Can't use control characters in 0x00-0x1F (0-31) range
   // because they are escaped in JSON and result in multi-byte delimiter.
@@ -51,12 +51,7 @@ export default class Serializer {
           return $.#serializeBoxedIdentifier("port", "o", value, destination);
 
         case "reference":
-          return $.#serializeBoxedIdentifier(
-            "reference",
-            "r",
-            value,
-            destination,
-          );
+          return {t: "r", n: value.node, c: value.creation, i: value.idWords};
 
         case "tuple":
           return {t: "t", d: value.data};
@@ -115,7 +110,10 @@ export default class Serializer {
 
   static #serializeJsString(value, key) {
     // Don't add prefix for the type marker in serialized boxed collection types
-    if (key === "t" && (value === "l" || value === "m" || value === "t")) {
+    if (
+      key === "t" &&
+      (value === "l" || value === "m" || value === "r" || value === "t")
+    ) {
       return value;
     }
 

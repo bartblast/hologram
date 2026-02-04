@@ -9,18 +9,18 @@ import {
   sinon,
 } from "./support/helpers.mjs";
 
-import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
+import {defineModule1Fixture as defineInterpreterModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
 import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
-
-defineModule1Fixture();
+defineInterpreterModule1Fixture();
 defineMatchOperatorModule1Fixture();
 
 describe("Interpreter", () => {
@@ -65,6 +65,18 @@ describe("Interpreter", () => {
 
     const expected =
       "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
+
+    assert.equal(result, expected);
+  });
+
+  it("buildBadFunctionErrorMsg()", () => {
+    const term = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const result = Interpreter.buildBadFunctionErrorMsg(term);
+    const expected = "expected a function, got: %{a: 1, b: 2}";
 
     assert.equal(result, expected);
   });
@@ -114,6 +126,7 @@ describe("Interpreter", () => {
 
   it("buildErlangErrorMsg()", () => {
     const result = Interpreter.buildErlangErrorMsg("my message");
+
     assert.equal(result, "Erlang error: my message");
   });
 
@@ -1657,7 +1670,10 @@ describe("Interpreter", () => {
     });
 
     it("defines a function which raises an exception with instructions", () => {
-      const expectedMessage = `Function :aaa_bbb.my_fun_a/2 is not yet ported. See what to do here: https://www.hologram.page/TODO`;
+      const expectedMessage =
+        `Function :aaa_bbb.my_fun_a/2 is not yet ported.\n` +
+        `  * Check implementation status: https://hologram.page/reference/client-runtime\n` +
+        `  * If the function is not marked 'in progress' and is critical for your project, you may request it here: https://github.com/bartblast/hologram/issues`;
 
       assert.throw(
         () =>
@@ -2082,11 +2098,20 @@ describe("Interpreter", () => {
       assert.equal(result, "#Port<0.11>");
     });
 
-    it("reference", () => {
-      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
-      const result = Interpreter.inspect(term);
+    describe("reference", () => {
+      it("client node", () => {
+        const term = Type.reference(NodeTable.CLIENT_NODE, 4, [3, 2, 1]);
+        const result = Interpreter.inspect(term);
 
-      assert.equal(result, "#Reference<0.1.2.3>");
+        assert.equal(result, "#Reference<0.1.2.3>");
+      });
+
+      it("server node", () => {
+        const term = Type.reference("my_node@my_host", 7, [6, 5, 4]);
+        const result = Interpreter.inspect(term);
+
+        assert.equal(result, "#Reference<1.4.5.6>");
+      });
     });
 
     describe("tuple", () => {
@@ -2624,30 +2649,44 @@ describe("Interpreter", () => {
 
     describe("references", () => {
       it("equal", () => {
-        const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
-        const ref2 = Type.reference("my_node", [0, 1, 2, 3], "server");
+        const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+        const ref2 = Type.reference("my_node", 0, [3, 2, 1]);
 
         assert.isTrue(isStrictlyEqual(ref1, ref2));
       });
 
       describe("not equal", () => {
         it("different node", () => {
-          const ref1 = Type.reference("my_node_1", [0, 1, 2, 3], "server");
-          const ref2 = Type.reference("my_node_2", [0, 1, 2, 3], "server");
+          const ref1 = Type.reference("my_node_1", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node_2", 0, [3, 2, 1]);
 
           assert.isFalse(isStrictlyEqual(ref1, ref2));
         });
 
-        it("different segments", () => {
-          const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
-          const ref2 = Type.reference("my_node", [0, 1, 2, 4], "server");
+        it("different creation number", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 4, [3, 2, 1]);
 
           assert.isFalse(isStrictlyEqual(ref1, ref2));
         });
 
-        it("different origin", () => {
-          const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
-          const ref2 = Type.reference("my_node", [0, 1, 2, 3], "client");
+        it("different ID word 1", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 0, [4, 2, 1]);
+
+          assert.isFalse(isStrictlyEqual(ref1, ref2));
+        });
+
+        it("different ID word 2", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 0, [3, 4, 1]);
+
+          assert.isFalse(isStrictlyEqual(ref1, ref2));
+        });
+
+        it("different ID word 3", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 0, [3, 2, 4]);
 
           assert.isFalse(isStrictlyEqual(ref1, ref2));
         });
@@ -4885,8 +4924,8 @@ describe("Interpreter", () => {
     });
 
     describe("match placeholder", () => {
-      // _var = 2
-      it("integer", () => {
+      it("on the left", () => {
+        // _placeholder = 2
         const result = Interpreter.matchOperator(
           Type.integer(2),
           Type.matchPlaceholder(),
@@ -4895,7 +4934,46 @@ describe("Interpreter", () => {
 
         assert.deepStrictEqual(result, Type.integer(2));
 
+        // Verify no variable was bound from the placeholder
         assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
+      });
+
+      it("on the right", () => {
+        const expectedVars = {...varsWithEmptyMatchedValues};
+        delete expectedVars.__matched__;
+
+        // fn 2 = _placeholder -> :ok end
+        const fun = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (context) => [
+                Interpreter.matchOperator(
+                  Type.matchPlaceholder(),
+                  Type.integer(2),
+                  context,
+                ),
+              ],
+              guards: [],
+              body: (context) => {
+                // Unlike "on the left" which tests matchOperator() directly, this test uses
+                // callAnonymousFunction() which calls updateVarsToMatchedValues() after matching,
+                // deleting __matched__ from context.vars.
+                // Verify no variable was bound from the placeholder.
+                assert.deepStrictEqual(context.vars, expectedVars);
+
+                return Type.atom("ok");
+              },
+            },
+          ],
+          context,
+        );
+
+        const result = Interpreter.callAnonymousFunction(fun, [
+          Type.integer(2),
+        ]);
+
+        assert.deepStrictEqual(result, Type.atom("ok"));
       });
 
       // <<prefix::size(8), _rest::binary>> = "hello"
@@ -6528,6 +6606,16 @@ describe("Interpreter", () => {
         "anonymous function with arity 1 called with 2 arguments (9, 8)",
       );
     });
+  });
+
+  it("raiseBadFunctionError()", () => {
+    const term = Type.atom("abc");
+
+    assertBoxedError(
+      () => Interpreter.raiseBadFunctionError(term),
+      "BadFunctionError",
+      Interpreter.buildBadFunctionErrorMsg(term),
+    );
   });
 
   it("raiseBadMapError()", () => {

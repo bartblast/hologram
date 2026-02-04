@@ -6,6 +6,7 @@ import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
+import ERTS from "./erts.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
@@ -46,6 +47,7 @@ import {toVNode} from "snabbdom";
 
 // TODO: test
 export default class Hologram {
+  static #ETS_STORAGE_KEY = "hologram_ets";
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
@@ -56,6 +58,7 @@ export default class Hologram {
 
   static #deps = {
     Bitstring: Bitstring,
+    ERTS: ERTS,
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,
@@ -673,6 +676,8 @@ export default class Hologram {
     window.addEventListener("beforeunload", () => {
       // Force synchronous session storage save since async OPFS may not complete before page termination
       Hologram.#savePageSnapshot(true);
+
+      Hologram.#saveEts();
     });
 
     window.addEventListener("popstate", Hologram.#handlePopstateEvent);
@@ -697,6 +702,8 @@ export default class Hologram {
       $.#historyId = crypto.randomUUID();
       history.replaceState($.#historyId, null, window.location.pathname);
     }
+
+    await $.#restoreEts();
 
     Client.connect(false);
 
@@ -832,6 +839,36 @@ export default class Hologram {
     $.#registeredPageModules.add(pageModule.value);
   }
 
+  static async #restoreEts() {
+    const storageKey = $.#ETS_STORAGE_KEY;
+
+    // Try OPFS first
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(storageKey, {create: false});
+      const file = await fileHandle.getFile();
+      const serialized = await file.text();
+      ERTS.ets = Deserializer.deserialize(serialized);
+      return;
+    } catch {
+      // Fall through to session storage
+    }
+
+    // Fallback to session storage if OPFS fails
+    const serialized = sessionStorage.getItem(storageKey);
+
+    if (serialized) {
+      try {
+        ERTS.ets = Deserializer.deserialize(serialized);
+      } catch (error) {
+        console.error("Failed to restore ETS from session storage:", error);
+        ERTS.ets = {}; // Reset to empty on deserialization failure
+      }
+    } else {
+      // No stored state found, keep current (likely empty) state
+    }
+  }
+
   static #restorePageSnapshot(pageSnapshot) {
     const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
       pageSnapshot;
@@ -843,6 +880,33 @@ export default class Hologram {
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
+  }
+
+  static async #saveEts() {
+    const storageKey = $.#ETS_STORAGE_KEY;
+    const serializedEts = Serializer.serialize(ERTS.ets, "client");
+
+    // Save to session storage first (guaranteed to complete synchronously)
+    try {
+      sessionStorage.setItem(storageKey, serializedEts);
+    } catch (error) {
+      console.error("Failed to save ETS to session storage:", error);
+    }
+
+    // Then try OPFS (async, may not complete before page unload on beforeunload)
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(storageKey, {create: true});
+      const writable = await fileHandle.createWritable();
+      await writable.write(serializedEts);
+      await writable.close();
+
+      // Successfully saved to OPFS, clear session storage
+      sessionStorage.removeItem(storageKey);
+    } catch (opfsError) {
+      console.error("Failed to save ETS to OPFS:", opfsError);
+      // Session storage still has the data as fallback
+    }
   }
 
   static async #savePageSnapshot(forceSync = false) {

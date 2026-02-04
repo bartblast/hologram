@@ -373,7 +373,7 @@ describe("Deserializer", () => {
       });
 
       describe("reference", () => {
-        const term = Type.reference('my_node@my_"host', [0, 1, 2, 3], "server");
+        const term = Type.reference('my_node@my_"host', 0, [3, 2, 1]);
 
         it("top-level", () => {
           testTopLevelDeserialization(term);

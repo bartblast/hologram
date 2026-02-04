@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -46,6 +47,10 @@ export default class Interpreter {
     return `errors were found at the given arguments:\n\n  * ${ordinal} argument: ${message}\n`;
   }
 
+  static buildBadFunctionErrorMsg(term) {
+    return "expected a function, got: " + $.inspect(term);
+  }
+
   static buildContext(data = {}) {
     const {module, vars} = data;
     const context = {module: null, vars: {}};
@@ -66,10 +71,10 @@ export default class Interpreter {
   }
 
   // TODO: include attempted function clauses info
-  static buildFunctionClauseErrorMsg(funName, args = []) {
+  static buildFunctionClauseErrorMsg(funName, args = null) {
     let argsInfo = "";
 
-    if (args.length > 0) {
+    if (args && args.length > 0) {
       argsInfo = Array.from(args).reduce(
         (acc, arg, idx) =>
           `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
@@ -185,6 +190,7 @@ export default class Interpreter {
     }
 
     if (
+      moduleProxy.__exports__ &&
       !moduleProxy.__exports__.has(functionArityStr) &&
       !Interpreter.isEqual(module, context.module)
     ) {
@@ -229,7 +235,8 @@ export default class Interpreter {
     return {module: context.module, vars: {...context.vars}};
   }
 
-  // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
+  // Implements structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
+  // TODO: support comparing the remaining types: anonymous function, list, map, port, reference
   static compareTerms(term1, term2) {
     Interpreter.assertStructuralComparisonSupportedType(term1);
     Interpreter.assertStructuralComparisonSupportedType(term2);
@@ -434,8 +441,10 @@ export default class Interpreter {
     }
 
     globalThis[moduleJsName][`${functionName}/${arity}`] = () => {
-      // TODO: update the URL
-      const message = `Function :${moduleExName}.${functionName}/${arity} is not yet ported. See what to do here: https://www.hologram.page/TODO`;
+      const message =
+        `Function :${moduleExName}.${functionName}/${arity} is not yet ported.\n` +
+        `  * Check implementation status: https://hologram.page/reference/client-runtime\n` +
+        `  * If the function is not marked 'in progress' and is critical for your project, you may request it here: https://github.com/bartblast/hologram/issues`;
 
       throw new HologramInterpreterError(message);
     };
@@ -547,7 +556,7 @@ export default class Interpreter {
         return `#PID<${term.segments.join(".")}>`;
 
       case "reference":
-        return `#Reference<${term.segments.join(".")}>`;
+        return Interpreter.#inspectReference(term, opts);
 
       case "port":
         return `#Port<${term.segments.join(".")}>`;
@@ -618,7 +627,7 @@ export default class Interpreter {
         return $.#areIdentifiersEqual(left, right);
 
       case "reference":
-        return $.#areIdentifiersEqual(left, right);
+        return $.#areReferencesEqual(left, right);
 
       case "port":
         return $.#areIdentifiersEqual(left, right);
@@ -652,6 +661,10 @@ export default class Interpreter {
 
     if (Type.isMatchPlaceholder(left)) {
       return right;
+    }
+
+    if (Type.isMatchPlaceholder(right)) {
+      return left;
     }
 
     if (Type.isVariablePattern(left)) {
@@ -788,6 +801,10 @@ export default class Interpreter {
       "BadArityError",
       `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`,
     );
+  }
+
+  static raiseBadFunctionError(term) {
+    $.raiseError("BadFunctionError", $.buildBadFunctionErrorMsg(term));
   }
 
   static raiseBadMapError(arg) {
@@ -990,6 +1007,14 @@ export default class Interpreter {
     }
 
     return true;
+  }
+
+  static #areReferencesEqual(ref1, ref2) {
+    return (
+      $.#areIntegerArraysEqual(ref1.idWords, ref2.idWords) &&
+      ref1.node === ref2.node &&
+      ref1.creation === ref2.creation
+    );
   }
 
   static #comparePids(pid1, pid2) {
@@ -1275,6 +1300,15 @@ export default class Interpreter {
       step.value > 1 ? `//${Interpreter.inspect(step, opts)}` : "";
 
     return `${Interpreter.inspect(first, opts)}..${Interpreter.inspect(last, opts)}${stepStr}`;
+  }
+
+  static #inspectReference(term, _opts) {
+    const localIncarnationId = NodeTable.getLocalIncarnationId(
+      term.node,
+      term.creation,
+    );
+
+    return `#Reference<${localIncarnationId}.${term.idWords.toReversed().join(".")}>`;
   }
 
   static #inspectTuple(term, opts) {

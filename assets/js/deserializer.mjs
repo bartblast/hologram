@@ -65,6 +65,9 @@ export default class Deserializer {
       case "m":
         return Type.map(obj.d);
 
+      case "r":
+        return Type.reference(obj.n, obj.c, obj.i);
+
       case "t":
         return Type.tuple(obj.d);
     }
@@ -96,9 +99,6 @@ export default class Deserializer {
 
       case "p":
         return $.#deserializeBoxedIdentifier("pid", data);
-
-      case "r":
-        return $.#deserializeBoxedIdentifier("reference", data);
 
       case "s":
         return data;

@@ -9,6 +9,9 @@ defmodule Hologram.Runtime.Deserializer do
     # change event, select event
     :value,
 
+    # client-side ERTS node name
+    :hologram_client,
+
     # mouse event, mouse move event, pointer event
     :page_x,
     :page_y,
@@ -71,17 +74,41 @@ defmodule Hologram.Runtime.Deserializer do
   @spec deserialize(integer, map | String.t()) :: any
   def deserialize(version, data)
 
-  def deserialize(2, "a" <> value) do
+  # sobelow_skip ["Misc.BinToTerm"]
+  def deserialize(3, %{"t" => "r", "n" => "s" <> node, "c" => creation, "i" => id_words}) do
+    node_len = byte_size(node)
+    len = length(id_words)
+    id_words_binary = for word <- id_words, into: <<>>, do: <<word::32>>
+
+    # Build Erlang external term format for reference:
+    # - 131: VERSION_NUMBER (ETF version)
+    # - 90: NEWER_REFERENCE_EXT tag
+    # - len::16: number of ID words (16-bit unsigned)
+    # - 119: SMALL_ATOM_UTF8_EXT tag
+    # - node_len::8: length of node name (8-bit unsigned)
+    # - node::binary: node name as UTF-8 bytes
+    # - creation::32: creation number (32-bit unsigned)
+    # - id_words_binary::binary: ID words, each 32-bit big-endian
+    binary =
+      <<131, 90, len::16, 119, node_len::8, node::binary, creation::32, id_words_binary::binary>>
+
+    :erlang.binary_to_term(binary, [:safe])
+  end
+
+  def deserialize(version, "a" <> value) when version in [3, 2] do
     String.to_existing_atom(value)
   end
 
-  def deserialize(2, "b"), do: ""
+  def deserialize(version, "b") when version in [3, 2] do
+    ""
+  end
 
-  def deserialize(2, "b0" <> <<hex::binary>>) do
+  def deserialize(version, "b0" <> <<hex::binary>>) when version in [3, 2] do
     Base.decode16!(hex, case: :lower)
   end
 
-  def deserialize(2, "b" <> <<leftover_bits::binary-size(1), hex::binary>>) do
+  def deserialize(version, "b" <> <<leftover_bits::binary-size(1), hex::binary>>)
+      when version in [3, 2] do
     bytes = Base.decode16!(hex, case: :lower)
     leftover_bit_count = String.to_integer(leftover_bits)
 
@@ -90,7 +117,7 @@ defmodule Hologram.Runtime.Deserializer do
     <<full_bytes::binary, right_aligned_leftover_byte::size(leftover_bit_count)>>
   end
 
-  def deserialize(2, "c" <> data) do
+  def deserialize(version, "c" <> data) when version in [3, 2] do
     [module_str, function_str, arity_str] = String.split(data, @delimiter)
 
     module = Module.safe_concat([module_str])
@@ -100,45 +127,45 @@ defmodule Hologram.Runtime.Deserializer do
     Function.capture(module, function, arity)
   end
 
-  def deserialize(2, "f" <> value) do
+  def deserialize(version, "f" <> value) when version in [3, 2] do
     value
     |> Float.parse()
     |> elem(0)
   end
 
-  def deserialize(2, "i" <> value) do
+  def deserialize(version, "i" <> value) when version in [3, 2] do
     IntegerUtils.parse!(value)
   end
 
-  def deserialize(2, %{"t" => "l", "d" => data}) do
-    Enum.map(data, &deserialize(2, &1))
+  def deserialize(version, %{"t" => "l", "d" => data}) when version in [3, 2] do
+    Enum.map(data, &deserialize(version, &1))
   end
 
-  def deserialize(2, %{"t" => "m", "d" => data}) do
+  def deserialize(version, %{"t" => "m", "d" => data}) when version in [3, 2] do
     data
-    |> Enum.map(fn [key, value] -> {deserialize(2, key), deserialize(2, value)} end)
+    |> Enum.map(fn [key, value] -> {deserialize(version, key), deserialize(version, value)} end)
     |> Enum.into(%{})
   end
 
-  def deserialize(2, "o" <> data) do
+  def deserialize(version, "o" <> data) when version in [3, 2] do
     [major, minor] = decode_identifier_segments(data)
     IEx.Helpers.port(major, minor)
   end
 
-  def deserialize(2, "p" <> data) do
+  def deserialize(version, "p" <> data) when version in [3, 2] do
     [x, y, z] = decode_identifier_segments(data)
     IEx.Helpers.pid(x, y, z)
+  end
+
+  def deserialize(version, %{"t" => "t", "d" => data}) when version in [3, 2] do
+    data
+    |> Enum.map(&deserialize(version, &1))
+    |> List.to_tuple()
   end
 
   def deserialize(2, "r" <> data) do
     [w, x, y, z] = decode_identifier_segments(data)
     IEx.Helpers.ref(w, x, y, z)
-  end
-
-  def deserialize(2, %{"t" => "t", "d" => data}) do
-    data
-    |> Enum.map(&deserialize(2, &1))
-    |> List.to_tuple()
   end
 
   def deserialize(1, %{

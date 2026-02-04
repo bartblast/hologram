@@ -2,13 +2,29 @@
 
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
-import Utils from "../utils.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Maps = {
+  // Start find/2
+  "find/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+
+    if (map.data[encodedKey]) {
+      return map.data[encodedKey][1];
+    }
+
+    return Type.atom("error");
+  },
+  // End find/2
+  // Deps: []
+
   // Start fold/3
   "fold/3": (fun, initialAcc, map) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
@@ -31,6 +47,25 @@ const Erlang_Maps = {
     );
   },
   // End fold/3
+  // Deps: []
+
+  // Start from_keys/2
+  "from_keys/2": (keys, value) => {
+    if (!Type.isList(keys)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(keys)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    return Type.map(keys.data.map((key) => [key, value]));
+  },
+  // End from_keys/2
   // Deps: []
 
   // Start from_list/1
@@ -74,6 +109,66 @@ const Erlang_Maps = {
     return defaultValue;
   },
   // End get/3
+  // Deps: []
+
+  // Start intersect/2
+  "intersect/2": (map1, map2) => {
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = Type.map();
+
+    for (const encodedKey of Object.keys(map1.data)) {
+      if (encodedKey in map2.data) {
+        result.data[encodedKey] = map2.data[encodedKey];
+      }
+    }
+
+    return result;
+  },
+  // End intersect/2
+  // Deps: []
+
+  // Start intersect_with/3
+  "intersect_with/3": (fun, map1, map2) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = Type.map();
+
+    for (const [encodedKey, [key, value]] of Object.entries(map1.data)) {
+      if (encodedKey in map2.data) {
+        result.data[encodedKey] = [
+          key,
+          Interpreter.callAnonymousFunction(fun, [
+            key,
+            value,
+            map2.data[encodedKey][1],
+          ]),
+        ];
+      }
+    }
+
+    return result;
+  },
+  // End intersect_with/3
   // Deps: []
 
   // Start is_key/2
@@ -150,6 +245,42 @@ const Erlang_Maps = {
   // End merge/2
   // Deps: []
 
+  // Start merge_with/3
+  "merge_with/3": (combiner, map1, map2) => {
+    if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = Type.cloneMap(map1);
+
+    Object.entries(map2.data).forEach(([encodedKey, [key, value2]]) => {
+      const value1 = result.data[encodedKey]?.[1];
+
+      const newValue = value1
+        ? Interpreter.callAnonymousFunction(combiner, [key, value1, value2])
+        : value2;
+
+      result.data[encodedKey] = [key, newValue];
+    });
+
+    return result;
+  },
+  // End merge_with/3
+  // Deps: []
+
   // Start next/1
   "next/1": (iterator) => {
     if (!Type.isIterator(iterator)) {
@@ -182,7 +313,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.shallowCloneObject(map);
+    const newMap = Type.cloneMap(map);
     newMap.data[Type.encodeMapKey(key)] = [key, value];
 
     return newMap;
@@ -196,13 +327,28 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.shallowCloneObject(map);
+    const newMap = Type.cloneMap(map);
     delete newMap.data[Type.encodeMapKey(key)];
 
     return newMap;
   },
   // End remove/2
   // Deps: []
+
+  // Start take/2
+  "take/2": (key, map) => {
+    const value = Erlang_Maps["get/3"](key, map, null);
+
+    if (value === null) {
+      return Type.atom("error");
+    }
+
+    const newMap = Erlang_Maps["remove/2"](key, map);
+
+    return Type.tuple([value, newMap]);
+  },
+  // End take/2
+  // Deps: [:maps.get/3, :maps.remove/2]
 
   // TODO: implement iterators
   // Start to_list/1
@@ -232,6 +378,17 @@ const Erlang_Maps = {
   },
   // End update/3
   // Deps: [:maps.is_key/2, :maps.put/3]
+
+  // Start values/1
+  "values/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.list(Object.values(map.data).map(([_key, value]) => value));
+  },
+  // End values/1
+  // Deps: []
 };
 
 export default Erlang_Maps;

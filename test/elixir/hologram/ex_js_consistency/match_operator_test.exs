@@ -581,11 +581,18 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   end
 
   describe "match placeholder" do
-    # _var = 2
-    test "integer" do
-      result = _var = 2
+    # _placeholder = 2
+    test "on the left" do
+      result = _placeholder = 2
 
       assert result == 2
+    end
+
+    test "on the right" do
+      fun = fn 2 = _placeholder -> :ok end
+      result = fun.(2)
+
+      assert result == :ok
     end
 
     # <<prefix::size(8), _rest::binary>> = "hello"

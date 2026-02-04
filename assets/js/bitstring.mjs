@@ -1,11 +1,12 @@
 "use strict";
 
+import ERTS from "./erts.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Bitstring {
-  static #decoder = new TextDecoder("utf-8", {fatal: true});
+  static #decoder = ERTS.utf8Decoder;
   static #encoder = new TextEncoder("utf-8");
 
   static calculateBitCount(bitstring) {
@@ -713,10 +714,7 @@ export default class Bitstring {
 
   static toCodepoints(bitstring) {
     $.maybeSetTextFromBytes(bitstring);
-
-    return Type.list(
-      Array.from(bitstring.text, (char) => Type.integer(char.codePointAt(0))),
-    );
+    return Type.charlist(bitstring.text);
   }
 
   static toFloat(bitstring, endianness) {

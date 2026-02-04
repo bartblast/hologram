@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import ERTS from "../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -233,6 +234,84 @@ describe("Type", () => {
     });
   });
 
+  describe("charlist()", () => {
+    it("converts ASCII string to list of character code points", () => {
+      const result = Type.charlist("abc");
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts string with special characters to list of code points", () => {
+      const result = Type.charlist("a\nb");
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(10),
+        Type.integer(98),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts Unicode string to list of code points", () => {
+      const result = Type.charlist("😀全息图");
+
+      const expected = Type.list([
+        Type.integer(128512),
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts empty string to empty list", () => {
+      const result = Type.charlist("");
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("cloneMap()", () => {
+    it("creates a shallow clone of the map", () => {
+      const original = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const cloned = Type.cloneMap(original);
+
+      assert.deepStrictEqual(cloned, original);
+      assert.notEqual(cloned, original);
+      assert.notEqual(cloned.data, original.data);
+    });
+
+    it("modifications to the cloned map do not affect the original", () => {
+      const original = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const cloned = Type.cloneMap(original);
+
+      cloned.data[Type.encodeMapKey(Type.atom("c"))] = [
+        Type.atom("c"),
+        Type.integer(3),
+      ];
+
+      assert.equal(Object.keys(original.data).length, 2);
+      assert.equal(Object.keys(cloned.data).length, 3);
+    });
+  });
+
   describe("commandStruct()", () => {
     it("default values", () => {
       assert.deepStrictEqual(
@@ -339,6 +418,7 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  // TODO: refactor test names - use the same pattern as for reference type
   describe("encodeMapKey()", () => {
     it("encodes boxed anonymous function value as map key", () => {
       Sequence.reset();
@@ -410,6 +490,16 @@ describe("Type", () => {
       const result = Type.encodeMapKey(map);
 
       assert.equal(result, "map(atom(a):integer(1),atom(b):integer(2))");
+    });
+
+    it("reference type", () => {
+      ERTS.nodeTable.reset();
+
+      const node = ERTS.nodeTable.CLIENT_NODE;
+      const ref = Type.reference(node, 4, [3, 2, 1]);
+      const result = Type.encodeMapKey(ref);
+
+      assert.equal(result, "r0.1.2.3");
     });
 
     it("encodes empty boxed tuple value as map key", () => {
@@ -487,7 +577,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([]),
         HologramInterpreterError,
-        "improper list must have at least 2 items, received [2,[]]",
+        "improper list must have at least 2 items, received [3,[]]",
       );
     });
 
@@ -495,7 +585,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([Type.integer(1)]),
         HologramInterpreterError,
-        'improper list must have at least 2 items, received [2,["i1"]]',
+        'improper list must have at least 2 items, received [3,["i1"]]',
       );
     });
 
@@ -640,6 +730,58 @@ describe("Type", () => {
     it("returns false for values which are not boxed booleans", () => {
       const arg = Type.bitstring("true");
       const result = Type.isBoolean(arg);
+
+      assert.isFalse(result);
+    });
+  });
+
+  describe("isCharlist()", () => {
+    it("returns true for proper list of valid codepoints", () => {
+      const arg = Type.list([
+        Type.integer(104),
+        Type.integer(101),
+        Type.integer(108),
+        Type.integer(108),
+        Type.integer(111),
+      ]); // "hello"
+
+      const result = Type.isCharlist(arg);
+
+      assert.isTrue(result);
+    });
+
+    it("returns true for empty list", () => {
+      const arg = Type.list();
+      const result = Type.isCharlist(arg);
+
+      assert.isTrue(result);
+    });
+
+    it("returns false for improper list", () => {
+      const arg = Type.improperList([Type.integer(97), Type.integer(98)]);
+      const result = Type.isCharlist(arg);
+
+      assert.isFalse(result);
+    });
+
+    it("returns false for non-list type", () => {
+      const arg = Type.atom("abc");
+      const result = Type.isCharlist(arg);
+
+      assert.isFalse(result);
+    });
+
+    it("returns false for list containing non-integer item", () => {
+      const arg = Type.list([Type.integer(97), Type.atom("b")]);
+      const result = Type.isCharlist(arg);
+
+      assert.isFalse(result);
+    });
+
+    it("returns false for list containing invalid codepoint", () => {
+      // Max Unicode code point value is 1,114,111 (U+10FFFF)
+      const arg = Type.list([Type.integer(97), Type.integer(1_114_113)]);
+      const result = Type.isCharlist(arg);
 
       assert.isFalse(result);
     });
@@ -1053,7 +1195,7 @@ describe("Type", () => {
 
   describe("isReference()", () => {
     it("returns true if the term is a reference", () => {
-      const term = Type.reference("nonode@nohost", [0, 1, 2, 3]);
+      const term = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);
       assert.isTrue(Type.isReference(term));
     });
 
@@ -1324,13 +1466,13 @@ describe("Type", () => {
   });
 
   it("reference()", () => {
-    const result = Type.reference("nonode@nohost", [0, 1, 2, 3], "client");
+    const result = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);
 
     const expected = {
       type: "reference",
-      node: "nonode@nohost",
-      segments: [0, 1, 2, 3],
-      origin: "client",
+      node: ERTS.nodeTable.CLIENT_NODE,
+      creation: 0,
+      idWords: [1, 2, 3],
     };
 
     assert.deepStrictEqual(result, expected);

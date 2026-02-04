@@ -1329,7 +1329,7 @@ defmodule Hologram.FrameworkTest do
             |> String.starts_with?("__")
           end)
 
-        assert Enum.count(expected_all) > 0
+        refute Enum.empty?(expected_all)
 
         Enum.each(expected_all, fn {fun, arity} ->
           assert Map.has_key?(module_map, {fun, arity}),
