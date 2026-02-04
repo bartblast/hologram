@@ -11,6 +11,13 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_String = {
+  // Start find/2
+  "find/2": (string, searchPattern) => {
+    return Erlang_String["find/3"](string, searchPattern, Type.atom("leading"));
+  },
+  // End find/2
+  // Deps: [:string.find/3]
+
   // Start find/3
   "find/3": (string, searchPattern, direction) => {
     let stringBinary;
