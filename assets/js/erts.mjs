@@ -10,6 +10,8 @@ export default class ERTS {
 
   // Sequence for anonymous function `uniq` field.
   // Used to derive fun_info/1 fields: index, new_index, uniq, new_uniq.
+  // In Erlang, index/new_index are per-module indices, and uniq/new_uniq are
+  // calculated from compiled code; here we use a global sequence for all.
   static funSequence = new Sequence();
 
   static graphemeSegmenter = new Intl.Segmenter(undefined, {

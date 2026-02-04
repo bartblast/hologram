@@ -7,8 +7,8 @@ import {
 } from "./support/helpers.mjs";
 
 import Deserializer from "../../assets/js/deserializer.mjs";
+import ERTS from "../../assets/js/erts.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
-import Sequence from "../../assets/js/sequence.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -182,7 +182,7 @@ describe("Deserializer", () => {
 
       describe("function", () => {
         beforeEach(() => {
-          Sequence.reset();
+          ERTS.funSequence.reset();
         });
 
         const context = contextFixture({
