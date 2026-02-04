@@ -9,6 +9,12 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
 
   @moduletag :consistency
 
+  describe "find/2" do
+    test "delegates to find/3 with :leading direction" do
+      assert :string.find("ab..cd..ef", "..") == :string.find("ab..cd..ef", "..", :leading)
+    end
+  end
+
   describe "find/3" do
     # Direction variations
 

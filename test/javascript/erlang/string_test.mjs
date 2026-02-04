@@ -18,6 +18,20 @@ defineGlobalErlangAndElixirModules();
 // Always update both together.
 
 describe("Erlang_String", () => {
+  describe("find/2", () => {
+    const testedFun = Erlang_String["find/2"];
+
+    it("delegates to find/3 with :leading direction", () => {
+      const string = Type.bitstring("ab..cd..ef");
+      const pattern = Type.bitstring("..");
+
+      assert.deepStrictEqual(
+        testedFun(string, pattern),
+        Erlang_String["find/3"](string, pattern, Type.atom("leading")),
+      );
+    });
+  });
+
   describe("find/3", () => {
     const find = Erlang_String["find/3"];
 
