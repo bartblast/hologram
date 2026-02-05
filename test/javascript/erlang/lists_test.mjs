@@ -216,11 +216,10 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(Type.atom("not_function"), properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.all/2",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [
           Type.atom("not_function"),
           properList,
-        ),
+        ]),
       );
     });
 
@@ -245,11 +244,10 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(funArity2, properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.all/2",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [
           anonymousCompareFn,
           properList,
-        ),
+        ]),
       );
     });
 

@@ -12,7 +12,7 @@ const Erlang_Lists = {
   "all/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", []),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [fun, list]),
       );
     }
 
