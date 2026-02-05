@@ -626,6 +626,18 @@ const Erlang = {
   // End bit_size/1
   // Deps: []
 
+  // Start bnot/1
+  "bnot/1": (integer) => {
+    if (!Type.isInteger(integer)) {
+      const arg = Interpreter.inspect(integer);
+      Interpreter.raiseArithmeticError(`Bitwise.bnot(${arg})`);
+    }
+
+    return Type.integer(~integer.value);
+  },
+  // End bnot/1
+  // Deps: []
+
   // Start bor/2
   "bor/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {

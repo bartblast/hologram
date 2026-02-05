@@ -1979,6 +1979,39 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "bnot/1" do
+    test "positive integer" do
+      # 2 = 0b00000010, -3 = 0b11111101
+      assert :erlang.bnot(2) == -3
+    end
+
+    test "zero" do
+      # 0 = 0b00000000, -1 = 0b11111111
+      assert :erlang.bnot(0) == -1
+    end
+
+    test "negative integer" do
+      # -3 = 0b11111101, 2 = 0b00000010
+      assert :erlang.bnot(-3) == 2
+    end
+
+    test "argument above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      assert :erlang.bnot(9_007_199_254_740_992) == -9_007_199_254_740_993
+    end
+
+    test "argument below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      assert :erlang.bnot(-9_007_199_254_740_992) == 9_007_199_254_740_991
+    end
+
+    test "raises ArithmeticError if the argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bnot(2.0)",
+                   {:erlang, :bnot, [2.0]}
+    end
+  end
+
   describe "bor/2" do
     test "both arguments are positive" do
       # 4 = 0b00000100, 3 = 0b00000011, 7 = 0b00000111
