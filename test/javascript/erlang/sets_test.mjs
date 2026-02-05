@@ -568,6 +568,81 @@ describe("Erlang_Sets", () => {
     });
   });
 
+  describe("intersection/2", () => {
+    const intersection_2 = Erlang_Sets["intersection/2"];
+    const from_list_2 = Erlang_Sets["from_list/2"];
+
+    it("returns the intersection of two sets with common elements", () => {
+      const set234 = from_list_2(
+        Type.list([integer2, integer3, Type.integer(4)]),
+        opts,
+      );
+
+      const result = intersection_2(set123, set234);
+      const expected = from_list_2(Type.list([integer2, integer3]), opts);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns an empty set if sets have no common elements", () => {
+      const set12 = from_list_2(Type.list([integer1, integer2]), opts);
+      const set3 = from_list_2(Type.list([integer3]), opts);
+
+      const result = intersection_2(set12, set3);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("returns an empty set if both sets are empty", () => {
+      const result = intersection_2(emptySet, emptySet);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("returns an empty set if first set is empty", () => {
+      const result = intersection_2(emptySet, set123);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("returns an empty set if second set is empty", () => {
+      const result = intersection_2(set123, emptySet);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("returns the same set if sets are identical", () => {
+      const result = intersection_2(set123, set123);
+
+      assert.deepStrictEqual(result, set123);
+    });
+
+    it("uses strict matching (integer vs float)", () => {
+      const setInt = from_list_2(Type.list([integer1]), opts);
+      const setFloat = from_list_2(Type.list([float1]), opts);
+
+      const result = intersection_2(setInt, setFloat);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a set", () => {
+      assertBoxedError(
+        () => intersection_2(atomAbc, set123),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      assertBoxedError(
+        () => intersection_2(set123, atomAbc),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [atomAbc]),
+      );
+    });
+  });
+
   describe("is_disjoint/2", () => {
     const is_disjoint_2 = Erlang_Sets["is_disjoint/2"];
     const from_list_2 = Erlang_Sets["from_list/2"];
