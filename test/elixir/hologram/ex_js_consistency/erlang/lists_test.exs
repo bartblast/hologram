@@ -125,6 +125,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "duplicate/2" do
+    test "returns an empty list when N is 0" do
+      assert :lists.duplicate(0, :a) == []
+    end
+
+    test "returns a list with one element when N is 1" do
+      assert :lists.duplicate(1, :a) == [:a]
+    end
+
+    test "returns a list with N copies of the given element" do
+      assert :lists.duplicate(3, :a) == [:a, :a, :a]
+    end
+
+    test "raises FunctionClauseError if the first argument is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.duplicate/2", [1.0, :b])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.duplicate(1.0, :b)
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is a negative integer" do
+      expected_msg = build_function_clause_error_msg(":lists.duplicate/2", [-1, :b])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.duplicate(-1, :b)
+      end
+    end
+  end
+
   describe "filter/2" do
     setup do
       [fun: fn elem -> elem > 1 end]

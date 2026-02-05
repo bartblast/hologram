@@ -72,6 +72,29 @@ const Erlang_Lists = {
   // End any/2
   // Deps: []
 
+  // Start duplicate/2
+  "duplicate/2": (n, elem) => {
+    if (!Type.isInteger(n) || n.value < 0n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
+          n,
+          elem,
+        ]),
+      );
+    }
+
+    const count = Number(n.value);
+    const result = new Array(count);
+
+    for (let i = 0; i < count; i++) {
+      result[i] = elem;
+    }
+
+    return Type.list(result);
+  },
+  // End duplicate/2
+  // Deps: []
+
   // Start filter/2
   "filter/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
