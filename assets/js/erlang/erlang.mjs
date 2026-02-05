@@ -1212,6 +1212,39 @@ const Erlang = {
   // End fun_info/2
   // Deps: [:erlang.fun_info/1]
 
+  // Start function_exported/3
+  "function_exported/3": (module, functionName, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const moduleProxy = Interpreter.moduleProxy(module);
+
+    if (typeof moduleProxy === "undefined") {
+      return Type.boolean(false);
+    }
+
+    const functionArityStr = `${functionName.value}/${arity.value}`;
+
+    return Type.boolean(moduleProxy.__exports__.has(functionArityStr));
+  },
+  // End function_exported/3
+  // Deps: []
+
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
