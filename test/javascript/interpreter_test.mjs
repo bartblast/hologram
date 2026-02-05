@@ -1556,12 +1556,18 @@ describe("Interpreter", () => {
     });
 
     it("appends to the module global var if it is already initiated", () => {
-      globalThis.Erlang_Eee = {dummy: "dummy"};
+      globalThis.Erlang_Eee = {
+        __exModule__: Type.atom("eee"),
+        __exports__: new Set(),
+        __jsName__: "Erlang_Eee",
+        "dummy/1": "dummy_body",
+      };
+
       Interpreter.defineErlangFunction("eee", "my_fun_e", 1, []);
 
       assert.isDefined(globalThis.Erlang_Eee);
       assert.isDefined(globalThis.Erlang_Eee["my_fun_e/1"]);
-      assert.equal(globalThis.Erlang_Eee.dummy, "dummy");
+      assert.equal(globalThis.Erlang_Eee["dummy/1"], "dummy_body");
 
       // cleanup
       delete globalThis.Erlang_Eee;
@@ -6395,73 +6401,150 @@ describe("Interpreter", () => {
   });
 
   describe("maybeInitModuleProxy()", () => {
-    beforeEach(() => delete globalThis.Elixir_MyModuleExName);
-
-    it("proxy hasn't been initiated yet", () => {
-      Interpreter.maybeInitModuleProxy(
-        "MyModuleExName",
-        "Elixir_MyModuleExName",
-      );
-
-      assert.deepStrictEqual(
-        globalThis.Elixir_MyModuleExName.__exModule__,
-        Type.alias("MyModuleExName"),
-      );
-
-      assert.deepStrictEqual(
-        globalThis.Elixir_MyModuleExName.__exports__,
-        new Set(),
-      );
-
-      assert.equal(
-        globalThis.Elixir_MyModuleExName.__jsName__,
-        "Elixir_MyModuleExName",
-      );
-
-      globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
-        "my_defined_fun/3 result";
-
-      assert.equal(
-        globalThis.Elixir_MyModuleExName["my_defined_fun/3"](),
-        "my_defined_fun/3 result",
-      );
-
-      assertBoxedError(
-        () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"](),
-        "UndefinedFunctionError",
-        Interpreter.buildUndefinedFunctionErrorMsg(
-          Type.alias("MyModuleExName"),
-          "my_undefined_fun",
-          3,
-        ),
-      );
+    beforeEach(() => {
+      delete globalThis.Elixir_MyModuleExName;
+      delete globalThis.Erlang_My_Module;
     });
 
-    it("proxy has been already initiated", () => {
-      Interpreter.maybeInitModuleProxy(
-        "MyModuleExName",
-        "Elixir_MyModuleExName",
-      );
+    describe("Elixir module (default)", () => {
+      it("proxy hasn't been initiated yet", () => {
+        Interpreter.maybeInitModuleProxy(
+          "MyModuleExName",
+          "Elixir_MyModuleExName",
+        );
 
-      globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
-        "my_defined_fun/3 result";
+        assert.deepStrictEqual(
+          globalThis.Elixir_MyModuleExName.__exModule__,
+          Type.alias("MyModuleExName"),
+        );
 
-      globalThis.Elixir_MyModuleExName.__exports__.add("my_defined_fun/3");
+        assert.deepStrictEqual(
+          globalThis.Elixir_MyModuleExName.__exports__,
+          new Set(),
+        );
 
-      Interpreter.maybeInitModuleProxy(
-        "MyModuleExName",
-        "Elixir_MyModuleExName",
-      );
+        assert.equal(
+          globalThis.Elixir_MyModuleExName.__jsName__,
+          "Elixir_MyModuleExName",
+        );
 
-      assert.equal(
-        globalThis.Elixir_MyModuleExName["my_defined_fun/3"](),
-        "my_defined_fun/3 result",
-      );
+        globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
+          "my_defined_fun/3 result";
 
-      assert.deepStrictEqual(
-        globalThis.Elixir_MyModuleExName.__exports__,
-        new Set(["my_defined_fun/3"]),
-      );
+        assert.equal(
+          globalThis.Elixir_MyModuleExName["my_defined_fun/3"](),
+          "my_defined_fun/3 result",
+        );
+
+        assertBoxedError(
+          () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"](),
+          "UndefinedFunctionError",
+          Interpreter.buildUndefinedFunctionErrorMsg(
+            Type.alias("MyModuleExName"),
+            "my_undefined_fun",
+            3,
+          ),
+        );
+      });
+
+      it("proxy has been already initiated", () => {
+        Interpreter.maybeInitModuleProxy(
+          "MyModuleExName",
+          "Elixir_MyModuleExName",
+        );
+
+        globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
+          "my_defined_fun/3 result";
+
+        globalThis.Elixir_MyModuleExName.__exports__.add("my_defined_fun/3");
+
+        Interpreter.maybeInitModuleProxy(
+          "MyModuleExName",
+          "Elixir_MyModuleExName",
+        );
+
+        assert.equal(
+          globalThis.Elixir_MyModuleExName["my_defined_fun/3"](),
+          "my_defined_fun/3 result",
+        );
+
+        assert.deepStrictEqual(
+          globalThis.Elixir_MyModuleExName.__exports__,
+          new Set(["my_defined_fun/3"]),
+        );
+      });
+    });
+
+    describe("Erlang module", () => {
+      it("proxy hasn't been initiated yet", () => {
+        Interpreter.maybeInitModuleProxy(
+          "my_module",
+          "Erlang_My_Module",
+          "erlang",
+        );
+
+        assert.deepStrictEqual(
+          globalThis.Erlang_My_Module.__exModule__,
+          Type.atom("my_module"),
+        );
+
+        assert.deepStrictEqual(
+          globalThis.Erlang_My_Module.__exports__,
+          new Set(),
+        );
+
+        assert.equal(
+          globalThis.Erlang_My_Module.__jsName__,
+          "Erlang_My_Module",
+        );
+
+        globalThis.Erlang_My_Module["my_defined_fun/3"] = () =>
+          "my_defined_fun/3 result";
+
+        assert.equal(
+          globalThis.Erlang_My_Module["my_defined_fun/3"](),
+          "my_defined_fun/3 result",
+        );
+
+        assertBoxedError(
+          () => globalThis.Erlang_My_Module["my_undefined_fun/3"](),
+          "UndefinedFunctionError",
+          Interpreter.buildUndefinedFunctionErrorMsg(
+            Type.atom("my_module"),
+            "my_undefined_fun",
+            3,
+          ),
+        );
+      });
+
+      it("proxy has been already initiated", () => {
+        Interpreter.maybeInitModuleProxy(
+          "my_module",
+          "Erlang_My_Module",
+          "erlang",
+        );
+
+        globalThis.Erlang_My_Module["my_defined_fun/3"] = () =>
+          "my_defined_fun/3 result";
+
+        globalThis.Erlang_My_Module.__exports__.add("my_defined_fun/3");
+
+        Interpreter.maybeInitModuleProxy(
+          "my_module",
+          "Erlang_My_Module",
+          "erlang",
+        );
+
+        assert.equal(
+          globalThis.Erlang_My_Module["my_defined_fun/3"](),
+          "my_defined_fun/3 result",
+        );
+
+        assert.deepStrictEqual(
+          globalThis.Erlang_My_Module.__exports__,
+          new Set(["my_defined_fun/3"]),
+        );
+      });
     });
   });
 
