@@ -5585,6 +5585,120 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_atom/1", () => {
+    const list_to_atom = Erlang["list_to_atom/1"];
+
+    it("empty list", () => {
+      const result = list_to_atom(Type.list());
+
+      assert.deepStrictEqual(result, Type.atom(""));
+    });
+
+    it("ASCII characters", () => {
+      // ~c"abc" = [97, 98, 99]
+      const result = list_to_atom(
+        Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("abc"));
+    });
+
+    it("Unicode characters", () => {
+      // ~c"全息图" = [20840, 24687, 22270]
+      const result = list_to_atom(
+        Type.list([
+          Type.integer(20_840),
+          Type.integer(24_687),
+          Type.integer(22_270),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("全息图"));
+    });
+
+    it("mixed ASCII and Unicode characters", () => {
+      // ~c"aπb" = [97, 960, 98]
+      const result = list_to_atom(
+        Type.list([Type.integer(97), Type.integer(960), Type.integer(98)]),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("aπb"));
+    });
+
+    it("single character", () => {
+      // ~c"a" = [97]
+      const result = list_to_atom(Type.list([Type.integer(97)]));
+      
+      assert.deepStrictEqual(result, Type.atom("a"));
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_atom(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is an improper list", () => {
+      assertBoxedError(
+        () =>
+          list_to_atom(Type.improperList([Type.integer(97), Type.integer(98)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if list contains non-integer element", () => {
+      assertBoxedError(
+        () =>
+          list_to_atom(
+            Type.list([Type.integer(97), Type.atom("x"), Type.integer(99)]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+      );
+    });
+
+    it("raises ArgumentError if list contains invalid codepoint", () => {
+      assertBoxedError(
+        () => list_to_atom(Type.list([Type.integer(-1)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+      );
+    });
+
+    it("raises ArgumentError if given a binary instead of a charlist", () => {
+      assertBoxedError(
+        () => list_to_atom(Type.bitstring("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if given chardata with nested list", () => {
+      assertBoxedError(
+        () =>
+          list_to_atom(
+            Type.list([
+              Type.list([Type.integer(97), Type.integer(98)]),
+              Type.integer(99),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+      );
+    });
+
+    it("raises ArgumentError if given iolist containing binary", () => {
+      assertBoxedError(
+        () => list_to_atom(Type.list([Type.integer(97), Type.bitstring("bc")])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list of characters"),
+      );
+    });
+  });
+
   describe("list_to_integer/1", () => {
     const list_to_integer = Erlang["list_to_integer/1"];
 
@@ -7528,10 +7642,10 @@ describe("Erlang", () => {
     const unique_integer = Erlang["unique_integer/1"];
 
     it("returns a unique integer each time it is called with empty modifier list", () => {
-      const integer1 = unique_integer(Type.list([]));
+      const integer1 = unique_integer(Type.list());
       assert.isTrue(Type.isInteger(integer1));
 
-      const integer2 = unique_integer(Type.list([]));
+      const integer2 = unique_integer(Type.list());
       assert.isTrue(Type.isInteger(integer2));
 
       assert.isFalse(Interpreter.isEqual(integer1, integer2));

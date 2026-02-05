@@ -3544,6 +3544,74 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_atom/1" do
+    test "empty list" do
+      assert :erlang.list_to_atom([]) == :""
+    end
+
+    test "ASCII characters" do
+      # ~c"abc" = [97, 98, 99]
+      assert :erlang.list_to_atom([97, 98, 99]) == :abc
+    end
+
+    test "Unicode characters" do
+      # ~c"全息图" = [20840, 24687, 22270]
+      assert :erlang.list_to_atom([20_840, 24_687, 22_270]) == :全息图
+    end
+
+    test "mixed ASCII and Unicode characters" do
+      # ~c"aπb" = [97, 960, 98]
+      assert :erlang.list_to_atom([97, 960, 98]) == String.to_atom("aπb")
+    end
+
+    test "single character" do
+      # ~c"a" = [97]
+      assert :erlang.list_to_atom([97]) == :a
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_atom, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   {:erlang, :list_to_atom, [[97 | 98]]}
+    end
+
+    test "raises ArgumentError if list contains non-integer element" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list of characters"),
+                   {:erlang, :list_to_atom, [[97, :x, 99]]}
+    end
+
+    test "raises ArgumentError if list contains invalid codepoint" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list of characters"),
+                   {:erlang, :list_to_atom, [[-1]]}
+    end
+
+    test "raises ArgumentError if given a binary instead of a charlist" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_atom, ["abc"]}
+    end
+
+    test "raises ArgumentError if given chardata with nested list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list of characters"),
+                   {:erlang, :list_to_atom, [[[97, 98], 99]]}
+    end
+
+    test "raises ArgumentError if given iolist containing binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list of characters"),
+                   {:erlang, :list_to_atom, [[97, "bc"]]}
+    end
+  end
+
   describe "list_to_integer/1" do
     test "delegates to list_to_integer/2 with base 10" do
       assert :erlang.list_to_integer([49, 50, 51]) ==
