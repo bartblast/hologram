@@ -1280,6 +1280,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "append_element/2" do
+    test "appends an element to an empty tuple" do
+      assert :erlang.append_element({}, 1) == {1}
+    end
+
+    test "appends an element to a single-element tuple" do
+      assert :erlang.append_element({1}, 2) == {1, 2}
+    end
+
+    test "appends an element to a tuple with multiple elements" do
+      assert :erlang.append_element({:one, :two}, :three) == {:one, :two, :three}
+    end
+
+    test "raises ArgumentError if the first argument is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a tuple"),
+                   {:erlang, :append_element, [:abc, 1]}
+    end
+  end
+
   describe "apply/2" do
     setup do
       [

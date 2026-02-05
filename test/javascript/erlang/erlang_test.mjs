@@ -1475,6 +1475,48 @@ describe("Erlang", () => {
     });
   });
 
+  describe("append_element/2", () => {
+    const append_element = Erlang["append_element/2"];
+
+    it("appends an element to an empty tuple", () => {
+      const result = append_element(Type.tuple(), Type.integer(1));
+
+      assert.deepStrictEqual(result, Type.tuple([Type.integer(1)]));
+    });
+
+    it("appends an element to a single-element tuple", () => {
+      const result = append_element(
+        Type.tuple([Type.integer(1)]),
+        Type.integer(2),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("appends an element to a tuple with multiple elements", () => {
+      const result = append_element(
+        Type.tuple([Type.atom("one"), Type.atom("two")]),
+        Type.atom("three"),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.atom("one"), Type.atom("two"), Type.atom("three")]),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not a tuple", () => {
+      assertBoxedError(
+        () => append_element(Type.atom("abc"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
   describe("apply/2", () => {
     const apply = Erlang["apply/2"];
 

@@ -296,6 +296,19 @@ const Erlang = {
   // End andalso/2
   // Deps: []
 
+  // Start append_element/2
+  "append_element/2": (tuple, term) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    }
+
+    return Type.tuple([...tuple.data, term]);
+  },
+  // End append_element/2
+  // Deps: []
+
   // Start apply/2
   "apply/2": (fun, args) => {
     if (!Type.isAnonymousFunction(fun)) {
