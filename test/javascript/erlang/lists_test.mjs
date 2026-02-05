@@ -29,6 +29,7 @@ const atomI = Type.atom("i");
 const atomX = Type.atom("x");
 
 const emptyList = Type.list();
+const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
 
@@ -510,6 +511,52 @@ describe("Erlang_Lists", () => {
         () => any(fun, improperList),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [improperList]),
+      );
+    });
+  });
+
+  describe("duplicate/2", () => {
+    const duplicate = Erlang_Lists["duplicate/2"];
+
+    it("returns an empty list when N is 0", () => {
+      const result = duplicate(integer0, atomA);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("returns a list with one element when N is 1", () => {
+      const result = duplicate(integer1, atomA);
+
+      assert.deepStrictEqual(result, Type.list([atomA]));
+    });
+
+    it("returns a list with N copies of the given element", () => {
+      const result = duplicate(integer3, atomA);
+
+      assert.deepStrictEqual(result, Type.list([atomA, atomA, atomA]));
+    });
+
+    it("raises FunctionClauseError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => duplicate(float1, atomB),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
+          float1,
+          atomB,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is a negative integer", () => {
+      const negativeOne = Type.integer(-1);
+
+      assertBoxedError(
+        () => duplicate(negativeOne, atomB),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
+          negativeOne,
+          atomB,
+        ]),
       );
     });
   });
