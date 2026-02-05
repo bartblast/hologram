@@ -224,7 +224,7 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first arg is an anonymous function with arity different than 1", () => {
-      const anonymousCompareFn = Type.anonymousFunction(
+      const fun = Type.anonymousFunction(
         2,
         [
           {
@@ -242,10 +242,10 @@ describe("Erlang_Lists", () => {
       );
 
       assertBoxedError(
-        () => all(funArity2, properList),
+        () => all(fun, properList),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [
-          anonymousCompareFn,
+          fun,
           properList,
         ]),
       );
