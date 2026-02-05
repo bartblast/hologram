@@ -9,6 +9,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   alias Hologram.Commons.SystemUtils
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1
+  alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2
 
   @moduletag :consistency
 
@@ -3218,6 +3219,96 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "invalid item"),
                    {:erlang, :fun_info, [fun, :invalid_item]}
+    end
+  end
+
+  describe "function_exported/3" do
+    # Erlang module
+
+    test "returns true for existing function in Erlang module" do
+      assert :erlang.function_exported(:erlang, :abs, 1) == true
+    end
+
+    test "returns false for non-existing function in Erlang module" do
+      assert :erlang.function_exported(:erlang, :nonexistent_function, 1) == false
+    end
+
+    test "returns false for wrong arity in Erlang module" do
+      assert :erlang.function_exported(:erlang, :abs, 2) == false
+    end
+
+    test "returns false for non-existing Erlang module" do
+      assert :erlang.function_exported(:nonexistent_module, :foo, 1) == false
+    end
+
+    # Elixir module
+
+    test "returns true for public function in Elixir module" do
+      Code.ensure_loaded!(Module2)
+
+      assert :erlang.function_exported(Module2, :public_fun, 1) == true
+    end
+
+    test "returns false for private function in Elixir module" do
+      Code.ensure_loaded!(Module2)
+
+      assert :erlang.function_exported(Module2, :private_fun, 1) == false
+    end
+
+    test "returns false for non-existing function in Elixir module" do
+      Code.ensure_loaded!(Module2)
+
+      assert :erlang.function_exported(Module2, :nonexistent_function, 1) == false
+    end
+
+    test "returns false for wrong arity in Elixir module" do
+      Code.ensure_loaded!(Module2)
+
+      assert :erlang.function_exported(Module2, :public_fun, 2) == false
+    end
+
+    test "returns false for non-existing Elixir module" do
+      assert :erlang.function_exported(NonExistentModule, :foo, 1) == false
+    end
+
+    # Arity edge cases
+
+    test "returns true for arity 0" do
+      Code.ensure_loaded!(Module2)
+
+      assert :erlang.function_exported(Module2, :public_fun_0, 0) == true
+    end
+
+    test "returns false for negative arity" do
+      Code.ensure_loaded!(Module2)
+
+      assert :erlang.function_exported(Module2, :public_fun, -1) == false
+    end
+
+    test "returns false for arity greater than 255" do
+      Code.ensure_loaded!(Module2)
+
+      assert :erlang.function_exported(Module2, :public_fun, 256) == false
+    end
+
+    # Errors
+
+    test "raises ArgumentError if module is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an atom"),
+                   {:erlang, :function_exported, ["not_atom", :foo, 1]}
+    end
+
+    test "raises ArgumentError if function is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an atom"),
+                   {:erlang, :function_exported, [:erlang, "not_atom", 1]}
+    end
+
+    test "raises ArgumentError if arity is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not an integer"),
+                   {:erlang, :function_exported, [:erlang, :abs, 2.0]}
     end
   end
 

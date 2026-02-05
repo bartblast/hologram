@@ -5158,6 +5158,233 @@ describe("Erlang", () => {
     });
   });
 
+  describe("function_exported/3", () => {
+    const function_exported = Erlang["function_exported/3"];
+
+    beforeEach(() => {
+      // Set up a mock Elixir module with exports tracking
+      // Mirrors Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2
+
+      // def public_fun_0, do: :ok
+      Interpreter.defineElixirFunction(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2",
+        "public_fun_0",
+        0,
+        "public",
+        [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+      );
+
+      // def public_fun(x), do: x + private_fun(x)
+      Interpreter.defineElixirFunction(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2",
+        "public_fun",
+        1,
+        "public",
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) =>
+              Erlang["+/2"](
+                context.vars.x,
+                globalThis.Elixir_Hologram_Test_Fixtures_ExJsConsistency_Erlang_Module2[
+                  "private_fun/1"
+                ](context.vars.x),
+              ),
+          },
+        ],
+      );
+
+      // defp private_fun(x), do: x * 2
+      Interpreter.defineElixirFunction(
+        "Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2",
+        "private_fun",
+        1,
+        "private",
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => Erlang["*/2"](context.vars.x, Type.integer(2)),
+          },
+        ],
+      );
+    });
+
+    describe("Erlang module", () => {
+      it("returns true for existing function", () => {
+        const result = function_exported(
+          Type.atom("erlang"),
+          Type.atom("abs"),
+          Type.integer(1),
+        );
+
+        assertBoxedTrue(result);
+      });
+
+      it("returns false for non-existing function", () => {
+        const result = function_exported(
+          Type.atom("erlang"),
+          Type.atom("nonexistent_function"),
+          Type.integer(1),
+        );
+
+        assertBoxedFalse(result);
+      });
+
+      it("returns false for wrong arity", () => {
+        const result = function_exported(
+          Type.atom("erlang"),
+          Type.atom("abs"),
+          Type.integer(2),
+        );
+
+        assertBoxedFalse(result);
+      });
+
+      it("returns false for non-existing module", () => {
+        const result = function_exported(
+          Type.atom("nonexistent_module"),
+          Type.atom("foo"),
+          Type.integer(1),
+        );
+
+        assertBoxedFalse(result);
+      });
+    });
+
+    describe("Elixir module", () => {
+      it("returns true for public function", () => {
+        const result = function_exported(
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2"),
+          Type.atom("public_fun"),
+          Type.integer(1),
+        );
+
+        assertBoxedTrue(result);
+      });
+
+      it("returns false for private function", () => {
+        const result = function_exported(
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2"),
+          Type.atom("private_fun"),
+          Type.integer(1),
+        );
+
+        assertBoxedFalse(result);
+      });
+
+      it("returns false for non-existing function", () => {
+        const result = function_exported(
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2"),
+          Type.atom("nonexistent_function"),
+          Type.integer(1),
+        );
+
+        assertBoxedFalse(result);
+      });
+
+      it("returns false for wrong arity", () => {
+        const result = function_exported(
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2"),
+          Type.atom("public_fun"),
+          Type.integer(2),
+        );
+
+        assertBoxedFalse(result);
+      });
+
+      it("returns false for non-existing module", () => {
+        const result = function_exported(
+          Type.alias("NonExistentModule"),
+          Type.atom("foo"),
+          Type.integer(1),
+        );
+
+        assertBoxedFalse(result);
+      });
+    });
+
+    describe("arity edge cases", () => {
+      it("returns true for arity 0", () => {
+        const result = function_exported(
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2"),
+          Type.atom("public_fun_0"),
+          Type.integer(0),
+        );
+
+        assertBoxedTrue(result);
+      });
+
+      it("returns false for negative arity", () => {
+        const result = function_exported(
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2"),
+          Type.atom("public_fun"),
+          Type.integer(-1),
+        );
+
+        assertBoxedFalse(result);
+      });
+
+      it("returns false for arity greater than 255", () => {
+        const result = function_exported(
+          Type.alias("Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2"),
+          Type.atom("public_fun"),
+          Type.integer(256),
+        );
+
+        assertBoxedFalse(result);
+      });
+    });
+
+    describe("errors", () => {
+      it("raises ArgumentError if module is not an atom", () => {
+        assertBoxedError(
+          () =>
+            function_exported(
+              Type.bitstring("not_atom"),
+              Type.atom("foo"),
+              Type.integer(1),
+            ),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+        );
+      });
+
+      it("raises ArgumentError if function is not an atom", () => {
+        assertBoxedError(
+          () =>
+            function_exported(
+              Type.atom("erlang"),
+              Type.bitstring("not_atom"),
+              Type.integer(1),
+            ),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+        );
+      });
+
+      it("raises ArgumentError if arity is not an integer", () => {
+        assertBoxedError(
+          () =>
+            function_exported(
+              Type.atom("erlang"),
+              Type.atom("abs"),
+              Type.float(2.0),
+            ),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+        );
+      });
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
