@@ -5628,7 +5628,7 @@ describe("Erlang", () => {
     it("single character", () => {
       // ~c"a" = [97]
       const result = list_to_atom(Type.list([Type.integer(97)]));
-      
+
       assert.deepStrictEqual(result, Type.atom("a"));
     });
 
