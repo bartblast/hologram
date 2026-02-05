@@ -147,6 +147,30 @@ const Erlang_Sets = {
   // End from_list/2
   // Deps: [:maps.from_keys/2, :sets._validate_opts/1]
 
+  // Start intersection/2
+  "intersection/2": (set1, set2) => {
+    if (!Type.isMap(set1) || !Type.isMap(set2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
+          !Type.isMap(set1) ? set1 : set2,
+        ]),
+      );
+    }
+
+    const encodedKeys1 = new Set(Object.keys(set1.data));
+    const encodedKeys2 = new Set(Object.keys(set2.data));
+    const intersectedKeys = encodedKeys1.intersection(encodedKeys2);
+
+    const data = {};
+    for (const encodedKey of intersectedKeys) {
+      data[encodedKey] = set1.data[encodedKey];
+    }
+
+    return {type: "map", data};
+  },
+  // End intersection/2
+  // Deps: []
+
   // Start is_disjoint/2
   "is_disjoint/2": (set1, set2) => {
     if (!Type.isMap(set1) || !Type.isMap(set2)) {
