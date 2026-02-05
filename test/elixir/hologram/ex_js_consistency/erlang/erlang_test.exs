@@ -3546,26 +3546,31 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "list_to_atom/1" do
     test "empty list" do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.list_to_atom([]) == :""
     end
 
     test "ASCII characters" do
       # ~c"abc" = [97, 98, 99]
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.list_to_atom([97, 98, 99]) == :abc
     end
 
     test "Unicode characters" do
       # ~c"全息图" = [20840, 24687, 22270]
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.list_to_atom([20_840, 24_687, 22_270]) == :全息图
     end
 
     test "mixed ASCII and Unicode characters" do
       # ~c"aπb" = [97, 960, 98]
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.list_to_atom([97, 960, 98]) == String.to_atom("aπb")
     end
 
     test "single character" do
       # ~c"a" = [97]
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.list_to_atom([97]) == :a
     end
 
