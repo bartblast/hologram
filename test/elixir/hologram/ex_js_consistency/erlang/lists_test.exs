@@ -9,64 +9,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   @moduletag :consistency
 
-  describe "any/2" do
-    test "returns true if the first item in the list results in true" do
-      assert :lists.any(&(&1 > 2), [3, 1, 2, 0])
-    end
-
-    test "returns true if the middle item in the list results in true" do
-      assert :lists.any(&(&1 > 2), [0, 1, 3, 2, 0])
-    end
-
-    test "returns true if the last item in the list results in true" do
-      assert :lists.any(&(&1 > 2), [0, 1, 0, 2, 3])
-    end
-
-    test "returns false if none of the items results in true when supplied to the anonymous function" do
-      assert :lists.any(&(&1 > 5), [0, 1, 2, 3, 4]) == false
-    end
-
-    test "returns false for empty list" do
-      assert :lists.any(&(&1 > 2), []) == false
-    end
-
-    test "raises FunctionClauseError if the first arg is not an anonymous function" do
-      expected_msg = build_function_clause_error_msg(":lists.any/2", [:not_function, [1, 2, 3]])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.any(:not_function, [1, 2, 3])
-      end
-    end
-
-    test "raises FunctionClauseError if the first arg is an anonymous function with arity different than 1" do
-      fun = &(&1 == &2)
-
-      expected_msg =
-        build_function_clause_error_msg(":lists.any/2", [fun, [1, 2, 3]])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.any(fun, [1, 2, 3])
-      end
-    end
-
-    test "raises CaseClauseError if the second argument is not a list" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
-        :lists.any(&(&1 > 2), :abc)
-      end
-    end
-
-    test "raises FunctionClauseError if the second argument is an improper list" do
-      fun = &(&1 > 2)
-
-      expected_msg =
-        build_function_clause_error_msg(":lists.any_1/2", [fun, 3])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.any(fun, [1, 2 | 3])
-      end
-    end
-  end
-
   describe "all/2" do
     test "returns false if the first item in the list results in false" do
       assert :lists.all(fn elem -> elem > 1 end, [1, 2, 3, 4]) == false
@@ -121,6 +63,64 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.all(fun, [1, 2 | 3])
+      end
+    end
+  end
+
+  describe "any/2" do
+    test "returns true if the first item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [3, 1, 2, 0])
+    end
+
+    test "returns true if the middle item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [0, 1, 3, 2, 0])
+    end
+
+    test "returns true if the last item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [0, 1, 0, 2, 3])
+    end
+
+    test "returns false if none of the items results in true when supplied to the anonymous function" do
+      assert :lists.any(&(&1 > 5), [0, 1, 2, 3, 4]) == false
+    end
+
+    test "returns false for empty list" do
+      assert :lists.any(&(&1 > 2), []) == false
+    end
+
+    test "raises FunctionClauseError if the first arg is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.any/2", [:not_function, [1, 2, 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.any(:not_function, [1, 2, 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the first arg is an anonymous function with arity different than 1" do
+      fun = &(&1 == &2)
+
+      expected_msg =
+        build_function_clause_error_msg(":lists.any/2", [fun, [1, 2, 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.any(fun, [1, 2, 3])
+      end
+    end
+
+    test "raises CaseClauseError if the second argument is not a list" do
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+        :lists.any(&(&1 > 2), :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list" do
+      fun = &(&1 > 2)
+
+      expected_msg =
+        build_function_clause_error_msg(":lists.any_1/2", [fun, 3])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.any(fun, [1, 2 | 3])
       end
     end
   end
