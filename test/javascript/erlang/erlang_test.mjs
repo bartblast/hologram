@@ -2823,6 +2823,53 @@ describe("Erlang", () => {
     });
   });
 
+  describe("bnot/1", () => {
+    const testedFun = Erlang["bnot/1"];
+
+    it("positive integer", () => {
+      // 2 = 0b00000010, -3 = 0b11111101
+      const result = testedFun(integer2);
+
+      assert.deepStrictEqual(result, Type.integer(-3));
+    });
+
+    it("zero", () => {
+      // 0 = 0b00000000, -1 = 0b11111111
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, Type.integer(-1));
+    });
+
+    it("negative integer", () => {
+      // -3 = 0b11111101, 2 = 0b00000010
+      const result = testedFun(Type.integer(-3));
+
+      assert.deepStrictEqual(result, integer2);
+    });
+
+    it("argument above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      const result = testedFun(Type.integer(9_007_199_254_740_992n));
+
+      assert.deepStrictEqual(result, Type.integer(-9_007_199_254_740_993n));
+    });
+
+    it("argument below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      const result = testedFun(Type.integer(-9_007_199_254_740_992n));
+
+      assert.deepStrictEqual(result, Type.integer(9_007_199_254_740_991n));
+    });
+
+    it("raises ArithmeticError if the argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(float2),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bnot(2.0)",
+      );
+    });
+  });
+
   describe("bor/2", () => {
     const bor = Erlang["bor/2"];
 
