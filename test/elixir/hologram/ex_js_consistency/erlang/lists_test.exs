@@ -9,6 +9,64 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   @moduletag :consistency
 
+  describe "all/2" do
+    test "returns false if the first item in the list results in false" do
+      assert :lists.all(fn elem -> elem > 1 end, [1, 2, 3, 4]) == false
+    end
+
+    test "returns false if the middle item in the list results in false" do
+      assert :lists.all(fn elem -> elem > 1 end, [5, 4, 1, 2, 3]) == false
+    end
+
+    test "returns false if the last item in the list results in false" do
+      assert :lists.all(fn elem -> elem > 1 end, [5, 4, 3, 2, 1]) == false
+    end
+
+    test "returns true if all items result in true when supplied to the anonymous function" do
+      assert :lists.all(fn elem -> elem > 1 end, [5, 4, 3, 2])
+    end
+
+    test "returns true for empty list" do
+      assert :lists.all(fn elem -> elem > 1 end, [])
+    end
+
+    test "raises FunctionClauseError if the first arg is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.all/2", [:not_function, [1, 2, 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.all(:not_function, [1, 2, 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the first arg is an anonymous function with arity different than 1" do
+      fun = fn x, y -> x == y end
+
+      expected_msg =
+        build_function_clause_error_msg(":lists.all/2", [fun, [1, 2, 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.all(fun, [1, 2, 3])
+      end
+    end
+
+    test "raises CaseClauseError if the second argument is not a list" do
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+        :lists.all(fn elem -> elem > 1 end, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list" do
+      fun = fn elem -> elem > 0 end
+
+      expected_msg =
+        build_function_clause_error_msg(":lists.all_1/2", [fun, 3])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.all(fun, [1, 2 | 3])
+      end
+    end
+  end
+
   describe "any/2" do
     test "returns true if the first item in the list results in true" do
       assert :lists.any(&(&1 > 2), [3, 1, 2, 0])
