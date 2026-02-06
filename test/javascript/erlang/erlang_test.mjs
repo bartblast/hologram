@@ -6315,6 +6315,22 @@ describe("Erlang", () => {
     });
   });
 
+  // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
+  // The client version works exactly the same as list_to_atom/1.
+  describe("list_to_existing_atom/1", () => {
+    const testedFun = Erlang["list_to_existing_atom/1"];
+
+    it("delegates to list_to_atom/1", () => {
+      const randomStr = `${Math.random()}`;
+      const codePoints = Type.charlist(randomStr);
+
+      const result = testedFun(codePoints);
+      const expected = Erlang["list_to_atom/1"](codePoints);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("list_to_integer/1", () => {
     const list_to_integer = Erlang["list_to_integer/1"];
 
