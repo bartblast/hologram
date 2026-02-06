@@ -3896,7 +3896,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   # Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
   # The client version works exactly the same as list_to_atom/1.
-  # test "list_to_existing_atom/1"  
+  # test "list_to_existing_atom/1"
 
   describe "list_to_integer/1" do
     test "delegates to list_to_integer/2 with base 10" do
