@@ -6136,6 +6136,185 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_binary/1", () => {
+    const list_to_binary = Erlang["list_to_binary/1"];
+
+    it("empty list", () => {
+      const result = list_to_binary(Type.list());
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("list of integers", () => {
+      const result = list_to_binary(
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+
+      assert.deepStrictEqual(result, Bitstring.fromBytes([1, 2, 3]));
+    });
+
+    it("list of binaries", () => {
+      const result = list_to_binary(
+        Type.list([Bitstring.fromBytes([1, 2]), Bitstring.fromBytes([3, 4])]),
+      );
+
+      assert.deepStrictEqual(result, Bitstring.fromBytes([1, 2, 3, 4]));
+    });
+
+    it("nested list", () => {
+      const result = list_to_binary(
+        Type.list([
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(3), Type.integer(4)]),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Bitstring.fromBytes([1, 2, 3, 4]));
+    });
+
+    it("deeply nested list", () => {
+      const result = list_to_binary(
+        Type.list([
+          Type.list([
+            Type.integer(1),
+            Type.list([
+              Type.integer(2),
+              Type.list([Type.integer(3), Type.list([Type.integer(4)])]),
+            ]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Bitstring.fromBytes([1, 2, 3, 4]));
+    });
+
+    it("improper list with binary tail", () => {
+      const result = list_to_binary(
+        Type.improperList([Type.integer(1), Bitstring.fromBytes([2, 3])]),
+      );
+
+      assert.deepStrictEqual(result, Bitstring.fromBytes([1, 2, 3]));
+    });
+
+    it("mixed integers and binaries (iolist from doc example)", () => {
+      const bin1 = Bitstring.fromBytes([1, 2, 3]);
+      const bin2 = Bitstring.fromBytes([4, 5]);
+      const bin3 = Bitstring.fromBytes([6]);
+
+      const result = list_to_binary(
+        Type.improperList([
+          bin1,
+          Type.integer(1),
+          Type.list([Type.integer(2), Type.integer(3), bin2]),
+          Type.integer(4),
+          bin3,
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Bitstring.fromBytes([1, 2, 3, 1, 2, 3, 4, 5, 4, 6]),
+      );
+    });
+
+    it("list with empty sublists", () => {
+      const result = list_to_binary(
+        Type.list([Type.list(), Type.list(), Type.list()]),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("boundary values 0 and 255", () => {
+      const result = list_to_binary(
+        Type.list([Type.integer(0), Type.integer(255)]),
+      );
+
+      assert.deepStrictEqual(result, Bitstring.fromBytes([0, 255]));
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_binary(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a binary", () => {
+      assertBoxedError(
+        () => list_to_binary(Type.bitstring("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError if list contains an atom", () => {
+      assertBoxedError(
+        () => list_to_binary(Type.list([Type.atom("abc")])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError if list contains a float", () => {
+      assertBoxedError(
+        () => list_to_binary(Type.list([Type.float(1.0)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError if list contains an integer greater than 255", () => {
+      assertBoxedError(
+        () => list_to_binary(Type.list([Type.integer(256)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError if list contains a negative integer", () => {
+      assertBoxedError(
+        () => list_to_binary(Type.list([Type.integer(-1)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError if improper list has a non-binary tail", () => {
+      assertBoxedError(
+        () =>
+          list_to_binary(
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.atom("abc"),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError if list contains a non-byte-aligned bitstring", () => {
+      assertBoxedError(
+        () =>
+          list_to_binary(
+            Type.list([
+              Type.bitstring([
+                Type.bitstringSegment(Type.integer(1), {
+                  type: "integer",
+                  size: Type.integer(3),
+                }),
+              ]),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+  });
+
   describe("list_to_integer/1", () => {
     const list_to_integer = Erlang["list_to_integer/1"];
 
