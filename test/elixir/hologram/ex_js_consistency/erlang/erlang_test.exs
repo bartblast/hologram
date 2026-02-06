@@ -3898,6 +3898,198 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   # The client version works exactly the same as list_to_atom/1.
   # test "list_to_existing_atom/1"
 
+  describe "list_to_float/1" do
+    test "positive float without sign in decimal notation" do
+      # ~c"1.23" = [49, 46, 50, 51]
+      assert :erlang.list_to_float([49, 46, 50, 51]) == 1.23
+    end
+
+    test "positive float with sign in decimal notation" do
+      # ~c"+1.23" = [43, 49, 46, 50, 51]
+      assert :erlang.list_to_float([43, 49, 46, 50, 51]) == 1.23
+    end
+
+    test "negative float in decimal notation" do
+      # ~c"-1.23" = [45, 49, 46, 50, 51]
+      assert :erlang.list_to_float([45, 49, 46, 50, 51]) == -1.23
+    end
+
+    test "unsigned zero float in decimal notation" do
+      # ~c"0.0" = [48, 46, 48]
+      assert :erlang.list_to_float([48, 46, 48]) === 0.0
+    end
+
+    test "signed positive zero float in decimal notation" do
+      # ~c"+0.0" = [43, 48, 46, 48]
+      assert :erlang.list_to_float([43, 48, 46, 48]) === +0.0
+    end
+
+    test "signed negative zero float in decimal notation" do
+      # ~c"-0.0" = [45, 48, 46, 48]
+      assert :erlang.list_to_float([45, 48, 46, 48]) === -0.0
+    end
+
+    test "positive float in scientific notation" do
+      # ~c"1.23456e+3" = [49, 46, 50, 51, 52, 53, 54, 101, 43, 51]
+      assert :erlang.list_to_float([49, 46, 50, 51, 52, 53, 54, 101, 43, 51]) == 1234.56
+    end
+
+    test "negative float in scientific notation" do
+      # ~c"-1.23456e+3" = [45, 49, 46, 50, 51, 52, 53, 54, 101, 43, 51]
+      assert :erlang.list_to_float([45, 49, 46, 50, 51, 52, 53, 54, 101, 43, 51]) == -1234.56
+    end
+
+    test "unsigned zero float in scientific notation" do
+      # ~c"0.0e+1" = [48, 46, 48, 101, 43, 49]
+      assert :erlang.list_to_float([48, 46, 48, 101, 43, 49]) === 0.0
+    end
+
+    test "signed positive zero float in scientific notation" do
+      # ~c"+0.0e+1" = [43, 48, 46, 48, 101, 43, 49]
+      assert :erlang.list_to_float([43, 48, 46, 48, 101, 43, 49]) === +0.0
+    end
+
+    test "signed negative zero float in scientific notation" do
+      # ~c"-0.0e+1" = [45, 48, 46, 48, 101, 43, 49]
+      assert :erlang.list_to_float([45, 48, 46, 48, 101, 43, 49]) === -0.0
+    end
+
+    test "with leading zeros" do
+      # ~c"00012.34" = [48, 48, 48, 49, 50, 46, 51, 52]
+      assert :erlang.list_to_float([48, 48, 48, 49, 50, 46, 51, 52]) == 12.34
+    end
+
+    test "uppercase scientific notation" do
+      # ~c"1.23456E3" = [49, 46, 50, 51, 52, 53, 54, 69, 51]
+      assert :erlang.list_to_float([49, 46, 50, 51, 52, 53, 54, 69, 51]) == 1234.56
+    end
+
+    test "negative exponent" do
+      # ~c"1.23e-3" = [49, 46, 50, 51, 101, 45, 51]
+      assert :erlang.list_to_float([49, 46, 50, 51, 101, 45, 51]) == 0.00123
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_float, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_float, [[49, 46 | 50]]}
+    end
+
+    test "raises ArgumentError if list contains non-integer element" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[49, :abc, 51]]}
+    end
+
+    test "positive integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[49, 50, 51]]}
+    end
+
+    test "negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[45, 49, 50, 51]]}
+    end
+
+    test "zero integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[48]]}
+    end
+
+    test "with underscore" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[49, 95, 48, 48, 48, 46, 53]]}
+    end
+
+    test "invalid float format" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[49, 50, 46, 51, 46, 52]]}
+    end
+
+    test "non-numeric text" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[97, 98, 99]]}
+    end
+
+    test "empty input" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[]]}
+    end
+
+    test "decimal point only" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[46]]}
+    end
+
+    test "with leading dot" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[46, 53]]}
+    end
+
+    test "with trailing dot" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[53, 46]]}
+    end
+
+    test "scientific notation without the fractional part" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[51, 101, 49, 48]]}
+    end
+
+    test "with trailing exponent marker" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[50, 101]]}
+    end
+
+    test "with leading whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[32, 49, 50, 46, 51]]}
+    end
+
+    test "with trailing whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[49, 50, 46, 51, 32]]}
+    end
+
+    test "with multiple exponent markers" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[49, 101, 50, 101, 51]]}
+    end
+
+    test "Infinity text" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[73, 110, 102, 105, 110, 105, 116, 121]]}
+    end
+
+    test "hex-style JS float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :list_to_float, [[48, 120, 49, 46, 102, 112, 50]]}
+    end
+  end
+
   describe "list_to_integer/1" do
     test "delegates to list_to_integer/2 with base 10" do
       assert :erlang.list_to_integer([49, 50, 51]) ==
