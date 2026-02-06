@@ -258,6 +258,43 @@ const Erlang_Sets = {
   // End size/1
   // Deps: [:erlang.map_size/1]
 
+  // Start subtract/2
+  "subtract/2": (set1, set2) => {
+    if (!Type.isMap(set1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2"),
+      );
+    }
+
+    if (Object.keys(set1.data).length === 0) {
+      return Type.map();
+    }
+
+    if (!Type.isMap(set2)) {
+      const firstElement = Object.values(set1.data)[0][0];
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
+          firstElement,
+          set2,
+        ]),
+      );
+    }
+
+    const encodedKeys1 = new Set(Object.keys(set1.data));
+    const encodedKeys2 = new Set(Object.keys(set2.data));
+    const subtractedKeys = encodedKeys1.difference(encodedKeys2);
+
+    const data = {};
+    for (const encodedKey of subtractedKeys) {
+      data[encodedKey] = set1.data[encodedKey];
+    }
+
+    return {type: "map", data};
+  },
+  // End subtract/2
+  // Deps: []
+
   // Start to_list/1
   "to_list/1": (set) => {
     if (!Type.isMap(set)) {

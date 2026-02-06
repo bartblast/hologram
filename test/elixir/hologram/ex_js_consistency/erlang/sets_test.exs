@@ -581,6 +581,80 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "subtract/2" do
+    setup do
+      [
+        empty_set: :sets.new(version: 2),
+        set_123: :sets.from_list([1, 2, 3], version: 2)
+      ]
+    end
+
+    test "returns elements in the first set that are not in the second set", %{set_123: set_123} do
+      set_234 = :sets.from_list([2, 3, 4], version: 2)
+
+      result = :sets.subtract(set_123, set_234)
+      expected = :sets.from_list([1], version: 2)
+
+      assert result == expected
+    end
+
+    test "returns the first set if sets have no common elements" do
+      set_12 = :sets.from_list([1, 2], version: 2)
+      set_3 = :sets.from_list([3], version: 2)
+
+      assert :sets.subtract(set_12, set_3) == set_12
+    end
+
+    test "returns an empty set if both sets are empty", %{empty_set: empty_set} do
+      assert :sets.subtract(empty_set, empty_set) == empty_set
+    end
+
+    test "returns an empty set if first set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.subtract(empty_set, set_123) == empty_set
+    end
+
+    test "returns the first set if second set is empty", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.subtract(set_123, empty_set) == set_123
+    end
+
+    test "returns an empty set if sets are identical", %{empty_set: empty_set, set_123: set_123} do
+      assert :sets.subtract(set_123, set_123) == empty_set
+    end
+
+    test "uses strict matching (integer vs float)" do
+      set_int = :sets.from_list([1], version: 2)
+      set_float = :sets.from_list([1.0], version: 2)
+
+      assert :sets.subtract(set_int, set_float) == set_int
+    end
+
+    test "raises FunctionClauseError if the first argument is not a set", %{set_123: set_123} do
+      expected_msg = ~r"""
+      no function clause matching in :sets\.filter/2
+
+      The following arguments were given to :sets\.filter/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in :sets\.subtract/2>
+
+          # 2
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.subtract(:abc, set_123)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a set", %{set_123: set_123} do
+      expected_msg = build_function_clause_error_msg(":sets.is_element/2", [1, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :sets.subtract(set_123, :abc)
+      end
+    end
+  end
+
   describe "to_list/1" do
     test "returns an empty list if given an empty set" do
       set = :sets.new(version: 2)

@@ -927,6 +927,84 @@ describe("Erlang_Sets", () => {
     });
   });
 
+  describe("subtract/2", () => {
+    const subtract_2 = Erlang_Sets["subtract/2"];
+    const from_list_2 = Erlang_Sets["from_list/2"];
+
+    it("returns elements in the first set that are not in the second set", () => {
+      const set234 = from_list_2(
+        Type.list([integer2, integer3, Type.integer(4)]),
+        opts,
+      );
+
+      const result = subtract_2(set123, set234);
+      const expected = from_list_2(Type.list([integer1]), opts);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns the first set if sets have no common elements", () => {
+      const set12 = from_list_2(Type.list([integer1, integer2]), opts);
+      const set3 = from_list_2(Type.list([integer3]), opts);
+
+      const result = subtract_2(set12, set3);
+
+      assert.deepStrictEqual(result, set12);
+    });
+
+    it("returns an empty set if both sets are empty", () => {
+      const result = subtract_2(emptySet, emptySet);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("returns an empty set if first set is empty", () => {
+      const result = subtract_2(emptySet, set123);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("returns the first set if second set is empty", () => {
+      const result = subtract_2(set123, emptySet);
+
+      assert.deepStrictEqual(result, set123);
+    });
+
+    it("returns an empty set if sets are identical", () => {
+      const result = subtract_2(set123, set123);
+
+      assert.deepStrictEqual(result, emptySet);
+    });
+
+    it("uses strict matching (integer vs float)", () => {
+      const setInt = from_list_2(Type.list([integer1]), opts);
+      const setFloat = from_list_2(Type.list([float1]), opts);
+
+      const result = subtract_2(setInt, setFloat);
+
+      assert.deepStrictEqual(result, setInt);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a set", () => {
+      assertBoxedError(
+        () => subtract_2(atomAbc, set123),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.filter/2"),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a set", () => {
+      assertBoxedError(
+        () => subtract_2(set123, atomAbc),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":sets.is_element/2", [
+          integer1,
+          atomAbc,
+        ]),
+      );
+    });
+  });
+
   describe("to_list/1", () => {
     const to_list = Erlang_Sets["to_list/1"];
 
