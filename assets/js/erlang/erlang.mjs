@@ -1638,6 +1638,46 @@ const Erlang = {
   // End list_to_existing_atom/1
   // Deps: [:erlang.list_to_atom/1]
 
+  // Start list_to_float/1
+  "list_to_float/1": (list) => {
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    const codes = [];
+
+    for (const code of list.data) {
+      if (!Type.isInteger(code)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not a textual representation of a float",
+          ),
+        );
+      }
+
+      codes.push(Number(code.value));
+    }
+
+    const text = String.fromCharCode(...codes);
+    const floatRegex = /^[+-]?\d+\.\d+([eE][+-]?\d+)?$/;
+
+    if (!floatRegex.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    }
+
+    return Type.float(Number(text));
+  },
+  // End list_to_float/1
+  // Deps: []
+
   // Start list_to_integer/1
   "list_to_integer/1": (list) => {
     return Erlang["list_to_integer/2"](list, Type.integer(10n));

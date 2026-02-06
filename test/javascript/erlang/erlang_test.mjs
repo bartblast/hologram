@@ -6331,6 +6331,569 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_float/1", () => {
+    const list_to_float = Erlang["list_to_float/1"];
+
+    it("positive float without sign in decimal notation", () => {
+      // ~c"1.23" = [49, 46, 50, 51]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(49),
+          Type.integer(46),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(1.23));
+    });
+
+    it("positive float with sign in decimal notation", () => {
+      // ~c"+1.23" = [43, 49, 46, 50, 51]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(43),
+          Type.integer(49),
+          Type.integer(46),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(1.23));
+    });
+
+    it("negative float in decimal notation", () => {
+      // ~c"-1.23" = [45, 49, 46, 50, 51]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(45),
+          Type.integer(49),
+          Type.integer(46),
+          Type.integer(50),
+          Type.integer(51),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(-1.23));
+    });
+
+    it("unsigned zero float in decimal notation", () => {
+      // ~c"0.0" = [48, 46, 48]
+      const result = list_to_float(
+        Type.list([Type.integer(48), Type.integer(46), Type.integer(48)]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in decimal notation", () => {
+      // ~c"+0.0" = [43, 48, 46, 48]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(43),
+          Type.integer(48),
+          Type.integer(46),
+          Type.integer(48),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in decimal notation", () => {
+      // ~c"-0.0" = [45, 48, 46, 48]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(45),
+          Type.integer(48),
+          Type.integer(46),
+          Type.integer(48),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("positive float in scientific notation", () => {
+      // ~c"1.23456e+3" = [49, 46, 50, 51, 52, 53, 54, 101, 43, 51]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(49),
+          Type.integer(46),
+          Type.integer(50),
+          Type.integer(51),
+          Type.integer(52),
+          Type.integer(53),
+          Type.integer(54),
+          Type.integer(101),
+          Type.integer(43),
+          Type.integer(51),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
+    });
+
+    it("negative float in scientific notation", () => {
+      // ~c"-1.23456e+3" = [45, 49, 46, 50, 51, 52, 53, 54, 101, 43, 51]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(45),
+          Type.integer(49),
+          Type.integer(46),
+          Type.integer(50),
+          Type.integer(51),
+          Type.integer(52),
+          Type.integer(53),
+          Type.integer(54),
+          Type.integer(101),
+          Type.integer(43),
+          Type.integer(51),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(-1234.56));
+    });
+
+    it("unsigned zero float in scientific notation", () => {
+      // ~c"0.0e+1" = [48, 46, 48, 101, 43, 49]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(48),
+          Type.integer(46),
+          Type.integer(48),
+          Type.integer(101),
+          Type.integer(43),
+          Type.integer(49),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in scientific notation", () => {
+      // ~c"+0.0e+1" = [43, 48, 46, 48, 101, 43, 49]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(43),
+          Type.integer(48),
+          Type.integer(46),
+          Type.integer(48),
+          Type.integer(101),
+          Type.integer(43),
+          Type.integer(49),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in scientific notation", () => {
+      // ~c"-0.0e+1" = [45, 48, 46, 48, 101, 43, 49]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(45),
+          Type.integer(48),
+          Type.integer(46),
+          Type.integer(48),
+          Type.integer(101),
+          Type.integer(43),
+          Type.integer(49),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("with leading zeros", () => {
+      // ~c"00012.34" = [48, 48, 48, 49, 50, 46, 51, 52]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(48),
+          Type.integer(48),
+          Type.integer(48),
+          Type.integer(49),
+          Type.integer(50),
+          Type.integer(46),
+          Type.integer(51),
+          Type.integer(52),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(12.34));
+    });
+
+    it("uppercase scientific notation", () => {
+      // ~c"1.23456E3" = [49, 46, 50, 51, 52, 53, 54, 69, 51]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(49),
+          Type.integer(46),
+          Type.integer(50),
+          Type.integer(51),
+          Type.integer(52),
+          Type.integer(53),
+          Type.integer(54),
+          Type.integer(69),
+          Type.integer(51),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
+    });
+
+    it("negative exponent", () => {
+      // ~c"1.23e-3" = [49, 46, 50, 51, 101, 45, 51]
+      const result = list_to_float(
+        Type.list([
+          Type.integer(49),
+          Type.integer(46),
+          Type.integer(50),
+          Type.integer(51),
+          Type.integer(101),
+          Type.integer(45),
+          Type.integer(51),
+        ]),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.00123));
+    });
+
+    it("raises ArgumentError if the argument is not a list", () => {
+      assertBoxedError(
+        () => list_to_float(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is an improper list", () => {
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.improperList([
+              Type.integer(49),
+              Type.integer(46),
+              Type.integer(50),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if list contains non-integer element", () => {
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([Type.integer(49), Type.atom("abc"), Type.integer(51)]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("positive integer", () => {
+      // ~c"123" = [49, 50, 51]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("negative integer", () => {
+      // ~c"-123" = [45, 49, 50, 51]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(45),
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(51),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("zero integer", () => {
+      // ~c"0" = [48]
+      assertBoxedError(
+        () => list_to_float(Type.list([Type.integer(48)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with underscore", () => {
+      // ~c"1_000.5" = [49, 95, 48, 48, 48, 46, 53]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(49),
+              Type.integer(95),
+              Type.integer(48),
+              Type.integer(48),
+              Type.integer(48),
+              Type.integer(46),
+              Type.integer(53),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("invalid float format", () => {
+      // ~c"12.3.4" = [49, 50, 46, 51, 46, 52]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(46),
+              Type.integer(51),
+              Type.integer(46),
+              Type.integer(52),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("non-numeric text", () => {
+      // ~c"abc" = [97, 98, 99]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("empty input", () => {
+      assertBoxedError(
+        () => list_to_float(Type.list()),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("decimal point only", () => {
+      // ~c"." = [46]
+      assertBoxedError(
+        () => list_to_float(Type.list([Type.integer(46)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading dot", () => {
+      // ~c".5" = [46, 53]
+      assertBoxedError(
+        () => list_to_float(Type.list([Type.integer(46), Type.integer(53)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing dot", () => {
+      // ~c"5." = [53, 46]
+      assertBoxedError(
+        () => list_to_float(Type.list([Type.integer(53), Type.integer(46)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("scientific notation without the fractional part", () => {
+      // ~c"3e10" = [51, 101, 49, 48]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(51),
+              Type.integer(101),
+              Type.integer(49),
+              Type.integer(48),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing exponent marker", () => {
+      // ~c"2e" = [50, 101]
+      assertBoxedError(
+        () => list_to_float(Type.list([Type.integer(50), Type.integer(101)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading whitespace", () => {
+      // ~c" 12.3" = [32, 49, 50, 46, 51]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(32),
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(46),
+              Type.integer(51),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing whitespace", () => {
+      // ~c"12.3 " = [49, 50, 46, 51, 32]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(49),
+              Type.integer(50),
+              Type.integer(46),
+              Type.integer(51),
+              Type.integer(32),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with multiple exponent markers", () => {
+      // ~c"1e2e3" = [49, 101, 50, 101, 51]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(49),
+              Type.integer(101),
+              Type.integer(50),
+              Type.integer(101),
+              Type.integer(51),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("Infinity text", () => {
+      // ~c"Infinity" = [73, 110, 102, 105, 110, 105, 116, 121]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(73),
+              Type.integer(110),
+              Type.integer(102),
+              Type.integer(105),
+              Type.integer(110),
+              Type.integer(105),
+              Type.integer(116),
+              Type.integer(121),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("hex-style JS float", () => {
+      // ~c"0x1.fp2" = [48, 120, 49, 46, 102, 112, 50]
+      assertBoxedError(
+        () =>
+          list_to_float(
+            Type.list([
+              Type.integer(48),
+              Type.integer(120),
+              Type.integer(49),
+              Type.integer(46),
+              Type.integer(102),
+              Type.integer(112),
+              Type.integer(50),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+  });
+
   describe("list_to_integer/1", () => {
     const list_to_integer = Erlang["list_to_integer/1"];
 
