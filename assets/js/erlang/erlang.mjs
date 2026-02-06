@@ -1629,6 +1629,15 @@ const Erlang = {
   // End list_to_binary/1
   // Deps: []
 
+  // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
+  // The client version works exactly the same as list_to_atom/1.
+  // Start list_to_existing_atom/1
+  "list_to_existing_atom/1": (codePoints) => {
+    return Erlang["list_to_atom/1"](codePoints);
+  },
+  // End list_to_existing_atom/1
+  // Deps: [:erlang.list_to_atom/1]
+
   // Start list_to_integer/1
   "list_to_integer/1": (list) => {
     return Erlang["list_to_integer/2"](list, Type.integer(10n));
