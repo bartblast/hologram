@@ -3803,6 +3803,97 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_binary/1" do
+    test "empty list" do
+      assert :erlang.list_to_binary([]) == <<>>
+    end
+
+    test "list of integers" do
+      assert :erlang.list_to_binary([1, 2, 3]) == <<1, 2, 3>>
+    end
+
+    test "list of binaries" do
+      assert :erlang.list_to_binary([<<1, 2>>, <<3, 4>>]) == <<1, 2, 3, 4>>
+    end
+
+    test "nested list" do
+      assert :erlang.list_to_binary([[1, 2], [3, 4]]) == <<1, 2, 3, 4>>
+    end
+
+    test "deeply nested list" do
+      assert :erlang.list_to_binary([[1, [2, [3, [4]]]]]) == <<1, 2, 3, 4>>
+    end
+
+    test "improper list with binary tail" do
+      assert :erlang.list_to_binary([1 | <<2, 3>>]) == <<1, 2, 3>>
+    end
+
+    test "mixed integers and binaries (iolist from doc example)" do
+      bin1 = <<1, 2, 3>>
+      bin2 = <<4, 5>>
+      bin3 = <<6>>
+
+      assert :erlang.list_to_binary([bin1, 1, [2, 3, bin2], 4 | bin3]) ==
+               <<1, 2, 3, 1, 2, 3, 4, 5, 4, 6>>
+    end
+
+    test "list with empty sublists" do
+      assert :erlang.list_to_binary([[], [], []]) == <<>>
+    end
+
+    test "boundary values 0 and 255" do
+      assert :erlang.list_to_binary([0, 255]) == <<0, 255>>
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, ["abc"]}
+    end
+
+    test "raises ArgumentError if list contains an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, [[:abc]]}
+    end
+
+    test "raises ArgumentError if list contains a float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, [[1.0]]}
+    end
+
+    test "raises ArgumentError if list contains an integer greater than 255" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, [[256]]}
+    end
+
+    test "raises ArgumentError if list contains a negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, [[-1]]}
+    end
+
+    test "raises ArgumentError if improper list has a non-binary tail" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, [[1, 2 | :abc]]}
+    end
+
+    test "raises ArgumentError if list contains a non-byte-aligned bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an iolist term"),
+                   {:erlang, :list_to_binary, [[<<1::3>>]]}
+    end
+  end
+
   describe "list_to_integer/1" do
     test "delegates to list_to_integer/2 with base 10" do
       assert :erlang.list_to_integer([49, 50, 51]) ==

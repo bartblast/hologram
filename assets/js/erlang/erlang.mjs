@@ -1565,6 +1565,70 @@ const Erlang = {
   // End list_to_atom/1
   // Deps: []
 
+  // Start list_to_binary/1
+  "list_to_binary/1": (ioList) => {
+    if (!Type.isList(ioList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    }
+
+    const chunks = [];
+
+    const collect = (list) => {
+      const data = list.data;
+      const len = data.length;
+      const elemCount = list.isProper ? len : len - 1;
+
+      for (let i = 0; i < elemCount; i++) {
+        const item = data[i];
+
+        if (Type.isInteger(item)) {
+          if (item.value < 0n || item.value > 255n) {
+            Interpreter.raiseArgumentError(
+              Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+            );
+          }
+
+          const segment = Type.bitstringSegment(item, {
+            type: "integer",
+            size: Type.integer(8),
+            unit: 1n,
+            endianness: "big",
+          });
+
+          chunks.push(Bitstring.fromSegmentWithIntegerValue(segment));
+        } else if (Type.isBinary(item)) {
+          chunks.push(item);
+        } else if (Type.isList(item)) {
+          collect(item);
+        } else {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+          );
+        }
+      }
+
+      if (!list.isProper) {
+        const tail = data[len - 1];
+
+        if (Type.isBinary(tail)) {
+          chunks.push(tail);
+        } else {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+          );
+        }
+      }
+    };
+
+    collect(ioList);
+
+    return Bitstring.concat(chunks);
+  },
+  // End list_to_binary/1
+  // Deps: []
+
   // Start list_to_integer/1
   "list_to_integer/1": (list) => {
     return Erlang["list_to_integer/2"](list, Type.integer(10n));
