@@ -559,6 +559,92 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "foreach/2" do
+    setup do
+      [fun: fn x -> x * 2 end]
+    end
+
+    test "returns :ok for an empty list", %{fun: fun} do
+      assert :lists.foreach(fun, []) == :ok
+    end
+
+    test "returns :ok for a non-empty list", %{fun: fun} do
+      assert :lists.foreach(fun, [1, 2, 3]) == :ok
+    end
+
+    test "calls the function for each element in order" do
+      parent = self()
+
+      :lists.foreach(fn x -> send(parent, x) end, [1, 2, 3])
+
+      assert_received 1
+      assert_received 2
+      assert_received 3
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.foreach/2", [:abc, [1, 2, 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(:abc, [1, 2, 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 1" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foreach/2
+
+      The following arguments were given to :lists\.foreach/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test foreach/2 raises FunctionClauseError if the first argument is an anonymous function with arity different than 1"/1>
+
+          # 2
+          \[1, 2, 3\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(fn x, y -> x + y end, [1, 2, 3])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foreach_1/2
+
+      The following arguments were given to :lists\.foreach_1/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(fun, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foreach_1/2
+
+      The following arguments were given to :lists\.foreach_1/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          3
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(fun, [1, 2 | 3])
+      end
+    end
+  end
+
   describe "keydelete/3" do
     test "returns the original list if tuples list is empty" do
       assert :lists.keydelete(:c, 1, []) == []
