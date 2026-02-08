@@ -307,6 +307,31 @@ const Erlang_Sets = {
   },
   // End to_list/1
   // Deps: [:maps.keys/1]
+
+  // Start union/2
+  "union/2": (set1, set2) => {
+    if (!Type.isMap(set1) || !Type.isMap(set2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":sets.size/1", [
+          !Type.isMap(set1) ? set1 : set2,
+        ]),
+      );
+    }
+
+    const encodedKeys1 = new Set(Object.keys(set1.data));
+    const encodedKeys2 = new Set(Object.keys(set2.data));
+    const unionedKeys = encodedKeys1.union(encodedKeys2);
+
+    const data = {};
+    for (const encodedKey of unionedKeys) {
+      data[encodedKey] =
+        encodedKey in set1.data ? set1.data[encodedKey] : set2.data[encodedKey];
+    }
+
+    return {type: "map", data};
+  },
+  // End union/2
+  // Deps: []
 };
 
 export default Erlang_Sets;
