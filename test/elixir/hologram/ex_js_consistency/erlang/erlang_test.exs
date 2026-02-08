@@ -5044,6 +5044,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "tuple_size/1" do
+    test "returns the number of elements in the tuple" do
+      assert :erlang.tuple_size({1, 2, 3}) == 3
+    end
+
+    test "returns 0 for an empty tuple" do
+      assert :erlang.tuple_size({}) == 0
+    end
+
+    test "raises ArgumentError if the argument is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a tuple"),
+                   {:erlang, :tuple_size, [:abc]}
+    end
+  end
+
   describe "tuple_to_list/1" do
     test "returns a list corresponding to the given tuple" do
       assert :erlang.tuple_to_list({1, 2, 3}) == [1, 2, 3]
