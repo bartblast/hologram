@@ -7836,6 +7836,41 @@ describe("Erlang", () => {
     });
   });
 
+  describe("map_get/2", () => {
+    const map_get = Erlang["map_get/2"];
+
+    it("returns the value associated with the given key if map contains the key", () => {
+      const key = Type.atom("b");
+      const value = Type.integer(2);
+
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [key, value],
+      ]);
+
+      assert.deepStrictEqual(map_get(key, map), value);
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      assertBoxedError(
+        () => map_get(Type.atom("a"), Type.integer(1)),
+        "BadMapError",
+        "expected a map, got: 1",
+      );
+    });
+
+    it("raises KeyError if the map doesn't contain the given key", () => {
+      const key = Type.atom("a");
+      const map = Type.map();
+
+      assertBoxedError(
+        () => map_get(key, map),
+        "KeyError",
+        Interpreter.buildKeyErrorMsg(key, map),
+      );
+    });
+  });
+
   describe("map_size/1", () => {
     const map_size = Erlang["map_size/1"];
 

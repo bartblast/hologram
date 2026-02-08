@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import Erlang_Maps from "../erlang/maps.mjs";
 import Erlang_Os from "../erlang/os.mjs";
 import ERTS from "../erts.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
@@ -2039,6 +2040,13 @@ const Erlang = {
   },
   // End make_tuple/2
   // Deps: []
+
+  // Start map_get/2
+  "map_get/2": (key, map) => {
+    return Erlang_Maps["get/2"](key, map);
+  },
+  // End map_get/2
+  // Deps: [:maps.get/2]
 
   // Start map_size/1
   "map_size/1": (map) => {
