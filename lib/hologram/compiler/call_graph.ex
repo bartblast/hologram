@@ -59,6 +59,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :is_map_key, 2}, {:maps, :is_key, 2}},
     {{:erlang, :list_to_existing_atom, 1}, {:erlang, :list_to_atom, 1}},
     {{:erlang, :list_to_integer, 1}, {:erlang, :list_to_integer, 2}},
+    {{:erlang, :map_get, 2}, {:maps, :get, 2}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :_validate_time_unit, 2}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :convert_time_unit, 3}},
     {{:erlang, :monotonic_time, 1}, {:erlang, :monotonic_time, 0}},
