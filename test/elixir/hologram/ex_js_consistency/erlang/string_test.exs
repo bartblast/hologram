@@ -211,6 +211,164 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
   end
 
+  describe "length/1" do
+    # Binary string input
+
+    test "returns 0 for empty binary string" do
+      assert :string.length("") == 0
+    end
+
+    test "returns length of simple ASCII string" do
+      assert :string.length("hello") == 5
+    end
+
+    test "returns 1 for single character" do
+      assert :string.length("a") == 1
+    end
+
+    test "counts grapheme clusters, not codepoints" do
+      # "e̊" is e (101) + combining ring above (778) = 1 grapheme cluster
+      assert :string.length("e̊") == 1
+    end
+
+    test "counts grapheme clusters in mixed string" do
+      # "ß↑e̊" = 3 grapheme clusters (from Erlang docs)
+      assert :string.length("ß↑e̊") == 3
+    end
+
+    test "counts emoji as single grapheme cluster" do
+      assert :string.length("👋") == 1
+    end
+
+    test "counts string with multiple emoji" do
+      assert :string.length("Hello 👋 World 🌍") == 15
+    end
+
+    test "handles multi-byte UTF-8 characters" do
+      # Same as "ß↑e̊" in binary form (from Erlang docs)
+      assert :string.length(<<195, 159, 226, 134, 145, 101, 204, 138>>) == 3
+    end
+
+    test "handles string with only combining characters after base" do
+      # "a" + combining acute accent + combining ring above = 1 grapheme
+      assert :string.length("á̊") == 1
+    end
+
+    test "counts flag emoji as single grapheme cluster" do
+      assert :string.length("🇺🇸") == 1
+    end
+
+    test "counts ZWJ emoji sequence as single grapheme cluster" do
+      assert :string.length("👩‍💻") == 1
+    end
+
+    test "counts string with newlines and tabs" do
+      assert :string.length("a\nb\tc") == 5
+    end
+
+    # Charlist input
+
+    test "returns 0 for empty charlist" do
+      assert :string.length([]) == 0
+    end
+
+    test "returns length of simple charlist" do
+      assert :string.length(~c"hello") == 5
+    end
+
+    test "counts grapheme clusters in charlist with combining characters" do
+      # e (101) + combining ring above (778) = 1 grapheme cluster
+      assert :string.length([101, 778]) == 1
+    end
+
+    # Mixed chardata input
+
+    test "handles mixed chardata with binary in list" do
+      assert :string.length(["hello"]) == 5
+    end
+
+    test "handles mixed chardata with integers and binaries" do
+      # [104, "ello"] = "hello" = 5
+      assert :string.length([104, "ello"]) == 5
+    end
+
+    test "handles nested list chardata" do
+      assert :string.length([[104, 101], "llo"]) == 5
+    end
+
+    # Error cases
+
+    test "raises FunctionClauseError for atom input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:atom])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length(:atom)
+      end
+    end
+
+    test "raises FunctionClauseError for integer input" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [42])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length(42)
+      end
+    end
+
+    test "raises FunctionClauseError for non-binary bitstring" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length(<<1::1, 0::1, 1::1>>)
+      end
+    end
+
+    test "raises FunctionClauseError for list with atom element" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:atom])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length([:atom])
+      end
+    end
+
+    test "raises FunctionClauseError for list with non-binary bitstring" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [<<1::1, 0::1, 1::1>>])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length([<<1::1, 0::1, 1::1>>])
+      end
+    end
+
+    test "raises FunctionClauseError for negative codepoint in list" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [-1])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length([-1])
+      end
+    end
+
+    test "raises FunctionClauseError for very large codepoint in list" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [9_999_999])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length([9_999_999])
+      end
+    end
+
+    test "raises FunctionClauseError for improper list" do
+      expected_msg = build_function_clause_error_msg(":unicode_util.cp/1", [:tail])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :string.length([104 | :tail])
+      end
+    end
+
+    test "raises ArgumentError for invalid bytes in binary" do
+      assert_error ArgumentError, "argument error: <<255, 255>>", fn ->
+        :string.length(<<255, 255>>)
+      end
+    end
+  end
+
   describe "replace/3" do
     test "delegates to replace/4 with :leading direction" do
       # Use a string with multiple occurrences of the pattern to verify :leading (not :all or :trailing)

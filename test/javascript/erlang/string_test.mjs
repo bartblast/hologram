@@ -480,6 +480,219 @@ describe("Erlang_String", () => {
     });
   });
 
+  describe("length/1", () => {
+    const length = Erlang_String["length/1"];
+
+    describe("binary string input", () => {
+      it("returns 0 for empty binary string", () => {
+        assert.deepStrictEqual(length(Type.bitstring("")), Type.integer(0));
+      });
+
+      it("returns length of simple ASCII string", () => {
+        assert.deepStrictEqual(
+          length(Type.bitstring("hello")),
+          Type.integer(5),
+        );
+      });
+
+      it("returns 1 for single character", () => {
+        assert.deepStrictEqual(length(Type.bitstring("a")), Type.integer(1));
+      });
+
+      it("counts grapheme clusters, not codepoints", () => {
+        // "e̊" is e (101) + combining ring above (778) = 1 grapheme cluster
+        assert.deepStrictEqual(length(Type.bitstring("e̊")), Type.integer(1));
+      });
+
+      it("counts grapheme clusters in mixed string", () => {
+        // "ß↑e̊" = 3 grapheme clusters (from Erlang docs)
+        assert.deepStrictEqual(length(Type.bitstring("ß↑e̊")), Type.integer(3));
+      });
+
+      it("counts emoji as single grapheme cluster", () => {
+        assert.deepStrictEqual(length(Type.bitstring("👋")), Type.integer(1));
+      });
+
+      it("counts string with multiple emoji", () => {
+        assert.deepStrictEqual(
+          length(Type.bitstring("Hello 👋 World 🌍")),
+          Type.integer(15),
+        );
+      });
+
+      it("handles multi-byte UTF-8 characters", () => {
+        // Same as "ß↑e̊" in binary form (from Erlang docs)
+        const binary = Bitstring.fromBytes([
+          195, 159, 226, 134, 145, 101, 204, 138,
+        ]);
+
+        assert.deepStrictEqual(length(binary), Type.integer(3));
+      });
+
+      it("handles string with only combining characters after base", () => {
+        // "a" + combining acute accent + combining ring above = 1 grapheme
+        assert.deepStrictEqual(length(Type.bitstring("á̊")), Type.integer(1));
+      });
+
+      it("counts flag emoji as single grapheme cluster", () => {
+        assert.deepStrictEqual(length(Type.bitstring("🇺🇸")), Type.integer(1));
+      });
+
+      it("counts ZWJ emoji sequence as single grapheme cluster", () => {
+        assert.deepStrictEqual(length(Type.bitstring("👩‍💻")), Type.integer(1));
+      });
+
+      it("counts string with newlines and tabs", () => {
+        assert.deepStrictEqual(
+          length(Type.bitstring("a\nb\tc")),
+          Type.integer(5),
+        );
+      });
+    });
+
+    describe("charlist input", () => {
+      it("returns 0 for empty charlist", () => {
+        assert.deepStrictEqual(length(Type.list()), Type.integer(0));
+      });
+
+      it("returns length of simple charlist", () => {
+        assert.deepStrictEqual(length(Type.charlist("hello")), Type.integer(5));
+      });
+
+      it("counts grapheme clusters in charlist with combining characters", () => {
+        // e (101) + combining ring above (778) = 1 grapheme cluster
+        assert.deepStrictEqual(
+          length(Type.list([Type.integer(101), Type.integer(778)])),
+          Type.integer(1),
+        );
+      });
+    });
+
+    describe("mixed chardata input", () => {
+      it("handles mixed chardata with binary in list", () => {
+        assert.deepStrictEqual(
+          length(Type.list([Type.bitstring("hello")])),
+          Type.integer(5),
+        );
+      });
+
+      it("handles mixed chardata with integers and binaries", () => {
+        // [104, "ello"] = "hello" = 5
+        assert.deepStrictEqual(
+          length(Type.list([Type.integer(104), Type.bitstring("ello")])),
+          Type.integer(5),
+        );
+      });
+
+      it("handles nested list chardata", () => {
+        assert.deepStrictEqual(
+          length(
+            Type.list([
+              Type.list([Type.integer(104), Type.integer(101)]),
+              Type.bitstring("llo"),
+            ]),
+          ),
+          Type.integer(5),
+        );
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises FunctionClauseError for atom input", () => {
+        assertBoxedError(
+          () => length(Type.atom("atom")),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.atom("atom"),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for integer input", () => {
+        assertBoxedError(
+          () => length(Type.integer(42)),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.integer(42),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for non-binary bitstring", () => {
+        const bitstring = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () => length(bitstring),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            bitstring,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for list with atom element", () => {
+        assertBoxedError(
+          () => length(Type.list([Type.atom("atom")])),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.atom("atom"),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for list with non-binary bitstring", () => {
+        const bitstring = Type.bitstring([1, 0, 1]);
+
+        assertBoxedError(
+          () => length(Type.list([bitstring])),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            bitstring,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for negative codepoint in list", () => {
+        assertBoxedError(
+          () => length(Type.list([Type.integer(-1)])),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.integer(-1),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for very large codepoint in list", () => {
+        assertBoxedError(
+          () => length(Type.list([Type.integer(9_999_999)])),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.integer(9_999_999),
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError for improper list", () => {
+        assertBoxedError(
+          () =>
+            length(Type.improperList([Type.integer(104), Type.atom("tail")])),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [
+            Type.atom("tail"),
+          ]),
+        );
+      });
+
+      it("raises ArgumentError for invalid bytes in binary", () => {
+        assertBoxedError(
+          () => length(Bitstring.fromBytes([255, 255])),
+          "ArgumentError",
+          "argument error: <<255, 255>>",
+        );
+      });
+    });
+  });
+
   describe("replace/3", () => {
     const replace3 = Erlang_String["replace/3"];
     const replace4 = Erlang_String["replace/4"];
