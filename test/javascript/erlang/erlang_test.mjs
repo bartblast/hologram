@@ -8634,6 +8634,67 @@ describe("Erlang", () => {
     });
   });
 
+  describe("time_offset/1", () => {
+    const time_offset = Erlang["time_offset/1"];
+
+    it("with valid atom unit", () => {
+      const result = time_offset(Type.atom("second"));
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("with valid integer unit", () => {
+      const result = time_offset(Type.integer(1000n));
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("applies time unit conversion", () => {
+      const micro = time_offset(Type.atom("microsecond")).value;
+      const nano = time_offset(Type.atom("nanosecond")).value;
+
+      // Use absolute values since time_offset can be negative
+      const absMicro = micro >= 0n ? micro : -micro;
+      const absNano = nano >= 0n ? nano : -nano;
+
+      // Allow small timing drift between calls
+      assert.isTrue(absNano >= absMicro * 999n);
+      assert.isTrue(absNano <= absMicro * 1001n + 1000n);
+    });
+
+    it("raises ArgumentError when argument is not atom or integer", () => {
+      assertBoxedError(
+        () => time_offset(Type.float(1.0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when atom argument is not a valid time unit", () => {
+      assertBoxedError(
+        () => time_offset(Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when integer argument is 0", () => {
+      assertBoxedError(
+        () => time_offset(Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when integer argument is negative", () => {
+      assertBoxedError(
+        () => time_offset(Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+  });
+
   describe("tl/1", () => {
     const tl = Erlang["tl/1"];
 

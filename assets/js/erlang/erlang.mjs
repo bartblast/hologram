@@ -2362,6 +2362,19 @@ const Erlang = {
   // End time_offset/0
   // Deps: [:erlang.monotonic_time/0, :os.system_time/0]
 
+  // Start time_offset/1
+  // See: docs/erlang_time_functions_porting_strategy.md
+  "time_offset/1": (unit) => {
+    // TODO: unit is validated twice - here (for correct arg index in error message)
+    // and in convert_time_unit/3. This could be optimized in the future.
+    Erlang["_validate_time_unit/2"](unit, 1);
+    const nativeTime = Erlang["time_offset/0"]();
+
+    return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
+  },
+  // End time_offset/1
+  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.time_offset/0]
+
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {

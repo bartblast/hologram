@@ -4944,6 +4944,53 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "time_offset/1" do
+    test "with valid atom unit" do
+      assert is_integer(:erlang.time_offset(:second))
+    end
+
+    test "with valid integer unit" do
+      assert is_integer(:erlang.time_offset(1000))
+    end
+
+    test "applies time unit conversion" do
+      micro = :erlang.time_offset(:microsecond)
+      nano = :erlang.time_offset(:nanosecond)
+
+      # Use absolute values since time_offset can be negative
+      abs_micro = abs(micro)
+      abs_nano = abs(nano)
+
+      # Allow small timing drift between calls
+      assert abs_nano >= abs_micro * 999
+      assert abs_nano <= abs_micro * 1001 + 1000
+    end
+
+    test "raises ArgumentError when argument is not atom or integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [1.0]}
+    end
+
+    test "raises ArgumentError when atom argument is not a valid time unit" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [:invalid]}
+    end
+
+    test "raises ArgumentError when integer argument is 0" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [0]}
+    end
+
+    test "raises ArgumentError when integer argument is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [-1]}
+    end
+  end
+
   describe "tl/1" do
     test "proper list, 1 item" do
       assert :erlang.tl([1]) == []
