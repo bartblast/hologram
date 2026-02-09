@@ -1,9 +1,9 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
-import ERTS from "../erts.mjs";
 import Erlang_Unicode from "./unicode.mjs";
 import Erlang_UnicodeUtil from "./unicode_util.mjs";
+import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
