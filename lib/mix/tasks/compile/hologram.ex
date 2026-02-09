@@ -184,7 +184,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       nil ->
         raise RuntimeError,
           message: """
-          Biome Formatter failed to run
+          Biome formatter failed to run.
 
           Neither the bundled biome binary nor a system-installed biome could be executed.
           This can happen on systems where dynamically linked binaries are not supported,
