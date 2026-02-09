@@ -3,6 +3,7 @@
 import Bitstring from "../bitstring.mjs";
 import Erlang_Unicode from "./unicode.mjs";
 import Erlang_UnicodeUtil from "./unicode_util.mjs";
+import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -158,6 +159,86 @@ const Erlang_String = {
   },
   // End join/2
   // Deps: []
+
+  // Start length/1
+  "length/1": (string) => {
+    const isBinary = Type.isBinary(string);
+    const isList = Type.isList(string);
+
+    if (!isBinary && !isList) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":unicode_util.cp/1", [string]),
+      );
+    }
+
+    // Binary fast path
+    if (isBinary) {
+      if (Bitstring.isEmpty(string)) return Type.integer(0);
+
+      const text = Bitstring.toText(string);
+
+      if (text !== false) {
+        let count = 0;
+        for (const _segment of ERTS.graphemeSegmenter.segment(text)) count++;
+        return Type.integer(count);
+      }
+    } else {
+      // List fast path
+
+      if (string.data.length === 0) return Type.integer(0);
+
+      let stringBinary;
+      let isBinaryObtained = false;
+
+      try {
+        stringBinary = Erlang_Unicode["characters_to_binary/1"](string);
+        isBinaryObtained = !Type.isTuple(stringBinary);
+      } catch {
+        // Conversion failed - fall through to gc/1 loop
+      }
+
+      if (isBinaryObtained) {
+        const text = Bitstring.toText(stringBinary);
+
+        if (text !== false) {
+          if (text.length === 0) return Type.integer(0);
+
+          let count = 0;
+          for (const _segment of ERTS.graphemeSegmenter.segment(text)) count++;
+          return Type.integer(count);
+        }
+      }
+    }
+
+    // Slow path: iterate with gc/1 (handles all error cases correctly)
+
+    let count = 0;
+    let current = string;
+
+    while (true) {
+      const gcResult = Erlang_UnicodeUtil["gc/1"](current);
+
+      if (Type.isList(gcResult) && gcResult.data.length === 0) {
+        return Type.integer(count);
+      }
+
+      if (Type.isTuple(gcResult)) {
+        Interpreter.raiseArgumentError(
+          `argument error: ${Interpreter.inspect(gcResult.data[1])}`,
+        );
+      }
+
+      count++;
+
+      if (Type.isImproperList(gcResult)) {
+        current = gcResult.data[gcResult.data.length - 1];
+      } else {
+        current = Type.list(gcResult.data.slice(1));
+      }
+    }
+  },
+  // End length/1
+  // Deps: [:unicode.characters_to_binary/1, :unicode_util.gc/1]
 
   // Start replace/3
   "replace/3": (string, pattern, replacement) => {
