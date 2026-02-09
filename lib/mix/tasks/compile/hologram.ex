@@ -44,18 +44,17 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  defp bin_available?(path) do
-    cmd_args = ["--version"]
-
-    cmd_opts = [parallelism: true, stderr_to_stdout: true]
+  defp bin_available?(cmd) do
+    args = ["--version"]
+    opts = [parallelism: true, stderr_to_stdout: true]
 
     try do
-      case SystemUtils.cmd_cross_platform(path, cmd_args, cmd_opts) do
-        {_exit_msg, 0} -> true
+      case SystemUtils.cmd_cross_platform(cmd, args, opts) do
+        {_output, 0} -> true
         _cmd_result -> false
       end
     rescue
-      _e -> false
+      _error -> false
     end
   end
 
@@ -175,10 +174,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp maybe_adjust_formatter_bin_path(opts) do
-    system_formatter_path = "biome"
+    system_formatter_cmd = "biome"
 
     formatter_bin_path =
-      Enum.find([opts[:formatter_bin_path], system_formatter_path], &bin_available?/1)
+      Enum.find([opts[:formatter_bin_path], system_formatter_cmd], &bin_available?/1)
 
     case formatter_bin_path do
       nil ->
