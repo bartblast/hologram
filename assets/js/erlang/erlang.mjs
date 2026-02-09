@@ -2371,30 +2371,6 @@ const Erlang = {
   // End tl/1
   // Deps: []
 
-  // Start time_offset/0
-  // See: docs/erlang_time_functions_porting_strategy.md
-  "time_offset/0": () => {
-    return Erlang["time_offset/1"](Type.atom("native"));
-  },
-  // End time_offset/0
-  // Deps: [:erlang.time_offset/1]
-
-  // Start time_offset/1
-  // See: docs/erlang_time_functions_porting_strategy.md
-  "time_offset/1": (unit) => {
-    const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
-    const monoTimeNs = BigInt(Math.round(performance.now() * 1_000_000));
-    const offsetNs = systemTimeNs - monoTimeNs;
-
-    return Erlang["convert_time_unit/3"](
-      Type.integer(offsetNs),
-      Type.atom("native"),
-      unit,
-    );
-  },
-  // End time_offset/1
-  // Deps: [:erlang.convert_time_unit/3]
-
   // Start trunc/1
   "trunc/1": (number) => {
     if (!Type.isNumber(number)) {
