@@ -8610,6 +8610,30 @@ describe("Erlang", () => {
     });
   });
 
+  describe("time_offset/0", () => {
+    const time_offset = Erlang["time_offset/0"];
+
+    it("returns an integer", () => {
+      const result = time_offset();
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("returns difference between system time and monotonic time", () => {
+      const systemTime = Erlang_Os["system_time/0"]().value;
+      const monotonicTime = Erlang["monotonic_time/0"]().value;
+      const offset = time_offset().value;
+
+      // The offset should be close to system_time - monotonic_time
+      // Allow small timing drift between calls (10 ms = 10_000_000 ns)
+      const expected = systemTime - monotonicTime;
+      const diff = offset - expected;
+      const absDiff = diff < 0n ? -diff : diff;
+
+      assert.isTrue(absDiff < 10_000_000n);
+    });
+  });
+
   describe("tl/1", () => {
     const tl = Erlang["tl/1"];
 

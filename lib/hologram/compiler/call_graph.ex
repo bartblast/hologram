@@ -66,6 +66,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :split_binary, 2}, {:erlang, :byte_size, 1}},
     {{:erlang, :system_time, 0}, {:os, :system_time, 0}},
     {{:erlang, :system_time, 1}, {:os, :system_time, 1}},
+    {{:erlang, :time_offset, 0}, {:erlang, :monotonic_time, 0}},
+    {{:erlang, :time_offset, 0}, {:os, :system_time, 0}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :join, 1}},
     {{:filelib, :safe_relative_path, 2}, {:filename, :split, 1}},
     {{:filename, :_do_flatten, 2}, {:erlang, :atom_to_list, 1}},

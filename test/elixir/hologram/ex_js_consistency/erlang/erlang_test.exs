@@ -4926,6 +4926,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "time_offset/0" do
+    test "returns an integer" do
+      assert is_integer(:erlang.time_offset())
+    end
+
+    test "returns difference between system time and monotonic time" do
+      system_time = :os.system_time()
+      monotonic_time = :erlang.monotonic_time()
+      offset = :erlang.time_offset()
+
+      # The offset should be close to system_time - monotonic_time
+      # Allow small timing drift between calls (10 ms = 10_000_000 ns)
+      expected = system_time - monotonic_time
+
+      assert abs(offset - expected) < 10_000_000
+    end
+  end
+
   describe "tl/1" do
     test "proper list, 1 item" do
       assert :erlang.tl([1]) == []
