@@ -27,9 +27,6 @@ const bytesBasedBinary = Bitstring.fromBytes([5, 19, 72, 33]);
 const bytesBasedEmptyBinary = Bitstring.fromBytes([]);
 const textBasedEmptyBinary = Bitstring.fromText("");
 
-// TODO: consider
-// const emptyList = Type.list();
-
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/ex_js_consistency/erlang/binary_test.exs
 // Always update both together.
