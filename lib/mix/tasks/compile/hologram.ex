@@ -44,6 +44,39 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
+  defp bin_available?(path) do
+    cmd_args = ["--version"]
+
+    cmd_opts = [parallelism: true, stderr_to_stdout: true]
+
+    try do
+      case SystemUtils.cmd_cross_platform(path, cmd_args, cmd_opts) do
+        {_exit_msg, 0} -> true
+        _cmd_result -> false
+      end
+    rescue
+      _e -> false
+    end
+  end
+
+  defp build_default_opts do
+    root_dir = Reflection.root_dir()
+    assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
+    build_dir = Reflection.build_dir()
+    node_modules_path = Path.join(assets_dir, "node_modules")
+
+    [
+      assets_dir: assets_dir,
+      build_dir: build_dir,
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      # Biome is almost x20 faster than Prettier in Hologram benchmarks
+      formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
+      js_dir: Path.join(assets_dir, "js"),
+      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
+      tmp_dir: Path.join(build_dir, "tmp")
+    ]
+  end
+
   defp compile(opts) do
     Logger.info("Hologram: compiler started")
 
@@ -137,6 +170,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     :ok
   end
 
+  defp elixir_ls_build?(opts) do
+    String.contains?(opts[:build_dir], "/.elixir_ls/")
+  end
+
   defp maybe_adjust_formatter_bin_path(opts) do
     system_formatter_path = "biome"
 
@@ -160,43 +197,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       path ->
         Keyword.put(opts, :formatter_bin_path, path)
     end
-  end
-
-  defp bin_available?(path) do
-    cmd_args = ["--version"]
-
-    cmd_opts = [parallelism: true, stderr_to_stdout: true]
-
-    try do
-      case SystemUtils.cmd_cross_platform(path, cmd_args, cmd_opts) do
-        {_exit_msg, 0} -> true
-        _cmd_result -> false
-      end
-    rescue
-      _e -> false
-    end
-  end
-
-  defp build_default_opts do
-    root_dir = Reflection.root_dir()
-    assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
-    build_dir = Reflection.build_dir()
-    node_modules_path = Path.join(assets_dir, "node_modules")
-
-    [
-      assets_dir: assets_dir,
-      build_dir: build_dir,
-      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
-      # Biome is almost x20 faster than Prettier in Hologram benchmarks
-      formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
-      js_dir: Path.join(assets_dir, "js"),
-      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
-      tmp_dir: Path.join(build_dir, "tmp")
-    ]
-  end
-
-  defp elixir_ls_build?(opts) do
-    String.contains?(opts[:build_dir], "/.elixir_ls/")
   end
 
   defp maybe_remove_file(lock_path) do
