@@ -8610,6 +8610,91 @@ describe("Erlang", () => {
     });
   });
 
+  describe("time_offset/0", () => {
+    const time_offset = Erlang["time_offset/0"];
+
+    it("returns an integer", () => {
+      const result = time_offset();
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("returns difference between system time and monotonic time", () => {
+      const systemTime = Erlang_Os["system_time/0"]().value;
+      const monotonicTime = Erlang["monotonic_time/0"]().value;
+      const offset = time_offset().value;
+
+      // The offset should be close to system_time - monotonic_time
+      // Allow small timing drift between calls (10 ms = 10_000_000 ns)
+      const expected = systemTime - monotonicTime;
+      const diff = offset - expected;
+      const absDiff = diff < 0n ? -diff : diff;
+
+      assert.isTrue(absDiff < 10_000_000n);
+    });
+  });
+
+  describe("time_offset/1", () => {
+    const time_offset = Erlang["time_offset/1"];
+
+    it("with valid atom unit", () => {
+      const result = time_offset(Type.atom("second"));
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("with valid integer unit", () => {
+      const result = time_offset(Type.integer(1000n));
+
+      assert.isTrue(Type.isInteger(result));
+    });
+
+    it("applies time unit conversion", () => {
+      const micro = time_offset(Type.atom("microsecond")).value;
+      const nano = time_offset(Type.atom("nanosecond")).value;
+
+      // Use absolute values since time_offset can be negative
+      const absMicro = micro >= 0n ? micro : -micro;
+      const absNano = nano >= 0n ? nano : -nano;
+
+      // Allow small timing drift between calls
+      assert.isTrue(absNano >= absMicro * 999n);
+      assert.isTrue(absNano <= absMicro * 1001n + 1000n);
+    });
+
+    it("raises ArgumentError when argument is not atom or integer", () => {
+      assertBoxedError(
+        () => time_offset(Type.float(1.0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when atom argument is not a valid time unit", () => {
+      assertBoxedError(
+        () => time_offset(Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when integer argument is 0", () => {
+      assertBoxedError(
+        () => time_offset(Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+
+    it("raises ArgumentError when integer argument is negative", () => {
+      assertBoxedError(
+        () => time_offset(Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
+      );
+    });
+  });
+
   describe("tl/1", () => {
     const tl = Erlang["tl/1"];
 
@@ -8685,80 +8770,6 @@ describe("Erlang", () => {
       });
     });
   });
-
-  // describe("time_offset/0", () => {
-  //   const time_offset = Erlang["time_offset/0"];
-
-  //   it("delegates to time_offset/1 with :native", () => {
-  //     const result = time_offset();
-  //     assert.deepStrictEqual(
-  //       result,
-  //       Erlang["time_offset/1"](Type.atom("native")),
-  //     );
-  //   });
-  // });
-
-  // describe("time_offset/1", () => {
-  //   const time_offset = Erlang["time_offset/1"];
-
-  //   it("all allowed units return integer", () => {
-  //     const units = [
-  //       "native",
-  //       "second",
-  //       "millisecond",
-  //       "microsecond",
-  //       "nanosecond",
-  //     ];
-  //     for (const u of units) {
-  //       assert.isTrue(Type.isInteger(time_offset(Type.atom(u))));
-  //     }
-  //   });
-
-  //   it("coarser units yield smaller absolute values", () => {
-  //     // Each call is independent; only check magnitudes.
-  //     const nano = Math.abs(Number(time_offset(Type.atom("nanosecond")).value));
-  //     const sec = Math.abs(Number(time_offset(Type.atom("second")).value));
-  //     if (nano > 1_000_000_000) assert.isBelow(sec, nano);
-  //   });
-
-  //   it("drifts slowly between two calls", async () => {
-  //     const t1 = Number(time_offset(Type.atom("nanosecond")).value);
-  //     await new Promise((r) => setTimeout(r, 100));
-  //     const t2 = Number(time_offset(Type.atom("nanosecond")).value);
-  //     const drift = Math.abs(t2 - t1);
-  //     // allow ±50 ms for NTP jitter in CI
-  //     assert.isAtMost(drift, 50_000_000);
-  //   });
-
-  //   it("with positive integer unit", () => {
-  //     const result = time_offset(Type.integer(1000n));
-  //     assert.isTrue(Type.isInteger(result));
-  //   });
-
-  //   it("raises ArgumentError when unit is less than 1", () => {
-  //     assertBoxedError(
-  //       () => time_offset(Type.integer(0n)),
-  //       "ArgumentError",
-  //       Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-  //     );
-  //   });
-
-  //   it("raises ArgumentError when unit is negative", () => {
-  //     assertBoxedError(
-  //       () => time_offset(Type.integer(-1n)),
-  //       "ArgumentError",
-  //       Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-  //     );
-  //   });
-
-  //   it("raises ArgumentError when unit is not a valid time unit atom", () => {
-  //     assertBoxedError(
-  //       () => time_offset(Type.atom("invalid")),
-  //       "ArgumentError",
-  //       Interpreter.buildArgumentErrorMsg(1, "invalid time unit"),
-  //     );
-  //   });
-  // });
 
   describe("trunc/1", () => {
     const testedFun = Erlang["trunc/1"];

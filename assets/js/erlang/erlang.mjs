@@ -2331,6 +2331,8 @@ const Erlang = {
   // Start system_time/0
   // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/0": () => {
+    // Delegates to :os.system_time/0 because in our JS environment there is no
+    // Erlang time correction, so OS system time and Erlang system time are identical.
     return Erlang_Os["system_time/0"]();
   },
   // End system_time/0
@@ -2339,10 +2341,39 @@ const Erlang = {
   // Start system_time/1
   // See: docs/erlang_time_functions_porting_strategy.md
   "system_time/1": (unit) => {
+    // Delegates to :os.system_time/1 because in our JS environment there is no
+    // Erlang time correction, so OS system time and Erlang system time are identical.
     return Erlang_Os["system_time/1"](unit);
   },
   // End system_time/1
   // Deps: [:os.system_time/1]
+
+  // Start time_offset/0
+  // See: docs/erlang_time_functions_porting_strategy.md
+  "time_offset/0": () => {
+    // Uses :os.system_time/0 directly because in our JS environment there is no
+    // Erlang time correction, so OS system time and Erlang system time are identical.
+    const systemTime = Erlang_Os["system_time/0"]();
+
+    const monotonicTime = Erlang["monotonic_time/0"]();
+
+    return Type.integer(systemTime.value - monotonicTime.value);
+  },
+  // End time_offset/0
+  // Deps: [:erlang.monotonic_time/0, :os.system_time/0]
+
+  // Start time_offset/1
+  // See: docs/erlang_time_functions_porting_strategy.md
+  "time_offset/1": (unit) => {
+    // TODO: unit is validated twice - here (for correct arg index in error message)
+    // and in convert_time_unit/3. This could be optimized in the future.
+    Erlang["_validate_time_unit/2"](unit, 1);
+    const nativeTime = Erlang["time_offset/0"]();
+
+    return Erlang["convert_time_unit/3"](nativeTime, Type.atom("native"), unit);
+  },
+  // End time_offset/1
+  // Deps: [:erlang._validate_time_unit/2, :erlang.convert_time_unit/3, :erlang.time_offset/0]
 
   // Start tl/1
   "tl/1": (list) => {
@@ -2370,30 +2401,6 @@ const Erlang = {
   },
   // End tl/1
   // Deps: []
-
-  // Start time_offset/0
-  // See: docs/erlang_time_functions_porting_strategy.md
-  "time_offset/0": () => {
-    return Erlang["time_offset/1"](Type.atom("native"));
-  },
-  // End time_offset/0
-  // Deps: [:erlang.time_offset/1]
-
-  // Start time_offset/1
-  // See: docs/erlang_time_functions_porting_strategy.md
-  "time_offset/1": (unit) => {
-    const systemTimeNs = BigInt(Date.now()) * 1_000_000n;
-    const monoTimeNs = BigInt(Math.round(performance.now() * 1_000_000));
-    const offsetNs = systemTimeNs - monoTimeNs;
-
-    return Erlang["convert_time_unit/3"](
-      Type.integer(offsetNs),
-      Type.atom("native"),
-      unit,
-    );
-  },
-  // End time_offset/1
-  // Deps: [:erlang.convert_time_unit/3]
 
   // Start trunc/1
   "trunc/1": (number) => {

@@ -4926,6 +4926,71 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "time_offset/0" do
+    test "returns an integer" do
+      assert is_integer(:erlang.time_offset())
+    end
+
+    test "returns difference between system time and monotonic time" do
+      system_time = :os.system_time()
+      monotonic_time = :erlang.monotonic_time()
+      offset = :erlang.time_offset()
+
+      # The offset should be close to system_time - monotonic_time
+      # Allow small timing drift between calls (10 ms = 10_000_000 ns)
+      expected = system_time - monotonic_time
+
+      assert abs(offset - expected) < 10_000_000
+    end
+  end
+
+  describe "time_offset/1" do
+    test "with valid atom unit" do
+      assert is_integer(:erlang.time_offset(:second))
+    end
+
+    test "with valid integer unit" do
+      assert is_integer(:erlang.time_offset(1000))
+    end
+
+    test "applies time unit conversion" do
+      micro = :erlang.time_offset(:microsecond)
+      nano = :erlang.time_offset(:nanosecond)
+
+      # Use absolute values since time_offset can be negative
+      abs_micro = abs(micro)
+      abs_nano = abs(nano)
+
+      # Allow small timing drift between calls
+      assert abs_nano >= abs_micro * 999
+      assert abs_nano <= abs_micro * 1001 + 1000
+    end
+
+    test "raises ArgumentError when argument is not atom or integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [1.0]}
+    end
+
+    test "raises ArgumentError when atom argument is not a valid time unit" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [:invalid]}
+    end
+
+    test "raises ArgumentError when integer argument is 0" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [0]}
+    end
+
+    test "raises ArgumentError when integer argument is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid time unit"),
+                   {:erlang, :time_offset, [-1]}
+    end
+  end
+
   describe "tl/1" do
     test "proper list, 1 item" do
       assert :erlang.tl([1]) == []
@@ -4945,58 +5010,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "improper list, 3 items" do
       assert :erlang.tl([1, 2 | 3]) == [2 | 3]
-    end
-  end
-
-  describe "time_offset/0" do
-    test "delegates to time_offset/1 with :native" do
-      assert :erlang.time_offset() == :erlang.time_offset(:native)
-    end
-  end
-
-  describe "time_offset/1" do
-    @units [:native, :second, :millisecond, :microsecond, :nanosecond]
-
-    test "all allowed units return integer" do
-      for u <- @units, do: assert(is_integer(:erlang.time_offset(u)))
-    end
-
-    test "coarser units yield smaller absolute values" do
-      nano = abs(:erlang.time_offset(:nanosecond))
-      sec = abs(:erlang.time_offset(:second))
-      if nano > 1_000_000_000, do: assert(sec < nano)
-    end
-
-    @tag :slow
-    test "drifts slowly between two calls" do
-      t1 = :erlang.time_offset(:nanosecond)
-      :timer.sleep(100)
-      t2 = :erlang.time_offset(:nanosecond)
-      drift = abs(t2 - t1)
-      # allow ±50 ms for NTP jitter in CI
-      assert drift <= 50_000_000
-    end
-
-    test "with positive integer unit" do
-      assert is_integer(:erlang.time_offset(1000))
-    end
-
-    test "raises ArgumentError when unit is less than 1" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid time unit"),
-                   {:erlang, :time_offset, [0]}
-    end
-
-    test "raises ArgumentError when unit is negative" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid time unit"),
-                   {:erlang, :time_offset, [-1]}
-    end
-
-    test "raises ArgumentError when unit is not a valid time unit atom" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid time unit"),
-                   {:erlang, :time_offset, [:invalid]}
     end
   end
 
