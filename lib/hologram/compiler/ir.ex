@@ -384,13 +384,16 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{name: atom, version: integer | nil}
   end
 
-  # TODO: finish implementing
   defmodule With do
     @moduledoc false
 
-    defstruct []
+    defstruct [:clauses, :body, :else_clauses]
 
-    @type t :: %__MODULE__{}
+    @type t :: %__MODULE__{
+            clauses: list(IR.Clause.t()),
+            body: IR.Block.t(),
+            else_clauses: list(IR.Clause.t())
+          }
   end
 
   @doc """
