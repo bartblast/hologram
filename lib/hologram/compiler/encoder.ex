@@ -622,6 +622,8 @@ defmodule Hologram.Compiler.Encoder do
     "Erlang[\"andalso/2\"](#{left_js}, #{right_js}, context)"
   end
 
+  # Encoded as Interpreter.callNamedFunction() instead of Erlang["apply/3"]()
+  # because we can't pass the runtime context to the ported function.
   defp encode_named_function_call(
          %IR.AtomType{value: :erlang},
          :apply,
