@@ -20,21 +20,25 @@ const Erlang_Lists = {
       Interpreter.raiseCaseClauseError(list);
     }
 
-    if (!Type.isProperList(list)) {
+    const properLength = list.isProper
+      ? list.data.length
+      : list.data.length - 1;
+
+    for (let i = 0; i < properLength; i++) {
+      const res = Interpreter.callAnonymousFunction(fun, [list.data[i]]);
+
+      if (!Type.isTrue(res)) {
+        return Type.boolean(false);
+      }
+    }
+
+    if (!list.isProper) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.all_1/2", [
           fun,
           list.data.at(-1),
         ]),
       );
-    }
-
-    for (let i = 0; i < list.data.length; i++) {
-      const res = Interpreter.callAnonymousFunction(fun, [list.data[i]]);
-
-      if (!Type.isTrue(res)) {
-        return Type.boolean(false);
-      }
     }
 
     return Type.boolean(true);

@@ -213,6 +213,32 @@ describe("Erlang_Lists", () => {
       assertBoxedTrue(result);
     });
 
+    it("returns false for an improper list if the function returns false before reaching the improper tail", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.matchPlaceholder()],
+            guards: [],
+            body: (_context) => {
+              return Type.boolean(false);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = all(fun, list);
+
+      assertBoxedFalse(result);
+    });
+
     it("raises FunctionClauseError if the first arg is not an anonymous function", () => {
       assertBoxedError(
         () => all(Type.atom("not_function"), properList),
