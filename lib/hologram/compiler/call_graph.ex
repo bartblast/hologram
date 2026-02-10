@@ -363,7 +363,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   # :erlang.apply/3 is not added to the call graph because the encoder
-  # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().  
+  # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().
   def build(
         call_graph,
         %IR.RemoteFunctionCall{
