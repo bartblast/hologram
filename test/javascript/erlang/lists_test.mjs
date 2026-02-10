@@ -429,15 +429,40 @@ describe("Erlang_Lists", () => {
       assertBoxedFalse(result);
     });
 
+    it("returns true for an improper list if the function returns true before reaching the improper tail", () => {
+      const list = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.matchPlaceholder()],
+            guards: [],
+            body: (_context) => {
+              return Type.boolean(true);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = any(fun, list);
+
+      assertBoxedTrue(result);
+    });
+
     it("raises FunctionClauseError if the first arg is not an anonymous function", () => {
       assertBoxedError(
         () => any(Type.atom("abc"), properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.any/2",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [
           Type.atom("abc"),
           properList,
-        ),
+        ]),
       );
     });
 
@@ -462,11 +487,10 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(funArity2, properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.any/2",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [
           anonymousCompareFn,
           properList,
-        ),
+        ]),
       );
     });
 
@@ -510,7 +534,10 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(fun, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [improperList]),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any_1/2", [
+          fun,
+          Type.integer(3),
+        ]),
       );
     });
   });

@@ -46,7 +46,7 @@ const Erlang_Lists = {
   "any/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", []),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [fun, list]),
       );
     }
 
@@ -54,17 +54,25 @@ const Erlang_Lists = {
       Interpreter.raiseCaseClauseError(list);
     }
 
-    if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [list]),
-      );
-    }
+    const properLength = list.isProper
+      ? list.data.length
+      : list.data.length - 1;
 
-    for (let i = 0; i < list.data.length; i++) {
+    for (let i = 0; i < properLength; i++) {
       const res = Interpreter.callAnonymousFunction(fun, [list.data[i]]);
+
       if (Type.isTrue(res)) {
         return Type.boolean(true);
       }
+    }
+
+    if (!list.isProper) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any_1/2", [
+          fun,
+          list.data.at(-1),
+        ]),
+      );
     }
 
     return Type.boolean(false);
