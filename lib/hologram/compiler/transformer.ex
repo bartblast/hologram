@@ -442,9 +442,34 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir(context)
   end
 
-  # TODO: finish implementing
-  def transform({:with, _meta, parts}, _context) when is_list(parts) do
-    %IR.With{}
+  def transform({:with, _meta, parts}, context) when is_list(parts) do
+    initial_acc = %IR.With{
+      clauses: [],
+      else_clauses: [],
+      body: nil
+    }
+
+    Enum.reduce(
+      parts,
+      initial_acc,
+      fn
+        do_and_else, acc when is_list(do_and_else) ->
+          do_part =
+            do_and_else
+            |> Keyword.get(:do)
+            |> transform(context)
+
+          else_part =
+            do_and_else
+            |> Keyword.get(:else, [])
+            |> Enum.map(&transform(&1, context))
+
+          %{acc | body: do_part, else_clauses: else_part}
+
+        clause, acc ->
+          %{acc | clauses: acc.clauses ++ [transform(clause, context)]}
+      end
+    )
   end
 
   # --- PRESERVE ORDER (BEGIN) ---

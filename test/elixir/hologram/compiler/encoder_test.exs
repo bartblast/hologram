@@ -2146,9 +2146,33 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  # TODO: finish implementing
   test "with" do
-    assert encode_ir(%IR.With{}) == "Interpreter.with()"
+    ir = %IR.With{
+      body: %IR.AtomType{value: :ok},
+      clauses: [
+        %IR.Clause{
+          match: %IR.Variable{name: :x},
+          body: %IR.Variable{name: :y},
+          guards: []
+        }
+      ],
+      else_clauses: [
+        %IR.Clause{
+          match: %IR.AtomType{value: :error},
+          guards: [],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+        }
+      ]
+    }
+
+    expected =
+      normalize_newlines("""
+      Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], body: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+      return Type.atom("error");
+      }}], context)\
+      """)
+
+    assert encode_ir(ir) == expected
   end
 
   describe "encode_as_class_name/1" do

@@ -6452,15 +6452,29 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  # TODO: finish implementing
   test "with" do
     ast =
       ast("""
-      with true <- true do
+      with {:ok, x} when not is_nil(x) <- {:ok, foo(y)},
+        {x, bar} <- baz(x),
+        :test = :test do
         :ok
+      else
+        :error ->
+          {:error, :wrong_data}
+        {:error, value} ->
+          {:error, :wrong_data, value}
       end
       """)
 
-    assert transform(ast, %Context{}) == %Hologram.Compiler.IR.With{}
+    assert %Hologram.Compiler.IR.With{
+             body: body,
+             clauses: [first_clause, _second, _third],
+             else_clauses: [first_else, _second_else]
+           } = transform(ast, %Context{})
+
+    assert body == %IR.AtomType{value: :ok}
+    assert %IR.Clause{} = first_clause
+    assert %IR.Clause{} = first_else
   end
 end

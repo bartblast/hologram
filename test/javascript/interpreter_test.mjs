@@ -6855,12 +6855,123 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  // TODO: finish implementing
-  it("with()", () => {
-    assert.throw(
-      () => Interpreter.with(),
-      Error,
-      '"with" expression is not yet implemented in Hologram',
-    );
+  describe("with()", () => {
+    const context = contextFixture({
+      vars: {
+        a: Type.atom("ok"),
+      },
+    });
+    const body = (context) => {
+      return Type.tuple([context.vars.a, context.vars.b]);
+    };
+
+    it("successful match returns body result", () => {
+      // with b <- a do
+      //   {a, b}
+      // end
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            body: (context) => context.vars.a,
+          },
+        ],
+        [],
+        context,
+      );
+
+      const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("can fail to match on match condition", () => {
+      // with :error <- a do
+      // else
+      //   :ok -> {:error, :nomatch}
+      // end
+      const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            body: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => expected,
+          },
+        ],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("can fail to match on guard", () => {
+      // with b when b == :no <- a do
+      // else
+      //   :ok -> {:error, :nomatch}
+      // end
+      const guard = (context) =>
+        Erlang["/=/2"](context.vars.b, Type.atom("no"));
+      const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [guard],
+            body: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => expected,
+          },
+        ],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    // Case 4: No else clause matches
+    it("throws error if no else clauses match", () => {
+      // with b when b == :no <- a do
+      // else
+      //   :ok -> {:error, :nomatch}
+      // end
+      assertBoxedError(
+        () =>
+          Interpreter.with(
+            body,
+            [
+              {
+                match: Type.atom("error"),
+                guards: [],
+                body: (context) => context.vars.a,
+              },
+            ],
+            [
+              {
+                match: Type.atom("other"),
+                guards: [],
+                body: (_context) => expected,
+              },
+            ],
+            context,
+          ),
+        "WithClauseError",
+        "no with clause matching: :ok",
+      );
+    });
   });
 });

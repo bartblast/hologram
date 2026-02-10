@@ -209,7 +209,8 @@ export default class Interpreter {
   // case() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/case_test.exs
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
-  static case(condition, clauses, context) {
+  static case(condition, clauses, context, errorCallback) {
+    errorCallback = errorCallback || Interpreter.raiseCaseClauseError;
     if (typeof condition === "function") {
       condition = condition(context);
     }
@@ -226,7 +227,7 @@ export default class Interpreter {
       }
     }
 
-    Interpreter.raiseCaseClauseError(condition);
+    errorCallback(condition);
   }
 
   static cloneContext(context) {
@@ -822,6 +823,12 @@ export default class Interpreter {
     Interpreter.raiseError("CaseClauseError", message);
   }
 
+  static raiseWithClauseError(arg) {
+    const message = "no with clause matching: " + Interpreter.inspect(arg);
+
+    Interpreter.raiseError("WithClauseError", message);
+  }
+
   static raiseCompileError(message) {
     Interpreter.raiseError("CompileError", message);
   }
@@ -924,11 +931,35 @@ export default class Interpreter {
     return context;
   }
 
-  // TODO: finish implementing
-  static with() {
-    throw new HologramInterpreterError(
-      '"with" expression is not yet implemented in Hologram',
-    );
+  static with(body, clauses, elseClauses, context) {
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+      const condition = clause.body(contextClone);
+
+      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          context = contextClone;
+        } else {
+          return Interpreter.case(
+            condition,
+            elseClauses,
+            context,
+            Interpreter.raiseWithClauseError,
+          );
+        }
+      } else {
+        return Interpreter.case(
+          condition,
+          elseClauses,
+          context,
+          Interpreter.raiseWithClauseError,
+        );
+      }
+    }
+
+    return body(context);
   }
 
   static #areBitstringsEqual(bitstring1, bitstring2) {
