@@ -30,6 +30,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert :lists.all(fn elem -> elem > 1 end, [])
     end
 
+    test "returns false for an improper list if the function returns false before reaching the improper tail" do
+      assert :lists.all(fn _elem -> false end, [1, 2 | 3]) == false
+    end
+
     test "raises FunctionClauseError if the first arg is not an anonymous function" do
       expected_msg = build_function_clause_error_msg(":lists.all/2", [:not_function, [1, 2, 3]])
 
