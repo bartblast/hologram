@@ -3015,6 +3015,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                "7.120e+00"
     end
 
+    test "multiple opts - last opt is :scientific preceded by :compact" do
+      assert :erlang.float_to_binary(7.12, [:compact, {:decimals, 4}, {:scientific, 3}]) ==
+               "7.120e+00"
+    end
+
+    test "multiple opts - last opt is :scientific with :compact in the middle" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}, :compact, {:scientific, 3}]) ==
+               "7.120e+00"
+    end
+
     test "multiple opts - last opt is :decimals" do
       assert :erlang.float_to_binary(7.12, [:short, {:decimals, 4}]) == "7.1200"
     end
@@ -3023,12 +3033,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.float_to_binary(7.12, [{:scientific, 3}, {:decimals, 4}, :compact]) == "7.12"
     end
 
+    test "multiple opts - last opt is :decimals preceded by :compact" do
+      assert :erlang.float_to_binary(7.12, [:compact, {:scientific, 3}, {:decimals, 4}]) == "7.12"
+    end
+
+    test "multiple opts - last opt is :decimals with :compact in the middle" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}, :compact, {:decimals, 4}]) == "7.12"
+    end
+
     test "multiple opts - last opt is :short" do
       assert :erlang.float_to_binary(7.12, [{:scientific, 3}, :short]) == "7.12"
     end
 
     test "multiple opts - last opt is :short followed by :compact" do
       assert :erlang.float_to_binary(7.12, [{:scientific, 3}, :short, :compact]) == "7.12"
+    end
+
+    test "multiple opts - last opt is :short preceded by :compact" do
+      assert :erlang.float_to_binary(7.12, [:compact, {:scientific, 3}, :short]) == "7.12"
+    end
+
+    test "multiple opts - last opt is :short with :compact in the middle" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}, :compact, :short]) == "7.12"
     end
 
     test "allows result with exactly 255 bytes (boundary condition)" do

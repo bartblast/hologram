@@ -4669,6 +4669,22 @@ describe("Erlang", () => {
         assert.deepStrictEqual(result, expected);
       });
 
+      it("last opt is :scientific preceded by :compact", () => {
+        const opts = Type.list([compactOpt, decimalsOpt, scientificOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.120e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :scientific with :compact in the middle", () => {
+        const opts = Type.list([decimalsOpt, compactOpt, scientificOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.120e+00");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
       it("last opt is :decimals", () => {
         const opts = Type.list([shortOpt, decimalsOpt]);
         const result = float_to_binary(input, opts);
@@ -4678,7 +4694,23 @@ describe("Erlang", () => {
       });
 
       it("last opt is :decimals followed by :compact", () => {
-        const opts = Type.list([shortOpt, decimalsOpt, compactOpt]);
+        const opts = Type.list([scientificOpt, decimalsOpt, compactOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :decimals preceded by :compact", () => {
+        const opts = Type.list([compactOpt, scientificOpt, decimalsOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :decimals with :compact in the middle", () => {
+        const opts = Type.list([scientificOpt, compactOpt, decimalsOpt]);
         const result = float_to_binary(input, opts);
         const expected = Type.bitstring("7.12");
 
@@ -4695,6 +4727,22 @@ describe("Erlang", () => {
 
       it("last opt is :short followed by :compact", () => {
         const opts = Type.list([scientificOpt, shortOpt, compactOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :short preceded by :compact", () => {
+        const opts = Type.list([compactOpt, scientificOpt, shortOpt]);
+        const result = float_to_binary(input, opts);
+        const expected = Type.bitstring("7.12");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("last opt is :short with :compact in the middle", () => {
+        const opts = Type.list([scientificOpt, compactOpt, shortOpt]);
         const result = float_to_binary(input, opts);
         const expected = Type.bitstring("7.12");
 
