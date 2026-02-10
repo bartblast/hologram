@@ -391,7 +391,7 @@ defmodule Hologram.Compiler.IR do
 
     @type t :: %__MODULE__{
             clauses: list(IR.Clause.t()),
-            body: IR.Block.t(),
+            body: IR.t(),
             else_clauses: list(IR.Clause.t())
           }
   end

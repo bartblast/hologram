@@ -467,9 +467,12 @@ defmodule Hologram.Compiler.Transformer do
           %{acc | body: do_part, else_clauses: else_part}
 
         clause, acc ->
-          %{acc | clauses: acc.clauses ++ [transform(clause, context)]}
+          %{acc | clauses: [transform(clause, context) | acc.clauses]}
       end
     )
+    |> then(fn %{clauses: clauses} = ir ->
+      %{ir | clauses: Enum.reverse(clauses)}
+    end)
   end
 
   # --- PRESERVE ORDER (BEGIN) ---
