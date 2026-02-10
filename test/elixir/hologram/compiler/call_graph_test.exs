@@ -454,6 +454,8 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    # :erlang.apply/3 is not added to the call graph because the encoder
+    # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().
     test "remote function call using Kernel.apply/3, module and function fields are both atoms",
          %{
            empty_call_graph: call_graph
@@ -486,6 +488,8 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    # :erlang.apply/3 is not added to the call graph because the encoder
+    # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().
     test "remote function call using Kernel.apply/3, module field is an atom, function field is not an atom",
          %{
            empty_call_graph: call_graph
@@ -509,17 +513,17 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
                DateTime,
-               {Module1, :my_fun_1, 4},
-               {:erlang, :apply, 3}
+               {Module1, :my_fun_1, 4}
              ]
 
       assert sorted_edges(call_graph) == [
                {{Module1, :my_fun_1, 4}, Calendar.ISO},
-               {{Module1, :my_fun_1, 4}, DateTime},
-               {{Module1, :my_fun_1, 4}, {:erlang, :apply, 3}}
+               {{Module1, :my_fun_1, 4}, DateTime}
              ]
     end
 
+    # :erlang.apply/3 is not added to the call graph because the encoder
+    # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().
     test "remote function call using Kernel.apply/3, module field is not an atom, function field is an atom",
          %{
            empty_call_graph: call_graph
@@ -542,13 +546,43 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
-               {Module1, :my_fun_1, 4},
-               {:erlang, :apply, 3}
+               {Module1, :my_fun_1, 4}
              ]
 
       assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun_1, 4}, Calendar.ISO},
-               {{Module1, :my_fun_1, 4}, {:erlang, :apply, 3}}
+               {{Module1, :my_fun_1, 4}, Calendar.ISO}
+             ]
+    end
+
+    # :erlang.apply/3 is not added to the call graph because the encoder
+    # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().
+    test "remote function call using Kernel.apply/3, neither module nor function field is an atom",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.Variable{name: :module},
+          %IR.Variable{name: :my_fun},
+          %IR.ListType{
+            data: [%IR.AtomType{value: Calendar.ISO}]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Calendar.ISO,
+               {Module1, :my_fun_1, 4}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun_1, 4}, Calendar.ISO}
              ]
     end
 

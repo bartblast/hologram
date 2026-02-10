@@ -341,6 +341,8 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(body, module)
   end
 
+  # :erlang.apply/3 is not added to the call graph because the encoder
+  # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().
   def build(
         call_graph,
         %IR.RemoteFunctionCall{
@@ -358,6 +360,23 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, from_vertex, to_vertex)
 
     build(call_graph, args, from_vertex)
+  end
+
+  # :erlang.apply/3 is not added to the call graph because the encoder
+  # translates it to Interpreter.callNamedFunction() instead of Erlang["apply/3"]().  
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :apply,
+          args: [module, function, %IR.ListType{data: args}]
+        },
+        from_vertex
+      ) do
+    call_graph
+    |> build(module, from_vertex)
+    |> build(function, from_vertex)
+    |> build(args, from_vertex)
   end
 
   def build(
