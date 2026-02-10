@@ -436,9 +436,7 @@ export default class Interpreter {
   static defineNotImplementedErlangFunction(moduleExName, functionName, arity) {
     const moduleJsName = Interpreter.moduleJsName(moduleExName);
 
-    if (!globalThis[moduleJsName]) {
-      globalThis[moduleJsName] = {};
-    }
+    Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName, "erlang");
 
     globalThis[moduleJsName][`${functionName}/${arity}`] = () => {
       const message =
