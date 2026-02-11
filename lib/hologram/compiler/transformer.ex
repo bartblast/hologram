@@ -972,6 +972,13 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_with_clause(clause, acc, context) do
-    %{acc | clauses: [transform(clause, context) | acc.clauses]}
+    clause =
+      %IR.Clause{
+        match: %IR.MatchPlaceholder{},
+        guards: [],
+        body: transform(clause, context)
+      }
+
+    %{acc | clauses: [clause | acc.clauses]}
   end
 end
