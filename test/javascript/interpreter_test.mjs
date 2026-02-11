@@ -6920,8 +6920,9 @@ describe("Interpreter", () => {
       //   :ok -> {:error, :nomatch}
       // end
       const guard = (context) =>
-        Erlang["/=/2"](context.vars.b, Type.atom("no"));
+        Erlang["==/2"](context.vars.b, Type.atom("no"));
       const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
+      
       const result = Interpreter.with(
         body,
         [
@@ -6944,9 +6945,9 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, expected);
     });
     it("throws error if no else clauses match", () => {
-      // with b when b == :no <- a do
+      // with  :error <- a do
       // else
-      //   :ok -> {:error, :nomatch}
+      //   :other -> {:error, :nomatch}
       // end
       assertBoxedError(
         () =>
