@@ -6922,7 +6922,7 @@ describe("Interpreter", () => {
       const guard = (context) =>
         Erlang["==/2"](context.vars.b, Type.atom("no"));
       const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
-      
+
       const result = Interpreter.with(
         body,
         [
