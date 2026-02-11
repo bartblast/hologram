@@ -947,6 +947,30 @@ defmodule Hologram.Compiler.Transformer do
     %{acc | body: do_part, else_clauses: else_part}
   end
 
+  defp transform_with_clause(
+         {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, body]},
+         acc,
+         context
+       ) do
+    clause = %IR.Clause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: transform_guards(guards, context),
+      body: transform(body, context)
+    }
+
+    %{acc | clauses: [clause | acc.clauses]}
+  end
+
+  defp transform_with_clause({:<-, _meta, [match, body]}, acc, context) do
+    clause = %IR.Clause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: [],
+      body: transform(body, context)
+    }
+
+    %{acc | clauses: [clause | acc.clauses]}
+  end
+
   defp transform_with_clause(clause, acc, context) do
     %{acc | clauses: [transform(clause, context) | acc.clauses]}
   end
