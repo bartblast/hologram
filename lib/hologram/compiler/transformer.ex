@@ -449,26 +449,10 @@ defmodule Hologram.Compiler.Transformer do
       body: nil
     }
 
-    Enum.reduce(
-      parts,
+    parts
+    |> Enum.reduce(
       initial_acc,
-      fn
-        do_and_else, acc when is_list(do_and_else) ->
-          do_part =
-            do_and_else
-            |> Keyword.get(:do)
-            |> transform(context)
-
-          else_part =
-            do_and_else
-            |> Keyword.get(:else, [])
-            |> Enum.map(&transform(&1, context))
-
-          %{acc | body: do_part, else_clauses: else_part}
-
-        clause, acc ->
-          %{acc | clauses: [transform(clause, context) | acc.clauses]}
-      end
+      &transform_with_clause(&1, &2, context)
     )
     |> then(fn %{clauses: clauses} = ir ->
       %{ir | clauses: Enum.reverse(clauses)}
@@ -947,5 +931,23 @@ defmodule Hologram.Compiler.Transformer do
       _fallback ->
         %IR.Variable{name: name, version: version}
     end
+  end
+
+  defp transform_with_clause(do_and_else, acc, context) when is_list(do_and_else) do
+    do_part =
+      do_and_else
+      |> Keyword.get(:do)
+      |> transform(context)
+
+    else_part =
+      do_and_else
+      |> Keyword.get(:else, [])
+      |> Enum.map(&transform(&1, context))
+
+    %{acc | body: do_part, else_clauses: else_part}
+  end
+
+  defp transform_with_clause(clause, acc, context) do
+    %{acc | clauses: [transform(clause, context) | acc.clauses]}
   end
 end
