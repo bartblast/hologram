@@ -1,7 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
-import Erlang_UnicodeUtil from "./unicode_util.mjs";
+import Erlang_Unicode_Util from "./unicode_util.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -17,7 +17,7 @@ const Erlang_Elixir_Utils = {
       let current = str;
 
       while (true) {
-        const result = Erlang_UnicodeUtil["cp/1"](current);
+        const result = Erlang_Unicode_Util["cp/1"](current);
 
         if (Type.isList(result) && result.data.length === 0) {
           break;
