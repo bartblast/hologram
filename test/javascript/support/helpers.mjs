@@ -74,7 +74,7 @@ export function assertBoxedError(
   }
 
   const receivedErrorType = Interpreter.getErrorType(error);
-  const receivedErrorMessage = Interpreter.getErrorMessage(error);
+  const receivedErrorMessage = Interpreter.resolveErrorMessage(error.struct);
 
   const typeMatches = receivedErrorType === expectedErrorType;
 

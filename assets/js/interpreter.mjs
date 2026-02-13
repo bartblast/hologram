@@ -475,11 +475,6 @@ export default class Interpreter {
     return Interpreter.evaluateJavaScriptCode(`return (${expr});`);
   }
 
-  static getErrorMessage(jsError) {
-    // TODO: use transpiled Elixir code
-    return Bitstring.toText(jsError.struct.data["atom(message)"][1]);
-  }
-
   static getErrorType(jsError) {
     // TODO: use transpiled Elixir code
     return jsError.struct.data["atom(__struct__)"][1].value.substring(7);
@@ -866,6 +861,17 @@ export default class Interpreter {
 
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
+  }
+
+  // TODO: consider when porting Elixir error handling
+  static resolveErrorMessage(struct) {
+    const messageEntry = struct.data["atom(message)"];
+
+    if (messageEntry !== undefined) {
+      return Bitstring.toText(messageEntry[1]);
+    }
+
+    return $.inspect(struct);
   }
 
   static try(
