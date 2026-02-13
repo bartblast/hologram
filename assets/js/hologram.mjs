@@ -365,7 +365,7 @@ export default class Hologram {
       } catch (error) {
         if (error instanceof HologramBoxedError) {
           error.name = Interpreter.getErrorType(error);
-          error.message = Interpreter.getErrorMessage(error);
+          error.message = Interpreter.resolveErrorMessage(error.struct);
         }
 
         throw error;
@@ -652,7 +652,7 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
-    // TODO: consider when implementing boxed error handling
+    // TODO: consider when porting Elixir error handling
     // window.addEventListener("error", (event) => {
     //   if (event.error instanceof HologramBoxedError) {
     //     console.error(`${event.error.message}\n`, event.error);
@@ -660,15 +660,14 @@ export default class Hologram {
     //   }
     // });
 
+    // TODO: consider when porting Elixir error handling
     window.addEventListener("error", (event) => {
       if (event.error instanceof HologramBoxedError) {
         GlobalRegistry.set("lastBoxedError", {
           module: Interpreter.inspect(
             Erlang_Maps["get/2"](Type.atom("__struct__"), event.error.struct),
           ),
-          message: Bitstring.toText(
-            Erlang_Maps["get/2"](Type.atom("message"), event.error.struct),
-          ),
+          message: Interpreter.resolveErrorMessage(event.error.struct),
         });
       }
     });

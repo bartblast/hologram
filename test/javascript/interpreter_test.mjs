@@ -1787,14 +1787,6 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, Type.integer(1));
   });
 
-  it("getErrorMessage()", () => {
-    const errorStruct = Type.errorStruct("MyError", "my message");
-    const jsError = new HologramBoxedError(errorStruct);
-    const result = Interpreter.getErrorMessage(jsError);
-
-    assert.equal(result, "my message");
-  });
-
   it("getErrorType()", () => {
     const errorStruct = Type.errorStruct("MyError", "my message");
     const jsError = new HologramBoxedError(errorStruct);
@@ -6777,6 +6769,26 @@ describe("Interpreter", () => {
       "UndefinedFunctionError",
       "my_message",
     );
+  });
+
+  describe("resolveErrorMessage()", () => {
+    it("returns the message when the struct has a message field", () => {
+      const struct = Type.errorStruct("MyError", "my message");
+      const result = Interpreter.resolveErrorMessage(struct);
+
+      assert.equal(result, "my message");
+    });
+
+    it("returns the inspected struct when the struct has no message field", () => {
+      const struct = Type.struct("MyError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("reason"), Type.atom("some_reason")],
+      ]);
+
+      const result = Interpreter.resolveErrorMessage(struct);
+
+      assert.equal(result, Interpreter.inspect(struct));
+    });
   });
 
   describe("try()", () => {
