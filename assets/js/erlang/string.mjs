@@ -2,7 +2,7 @@
 
 import Bitstring from "../bitstring.mjs";
 import Erlang_Unicode from "./unicode.mjs";
-import Erlang_UnicodeUtil from "./unicode_util.mjs";
+import Erlang_Unicode_Util from "./unicode_util.mjs";
 import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -216,7 +216,7 @@ const Erlang_String = {
     let current = string;
 
     while (true) {
-      const gcResult = Erlang_UnicodeUtil["gc/1"](current);
+      const gcResult = Erlang_Unicode_Util["gc/1"](current);
 
       if (Type.isList(gcResult) && gcResult.data.length === 0) {
         return Type.integer(count);
@@ -473,7 +473,7 @@ const Erlang_String = {
 
     // Helper: Extract first codepoint using unicode_util.cp/1
     const extractFirstCodepoint = (subject) => {
-      const cpResult = Erlang_UnicodeUtil["cp/1"](subject);
+      const cpResult = Erlang_Unicode_Util["cp/1"](subject);
 
       // Check if unicode_util.cp/1 returned an error tuple
       if (Type.isTuple(cpResult)) {
