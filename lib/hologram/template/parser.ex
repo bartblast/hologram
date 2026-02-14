@@ -266,6 +266,16 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:end_tag, rest)
   end
 
+  def parse_tokens(context, :end_tag, [
+        {:symbol, "-"} = token1 | [{:string, str} = token2 | rest]
+      ]) do
+    context
+    |> set_tag_name(context.tag_name <> "-" <> str)
+    |> add_processed_token(token1)
+    |> add_processed_token(token2)
+    |> parse_tokens(:end_tag, rest)
+  end
+
   def parse_tokens(context, :end_tag, [{:symbol, ">"} = token | rest]) do
     context
     |> add_end_tag()
@@ -481,6 +491,17 @@ defmodule Hologram.Template.Parser do
 
   def parse_tokens(context, :start_tag, [{:symbol, ">"} = token | rest]) do
     parse_start_tag_end(context, token, rest, false)
+  end
+
+  def parse_tokens(%{prev_status: :start_tag_name} = context, :start_tag, [
+        {:symbol, "-"} = token1 | [{:string, str} = token2 | rest]
+      ]) do
+    context
+    |> set_tag_name(context.tag_name <> "-" <> str)
+    |> add_processed_token(token1)
+    |> add_processed_token(token2)
+    |> set_prev_status(:start_tag_name)
+    |> parse_tokens(:start_tag, rest)
   end
 
   def parse_tokens(context, :start_tag, [{:string, _str} = token | rest]) do

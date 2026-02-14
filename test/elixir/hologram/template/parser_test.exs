@@ -111,6 +111,22 @@ defmodule Hologram.Template.ParserTest do
     test "whitespaces after end tag name" do
       assert parse_markup("</div \n\r\t>") == [end_tag: "div"]
     end
+
+    test "hyphenated element start tag" do
+      assert parse_markup("<foo-bar>") == [start_tag: {"foo-bar", []}]
+    end
+
+    test "hyphenated element self-closed start tag" do
+      assert parse_markup("<foo-bar />") == [self_closing_tag: {"foo-bar", []}]
+    end
+
+    test "hyphenated element end tag" do
+      assert parse_markup("</foo-bar>") == [end_tag: "foo-bar"]
+    end
+
+    test "multiple hyphens in element name" do
+      assert parse_markup("<foo-bar-baz>") == [start_tag: {"foo-bar-baz", []}]
+    end
   end
 
   describe "component tags" do
