@@ -7,7 +7,7 @@ import {
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
-import Erlang_UnicodeUtil from "../../../assets/js/erlang/unicode_util.mjs";
+import Erlang_Unicode_Util from "../../../assets/js/erlang/unicode_util.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -17,9 +17,9 @@ defineGlobalErlangAndElixirModules();
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/unicode_util_test.exs
 // Always update both together.
 
-describe("Erlang_UnicodeUtil", () => {
+describe("Erlang_Unicode_Util", () => {
   describe("cp/1", () => {
-    const cp = Erlang_UnicodeUtil["cp/1"];
+    const cp = Erlang_Unicode_Util["cp/1"];
 
     describe("with binary input", () => {
       it("returns empty list for empty binary", () => {
@@ -828,7 +828,7 @@ describe("Erlang_UnicodeUtil", () => {
   });
 
   describe("gc/1", () => {
-    const gc = Erlang_UnicodeUtil["gc/1"];
+    const gc = Erlang_Unicode_Util["gc/1"];
 
     describe("with binary input", () => {
       it("returns empty list for empty binary", () => {
