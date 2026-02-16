@@ -95,16 +95,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Determines the expected UTF-8 sequence length from the leader byte.
-      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
-      const getSequenceLength = (leaderByte) => {
-        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
-        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
-        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
-        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
-        return -1; // Invalid leader byte
-      };
-
       // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
       const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
 
@@ -175,7 +165,7 @@ const Erlang_Unicode = {
       // Returns true if bytes could be a valid prefix of a UTF-8 sequence.
       const isTruncatedSequence = (start) => {
         const leaderByte = bytes[start];
-        const expectedLength = getSequenceLength(leaderByte);
+        const expectedLength = Bitstring.getUtf8SequenceLength(leaderByte);
 
         if (expectedLength <= 0) return false;
 
@@ -194,7 +184,7 @@ const Erlang_Unicode = {
       let pos = 0;
 
       while (pos < bytes.length) {
-        const seqLength = getSequenceLength(bytes[pos]);
+        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
@@ -394,16 +384,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Determines the expected UTF-8 sequence length from the leader byte.
-      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
-      const getSequenceLength = (leaderByte) => {
-        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
-        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
-        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
-        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
-        return -1; // Invalid leader byte
-      };
-
       // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
       const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
 
@@ -474,7 +454,7 @@ const Erlang_Unicode = {
       let pos = 0;
 
       while (pos < bytes.length) {
-        const seqLength = getSequenceLength(bytes[pos]);
+        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
@@ -720,16 +700,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Determines the expected UTF-8 sequence length from the leader byte.
-      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
-      const getSequenceLength = (leaderByte) => {
-        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
-        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
-        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
-        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
-        return -1; // Invalid leader byte
-      };
-
       // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
       const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
 
@@ -798,7 +768,7 @@ const Erlang_Unicode = {
       // Main loop: scan forward, validating each sequence
       let pos = 0;
       while (pos < bytes.length) {
-        const seqLength = getSequenceLength(bytes[pos]);
+        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
@@ -897,16 +867,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Determines the expected UTF-8 sequence length from the leader byte.
-      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
-      const getSequenceLength = (leaderByte) => {
-        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
-        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
-        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
-        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
-        return -1; // Invalid leader byte
-      };
-
       // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
       const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
 
@@ -975,7 +935,7 @@ const Erlang_Unicode = {
       // Main loop: scan forward, validating each sequence
       let pos = 0;
       while (pos < bytes.length) {
-        const seqLength = getSequenceLength(bytes[pos]);
+        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
@@ -1073,16 +1033,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Determines the expected UTF-8 sequence length from the leader byte.
-      // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
-      const getSequenceLength = (leaderByte) => {
-        if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
-        if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
-        if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
-        if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
-        return -1; // Invalid leader byte
-      };
-
       // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
       const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
 
@@ -1154,7 +1104,7 @@ const Erlang_Unicode = {
       // Main loop: scan forward, validating each sequence
       let pos = 0;
       while (pos < bytes.length) {
-        const seqLength = getSequenceLength(bytes[pos]);
+        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
         if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }

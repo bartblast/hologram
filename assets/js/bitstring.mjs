@@ -478,6 +478,18 @@ export default class Bitstring {
     };
   }
 
+  // Determines the expected UTF-8 sequence length from the leader byte.
+  // Returns -1 for invalid leader bytes (e.g., 0xC0, 0xC1, 0xF5+).
+  static getUtf8SequenceLength(leaderByte) {
+    if ((leaderByte & 0x80) === 0) return 1; // 0xxxxxxx: ASCII
+    if (leaderByte === 0xc0 || leaderByte === 0xc1) return -1; // Invalid: overlong encoding
+    if ((leaderByte & 0xe0) === 0xc0) return 2; // 110xxxxx: 2-byte
+    if ((leaderByte & 0xf0) === 0xe0) return 3; // 1110xxxx: 3-byte
+    if (leaderByte >= 0xf5) return -1; // Invalid: > U+10FFFF
+    if ((leaderByte & 0xf8) === 0xf0) return 4; // 11110xxx: 4-byte
+    return -1; // Invalid leader byte
+  }
+
   static isEmpty(bitstring) {
     return bitstring.text === "" || bitstring.bytes?.length === 0;
   }
