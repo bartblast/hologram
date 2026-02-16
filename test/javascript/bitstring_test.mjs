@@ -7150,6 +7150,71 @@ describe("Bitstring", () => {
       });
     });
 
+    describe("impossible UTF-8 leader bytes (should not be treated as truncated)", () => {
+      it("rejects impossible 2-byte leader 0xC0 (would produce overlong encoding)", () => {
+        // 0xC0 can never be valid - would encode U+0000 which requires single byte
+        const bitstring = Bitstring.fromBytes([0xc0]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // Should NOT be treated as truncated since 0xC0 is invalid
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("rejects impossible 2-byte leader 0xC1 (would produce overlong encoding)", () => {
+        // 0xC1 can never be valid - would encode U+0001 which requires single byte
+        const bitstring = Bitstring.fromBytes([0xc1]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // Should NOT be treated as truncated since 0xC1 is invalid
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("rejects impossible 4-byte leader 0xF5 (would exceed max code point U+10FFFF)", () => {
+        // 0xF5 would produce code points > U+10FFFF which are invalid
+        const bitstring = Bitstring.fromBytes([0xf5]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // Should NOT be treated as truncated since 0xF5 is invalid
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("rejects impossible 4-byte leader 0xF6 (would exceed max code point U+10FFFF)", () => {
+        // 0xF6 would produce code points > U+10FFFF which are invalid
+        const bitstring = Bitstring.fromBytes([0xf6]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // Should NOT be treated as truncated since 0xF6 is invalid
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("rejects impossible 4-byte leader 0xF7 (would exceed max code point U+10FFFF)", () => {
+        // 0xF7 would produce code points > U+10FFFF which are invalid
+        const bitstring = Bitstring.fromBytes([0xf7]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // Should NOT be treated as truncated since 0xF7 is invalid
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("rejects impossible 2-byte leader 0xC0 with valid continuation byte", () => {
+        // 0xC0 0x80 would be an overlong encoding of U+0000
+        const bitstring = Bitstring.fromBytes([0xc0, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // Should NOT be treated as truncated since 0xC0 is invalid
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("rejects impossible 4-byte leader 0xF5 with valid continuation bytes", () => {
+        // 0xF5 0x80 0x80 0x80 would encode U+150000, which exceeds max
+        const bitstring = Bitstring.fromBytes([0xf5, 0x80, 0x80, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // Should NOT be treated as truncated since 0xF5 is invalid
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+    });
+
     describe("partial valid UTF-8", () => {
       it("returns valid prefix length when invalid byte follows valid sequence", () => {
         // "ab" (valid) + 0xFF (invalid)

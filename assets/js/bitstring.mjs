@@ -895,7 +895,49 @@ export default class Bitstring {
       const expectedLength = getSequenceLength(leaderByte);
       const availableBytes = data.length - start;
 
-      const hasValidLeaderByte = () => expectedLength > 0;
+      // Validate leader byte against bounds for the expected sequence length.
+      // Reject impossible leader bytes (e.g., 0xC0/0xC1, 0xF5–0xF7) that can never
+      // produce valid code points, even if technically truncated.
+      const isLeaderByteValid = () => {
+        if (!(expectedLength > 0)) return false;
+
+        // minValueForLength is the minimum valid code point for a given UTF-8 sequence length.
+        const minValueForLength = {1: 0, 2: 0x80, 3: 0x800, 4: 0x10000};
+        const maxCodePoint = 0x10ffff;
+
+        // Calculate both minimum and maximum possible code points from this leader byte.
+        // The minimum comes from continuation bytes all being 0x80 (contributing 0 bits).
+        // The maximum comes from continuation bytes all being 0xBF (contributing all 1s).
+        const getCodePointRange = (leader, length) => {
+          switch (length) {
+            case 2: {
+              const leaderBits = (leader & 0x1f) << 6;
+              return { min: leaderBits, max: leaderBits | 0x3f };
+            }
+            case 3: {
+              const leaderBits = (leader & 0x0f) << 12;
+              // Continuation bytes can contribute up to 0xFFF (12 bits: 0x3F + (0x3F << 6))
+              return { min: leaderBits, max: leaderBits | 0xfff };
+            }
+            case 4: {
+              const leaderBits = (leader & 0x07) << 18;
+              // Continuation bytes can contribute up to 0x3FFFF (18 bits: 0x3F + (0x3F << 6) + (0x3F << 12))
+              return { min: leaderBits, max: leaderBits | 0x3ffff };
+              }
+            default:
+              return {min: leader, max: leader};
+          };
+        };
+
+        const range = getCodePointRange(leaderByte, expectedLength);
+        const minRequired = minValueForLength[expectedLength];
+
+        // Reject if no valid code point can be produced from this leader:
+        // - max < minRequired: overlong encoding (too small)
+        // - min > maxCodePoint: code point out of range (too large)
+        return range.max >= minRequired && range.min <= maxCodePoint;
+      };
+
       const isActuallyTruncated = () => availableBytes < expectedLength;
       const hasValidContinuationBytes = () => {
         // Imperative loop for performance - avoids function call overhead of iterators and recursion, allows early return
@@ -907,7 +949,7 @@ export default class Bitstring {
 
       // Returns early on any failure condition via && short-circuit evaluation
       return (
-        hasValidLeaderByte() &&
+        isLeaderByteValid() &&
         isActuallyTruncated() &&
         hasValidContinuationBytes()
       );
