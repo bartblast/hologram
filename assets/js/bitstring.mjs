@@ -793,15 +793,6 @@ export default class Bitstring {
 
   // Finds the length of the longest valid UTF-8 prefix and whether the tail is truncated.
   static utf8PrefixValidation(bitstring) {
-    // Helper: Determines the expected length of a UTF-8 sequence based on the leader byte.
-    const getSequenceLength = (leaderByte) => {
-      if ((leaderByte & 0x80) === 0) return 1;
-      if ((leaderByte & 0xe0) === 0xc0) return 2;
-      if ((leaderByte & 0xf0) === 0xe0) return 3;
-      if ((leaderByte & 0xf8) === 0xf0) return 4;
-      return -1;
-    };
-
     // Helper: Decodes a UTF-8 code point from a sequence of bytes starting at 'start' with the given 'length'.
     const decodeCodePoint = (start, length) => {
       const extractSingleByte = () => data[start];
@@ -844,6 +835,89 @@ export default class Bitstring {
       return pos;
     };
 
+    // Helper: Determines the expected length of a UTF-8 sequence based on the leader byte.
+    const getSequenceLength = (leaderByte) => {
+      if ((leaderByte & 0x80) === 0) return 1;
+      if ((leaderByte & 0xe0) === 0xc0) return 2;
+      if ((leaderByte & 0xf0) === 0xe0) return 3;
+      if ((leaderByte & 0xf8) === 0xf0) return 4;
+      return -1;
+    };
+
+    // Helper: Checks if the remaining bytes form a truncated UTF-8 sequence
+    const isTruncatedSequence = (start) => {
+      // Calculate both minimum and maximum possible code points from this leader byte.
+      // The minimum comes from continuation bytes all being 0x80 (contributing 0 bits).
+      // The maximum comes from continuation bytes all being 0xBF (contributing all 1s).
+      const getCodePointRange = (leader, length) => {
+        switch (length) {
+          case 2: {
+            const leaderBits = (leader & 0x1f) << 6;
+            return {min: leaderBits, max: leaderBits | 0x3f};
+          }
+          case 3: {
+            const leaderBits = (leader & 0x0f) << 12;
+            // Continuation bytes can contribute up to 0xFFF (12 bits: 0x3F + (0x3F << 6))
+            return {min: leaderBits, max: leaderBits | 0xfff};
+          }
+          case 4: {
+            const leaderBits = (leader & 0x07) << 18;
+            // Continuation bytes can contribute up to 0x3FFFF (18 bits: 0x3F + (0x3F << 6) + (0x3F << 12))
+            return {min: leaderBits, max: leaderBits | 0x3ffff};
+          }
+          default:
+            return {min: leader, max: leader};
+        }
+      };
+
+      const hasValidContinuationBytes = () => {
+        // Imperative loop for performance - avoids function call overhead of iterators and recursion, allows early return
+        for (let i = 1; i < availableBytes; i++) {
+          if (!isValidContinuation(data[start + i])) return false;
+        }
+        return true;
+      };
+
+      const isActuallyTruncated = () => availableBytes < expectedLength;
+
+      // Validate leader byte against bounds for the expected sequence length.
+      // Reject impossible leader bytes (e.g., 0xC0/0xC1, 0xF5–0xF7) that can never
+      // produce valid code points, even if technically truncated.
+      const isLeaderByteValid = () => {
+        // Reject invalid leader bytes that cannot produce valid code points, even if truncated
+        if (!(expectedLength > 0)) return false;
+
+        // minValueForLength is the minimum valid code point for a given UTF-8 sequence length.
+        const minValueForLength = {1: 0, 2: 0x80, 3: 0x800, 4: 0x10000};
+        const maxCodePoint = 0x10ffff;
+
+        const range = getCodePointRange(leaderByte, expectedLength);
+        const minRequired = minValueForLength[expectedLength];
+
+        // Reject if no valid code point can be produced from this leader:
+        // - max < minRequired: overlong encoding (too small)
+        // - min > maxCodePoint: code point out of range (too large)
+        return range.max >= minRequired && range.min <= maxCodePoint;
+      };
+
+      // Main logic
+
+      // Guard clause: precondition must hold since we access data[start] below
+      if (start >= data.length) return false;
+
+      // Cache these values to avoid recalculation across multiple validations
+      const leaderByte = data[start];
+      const expectedLength = getSequenceLength(leaderByte);
+      const availableBytes = data.length - start;
+
+      // Returns early on any failure condition via && short-circuit evaluation
+      return (
+        isLeaderByteValid() &&
+        isActuallyTruncated() &&
+        hasValidContinuationBytes()
+      );
+    };
+
     // Helper: Validates that a decoded code point is valid for the given UTF-8 sequence length and not an overlong encoding
     // or surrogate half. BitString.validateCodePoint() is not suitable for this because it doesn't have context of
     // the sequence length to check for overlong encodings and should not have this responsibility.
@@ -882,76 +956,6 @@ export default class Bitstring {
         validateHasEnoughBytes() &&
         validateContinuationBytes() &&
         validateCodePoint()
-      );
-    };
-
-    // Helper: Checks if the remaining bytes form a truncated UTF-8 sequence
-    const isTruncatedSequence = (start) => {
-      // Guard clause: precondition must hold since we access data[start] below
-      if (start >= data.length) return false;
-
-      // Cache these values to avoid recalculation across multiple validations
-      const leaderByte = data[start];
-      const expectedLength = getSequenceLength(leaderByte);
-      const availableBytes = data.length - start;
-
-      // Validate leader byte against bounds for the expected sequence length.
-      // Reject impossible leader bytes (e.g., 0xC0/0xC1, 0xF5–0xF7) that can never
-      // produce valid code points, even if technically truncated.
-      const isLeaderByteValid = () => {
-        if (!(expectedLength > 0)) return false;
-
-        // minValueForLength is the minimum valid code point for a given UTF-8 sequence length.
-        const minValueForLength = {1: 0, 2: 0x80, 3: 0x800, 4: 0x10000};
-        const maxCodePoint = 0x10ffff;
-
-        // Calculate both minimum and maximum possible code points from this leader byte.
-        // The minimum comes from continuation bytes all being 0x80 (contributing 0 bits).
-        // The maximum comes from continuation bytes all being 0xBF (contributing all 1s).
-        const getCodePointRange = (leader, length) => {
-          switch (length) {
-            case 2: {
-              const leaderBits = (leader & 0x1f) << 6;
-              return { min: leaderBits, max: leaderBits | 0x3f };
-            }
-            case 3: {
-              const leaderBits = (leader & 0x0f) << 12;
-              // Continuation bytes can contribute up to 0xFFF (12 bits: 0x3F + (0x3F << 6))
-              return { min: leaderBits, max: leaderBits | 0xfff };
-            }
-            case 4: {
-              const leaderBits = (leader & 0x07) << 18;
-              // Continuation bytes can contribute up to 0x3FFFF (18 bits: 0x3F + (0x3F << 6) + (0x3F << 12))
-              return { min: leaderBits, max: leaderBits | 0x3ffff };
-              }
-            default:
-              return {min: leader, max: leader};
-          };
-        };
-
-        const range = getCodePointRange(leaderByte, expectedLength);
-        const minRequired = minValueForLength[expectedLength];
-
-        // Reject if no valid code point can be produced from this leader:
-        // - max < minRequired: overlong encoding (too small)
-        // - min > maxCodePoint: code point out of range (too large)
-        return range.max >= minRequired && range.min <= maxCodePoint;
-      };
-
-      const isActuallyTruncated = () => availableBytes < expectedLength;
-      const hasValidContinuationBytes = () => {
-        // Imperative loop for performance - avoids function call overhead of iterators and recursion, allows early return
-        for (let i = 1; i < availableBytes; i++) {
-          if (!isValidContinuation(data[start + i])) return false;
-        }
-        return true;
-      };
-
-      // Returns early on any failure condition via && short-circuit evaluation
-      return (
-        isLeaderByteValid() &&
-        isActuallyTruncated() &&
-        hasValidContinuationBytes()
       );
     };
 
