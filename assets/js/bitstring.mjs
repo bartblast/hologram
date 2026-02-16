@@ -791,6 +791,139 @@ export default class Bitstring {
     return bitstring.text;
   }
 
+  // Finds the length of the longest valid UTF-8 prefix and whether the tail is truncated.
+  static utf8PrefixValidation(bitstring) {
+    // Helper: Determines the expected length of a UTF-8 sequence based on the leader byte.
+    const getSequenceLength = (leaderByte) => {
+      if ((leaderByte & 0x80) === 0) return 1;
+      if ((leaderByte & 0xe0) === 0xc0) return 2;
+      if ((leaderByte & 0xf0) === 0xe0) return 3;
+      if ((leaderByte & 0xf8) === 0xf0) return 4;
+      return -1;
+    };
+
+    // Helper: Decodes a UTF-8 code point from a sequence of bytes starting at 'start' with the given 'length'.
+    const decodeCodePoint = (start, length) => {
+      const extractSingleByte = () => data[start];
+
+      const extractTwoBytes = () =>
+        ((data[start] & 0x1f) << 6) | (data[start + 1] & 0x3f);
+
+      const extractThreeBytes = () =>
+        ((data[start] & 0x0f) << 12) |
+        ((data[start + 1] & 0x3f) << 6) |
+        (data[start + 2] & 0x3f);
+
+      const extractFourBytes = () =>
+        ((data[start] & 0x07) << 18) |
+        ((data[start + 1] & 0x3f) << 12) |
+        ((data[start + 2] & 0x3f) << 6) |
+        (data[start + 3] & 0x3f);
+
+      switch (length) {
+        case 1:
+          return extractSingleByte();
+        case 2:
+          return extractTwoBytes();
+        case 3:
+          return extractThreeBytes();
+        default:
+          return extractFourBytes();
+      }
+    };
+
+    // Helper: Iterates through the byte array, validating UTF-8 sequences and tracking the position of the longest valid prefix
+    const findValidSequenceEnd = (getSequenceLength, isValidSequence) => {
+      // Imperative loop for performance - avoids function call overhead of iterators and recursion
+      let pos = 0;
+      while (pos < data.length) {
+        const seqLength = getSequenceLength(data[pos]);
+        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        pos += seqLength;
+      }
+      return pos;
+    };
+
+    // Helper: Validates that a decoded code point is valid for the given UTF-8 sequence length and not an overlong encoding
+    // or surrogate half. BitString.validateCodePoint() is not suitable for this because it doesn't have context of
+    // the sequence length to check for overlong encodings and should not have this responsibility.
+    const isValidCodePoint = (codePoint, encodingLength) => {
+      // minValueForLength is the minimum valid code point for a given UTF-8 sequence length.
+      const minValueForLength = {1: 0, 2: 0x80, 3: 0x800, 4: 0x10000};
+
+      const isValidCodePoint = !(
+        codePoint < minValueForLength[encodingLength] ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+        codePoint > 0x10ffff
+      );
+
+      return isValidCodePoint;
+    };
+
+    // Helper: Checks if a byte is a valid UTF-8 continuation byte (i.e., starts with '10')
+    const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
+
+    // Helper: Validates a UTF-8 sequence starting at 'start' with the given 'length'
+    const isValidSequence = (start, length) => {
+      const validateHasEnoughBytes = () => start + length <= data.length;
+      const validateContinuationBytes = () => {
+        for (let i = 1; i < length; i++) {
+          if (!isValidContinuation(data[start + i])) return false;
+        }
+        return true;
+      };
+      const validateCodePoint = () => {
+        const codePoint = decodeCodePoint(start, length);
+        return isValidCodePoint(codePoint, length);
+      };
+
+      // Returns early on any failure condition
+      return (
+        validateHasEnoughBytes() &&
+        validateContinuationBytes() &&
+        validateCodePoint()
+      );
+    };
+
+    // Helper: Checks if the remaining bytes form a truncated UTF-8 sequence
+    const isTruncatedSequence = (start) => {
+      // Guard clause: precondition must hold since we access data[start] below
+      if (start >= data.length) return false;
+
+      // Cache these values to avoid recalculation across multiple validations
+      const leaderByte = data[start];
+      const expectedLength = getSequenceLength(leaderByte);
+      const availableBytes = data.length - start;
+
+      const hasValidLeaderByte = () => expectedLength > 0;
+      const isActuallyTruncated = () => availableBytes < expectedLength;
+      const hasValidContinuationBytes = () => {
+        // Imperative loop for performance - avoids function call overhead of iterators and recursion, allows early return
+        for (let i = 1; i < availableBytes; i++) {
+          if (!isValidContinuation(data[start + i])) return false;
+        }
+        return true;
+      };
+
+      // Returns early on any failure condition via && short-circuit evaluation
+      return (
+        hasValidLeaderByte() &&
+        isActuallyTruncated() &&
+        hasValidContinuationBytes()
+      );
+    };
+
+    // Main logic
+
+    $.maybeSetBytesFromText(bitstring);
+    const data = bitstring.bytes ?? new Uint8Array(0);
+
+    const pos = findValidSequenceEnd(getSequenceLength, isValidSequence);
+    const isTruncated = pos < data.length && isTruncatedSequence(pos);
+
+    return {isTruncated: isTruncated, validLength: pos};
+  }
+
   static validateCodePoint(codePoint) {
     if (typeof codePoint === "bigint") {
       codePoint = Number(codePoint);

@@ -6944,6 +6944,377 @@ describe("Bitstring", () => {
     assert.equal(result, "abc");
   });
 
+  describe("utf8PrefixValidation()", () => {
+    describe("valid UTF-8", () => {
+      it("returns valid length for empty bitstring", () => {
+        const bitstring = Type.bitstring("");
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("returns valid length for single ASCII character", () => {
+        const bitstring = Type.bitstring("a");
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 1, isTruncated: false});
+      });
+
+      it("returns valid length for multiple ASCII characters", () => {
+        const bitstring = Type.bitstring("abc");
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 3, isTruncated: false});
+      });
+
+      it("returns valid length for 2-byte UTF-8 character", () => {
+        // ¢ is U+00A2, encoded as 0xC2 0xA2
+        const bitstring = Bitstring.fromBytes([0xc2, 0xa2]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 2, isTruncated: false});
+      });
+
+      it("returns valid length for 3-byte UTF-8 character", () => {
+        // € is U+20AC, encoded as 0xE2 0x82 0xAC
+        const bitstring = Bitstring.fromBytes([0xe2, 0x82, 0xac]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 3, isTruncated: false});
+      });
+
+      it("returns valid length for 4-byte UTF-8 character", () => {
+        // 𝕳 is U+1D573, encoded as 0xF0 0x9D 0x95 0xB3
+        const bitstring = Bitstring.fromBytes([0xf0, 0x9d, 0x95, 0xb3]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 4, isTruncated: false});
+      });
+
+      it("returns valid length for mixed multi-byte characters", () => {
+        // "a全" = 'a' (1 byte) + '全' (U+5168, 3 bytes: 0xE5 0x85 0xA8)
+        const bitstring = Type.bitstring("a全");
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 4, isTruncated: false});
+      });
+    });
+
+    describe("invalid UTF-8", () => {
+      it("detects invalid leader byte", () => {
+        // 0xFF is not a valid UTF-8 leader byte
+        const bitstring = Bitstring.fromBytes([0xff]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects invalid continuation byte", () => {
+        // 0xC2 expects continuation byte (10xxxxxx), but 0x00 is not
+        const bitstring = Bitstring.fromBytes([0xc2, 0x00]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects lone continuation byte", () => {
+        // 0x80 is a continuation byte (10xxxxxx) without a leader
+        const bitstring = Bitstring.fromBytes([0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects overlong encoding (2-byte for ASCII)", () => {
+        // 'A' (U+0041) should be 1 byte (0x41), not 2 bytes (0xC1 0x81)
+        const bitstring = Bitstring.fromBytes([0xc1, 0x81]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects overlong encoding (3-byte)", () => {
+        // U+007F should be 1 byte, not 3 bytes (0xE0 0x81 0xBF)
+        const bitstring = Bitstring.fromBytes([0xe0, 0x81, 0xbf]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects overlong encoding (4-byte)", () => {
+        // U+FFFF should be 3 bytes, not 4 bytes (0xF0 0x8F 0xBF 0xBF)
+        const bitstring = Bitstring.fromBytes([0xf0, 0x8f, 0xbf, 0xbf]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects UTF-16 surrogate (high surrogate)", () => {
+        // U+D800 (high surrogate): 0xED 0xA0 0x80
+        const bitstring = Bitstring.fromBytes([0xed, 0xa0, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects UTF-16 surrogate (low surrogate)", () => {
+        // U+DFFF (low surrogate): 0xED 0xBF 0xBF
+        const bitstring = Bitstring.fromBytes([0xed, 0xbf, 0xbf]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects code point above maximum (U+10FFFF)", () => {
+        // U+110000 (too large): 0xF4 0x90 0x80 0x80
+        const bitstring = Bitstring.fromBytes([0xf4, 0x90, 0x80, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects invalid 5-byte sequence", () => {
+        // 5-byte sequences are not valid in UTF-8
+        const bitstring = Bitstring.fromBytes([0xf8, 0x80, 0x80, 0x80, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+
+      it("detects invalid 6-byte sequence", () => {
+        // 6-byte sequences are not valid in UTF-8
+        const bitstring = Bitstring.fromBytes([
+          0xfc, 0x80, 0x80, 0x80, 0x80, 0x80,
+        ]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+    });
+
+    describe("truncated UTF-8", () => {
+      it("detects truncated 2-byte sequence (0 continuation bytes)", () => {
+        // 0xC2 expects 1 continuation byte, but none provided
+        const bitstring = Bitstring.fromBytes([0xc2]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: true});
+      });
+
+      it("detects truncated 3-byte sequence (0 continuation bytes)", () => {
+        // 0xE2 expects 2 continuation bytes, but none provided
+        const bitstring = Bitstring.fromBytes([0xe2]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: true});
+      });
+
+      it("detects truncated 3-byte sequence (1 continuation byte)", () => {
+        // 0xE2 expects 2 continuation bytes, only 1 provided
+        const bitstring = Bitstring.fromBytes([0xe2, 0x82]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: true});
+      });
+
+      it("detects truncated 4-byte sequence (0 continuation bytes)", () => {
+        // 0xF0 expects 3 continuation bytes, but none provided
+        const bitstring = Bitstring.fromBytes([0xf0]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: true});
+      });
+
+      it("detects truncated 4-byte sequence (1 continuation byte)", () => {
+        // 0xF0 expects 3 continuation bytes, only 1 provided
+        const bitstring = Bitstring.fromBytes([0xf0, 0x9d]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: true});
+      });
+
+      it("detects truncated 4-byte sequence (2 continuation bytes)", () => {
+        // 0xF0 expects 3 continuation bytes, only 2 provided
+        const bitstring = Bitstring.fromBytes([0xf0, 0x9d, 0x95]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: true});
+      });
+
+      it("rejects truncated sequence with invalid continuation byte", () => {
+        // Leader byte followed by invalid continuation byte
+        const bitstring = Bitstring.fromBytes([0xc2, 0xff]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 0, isTruncated: false});
+      });
+    });
+
+    describe("partial valid UTF-8", () => {
+      it("returns valid prefix length when invalid byte follows valid sequence", () => {
+        // "ab" (valid) + 0xFF (invalid)
+        const bitstring = Bitstring.fromBytes([0x61, 0x62, 0xff]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 2, isTruncated: false});
+      });
+
+      it("returns valid prefix when truncated sequence follows valid characters", () => {
+        // "ab" (valid) + truncated 2-byte (0xC2 without continuation)
+        const bitstring = Bitstring.fromBytes([0x61, 0x62, 0xc2]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 2, isTruncated: true});
+      });
+
+      it("handles valid multi-byte followed by invalid byte", () => {
+        // € (U+20AC: 0xE2 0x82 0xAC) + invalid 0xFF
+        const bitstring = Bitstring.fromBytes([0xe2, 0x82, 0xac, 0xff]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 3, isTruncated: false});
+      });
+
+      it("handles multiple valid sequences followed by truncated sequence", () => {
+        // "a€" (valid) + truncated 3-byte (0xE2 0x82 without final byte)
+        const bitstring = Bitstring.fromBytes([
+          0x61, 0xe2, 0x82, 0xac, 0xe2, 0x82,
+        ]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 4, isTruncated: true});
+      });
+
+      it("handles complex mix of valid and invalid sequences", () => {
+        // "abc全" (all valid: 'a' 'b' 'c' + 全 U+5168: 0xE5 0x85 0xA8)
+        // + overlong encoding (invalid)
+        const bitstring = Bitstring.fromBytes([
+          0x61, 0x62, 0x63, 0xe5, 0x85, 0xa8, 0xc0, 0x80,
+        ]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 6, isTruncated: false});
+      });
+    });
+
+    describe("edge cases", () => {
+      it("handles bitstring created from text", () => {
+        const bitstring = Type.bitstring("全息图");
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        // "全息图" is 3 characters × 3 bytes each = 9 bytes
+        assert.deepStrictEqual(result, {validLength: 9, isTruncated: false});
+      });
+
+      it("handles bitstring with null bytes field", () => {
+        const bitstring = {
+          type: "bitstring",
+          text: "test",
+          bytes: null,
+          leftoverBitCount: 0,
+          hex: null,
+        };
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 4, isTruncated: false});
+      });
+
+      it("handles maximum valid Unicode code point (U+10FFFF)", () => {
+        // U+10FFFF: 0xF4 0x8F 0xBF 0xBF
+        const bitstring = Bitstring.fromBytes([0xf4, 0x8f, 0xbf, 0xbf]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 4, isTruncated: false});
+      });
+
+      it("handles minimum 2-byte sequence (U+0080)", () => {
+        // U+0080: 0xC2 0x80
+        const bitstring = Bitstring.fromBytes([0xc2, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 2, isTruncated: false});
+      });
+
+      it("handles minimum 3-byte sequence (U+0800)", () => {
+        // U+0800: 0xE0 0xA0 0x80
+        const bitstring = Bitstring.fromBytes([0xe0, 0xa0, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 3, isTruncated: false});
+      });
+
+      it("handles minimum 4-byte sequence (U+10000)", () => {
+        // U+10000: 0xF0 0x90 0x80 0x80
+        const bitstring = Bitstring.fromBytes([0xf0, 0x90, 0x80, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 4, isTruncated: false});
+      });
+
+      it("handles maximum 1-byte sequence (U+007F)", () => {
+        // U+007F (DEL): 0x7F
+        const bitstring = Bitstring.fromBytes([0x7f]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 1, isTruncated: false});
+      });
+
+      it("handles null byte (U+0000)", () => {
+        // U+0000: 0x00
+        const bitstring = Bitstring.fromBytes([0x00]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 1, isTruncated: false});
+      });
+
+      it("handles code point just before surrogate range (U+D7FF)", () => {
+        // U+D7FF: 0xED 0x9F 0xBF (highest valid before surrogate range)
+        const bitstring = Bitstring.fromBytes([0xed, 0x9f, 0xbf]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 3, isTruncated: false});
+      });
+
+      it("handles code point just after surrogate range (U+E000)", () => {
+        // U+E000: 0xEE 0x80 0x80 (lowest valid after surrogate range)
+        const bitstring = Bitstring.fromBytes([0xee, 0x80, 0x80]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 3, isTruncated: false});
+      });
+
+      it("handles bitstring with leftover bits", () => {
+        // Create a bitstring with leftover bits - UTF-8 validation should ignore them
+        const bitstring = {
+          type: "bitstring",
+          text: null,
+          bytes: new Uint8Array([0x61, 0x62]), // "ab"
+          leftoverBitCount: 3,
+          hex: null,
+        };
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 2, isTruncated: false});
+      });
+
+      it("handles maximum 2-byte sequence just below 3-byte threshold (U+07FF)", () => {
+        // U+07FF: 0xDF 0xBF (highest valid 2-byte sequence)
+        const bitstring = Bitstring.fromBytes([0xdf, 0xbf]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 2, isTruncated: false});
+      });
+
+      it("handles maximum 3-byte sequence just below 4-byte threshold (U+FFFF)", () => {
+        // U+FFFF: 0xEF 0xBF 0xBF (highest valid 3-byte sequence)
+        const bitstring = Bitstring.fromBytes([0xef, 0xbf, 0xbf]);
+        const result = Bitstring.utf8PrefixValidation(bitstring);
+
+        assert.deepStrictEqual(result, {validLength: 3, isTruncated: false});
+      });
+    });
+  });
+
   describe("validateCodePoint()", () => {
     it("integer that is a valid code point", () => {
       // a = 97
