@@ -24,7 +24,7 @@ defmodule Hologram.JS do
 
     quote do
       @doc """
-      Returns the list of JS bindings declared with js_import/2 in the module.
+      Returns the list of JS imports declared with js_import/2 in the module.
       """
       @spec __js_imports__() :: list(map)
       def __js_imports__, do: Enum.reverse(@__js_imports__)
