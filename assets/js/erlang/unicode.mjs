@@ -167,7 +167,7 @@ const Erlang_Unicode = {
         const leaderByte = bytes[start];
         const expectedLength = Bitstring.getUtf8SequenceLength(leaderByte);
 
-        if (expectedLength <= 0) return false;
+        if (expectedLength === false) return false;
 
         const availableBytes = bytes.length - start;
         if (availableBytes >= expectedLength) return false;
@@ -185,7 +185,7 @@ const Erlang_Unicode = {
 
       while (pos < bytes.length) {
         const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
 
@@ -455,7 +455,7 @@ const Erlang_Unicode = {
 
       while (pos < bytes.length) {
         const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
 
@@ -769,7 +769,7 @@ const Erlang_Unicode = {
       let pos = 0;
       while (pos < bytes.length) {
         const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
 
@@ -936,7 +936,7 @@ const Erlang_Unicode = {
       let pos = 0;
       while (pos < bytes.length) {
         const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
 
@@ -1105,7 +1105,7 @@ const Erlang_Unicode = {
       let pos = 0;
       while (pos < bytes.length) {
         const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === -1 || !isValidSequence(pos, seqLength)) break;
+        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
         pos += seqLength;
       }
 

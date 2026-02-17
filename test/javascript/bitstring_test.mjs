@@ -7431,44 +7431,44 @@ describe("Bitstring", () => {
     });
 
     describe("invalid leader bytes", () => {
-      it("returns -1 for 0x80 (continuation byte pattern 10xxxxxx)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0x80), -1);
+      it("returns false for 0x80 (continuation byte pattern 10xxxxxx)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0x80), false);
       });
 
-      it("returns -1 for 0xBF (continuation byte pattern 10xxxxxx)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xbf), -1);
+      it("returns false for 0xBF (continuation byte pattern 10xxxxxx)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xbf), false);
       });
 
-      it("returns -1 for 0xC0 (invalid: overlong encoding)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xc0), -1);
+      it("returns false for 0xC0 (invalid: overlong encoding)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xc0), false);
       });
 
-      it("returns -1 for 0xC1 (invalid: overlong encoding)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xc1), -1);
+      it("returns false for 0xC1 (invalid: overlong encoding)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xc1), false);
       });
 
-      it("returns -1 for 0xF5 (invalid: > U+10FFFF)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf5), -1);
+      it("returns false for 0xF5 (invalid: > U+10FFFF)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xf5), false);
       });
 
-      it("returns -1 for 0xF6 (invalid: > U+10FFFF)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf6), -1);
+      it("returns false for 0xF6 (invalid: > U+10FFFF)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xf6), false);
       });
 
-      it("returns -1 for 0xF7 (invalid: > U+10FFFF)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf7), -1);
+      it("returns false for 0xF7 (invalid: > U+10FFFF)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xf7), false);
       });
 
-      it("returns -1 for 0xF8 (invalid 5-byte pattern 111110xx)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf8), -1);
+      it("returns false for 0xF8 (invalid 5-byte pattern 111110xx)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xf8), false);
       });
 
-      it("returns -1 for 0xFE (invalid pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xfe), -1);
+      it("returns false for 0xFE (invalid pattern)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xfe), false);
       });
 
-      it("returns -1 for 0xFF (invalid pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xff), -1);
+      it("returns false for 0xFF (invalid pattern)", () => {
+        assert.equal(Bitstring.getUtf8SequenceLength(0xff), false);
       });
     });
   });
