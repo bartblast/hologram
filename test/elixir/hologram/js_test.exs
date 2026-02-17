@@ -9,6 +9,11 @@ defmodule Hologram.JSTest do
   alias Hologram.Test.Fixtures.JS.Module5
   alias Hologram.Test.Fixtures.JS.Module6
 
+  test "exec/1" do
+    code = "console.log('Hello, world!');"
+    assert exec(code) == code
+  end
+
   describe "js_import/2" do
     test "no imports" do
       assert Module2.__js_bindings__() == []
@@ -47,11 +52,6 @@ defmodule Hologram.JSTest do
                %{export: "Chart", from: "chart.js", as: "MyChart"}
              ]
     end
-  end
-
-  test "exec/1" do
-    code = "console.log('Hello, world!');"
-    assert exec(code) == code
   end
 
   test "sigil_JS/2" do
