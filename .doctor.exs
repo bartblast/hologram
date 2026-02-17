@@ -3,6 +3,7 @@
   # False positives are reported for these modules:
   ignore_modules: [
     Hologram.Component,
+    Hologram.JS,
     Hologram.Layout,
     Hologram.Page
   ],
