@@ -14,6 +14,59 @@ defmodule Hologram.Compiler do
   alias Hologram.Reflection
 
   @doc """
+  Aggregates JS imports from all Elixir modules referenced by the given MFAs.
+  Returns a map with:
+  - `:imports` — unique imports with generated `$1`, `$2`, ... aliases for JS import statements
+  - `:bindings` — per-module map of user alias to generated alias for `__bindings__` on module proxies
+  """
+  @spec aggregate_js_imports(list(mfa)) :: %{
+          imports: list(%{from: String.t(), export: String.t(), alias: String.t()}),
+          bindings: %{module => %{String.t() => String.t()}}
+        }
+  def aggregate_js_imports(mfas) do
+    modules_with_imports =
+      mfas
+      |> filter_elixir_mfas()
+      |> Enum.map(fn {module, _function, _arity} -> module end)
+      |> Enum.uniq()
+      |> Enum.filter(
+        &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
+      )
+
+    unique_imports =
+      modules_with_imports
+      |> Enum.flat_map(fn module ->
+        Enum.map(module.__js_imports__(), fn %{from: from, export: export} ->
+          {from, export}
+        end)
+      end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    alias_map =
+      unique_imports
+      |> Enum.with_index(1)
+      |> Map.new(fn {{from, export}, index} -> {{from, export}, "$#{index}"} end)
+
+    imports =
+      Enum.map(unique_imports, fn {from, export} ->
+        %{from: from, export: export, alias: alias_map[{from, export}]}
+      end)
+
+    bindings =
+      Map.new(modules_with_imports, fn module ->
+        module_bindings =
+          Map.new(module.__js_imports__(), fn %{as: as, from: from, export: export} ->
+            {as, alias_map[{from, export}]}
+          end)
+
+        {module, module_bindings}
+      end)
+
+    %{imports: imports, bindings: bindings}
+  end
+
+  @doc """
   Builds the call graph of all modules in the project.
   """
   @spec build_call_graph :: CallGraph.t()

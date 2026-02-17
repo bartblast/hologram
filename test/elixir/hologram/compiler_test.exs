@@ -11,6 +11,11 @@ defmodule Hologram.CompilerTest do
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
+  alias Hologram.Test.Fixtures.Compiler.Module12
+  alias Hologram.Test.Fixtures.Compiler.Module13
+  alias Hologram.Test.Fixtures.Compiler.Module14
+  alias Hologram.Test.Fixtures.Compiler.Module15
+  alias Hologram.Test.Fixtures.Compiler.Module17
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
@@ -49,6 +54,103 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt,
       runtime_mfas: CallGraph.list_runtime_mfas(call_graph)
     ]
+  end
+
+  describe "aggregate_js_imports/1" do
+    test "empty MFAs list" do
+      assert aggregate_js_imports([]) == %{imports: [], bindings: %{}}
+    end
+
+    test "filters out Erlang modules" do
+      mfas = [{:erlang, :+, 2}, {:maps, :get, 2}]
+
+      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+    end
+
+    test "no modules have JS imports" do
+      mfas = [{Enum, :map, 2}, {Kernel, :+, 2}]
+
+      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+    end
+
+    test "skips modules that use Hologram.JS but have no imports" do
+      mfas = [{Module13, :func, 0}]
+
+      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+    end
+
+    test "single module with imports" do
+      mfas = [{Module12, :func, 0}, {Enum, :map, 2}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"},
+                 %{from: "chart.js", export: "helpers", alias: "$2"}
+               ],
+               bindings: %{
+                 Module12 => %{
+                   "MyChart" => "$1",
+                   "helpers" => "$2"
+                 }
+               }
+             }
+    end
+
+    test "multiple modules with imports from different sources" do
+      mfas = [{Module12, :func, 0}, {Module17, :func, 0}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "./utils.js", export: "formatDate", alias: "$1"},
+                 %{from: "chart.js", export: "Chart", alias: "$2"},
+                 %{from: "chart.js", export: "helpers", alias: "$3"}
+               ],
+               bindings: %{
+                 Module12 => %{
+                   "MyChart" => "$2",
+                   "helpers" => "$3"
+                 },
+                 Module17 => %{
+                   "myFormatDate" => "$1"
+                 }
+               }
+             }
+    end
+
+    test "deduplicates modules when multiple MFAs reference the same module" do
+      mfas = [{Module12, :func_a, 0}, {Module12, :func_b, 1}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"},
+                 %{from: "chart.js", export: "helpers", alias: "$2"}
+               ],
+               bindings: %{
+                 Module12 => %{
+                   "MyChart" => "$1",
+                   "helpers" => "$2"
+                 }
+               }
+             }
+    end
+
+    test "deduplicates imports when multiple modules import the same export" do
+      mfas = [{Module14, :func, 0}, {Module15, :func, 0}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"}
+               ],
+               bindings: %{
+                 Module14 => %{
+                   "Chart" => "$1"
+                 },
+                 Module15 => %{
+                   "MyChart" => "$1"
+                 }
+               }
+             }
+    end
   end
 
   describe "build_page_js/3" do
