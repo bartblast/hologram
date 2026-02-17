@@ -7,13 +7,13 @@ defmodule Hologram.JS do
 
       @before_compile Hologram.JS
 
-      Module.register_attribute(__MODULE__, :__js_bindings__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__js_imports__, accumulate: true)
     end
   end
 
   defmacro __before_compile__(env) do
     env.module
-    |> Module.get_attribute(:__js_bindings__)
+    |> Module.get_attribute(:__js_imports__)
     |> Enum.frequencies_by(& &1.as)
     |> Enum.each(fn {name, count} ->
       if count > 1 do
@@ -26,8 +26,8 @@ defmodule Hologram.JS do
       @doc """
       Returns the list of JS bindings declared with js_import/2 in the module.
       """
-      @spec __js_bindings__() :: list(map)
-      def __js_bindings__, do: Enum.reverse(@__js_bindings__)
+      @spec __js_imports__() :: list(map)
+      def __js_imports__, do: Enum.reverse(@__js_imports__)
     end
   end
 
@@ -51,7 +51,7 @@ defmodule Hologram.JS do
     as = Keyword.get(opts, :as, export)
 
     quote do
-      @__js_bindings__ %{export: unquote(export), from: unquote(from), as: unquote(as)}
+      @__js_imports__ %{export: unquote(export), from: unquote(from), as: unquote(as)}
     end
   end
 

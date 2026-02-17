@@ -15,30 +15,30 @@ defmodule Hologram.JSTest do
 
   describe "js_import/2" do
     test "no imports" do
-      assert Module2.__js_bindings__() == []
+      assert Module2.__js_imports__() == []
     end
 
     test "single import without alias" do
-      assert Module3.__js_bindings__() == [
+      assert Module3.__js_imports__() == [
                %{export: "Chart", from: "chart.js", as: "Chart"}
              ]
     end
 
     test "single import with alias" do
-      assert Module4.__js_bindings__() == [
+      assert Module4.__js_imports__() == [
                %{export: "Chart", from: "chart.js", as: "MyChart"}
              ]
     end
 
     test "multiple imports from same source" do
-      assert Module1.__js_bindings__() == [
+      assert Module1.__js_imports__() == [
                %{export: "Chart", from: "chart.js", as: "MyChart"},
                %{export: "helpers", from: "chart.js", as: "helpers"}
              ]
     end
 
     test "multiple imports from different sources" do
-      assert Module6.__js_bindings__() == [
+      assert Module6.__js_imports__() == [
                %{export: "Chart", from: "chart.js", as: "Chart"},
                %{export: "helpers", from: "chart.js", as: "helpers"},
                %{export: "formatDate", from: "./utils.js", as: "myFormatDate"}
