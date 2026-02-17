@@ -166,7 +166,6 @@ defmodule Hologram.Test.Stubs do
     end
   end
 
-  # credo:disable-for-lines:71 Credo.Check.Refactor.ABCSize
   defp setup_asset_fixtures(static_dir) do
     FileUtils.recreate_dir(static_dir)
 

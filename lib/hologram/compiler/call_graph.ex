@@ -831,7 +831,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   # Add call graph edges for Erlang functions depending on other Erlang functions.
-  # credo:disable-for-next-line Credo.Check.Refactor.ABCSize
   defp add_edges_for_erlang_functions(graph) do
     Digraph.add_edges(graph, @erlang_mfa_edges)
   end

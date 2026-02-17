@@ -57,7 +57,6 @@
           {Credo.Check.Readability.VariableNames, []},
           {Credo.Check.Readability.WithCustomTaggedTuple, []},
           {Credo.Check.Readability.WithSingleClause, []},
-          {Credo.Check.Refactor.ABCSize, []},
           {Credo.Check.Refactor.AppendSingleItem, []},
           {Credo.Check.Refactor.Apply, []},
           {Credo.Check.Refactor.CondStatements, []},
@@ -114,6 +113,7 @@
           {Credo.Check.Readability.AliasAs, []},
           {Credo.Check.Readability.ModuleDoc, []},
           {Credo.Check.Readability.Specs, []},
+          {Credo.Check.Refactor.ABCSize, []},
           {Credo.Check.Refactor.MapMap, []},
           {Credo.Check.Refactor.ModuleDependencies, []},
           {Credo.Check.Warning.LeakyEnvironment, []}

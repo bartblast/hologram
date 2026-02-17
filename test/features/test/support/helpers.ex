@@ -303,7 +303,6 @@ defmodule HologramFeatureTests.Helpers do
     :erlang.monotonic_time(:milli_seconds)
   end
 
-  # credo:disable-for-lines:15 Credo.Check.Refactor.ABCSize
   defp do_execute_query_once(%{driver: driver} = parent, query) do
     with {:ok, query} <- Query.validate(query),
          compiled_query <- Query.compile(query),
