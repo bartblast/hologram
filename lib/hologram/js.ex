@@ -1,11 +1,23 @@
 defmodule Hologram.JS do
   @moduledoc false
 
-  alias Hologram.Compiler.AST
-
   defmacro __using__(_opts) do
     quote do
-      register_js_bindings_accumulator()
+      import Hologram.JS, only: [js_import: 2]
+
+      @before_compile Hologram.JS
+
+      Module.register_attribute(__MODULE__, :__js_bindings__, accumulate: true)
+    end
+  end
+
+  defmacro __before_compile__(_env) do
+    quote do
+      @doc """
+      Returns the list of JS bindings declared with js_import/2 in the module.
+      """
+      @spec __js_bindings__() :: list(map)
+      def __js_bindings__, do: Enum.reverse(@__js_bindings__)
     end
   end
 
@@ -17,12 +29,19 @@ defmodule Hologram.JS do
   def exec(code), do: code
 
   @doc """
-  Returns the AST of code that registers __js_bindings__ module attribute.
+  Imports a JS export and binds it to a name available via JS.ref/1.
+
+  ## Examples
+
+      js_import "Chart", from: "chart.js"
+      js_import "Chart", from: "chart.js", as: "MyChart"
   """
-  @spec register_js_bindings_accumulator() :: AST.t()
-  def register_js_bindings_accumulator do
+  defmacro js_import(export, opts) do
+    from = Keyword.fetch!(opts, :from)
+    as = Keyword.get(opts, :as, export)
+
     quote do
-      Module.register_attribute(__MODULE__, :__js_bindings__, accumulate: true)
+      @__js_bindings__ %{export: unquote(export), from: unquote(from), as: unquote(as)}
     end
   end
 
