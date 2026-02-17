@@ -57,7 +57,6 @@ defmodule Hologram.Compiler.Digraph do
   Automatically adds vertices if they don't exist.
   """
   @spec add_edges(t, [edge]) :: t
-  # credo:disable-for-lines:41 Credo.Check.Refactor.ABCSize
   # The above Credo check is disabled because the function is optimised this way
   def add_edges(graph, added_edges) do
     %Digraph{
@@ -205,7 +204,7 @@ defmodule Hologram.Compiler.Digraph do
   This includes both outgoing edges from the vertex and incoming edges to the vertex.
   """
   @spec remove_vertex(t, vertex) :: t
-  # credo:disable-for-lines:63 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
+  # credo:disable-for-lines:63 Credo.Check.Refactor.Nesting
   # The above Credo checks are disabled because the function is optimised this way
   def remove_vertex(graph, vertex) do
     %Digraph{
@@ -275,7 +274,7 @@ defmodule Hologram.Compiler.Digraph do
   This includes both outgoing edges from the vertices and incoming edges to the vertices.
   """
   @spec remove_vertices(t, [vertex]) :: t
-  # credo:disable-for-lines:85 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
+  # credo:disable-for-lines:85 Credo.Check.Refactor.Nesting
   # The above Credo checks are disabled because the function is optimised this way
   def remove_vertices(graph, vertices_to_remove) do
     %Digraph{

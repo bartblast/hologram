@@ -11,7 +11,6 @@ defmodule Hologram.Benchmarks do
   otherwise they are treated as (literal) number of modules.
   """
   @spec generate_module_digest_plts(integer, integer, integer) :: {PLT.t(), PLT.t()}
-  # credo:disable-for-lines:53 Credo.Check.Refactor.ABCSize
   def generate_module_digest_plts(added_modules_spec, removed_modules_spec, edited_modules_spec) do
     validate_args(added_modules_spec, removed_modules_spec, edited_modules_spec)
 

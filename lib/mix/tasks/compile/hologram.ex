@@ -1,4 +1,3 @@
-# credo:disable-for-this-file Credo.Check.Refactor.ABCSize
 defmodule Mix.Tasks.Compile.Hologram do
   @moduledoc """
   Builds Hologram project JavaScript bundles, the call graph of the code,

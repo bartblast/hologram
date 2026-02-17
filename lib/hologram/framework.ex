@@ -288,7 +288,6 @@ defmodule Hologram.Framework do
             deferred_fun_count: non_neg_integer()
           }
         }
-  # credo:disable-for-lines:46 Credo.Check.Refactor.ABCSize
   def elixir_modules_info(erlang_js_dir, stdlib_deps, opts) do
     deferred_elixir_modules = Keyword.fetch!(opts, :deferred_elixir_modules)
     deferred_elixir_funs = Keyword.fetch!(opts, :deferred_elixir_funs)

@@ -494,7 +494,7 @@ defmodule Hologram.Compiler.IR do
   @spec for_term!(any) :: IR.t()
   def for_term!(term)
 
-  # credo:disable-for-lines:34 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.CyclomaticComplexity/
+  # credo:disable-for-lines:34 Credo.Check.Refactor.CyclomaticComplexity
   def for_term!(term) when is_function(term) do
     function_info = Function.info(term)
 
