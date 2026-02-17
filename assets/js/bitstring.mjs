@@ -247,6 +247,27 @@ export default class Bitstring {
     }
   }
 
+  // Decodes a UTF-8 sequence starting at the given position.
+  // Returns the decoded Unicode code point value.
+  // bytes: Uint8Array containing the UTF-8 encoded data
+  // start: byte index where the sequence begins
+  // length: number of bytes in the UTF-8 sequence (1-4)
+  static decodeUtf8CodePoint(bytes, start, length) {
+    if (length === 1) return bytes[start];
+
+    // First byte masks: 2-byte=0x1f, 3-byte=0x0f, 4-byte=0x07
+    const firstByteMasks = {2: 0x1f, 3: 0x0f, 4: 0x07};
+
+    let codePoint = bytes[start] & firstByteMasks[length];
+
+    // Process continuation bytes (all use 0x3f mask, shift by 6 each)
+    for (let i = 1; i < length; i++) {
+      codePoint = (codePoint << 6) | (bytes[start + i] & 0x3f);
+    }
+
+    return codePoint;
+  }
+
   static fromBits(bits) {
     const bitCount = bits.length;
     const byteCount = Math.ceil(bitCount / 8);
