@@ -11,7 +11,17 @@ defmodule Hologram.JS do
     end
   end
 
-  defmacro __before_compile__(_env) do
+  defmacro __before_compile__(env) do
+    env.module
+    |> Module.get_attribute(:__js_bindings__)
+    |> Enum.frequencies_by(& &1.as)
+    |> Enum.each(fn {name, count} ->
+      if count > 1 do
+        raise Hologram.CompileError,
+          message: "duplicate JS binding name \"#{name}\" in #{inspect(env.module)}"
+      end
+    end)
+
     quote do
       @doc """
       Returns the list of JS bindings declared with js_import/2 in the module.

@@ -6,7 +6,6 @@ defmodule Hologram.JSTest do
   alias Hologram.Test.Fixtures.JS.Module2
   alias Hologram.Test.Fixtures.JS.Module3
   alias Hologram.Test.Fixtures.JS.Module4
-  alias Hologram.Test.Fixtures.JS.Module5
   alias Hologram.Test.Fixtures.JS.Module6
 
   test "exec/1" do
@@ -46,11 +45,20 @@ defmodule Hologram.JSTest do
              ]
     end
 
-    test "duplicated imports" do
-      assert Module5.__js_bindings__() == [
-               %{export: "Chart", from: "chart.js", as: "MyChart"},
-               %{export: "Chart", from: "chart.js", as: "MyChart"}
-             ]
+    test "raises on duplicate binding name" do
+      expected_error_msg =
+        ~s'duplicate JS binding name "MyChart" in Hologram.Test.Fixtures.JS.DuplicateBindingName'
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DuplicateBindingName do
+          use Hologram.JS
+
+          js_import "Chart", from: "chart.js", as: "MyChart"
+          js_import "Other", from: "other.js", as: "MyChart"
+        end
+        """)
+      end
     end
   end
 
