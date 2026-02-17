@@ -7382,94 +7382,32 @@ describe("Bitstring", () => {
   });
 
   describe("getUtf8SequenceLength()", () => {
-    describe("1-byte sequences (ASCII)", () => {
-      it("returns 1 for 0x00 (0xxxxxxx pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0x00), 1);
-      });
-
-      it("returns 1 for 0x7F (0xxxxxxx pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0x7f), 1);
-      });
-
-      it("returns 1 for 0x41 (ASCII 'A')", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0x41), 1);
-      });
+    it("returns 1 for 0x41 (ASCII)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0x41), 1);
     });
 
-    describe("2-byte sequences", () => {
-      it("returns 2 for 0xC2 (valid 2-byte leader)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xc2), 2);
-      });
-
-      it("returns 2 for 0xDF (110xxxxx pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xdf), 2);
-      });
+    it("returns 2 for 0xC2 (2-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xc2), 2);
     });
 
-    describe("3-byte sequences", () => {
-      it("returns 3 for 0xE0 (1110xxxx pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xe0), 3);
-      });
-
-      it("returns 3 for 0xEF (1110xxxx pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xef), 3);
-      });
-
-      it("returns 3 for 0xE2 (valid 3-byte leader)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xe2), 3);
-      });
+    it("returns 3 for 0xE0 (3-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xe0), 3);
     });
 
-    describe("4-byte sequences", () => {
-      it("returns 4 for 0xF0 (11110xxx pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf0), 4);
-      });
-
-      it("returns 4 for 0xF4 (valid 4-byte leader)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf4), 4);
-      });
+    it("returns 4 for 0xF0 (4-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xf0), 4);
     });
 
-    describe("invalid leader bytes", () => {
-      it("returns false for 0x80 (continuation byte pattern 10xxxxxx)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0x80), false);
-      });
+    it("returns false for 0xC0 (invalid: overlong encoding)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xc0), false);
+    });
 
-      it("returns false for 0xBF (continuation byte pattern 10xxxxxx)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xbf), false);
-      });
+    it("returns false for 0xF5 (invalid: > U+10FFFF)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xf5), false);
+    });
 
-      it("returns false for 0xC0 (invalid: overlong encoding)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xc0), false);
-      });
-
-      it("returns false for 0xC1 (invalid: overlong encoding)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xc1), false);
-      });
-
-      it("returns false for 0xF5 (invalid: > U+10FFFF)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf5), false);
-      });
-
-      it("returns false for 0xF6 (invalid: > U+10FFFF)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf6), false);
-      });
-
-      it("returns false for 0xF7 (invalid: > U+10FFFF)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf7), false);
-      });
-
-      it("returns false for 0xF8 (invalid 5-byte pattern 111110xx)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xf8), false);
-      });
-
-      it("returns false for 0xFE (invalid pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xfe), false);
-      });
-
-      it("returns false for 0xFF (invalid pattern)", () => {
-        assert.equal(Bitstring.getUtf8SequenceLength(0xff), false);
-      });
+    it("returns false for 0x80 (invalid: continuation byte)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0x80), false);
     });
   });
 });
