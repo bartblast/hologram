@@ -199,10 +199,10 @@ defmodule Hologram.CompilerTest do
 
     test "single JS import", %{call_graph: call_graph, ir_plt: ir_plt} do
       result = build_page_js(Module19, call_graph, ir_plt, @js_dir)
-      js_fixture = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
 
       assert length(Regex.scan(~r/import \{/, result)) == 1
-      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture}";')
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_path}";')
 
       assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
 
@@ -214,11 +214,11 @@ defmodule Hologram.CompilerTest do
 
     test "multiple JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
       result = build_page_js(Module21, call_graph, ir_plt, @js_dir)
-      js_fixture = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
 
       assert length(Regex.scan(~r/import \{/, result)) == 2
-      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture}";')
-      assert String.contains?(result, ~s'import { export_1b as $2 } from "#{js_fixture}";')
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_path}";')
+      assert String.contains?(result, ~s'import { export_1b as $2 } from "#{js_fixture_path}";')
 
       assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
 
@@ -230,18 +230,18 @@ defmodule Hologram.CompilerTest do
 
     test "multiple modules with JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
       result = build_page_js(Module23, call_graph, ir_plt, @js_dir)
-      js_fixture_1 = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
-      js_fixture_2 = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
 
       assert length(Regex.scan(~r/import \{/, result)) == 2
-      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_1}";')
-      assert String.contains?(result, ~s'import { export_2a as $2 } from "#{js_fixture_2}";')
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_1_path}";')
+      assert String.contains?(result, ~s'import { export_2 as $2 } from "#{js_fixture_2_path}";')
 
       assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
 
       assert String.contains?(
                result,
-               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}, "Hologram.Test.Fixtures.Compiler.Module22": {"alias_2a": $2}});'
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}, "Hologram.Test.Fixtures.Compiler.Module22": {"alias_2": $2}});'
              )
     end
   end
