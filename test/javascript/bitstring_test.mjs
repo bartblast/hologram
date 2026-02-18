@@ -1231,6 +1231,43 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("decodeUtf8CodePoint()", () => {
+    it("decodes 1-byte UTF-8 sequence (ASCII)", () => {
+      // 'A' = 0x41 = U+0041
+      const bytes = new Uint8Array([0x41]);
+      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 1);
+      assert.equal(codePoint, 0x41);
+    });
+
+    it("decodes 2-byte UTF-8 sequence", () => {
+      // '£' = 0xC2 0xA3 = U+00A3 (pound sign)
+      const bytes = new Uint8Array([0xc2, 0xa3]);
+      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 2);
+      assert.equal(codePoint, 0xa3);
+    });
+
+    it("decodes 3-byte UTF-8 sequence", () => {
+      // '€' = 0xE2 0x82 0xAC = U+20AC (euro sign)
+      const bytes = new Uint8Array([0xe2, 0x82, 0xac]);
+      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 3);
+      assert.equal(codePoint, 0x20ac);
+    });
+
+    it("decodes 4-byte UTF-8 sequence", () => {
+      // '𐍈' = 0xF0 0x90 0x8D 0x88 = U+10348 (Gothic letter hwair)
+      const bytes = new Uint8Array([0xf0, 0x90, 0x8d, 0x88]);
+      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 4);
+      assert.equal(codePoint, 0x10348);
+    });
+
+    it("decodes from non-zero start position", () => {
+      // Test decoding '£' starting at position 2
+      const bytes = new Uint8Array([0x41, 0x42, 0xc2, 0xa3]);
+      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 2, 2);
+      assert.equal(codePoint, 0xa3);
+    });
+  });
+
   describe("fromBits()", () => {
     it("empty", () => {
       const result = Bitstring.fromBits([]);
@@ -5224,6 +5261,50 @@ describe("Bitstring", () => {
         const bitstring = Bitstring.fromBytes([255]);
         assert.isFalse(Bitstring.isText(bitstring));
       });
+    });
+  });
+
+  describe("isValidUtf8ContinuationByte()", () => {
+    it("valid continuation byte (10xxxxxx pattern)", () => {
+      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0x80)); // 10000000
+      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0xbf)); // 10111111
+    });
+
+    it("invalid continuation byte (not 10xxxxxx pattern)", () => {
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x00)); // 00000000 (ASCII)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x7f)); // 01111111 (ASCII)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xc0)); // 11000000 (2-byte start)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xff)); // 11111111 (invalid)
+    });
+  });
+
+  describe("isValidUtf8CodePoint()", () => {
+    it("valid codepoint", () => {
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x41, 1)); // ASCII 'A'
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0xa9, 2)); // © (copyright)
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x20ac, 3)); // € (euro)
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x10348, 4)); // 𐍈 (Gothic letter)
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x10ffff, 4)); // Maximum valid Unicode
+    });
+
+    it("overlong encoding (codepoint too small for encoding length)", () => {
+      // 'A' (0x41) must use 1 byte, not 2
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x41, 2));
+      // 0x7FF requires 2 bytes, but attempting 3-byte encoding
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x7ff, 3));
+      // 0xFFFF requires 3 bytes, but attempting 4-byte encoding
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xffff, 4));
+    });
+
+    it("UTF-16 surrogate (U+D800–U+DFFF)", () => {
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xd800, 3)); // Start of surrogate range
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xdc00, 3)); // Middle of surrogate range
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xdfff, 3)); // End of surrogate range
+    });
+
+    it("beyond Unicode range (> U+10FFFF)", () => {
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x110000, 4));
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x200000, 4));
     });
   });
 
