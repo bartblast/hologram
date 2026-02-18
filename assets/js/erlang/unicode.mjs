@@ -95,27 +95,7 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Checks if there's a truncated (incomplete) sequence at position.
-      // Returns true if bytes could be a valid prefix of a UTF-8 sequence.
-      const isTruncatedSequence = (start) => {
-        const leaderByte = bytes[start];
-        const expectedLength = Bitstring.getUtf8SequenceLength(leaderByte);
-
-        if (expectedLength === false) return false;
-
-        const availableBytes = bytes.length - start;
-        if (availableBytes >= expectedLength) return false;
-
-        // Check all available continuation bytes
-        for (let i = 1; i < availableBytes; i++) {
-          if (!Bitstring.isValidUtf8ContinuationByte(bytes[start + i]))
-            return false;
-        }
-
-        return true;
-      };
-
-      // Main loop: scan forward, validating each sequence
+      // Scan forward, validating each sequence
       let pos = 0;
 
       while (pos < bytes.length) {
@@ -128,7 +108,7 @@ const Erlang_Unicode = {
         pos += seqLength;
       }
 
-      return {validLength: pos, isTruncated: isTruncatedSequence(pos)};
+      return pos;
     };
 
     // Converts a binary to a list of codepoints.
@@ -160,13 +140,15 @@ const Erlang_Unicode = {
     const handleInvalidUtf8FromBinary = (invalidBinary) => {
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const {validLength, isTruncated} = findValidUtf8Length(bytes);
+      const validLength = findValidUtf8Length(bytes);
 
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
 
       const codepoints =
         validLength > 0 ? convertBinaryToCodepoints(validPrefix) : [];
+
+      const isTruncated = Bitstring.isTruncatedUtf8Sequence(bytes, validLength);
 
       if (isTruncated) {
         return createIncompleteTuple(codepoints, invalidRest);
@@ -187,7 +169,8 @@ const Erlang_Unicode = {
       // Check if it's a truncated sequence
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const {isTruncated} = findValidUtf8Length(bytes);
+      const validLength = findValidUtf8Length(bytes);
+      const isTruncated = Bitstring.isTruncatedUtf8Sequence(bytes, validLength);
 
       if (isTruncated) {
         // Incomplete: rest is the binary directly (not wrapped in list)

@@ -5264,6 +5264,85 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("isTruncatedUtf8Sequence()", () => {
+    // Happy path: truncated 2-byte sequence
+    it("returns true for truncated 2-byte sequence with valid continuation byte", () => {
+      // 0xC2 requires 2 bytes, but only 1 byte available (0x80 is valid continuation)
+      const bytes = new Uint8Array([0xc2]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), true);
+    });
+
+    // Happy path: truncated 3-byte sequence
+    it("returns true for truncated 3-byte sequence with valid continuation bytes", () => {
+      // 0xE2 requires 3 bytes, but only 2 bytes available (both valid continuations)
+      const bytes = new Uint8Array([0xe2, 0x82]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), true);
+    });
+
+    // Happy path: truncated 4-byte sequence
+    it("returns true for truncated 4-byte sequence with valid continuation bytes", () => {
+      // 0xF0 requires 4 bytes, but only 3 bytes available (all valid continuations)
+      const bytes = new Uint8Array([0xf0, 0x90, 0x8d]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), true);
+    });
+
+    // Edge case: start position in middle of data
+    it("returns true for truncated sequence starting at non-zero position", () => {
+      // Valid ASCII prefix, then truncated 2-byte sequence
+      const bytes = new Uint8Array([0x41, 0xc2]); // 'A' + truncated '£'
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 1), true);
+    });
+
+    // Edge case: multiple valid continuation bytes before truncation
+    it("returns true for 4-byte sequence with 2 valid continuation bytes (truncated)", () => {
+      // 0xF0 (4-byte) with 2 valid continuation bytes available
+      const bytes = new Uint8Array([0xf0, 0x90, 0x8d]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), true);
+    });
+
+    // False path: invalid leader byte
+    it("returns false for invalid leader byte", () => {
+      // 0xC0 is invalid (overlong encoding marker)
+      const bytes = new Uint8Array([0xc0]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), false);
+    });
+
+    // False path: invalid leader byte (out of range)
+    it("returns false for leader byte >= 0xF5", () => {
+      // 0xF5 and above are invalid (> U+10FFFF)
+      const bytes = new Uint8Array([0xf5]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), false);
+    });
+
+    // False path: enough bytes available
+    it("returns false when enough bytes are available for complete sequence", () => {
+      // 0xC2 requires 2 bytes, and 2 bytes are available
+      const bytes = new Uint8Array([0xc2, 0xa3]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), false);
+    });
+
+    // False path: invalid continuation byte in truncated sequence
+    it("returns false when continuation byte is invalid", () => {
+      // 0xC2 requires 2 bytes, but only 1 available with invalid continuation (0x00)
+      const bytes = new Uint8Array([0xc2, 0x00]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), false);
+    });
+
+    // False path: ASCII byte
+    it("returns false for ASCII byte (1-byte sequence)", () => {
+      // ASCII bytes are 1-byte sequences, always complete
+      const bytes = new Uint8Array([0x41]); // 'A'
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), false);
+    });
+
+    // False path: truncated sequence with invalid continuation at end
+    it("returns false when truncated sequence has invalid continuation byte at start", () => {
+      // 0xE2 requires 3 bytes, 2 available, but second byte (0x00) is invalid continuation
+      const bytes = new Uint8Array([0xe2, 0x00]);
+      assert.equal(Bitstring.isTruncatedUtf8Sequence(bytes, 0), false);
+    });
+  });
+
   describe("isValidUtf8CodePoint()", () => {
     it("valid codepoint", () => {
       assert.isTrue(Bitstring.isValidUtf8CodePoint(0x41, 1)); // ASCII 'A'

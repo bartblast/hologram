@@ -635,6 +635,27 @@ export default class Bitstring {
     return $.isValidUtf8CodePoint(codePoint, length);
   }
 
+  // Checks if there's a truncated (incomplete) UTF-8 sequence at the given position.
+  // Returns true if bytes could be a valid prefix of a UTF-8 sequence.
+  // bytes: Uint8Array containing UTF-8 encoded data
+  // start: byte index to check for truncation
+  static isTruncatedUtf8Sequence(bytes, start) {
+    const leaderByte = bytes[start];
+    const expectedLength = $.getUtf8SequenceLength(leaderByte);
+
+    if (expectedLength === false) return false;
+
+    const availableBytes = bytes.length - start;
+    if (availableBytes >= expectedLength) return false;
+
+    // Check all available continuation bytes
+    for (let i = 1; i < availableBytes; i++) {
+      if (!$.isValidUtf8ContinuationByte(bytes[start + i])) return false;
+    }
+
+    return true;
+  }
+
   static maybeResolveHex(bitstring) {
     if (bitstring.hex === null) {
       $.maybeSetBytesFromText(bitstring);
