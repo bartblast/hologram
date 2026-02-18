@@ -247,6 +247,27 @@ export default class Bitstring {
     }
   }
 
+  // Decodes a UTF-8 sequence starting at the given position.
+  // Returns the decoded Unicode code point value.
+  // bytes: Uint8Array containing the UTF-8 encoded data
+  // start: byte index where the sequence begins
+  // length: number of bytes in the UTF-8 sequence (1-4)
+  static decodeUtf8CodePoint(bytes, start, length) {
+    if (length === 1) return bytes[start];
+
+    // First byte masks: 2-byte=0x1f, 3-byte=0x0f, 4-byte=0x07
+    const firstByteMasks = {2: 0x1f, 3: 0x0f, 4: 0x07};
+
+    let codePoint = bytes[start] & firstByteMasks[length];
+
+    // Process continuation bytes (all use 0x3f mask, shift by 6 each)
+    for (let i = 1; i < length; i++) {
+      codePoint = (codePoint << 6) | (bytes[start + i] & 0x3f);
+    }
+
+    return codePoint;
+  }
+
   static fromBits(bits) {
     const bitCount = bits.length;
     const byteCount = Math.ceil(bitCount / 8);
@@ -490,6 +511,27 @@ export default class Bitstring {
     return false; // Invalid leader byte
   }
 
+  // Scans forward once to find the longest valid UTF-8 prefix.
+  // Validates UTF-8 by checking byte structure, decoding code points,
+  // and rejecting overlong encodings, surrogates, and out-of-range values.
+  // Time complexity: O(n) where n is the number of bytes.
+  static getValidUtf8Length(bytes) {
+    let pos = 0;
+
+    while (pos < bytes.length) {
+      const seqLength = $.getUtf8SequenceLength(bytes[pos]);
+      if (
+        seqLength === false ||
+        !$.isValidUtf8Sequence(bytes, pos, seqLength)
+      ) {
+        break;
+      }
+      pos += seqLength;
+    }
+
+    return pos;
+  }
+
   static isEmpty(bitstring) {
     return bitstring.text === "" || bitstring.bytes?.length === 0;
   }
@@ -570,6 +612,69 @@ export default class Bitstring {
 
     $.maybeSetTextFromBytes(bitstring);
     return bitstring.text !== false;
+  }
+
+  // Validates that a code point is within UTF-8 rules:
+  // - Not an overlong encoding (using more bytes than necessary)
+  // - Not a UTF-16 surrogate (U+D800–U+DFFF)
+  // - Not above maximum Unicode (U+10FFFF)
+  static isValidUtf8CodePoint(codePoint, encodingLength) {
+    // Check for overlong encodings (security issue)
+    const minValueForLength = {1: 0, 2: 0x80, 3: 0x800, 4: 0x10000};
+
+    // Reject code points that could have been encoded with fewer bytes (overlong)
+    if (codePoint < minValueForLength[encodingLength]) return false;
+    // Reject UTF-16 surrogates (U+D800–U+DFFF)
+    if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
+    // Reject code points beyond Unicode range (> U+10FFFF)
+    if (codePoint > 0x10ffff) return false;
+
+    return true;
+  }
+
+  // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
+  static isValidUtf8ContinuationByte(byte) {
+    return (byte & 0xc0) === 0x80;
+  }
+
+  // Validates a UTF-8 sequence at the given position assuming the leader byte
+  // has already been confirmed valid for `length` (e.g. via getUtf8SequenceLength).
+  // Checks: sufficient bytes, valid continuation bytes, and valid code point.
+  // Precondition: `length` is the value returned by getUtf8SequenceLength(bytes[start]).
+  static isValidUtf8Sequence(bytes, start, length) {
+    // Check if we have enough bytes
+    if (start + length > bytes.length) return false;
+
+    // Verify all continuation bytes have correct pattern (10xxxxxx)
+    for (let i = 1; i < length; i++) {
+      if (!$.isValidUtf8ContinuationByte(bytes[start + i])) return false;
+    }
+
+    // Decode and validate the code point value
+    const codePoint = $.decodeUtf8CodePoint(bytes, start, length);
+
+    return $.isValidUtf8CodePoint(codePoint, length);
+  }
+
+  // Checks if there's a truncated (incomplete) UTF-8 sequence at the given position.
+  // Returns true if bytes could be a valid prefix of a UTF-8 sequence.
+  // bytes: Uint8Array containing UTF-8 encoded data
+  // start: byte index to check for truncation
+  static isTruncatedUtf8Sequence(bytes, start) {
+    const leaderByte = bytes[start];
+    const expectedLength = $.getUtf8SequenceLength(leaderByte);
+
+    if (expectedLength === false) return false;
+
+    const availableBytes = bytes.length - start;
+    if (availableBytes >= expectedLength) return false;
+
+    // Check all available continuation bytes
+    for (let i = 1; i < availableBytes; i++) {
+      if (!$.isValidUtf8ContinuationByte(bytes[start + i])) return false;
+    }
+
+    return true;
   }
 
   static maybeResolveHex(bitstring) {
