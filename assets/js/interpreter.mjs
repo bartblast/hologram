@@ -745,6 +745,7 @@ export default class Interpreter {
           : Type.alias(moduleExName);
 
       moduleProxy.__exports__ = new Set();
+      moduleProxy.__jsBindings__ = new Map();
       moduleProxy.__jsName__ = moduleJsName;
     }
   }
@@ -861,6 +862,19 @@ export default class Interpreter {
 
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
+  }
+
+  static registerJsBindings(bindingsMap) {
+    for (const [moduleExName, bindings] of Object.entries(bindingsMap)) {
+      const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
+      Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
+
+      const jsBindings = globalThis[moduleJsName].__jsBindings__;
+
+      for (const [alias, value] of Object.entries(bindings)) {
+        jsBindings.set(alias, value);
+      }
+    }
   }
 
   // TODO: consider when porting Elixir error handling

@@ -6415,6 +6415,11 @@ describe("Interpreter", () => {
           new Set(),
         );
 
+        assert.deepStrictEqual(
+          globalThis.Elixir_MyModuleExName.__jsBindings__,
+          new Map(),
+        );
+
         assert.equal(
           globalThis.Elixir_MyModuleExName.__jsName__,
           "Elixir_MyModuleExName",
@@ -6483,6 +6488,11 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(
           globalThis.Erlang_My_Module.__exports__,
           new Set(),
+        );
+
+        assert.deepStrictEqual(
+          globalThis.Erlang_My_Module.__jsBindings__,
+          new Map(),
         );
 
         assert.equal(
@@ -6769,6 +6779,66 @@ describe("Interpreter", () => {
       "UndefinedFunctionError",
       "my_message",
     );
+  });
+
+  describe("registerJsBindings()", () => {
+    const $1 = {name: "import_1"};
+    const $2 = {name: "import_2"};
+
+    beforeEach(() => {
+      delete globalThis.Elixir_Aaa_Bbb;
+      delete globalThis.Elixir_Ccc_Ddd;
+    });
+
+    it("initializes module proxy if not yet initialized", () => {
+      Interpreter.registerJsBindings({"Aaa.Bbb": {my_alias: $1}});
+
+      assert.isDefined(globalThis.Elixir_Aaa_Bbb);
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__exModule__,
+        Type.alias("Aaa.Bbb"),
+      );
+    });
+
+    it("sets bindings on module proxy", () => {
+      Interpreter.registerJsBindings({"Aaa.Bbb": {my_alias: $1}});
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__jsBindings__,
+        new Map([["my_alias", $1]]),
+      );
+    });
+
+    it("registers bindings for multiple modules", () => {
+      Interpreter.registerJsBindings({
+        "Aaa.Bbb": {alias_1: $1},
+        "Ccc.Ddd": {alias_2: $2},
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__jsBindings__,
+        new Map([["alias_1", $1]]),
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Ccc_Ddd.__jsBindings__,
+        new Map([["alias_2", $2]]),
+      );
+    });
+
+    it("merges bindings when module proxy already exists", () => {
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun", 0, "public", []);
+
+      Interpreter.registerJsBindings({"Aaa.Bbb": {my_alias: $1}});
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__jsBindings__,
+        new Map([["my_alias", $1]]),
+      );
+
+      assert.isDefined(globalThis.Elixir_Aaa_Bbb["my_fun/0"]);
+    });
   });
 
   describe("resolveErrorMessage()", () => {
