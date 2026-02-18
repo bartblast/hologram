@@ -171,13 +171,18 @@ defmodule Hologram.Compiler do
   def build_page_js(page_module, call_graph, ir_plt, js_dir) do
     mfas = CallGraph.list_page_mfas(call_graph, page_module)
 
-    %{imports: aggregated_imports} = aggregate_js_imports(mfas)
+    %{imports: imports, bindings: bindings} = aggregate_js_imports(mfas)
 
-    imports =
-      aggregated_imports
+    import_statements =
+      imports
       |> Enum.map_join("\n", fn %{from: from, export: export, alias: alias} ->
         ~s'import { #{export} as #{alias} } from "#{from}";'
       end)
+      |> render_block()
+
+    js_bindings_registration_call =
+      bindings
+      |> render_js_bindings_registration_call()
       |> render_block()
 
     erlang_js_dir = Path.join(js_dir, "erlang")
@@ -195,7 +200,7 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
-    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";#{imports}
+    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";#{import_statements}
 
     const startTime = performance.now();
 
@@ -209,7 +214,7 @@ defmodule Hologram.Compiler do
         MemoryStorage,
         Type,
         Utils,
-      } = deps;#{erlang_function_defs}#{elixir_function_defs}
+      } = deps;#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
     }
 
     globalThis.hologram.pageScriptLoaded = true;
@@ -742,5 +747,25 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  defp render_js_bindings_registration_call(bindings) when bindings == %{}, do: ""
+
+  defp render_js_bindings_registration_call(bindings) do
+    modules_arg =
+      bindings
+      |> Enum.sort()
+      |> Enum.map_join(", ", fn {module, module_bindings} ->
+        module_name = Reflection.module_name(module)
+
+        entries =
+          module_bindings
+          |> Enum.sort()
+          |> Enum.map_join(", ", fn {as, alias} -> ~s'"#{as}": #{alias}' end)
+
+        ~s'"#{module_name}": {#{entries}}'
+      end)
+
+    ~s'Interpreter.registerJsBindings({#{modules_arg}});'
   end
 end

@@ -19,6 +19,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module19
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module21
+  alias Hologram.Test.Fixtures.Compiler.Module23
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
@@ -193,6 +194,7 @@ defmodule Hologram.CompilerTest do
       result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
 
       refute String.contains?(result, "import {")
+      refute String.contains?(result, "registerJsBindings")
     end
 
     test "single JS import", %{call_graph: call_graph, ir_plt: ir_plt} do
@@ -200,6 +202,13 @@ defmodule Hologram.CompilerTest do
 
       assert length(Regex.scan(~r/import \{/, result)) == 1
       assert String.contains?(result, ~s'import { Chart as $1 } from "chart.js";')
+
+      assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"MyChart": $1}});'
+             )
     end
 
     test "multiple JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
@@ -208,6 +217,28 @@ defmodule Hologram.CompilerTest do
       assert length(Regex.scan(~r/import \{/, result)) == 2
       assert String.contains?(result, ~s'import { Chart as $1 } from "chart.js";')
       assert String.contains?(result, ~s'import { helpers as $2 } from "chart.js";')
+
+      assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module20": {"MyChart": $1, "helpers": $2}});'
+             )
+    end
+
+    test "multiple modules with JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module23, call_graph, ir_plt, @js_dir)
+
+      assert length(Regex.scan(~r/import \{/, result)) == 2
+      assert String.contains?(result, ~s'import { formatDate as $1 } from "./utils.js";')
+      assert String.contains?(result, ~s'import { Chart as $2 } from "chart.js";')
+
+      assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"MyChart": $2}, "Hologram.Test.Fixtures.Compiler.Module22": {"myFormatDate": $1}});'
+             )
     end
   end
 
