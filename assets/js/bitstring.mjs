@@ -606,6 +606,11 @@ export default class Bitstring {
     return bitstring.text !== false;
   }
 
+  // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
+  static isValidUtf8ContinuationByte(byte) {
+    return (byte & 0xc0) === 0x80;
+  }
+
   static maybeResolveHex(bitstring) {
     if (bitstring.hex === null) {
       $.maybeSetBytesFromText(bitstring);
