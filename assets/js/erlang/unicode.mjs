@@ -95,24 +95,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
       // Validates a complete UTF-8 sequence at the given position.
       // Checks: sufficient bytes, valid continuations, and valid code point.
       const isValidSequence = (start, length) => {
@@ -128,7 +110,7 @@ const Erlang_Unicode = {
         // Decode and validate the code point value
         const codePoint = Bitstring.decodeUtf8CodePoint(bytes, start, length);
 
-        return isValidCodePoint(codePoint, length);
+        return Bitstring.isValidUtf8CodePoint(codePoint, length);
       };
 
       // Checks if there's a truncated (incomplete) sequence at position.
@@ -355,24 +337,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
       // Validates a complete UTF-8 sequence at the given position.
       // Checks: sufficient bytes, valid continuations, and valid code point.
       const isValidSequence = (start, length) => {
@@ -388,7 +352,7 @@ const Erlang_Unicode = {
         // Decode and validate the code point value
         const codePoint = Bitstring.decodeUtf8CodePoint(bytes, start, length);
 
-        return isValidCodePoint(codePoint, length);
+        return Bitstring.isValidUtf8CodePoint(codePoint, length);
       };
 
       // Main loop: scan forward, validating each sequence
@@ -641,24 +605,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
       // Validates a complete UTF-8 sequence at the given position.
       // Checks: sufficient bytes, valid continuations, and valid code point.
       const isValidSequence = (start, length) => {
@@ -674,7 +620,7 @@ const Erlang_Unicode = {
         // Decode and validate the code point value
         const codePoint = Bitstring.decodeUtf8CodePoint(bytes, start, length);
 
-        return isValidCodePoint(codePoint, length);
+        return Bitstring.isValidUtf8CodePoint(codePoint, length);
       };
 
       // Main loop: scan forward, validating each sequence
@@ -779,24 +725,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
       // Validates a complete UTF-8 sequence at the given position.
       // Checks: sufficient bytes, valid continuations, and valid code point.
       const isValidSequence = (start, length) => {
@@ -811,7 +739,7 @@ const Erlang_Unicode = {
 
         // Decode and validate the code point value
         const codePoint = Bitstring.decodeUtf8CodePoint(bytes, start, length);
-        return isValidCodePoint(codePoint, length);
+        return Bitstring.isValidUtf8CodePoint(codePoint, length);
       };
 
       // Main loop: scan forward, validating each sequence
@@ -915,24 +843,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
       // Validates a complete UTF-8 sequence at the given position.
       // Checks: sufficient bytes, valid continuations, and valid code point.
       const isValidSequence = (start, length) => {
@@ -949,7 +859,7 @@ const Erlang_Unicode = {
         // Decode and validate the code point value
         const codePoint = Bitstring.decodeUtf8CodePoint(bytes, start, length);
 
-        return isValidCodePoint(codePoint, length);
+        return Bitstring.isValidUtf8CodePoint(codePoint, length);
       };
 
       // Main loop: scan forward, validating each sequence

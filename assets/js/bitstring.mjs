@@ -593,6 +593,24 @@ export default class Bitstring {
     return bitstring.text !== false;
   }
 
+  // Validates that a code point is within UTF-8 rules:
+  // - Not an overlong encoding (using more bytes than necessary)
+  // - Not a UTF-16 surrogate (U+D800–U+DFFF)
+  // - Not above maximum Unicode (U+10FFFF)
+  static isValidUtf8CodePoint(codePoint, encodingLength) {
+    // Check for overlong encodings (security issue)
+    const minValueForLength = {1: 0, 2: 0x80, 3: 0x800, 4: 0x10000};
+
+    // Reject code points that could have been encoded with fewer bytes (overlong)
+    if (codePoint < minValueForLength[encodingLength]) return false;
+    // Reject UTF-16 surrogates (U+D800–U+DFFF)
+    if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
+    // Reject code points beyond Unicode range (> U+10FFFF)
+    if (codePoint > 0x10ffff) return false;
+
+    return true;
+  }
+
   // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
   static isValidUtf8ContinuationByte(byte) {
     return (byte & 0xc0) === 0x80;

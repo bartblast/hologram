@@ -5278,6 +5278,36 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("isValidUtf8CodePoint()", () => {
+    it("valid codepoint", () => {
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x41, 1)); // ASCII 'A'
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0xa9, 2)); // © (copyright)
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x20ac, 3)); // € (euro)
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x10348, 4)); // 𐍈 (Gothic letter)
+      assert.isTrue(Bitstring.isValidUtf8CodePoint(0x10ffff, 4)); // Maximum valid Unicode
+    });
+
+    it("overlong encoding (codepoint too small for encoding length)", () => {
+      // 'A' (0x41) must use 1 byte, not 2
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x41, 2));
+      // 0x7FF requires 2 bytes, but attempting 3-byte encoding
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x7ff, 3));
+      // 0xFFFF requires 3 bytes, but attempting 4-byte encoding
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xffff, 4));
+    });
+
+    it("UTF-16 surrogate (U+D800–U+DFFF)", () => {
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xd800, 3)); // Start of surrogate range
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xdc00, 3)); // Middle of surrogate range
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0xdfff, 3)); // End of surrogate range
+    });
+
+    it("beyond Unicode range (> U+10FFFF)", () => {
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x110000, 4));
+      assert.isFalse(Bitstring.isValidUtf8CodePoint(0x200000, 4));
+    });
+  });
+
   describe("maybeResolveHex()", () => {
     it("when hex field is already set", () => {
       const bitstring = Type.bitstring("Hologram");
