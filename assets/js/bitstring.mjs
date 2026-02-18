@@ -616,6 +616,25 @@ export default class Bitstring {
     return (byte & 0xc0) === 0x80;
   }
 
+  // Validates a UTF-8 sequence at the given position assuming the leader byte
+  // has already been confirmed valid for `length` (e.g. via getUtf8SequenceLength).
+  // Checks: sufficient bytes, valid continuation bytes, and valid code point.
+  // Precondition: `length` is the value returned by getUtf8SequenceLength(bytes[start]).
+  static isValidUtf8Sequence(bytes, start, length) {
+    // Check if we have enough bytes
+    if (start + length > bytes.length) return false;
+
+    // Verify all continuation bytes have correct pattern (10xxxxxx)
+    for (let i = 1; i < length; i++) {
+      if (!$.isValidUtf8ContinuationByte(bytes[start + i])) return false;
+    }
+
+    // Decode and validate the code point value
+    const codePoint = $.decodeUtf8CodePoint(bytes, start, length);
+
+    return $.isValidUtf8CodePoint(codePoint, length);
+  }
+
   static maybeResolveHex(bitstring) {
     if (bitstring.hex === null) {
       $.maybeSetBytesFromText(bitstring);

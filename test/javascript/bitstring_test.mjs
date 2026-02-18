@@ -5264,20 +5264,6 @@ describe("Bitstring", () => {
     });
   });
 
-  describe("isValidUtf8ContinuationByte()", () => {
-    it("valid continuation byte (10xxxxxx pattern)", () => {
-      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0x80)); // 10000000
-      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0xbf)); // 10111111
-    });
-
-    it("invalid continuation byte (not 10xxxxxx pattern)", () => {
-      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x00)); // 00000000 (ASCII)
-      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x7f)); // 01111111 (ASCII)
-      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xc0)); // 11000000 (2-byte start)
-      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xff)); // 11111111 (invalid)
-    });
-  });
-
   describe("isValidUtf8CodePoint()", () => {
     it("valid codepoint", () => {
       assert.isTrue(Bitstring.isValidUtf8CodePoint(0x41, 1)); // ASCII 'A'
@@ -5305,6 +5291,76 @@ describe("Bitstring", () => {
     it("beyond Unicode range (> U+10FFFF)", () => {
       assert.isFalse(Bitstring.isValidUtf8CodePoint(0x110000, 4));
       assert.isFalse(Bitstring.isValidUtf8CodePoint(0x200000, 4));
+    });
+  });
+
+  describe("isValidUtf8ContinuationByte()", () => {
+    it("valid continuation byte (10xxxxxx pattern)", () => {
+      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0x80)); // 10000000
+      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0xbf)); // 10111111
+    });
+
+    it("invalid continuation byte (not 10xxxxxx pattern)", () => {
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x00)); // 00000000 (ASCII)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x7f)); // 01111111 (ASCII)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xc0)); // 11000000 (2-byte start)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xff)); // 11111111 (invalid)
+    });
+  });
+
+  describe("isValidUtf8Sequence()", () => {
+    it("valid 1-byte sequence (ASCII)", () => {
+      // ASCII 'A'
+      const bytes = new Uint8Array([0x41]);
+      assert.isTrue(Bitstring.isValidUtf8Sequence(bytes, 0, 1));
+    });
+
+    it("valid 2-byte sequence", () => {
+      // é (U+00E9): 0xC3 0xA9
+      const bytes = new Uint8Array([0xc3, 0xa9]);
+      assert.isTrue(Bitstring.isValidUtf8Sequence(bytes, 0, 2));
+    });
+
+    it("valid 3-byte sequence", () => {
+      // € (U+20AC): 0xE2 0x82 0xAC
+      const bytes = new Uint8Array([0xe2, 0x82, 0xac]);
+      assert.isTrue(Bitstring.isValidUtf8Sequence(bytes, 0, 3));
+    });
+
+    it("valid 4-byte sequence", () => {
+      // 𐍈 (U+10348): 0xF0 0x90 0x8D 0x88
+      const bytes = new Uint8Array([0xf0, 0x90, 0x8d, 0x88]);
+      assert.isTrue(Bitstring.isValidUtf8Sequence(bytes, 0, 4));
+    });
+
+    it("not enough bytes available", () => {
+      const bytes = new Uint8Array([0xc3, 0xa9]); // 2 bytes
+      // Try to validate 3-byte sequence starting at position 0
+      assert.isFalse(Bitstring.isValidUtf8Sequence(bytes, 0, 3));
+    });
+
+    it("invalid continuation byte", () => {
+      // 0xC3 starts a 2-byte sequence, but 0x41 (ASCII 'A') is not a valid continuation
+      const bytes = new Uint8Array([0xc3, 0x41]);
+      assert.isFalse(Bitstring.isValidUtf8Sequence(bytes, 0, 2));
+    });
+
+    it("overlong encoding", () => {
+      // 'A' (0x41) encoded as 2-byte sequence: 0xC1 0x81 (overlong)
+      const bytes = new Uint8Array([0xc1, 0x81]);
+      assert.isFalse(Bitstring.isValidUtf8Sequence(bytes, 0, 2));
+    });
+
+    it("UTF-16 surrogate", () => {
+      // U+D800 (surrogate) encoded as 3-byte sequence: 0xED 0xA0 0x80
+      const bytes = new Uint8Array([0xed, 0xa0, 0x80]);
+      assert.isFalse(Bitstring.isValidUtf8Sequence(bytes, 0, 3));
+    });
+
+    it("beyond Unicode range", () => {
+      // U+110000 (beyond max) encoded as 4-byte sequence: 0xF4 0x90 0x80 0x80
+      const bytes = new Uint8Array([0xf4, 0x90, 0x80, 0x80]);
+      assert.isFalse(Bitstring.isValidUtf8Sequence(bytes, 0, 4));
     });
   });
 
