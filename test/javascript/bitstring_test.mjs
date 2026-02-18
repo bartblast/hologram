@@ -5264,6 +5264,20 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("isValidUtf8ContinuationByte()", () => {
+    it("valid continuation byte (10xxxxxx pattern)", () => {
+      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0x80)); // 10000000
+      assert.isTrue(Bitstring.isValidUtf8ContinuationByte(0xbf)); // 10111111
+    });
+
+    it("invalid continuation byte (not 10xxxxxx pattern)", () => {
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x00)); // 00000000 (ASCII)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0x7f)); // 01111111 (ASCII)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xc0)); // 11000000 (2-byte start)
+      assert.isFalse(Bitstring.isValidUtf8ContinuationByte(0xff)); // 11111111 (invalid)
+    });
+  });
+
   describe("maybeResolveHex()", () => {
     it("when hex field is already set", () => {
       const bitstring = Type.bitstring("Hologram");

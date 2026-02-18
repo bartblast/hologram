@@ -95,9 +95,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
       // Validates that a code point is within UTF-8 rules:
       // - Not an overlong encoding (using more bytes than necessary)
       // - Not a UTF-16 surrogate (U+D800–U+DFFF)
@@ -124,7 +121,8 @@ const Erlang_Unicode = {
 
         // Verify all continuation bytes have correct pattern (10xxxxxx)
         for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
+          if (!Bitstring.isValidUtf8ContinuationByte(bytes[start + i]))
+            return false;
         }
 
         // Decode and validate the code point value
@@ -146,7 +144,8 @@ const Erlang_Unicode = {
 
         // Check all available continuation bytes
         for (let i = 1; i < availableBytes; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
+          if (!Bitstring.isValidUtf8ContinuationByte(bytes[start + i]))
+            return false;
         }
 
         return true;
@@ -356,9 +355,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
       // Validates that a code point is within UTF-8 rules:
       // - Not an overlong encoding (using more bytes than necessary)
       // - Not a UTF-16 surrogate (U+D800–U+DFFF)
@@ -385,7 +381,8 @@ const Erlang_Unicode = {
 
         // Verify all continuation bytes have correct pattern (10xxxxxx)
         for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
+          if (!Bitstring.isValidUtf8ContinuationByte(bytes[start + i]))
+            return false;
         }
 
         // Decode and validate the code point value
@@ -644,9 +641,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
       // Validates that a code point is within UTF-8 rules:
       // - Not an overlong encoding (using more bytes than necessary)
       // - Not a UTF-16 surrogate (U+D800–U+DFFF)
@@ -673,7 +667,8 @@ const Erlang_Unicode = {
 
         // Verify all continuation bytes have correct pattern (10xxxxxx)
         for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
+          if (!Bitstring.isValidUtf8ContinuationByte(bytes[start + i]))
+            return false;
         }
 
         // Decode and validate the code point value
@@ -784,9 +779,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
       // Validates that a code point is within UTF-8 rules:
       // - Not an overlong encoding (using more bytes than necessary)
       // - Not a UTF-16 surrogate (U+D800–U+DFFF)
@@ -813,7 +805,8 @@ const Erlang_Unicode = {
 
         // Verify all continuation bytes have correct pattern (10xxxxxx)
         for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
+          if (!Bitstring.isValidUtf8ContinuationByte(bytes[start + i]))
+            return false;
         }
 
         // Decode and validate the code point value
@@ -922,9 +915,6 @@ const Erlang_Unicode = {
     // and rejecting overlong encodings, surrogates, and out-of-range values.
     // Time complexity: O(n) where n is the number of bytes.
     const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
       // Validates that a code point is within UTF-8 rules:
       // - Not an overlong encoding (using more bytes than necessary)
       // - Not a UTF-16 surrogate (U+D800–U+DFFF)
@@ -951,7 +941,7 @@ const Erlang_Unicode = {
 
         // Verify all continuation bytes have correct pattern (10xxxxxx)
         for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) {
+          if (!Bitstring.isValidUtf8ContinuationByte(bytes[start + i])) {
             return false;
           }
         }
