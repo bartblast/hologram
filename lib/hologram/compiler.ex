@@ -170,6 +170,16 @@ defmodule Hologram.Compiler do
   @spec build_page_js(module, CallGraph.t(), PLT.t(), T.file_path()) :: String.t()
   def build_page_js(page_module, call_graph, ir_plt, js_dir) do
     mfas = CallGraph.list_page_mfas(call_graph, page_module)
+
+    %{imports: aggregated_imports} = aggregate_js_imports(mfas)
+
+    imports =
+      aggregated_imports
+      |> Enum.map_join("\n", fn %{from: from, export: export, alias: alias} ->
+        ~s'import { #{export} as #{alias} } from "#{from}";'
+      end)
+      |> render_block()
+
     erlang_js_dir = Path.join(js_dir, "erlang")
 
     erlang_function_defs =
@@ -185,7 +195,7 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
-    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";    
+    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";#{imports}
 
     const startTime = performance.now();
 

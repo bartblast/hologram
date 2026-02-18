@@ -16,7 +16,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module14
   alias Hologram.Test.Fixtures.Compiler.Module15
   alias Hologram.Test.Fixtures.Compiler.Module17
+  alias Hologram.Test.Fixtures.Compiler.Module19
   alias Hologram.Test.Fixtures.Compiler.Module2
+  alias Hologram.Test.Fixtures.Compiler.Module21
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
@@ -185,6 +187,27 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(result, js_fragment_1)
       assert String.contains?(result, js_fragment_2)
       refute String.contains?(result, js_fragment_3)
+    end
+
+    test "no JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
+
+      refute String.contains?(result, "import {")
+    end
+
+    test "single JS import", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module19, call_graph, ir_plt, @js_dir)
+
+      assert length(Regex.scan(~r/import \{/, result)) == 1
+      assert String.contains?(result, ~s'import { Chart as $1 } from "chart.js";')
+    end
+
+    test "multiple JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module21, call_graph, ir_plt, @js_dir)
+
+      assert length(Regex.scan(~r/import \{/, result)) == 2
+      assert String.contains?(result, ~s'import { Chart as $1 } from "chart.js";')
+      assert String.contains?(result, ~s'import { helpers as $2 } from "chart.js";')
     end
   end
 
