@@ -90,27 +90,6 @@ const Erlang_Unicode = {
   "characters_to_list/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Scan forward, validating each sequence
-      let pos = 0;
-
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (
-          seqLength === false ||
-          !Bitstring.isValidUtf8Sequence(bytes, pos, seqLength)
-        )
-          break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Converts a binary to a list of codepoints.
     const convertBinaryToCodepoints = (binary, preDecodedText = null) => {
       const text =
@@ -140,7 +119,7 @@ const Erlang_Unicode = {
     const handleInvalidUtf8FromBinary = (invalidBinary) => {
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
 
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
@@ -169,7 +148,7 @@ const Erlang_Unicode = {
       // Check if it's a truncated sequence
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const isTruncated = Bitstring.isTruncatedUtf8Sequence(bytes, validLength);
 
       if (isTruncated) {
@@ -301,27 +280,6 @@ const Erlang_Unicode = {
   "characters_to_nfc_binary/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Scan forward, validating each sequence
-      let pos = 0;
-
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (
-          seqLength === false ||
-          !Bitstring.isValidUtf8Sequence(bytes, pos, seqLength)
-        )
-          break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
@@ -360,7 +318,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
@@ -555,27 +513,6 @@ const Erlang_Unicode = {
   "characters_to_nfd_binary/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Scan forward, validating each sequence
-      let pos = 0;
-
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (
-          seqLength === false ||
-          !Bitstring.isValidUtf8Sequence(bytes, pos, seqLength)
-        )
-          break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
@@ -614,7 +551,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
@@ -662,27 +599,6 @@ const Erlang_Unicode = {
   "characters_to_nfkc_binary/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // scan forward, validating each sequence
-      let pos = 0;
-
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (
-          seqLength === false ||
-          !Bitstring.isValidUtf8Sequence(bytes, pos, seqLength)
-        )
-          break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
@@ -721,7 +637,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
@@ -768,26 +684,6 @@ const Erlang_Unicode = {
   "characters_to_nfkd_binary/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Scan forward, validating each sequence
-      let pos = 0;
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (
-          seqLength === false ||
-          !Bitstring.isValidUtf8Sequence(bytes, pos, seqLength)
-        )
-          break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
@@ -826,7 +722,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);

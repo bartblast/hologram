@@ -5087,6 +5087,132 @@ describe("Bitstring", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  describe("getUtf8SequenceLength()", () => {
+    it("returns 1 for 0x41 (ASCII)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0x41), 1);
+    });
+
+    it("returns 2 for 0xC2 (2-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xc2), 2);
+    });
+
+    it("returns 3 for 0xE0 (3-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xe0), 3);
+    });
+
+    it("returns 4 for 0xF0 (4-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xf0), 4);
+    });
+
+    it("returns false for 0xC0 (invalid: overlong encoding)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xc0), false);
+    });
+
+    it("returns false for 0xF5 (invalid: > U+10FFFF)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xf5), false);
+    });
+
+    it("returns false for 0x80 (invalid: continuation byte)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0x80), false);
+    });
+  });
+
+  describe("getValidUtf8Length()", () => {
+    it("empty bytes array", () => {
+      const bytes = new Uint8Array([]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 0);
+    });
+
+    it("single valid ASCII byte", () => {
+      // 'A' (0x41): 0xxxxxxx pattern
+      const bytes = new Uint8Array([0x41]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 1);
+    });
+
+    it("single valid 2-byte sequence", () => {
+      // é (U+00E9): 0xC3 0xA9
+      const bytes = new Uint8Array([0xc3, 0xa9]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 2);
+    });
+
+    it("single valid 3-byte sequence", () => {
+      // € (U+20AC): 0xE2 0x82 0xAC
+      const bytes = new Uint8Array([0xe2, 0x82, 0xac]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 3);
+    });
+
+    it("single valid 4-byte sequence", () => {
+      // 𐍈 (U+10348): 0xF0 0x90 0x8D 0x88
+      const bytes = new Uint8Array([0xf0, 0x90, 0x8d, 0x88]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 4);
+    });
+
+    it("multiple consecutive valid sequences", () => {
+      // 'A' (1 byte) + é (2 bytes) + € (3 bytes)
+      const bytes = new Uint8Array([
+        0x41, // ASCII 'A'
+        0xc3,
+        0xa9, // é
+        0xe2,
+        0x82,
+        0xac, // €
+      ]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 6);
+    });
+
+    it("invalid leader byte (0xC0)", () => {
+      // 0xC0 is invalid (overlong encoding)
+      const bytes = new Uint8Array([0xc0, 0xa9]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 0);
+    });
+
+    it("invalid leader byte (>= 0xF5)", () => {
+      // 0xF5+ is invalid (beyond Unicode range)
+      const bytes = new Uint8Array([0xf5, 0x90, 0x80, 0x80]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 0);
+    });
+
+    it("invalid continuation byte", () => {
+      // 0xC3 starts 2-byte sequence, but 0x41 (ASCII) is not a valid continuation
+      const bytes = new Uint8Array([0xc3, 0x41]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 0);
+    });
+
+    it("truncated 2-byte sequence", () => {
+      // 0xC3 expects 1 continuation byte, but we only have the leader
+      const bytes = new Uint8Array([0xc3]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 0);
+    });
+
+    it("truncated 3-byte sequence with one byte missing", () => {
+      // 0xE2 0x82 expects one more continuation byte
+      const bytes = new Uint8Array([0xe2, 0x82]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 0);
+    });
+
+    it("valid sequences followed by invalid byte", () => {
+      // 'A' (1 byte) + é (2 bytes) + invalid 0xC0
+      const bytes = new Uint8Array([
+        0x41, // ASCII 'A'
+        0xc3,
+        0xa9, // é
+        0xc0, // Invalid
+      ]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 3);
+    });
+
+    it("valid sequences followed by truncated sequence", () => {
+      // 'A' (1 byte) + é (2 bytes) + incomplete 2-byte start
+      const bytes = new Uint8Array([
+        0x41, // ASCII 'A'
+        0xc3,
+        0xa9, // é
+        0xc3, // Incomplete 2-byte
+      ]);
+      assert.equal(Bitstring.getValidUtf8Length(bytes), 3);
+    });
+  });
+
   describe("isEmpty()", () => {
     describe("empty", () => {
       it("with text field", () => {
@@ -7594,36 +7720,6 @@ describe("Bitstring", () => {
           );
         });
       });
-    });
-  });
-
-  describe("getUtf8SequenceLength()", () => {
-    it("returns 1 for 0x41 (ASCII)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0x41), 1);
-    });
-
-    it("returns 2 for 0xC2 (2-byte leader)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xc2), 2);
-    });
-
-    it("returns 3 for 0xE0 (3-byte leader)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xe0), 3);
-    });
-
-    it("returns 4 for 0xF0 (4-byte leader)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xf0), 4);
-    });
-
-    it("returns false for 0xC0 (invalid: overlong encoding)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xc0), false);
-    });
-
-    it("returns false for 0xF5 (invalid: > U+10FFFF)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xf5), false);
-    });
-
-    it("returns false for 0x80 (invalid: continuation byte)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0x80), false);
     });
   });
 });

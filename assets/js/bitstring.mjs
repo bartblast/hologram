@@ -511,6 +511,27 @@ export default class Bitstring {
     return false; // Invalid leader byte
   }
 
+  // Scans forward once to find the longest valid UTF-8 prefix.
+  // Validates UTF-8 by checking byte structure, decoding code points,
+  // and rejecting overlong encodings, surrogates, and out-of-range values.
+  // Time complexity: O(n) where n is the number of bytes.
+  static getValidUtf8Length(bytes) {
+    let pos = 0;
+
+    while (pos < bytes.length) {
+      const seqLength = $.getUtf8SequenceLength(bytes[pos]);
+      if (
+        seqLength === false ||
+        !$.isValidUtf8Sequence(bytes, pos, seqLength)
+      ) {
+        break;
+      }
+      pos += seqLength;
+    }
+
+    return pos;
+  }
+
   static isEmpty(bitstring) {
     return bitstring.text === "" || bitstring.bytes?.length === 0;
   }
