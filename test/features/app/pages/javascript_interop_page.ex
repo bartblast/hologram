@@ -34,7 +34,7 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   def action(:call_global_fun, _params, component) do
     result = JS.call("Math", "round", [3.7])
 
-    put_state(component, :result, result)
+    put_state(component, :result, {result, is_integer(result)})
   end
 
   def action(:run_js_snippet, _params, component) do

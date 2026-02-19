@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
       |> click(button("Call global fun"))
-      |> assert_text(css("#call_result"), "4")
+      |> assert_text(css("#call_result"), "{4, true}")
     end
   end
 
