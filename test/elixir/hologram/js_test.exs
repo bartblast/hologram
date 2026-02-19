@@ -1,6 +1,5 @@
 defmodule Hologram.JSTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.JS
 
   alias Hologram.Test.Fixtures.JS.Module1
   alias Hologram.Test.Fixtures.JS.Module2
@@ -55,10 +54,5 @@ defmodule Hologram.JSTest do
         """)
       end
     end
-  end
-
-  test "sigil_JS/2" do
-    assert Code.eval_string("~JS\"console.log('Hello, world!');\"", [], __ENV__) ==
-             {:ok, []}
   end
 end
