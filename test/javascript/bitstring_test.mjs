@@ -1235,36 +1235,46 @@ describe("Bitstring", () => {
     it("decodes 1-byte UTF-8 sequence (ASCII)", () => {
       // 'A' = 0x41 = U+0041
       const bytes = new Uint8Array([0x41]);
-      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 1);
-      assert.equal(codePoint, 0x41);
+
+      const result = Bitstring.decodeUtf8CodePoint(bytes, 0, 1);
+
+      assert.equal(result, 0x41);
     });
 
     it("decodes 2-byte UTF-8 sequence", () => {
       // '£' = 0xC2 0xA3 = U+00A3 (pound sign)
       const bytes = new Uint8Array([0xc2, 0xa3]);
-      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 2);
-      assert.equal(codePoint, 0xa3);
+
+      const result = Bitstring.decodeUtf8CodePoint(bytes, 0, 2);
+
+      assert.equal(result, 0xa3);
     });
 
     it("decodes 3-byte UTF-8 sequence", () => {
       // '€' = 0xE2 0x82 0xAC = U+20AC (euro sign)
       const bytes = new Uint8Array([0xe2, 0x82, 0xac]);
-      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 3);
-      assert.equal(codePoint, 0x20ac);
+
+      const result = Bitstring.decodeUtf8CodePoint(bytes, 0, 3);
+
+      assert.equal(result, 0x20ac);
     });
 
     it("decodes 4-byte UTF-8 sequence", () => {
       // '𐍈' = 0xF0 0x90 0x8D 0x88 = U+10348 (Gothic letter hwair)
       const bytes = new Uint8Array([0xf0, 0x90, 0x8d, 0x88]);
-      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 0, 4);
-      assert.equal(codePoint, 0x10348);
+
+      const result = Bitstring.decodeUtf8CodePoint(bytes, 0, 4);
+
+      assert.equal(result, 0x10348);
     });
 
     it("decodes from non-zero start position", () => {
       // Test decoding '£' starting at position 2
       const bytes = new Uint8Array([0x41, 0x42, 0xc2, 0xa3]);
-      const codePoint = Bitstring.decodeUtf8CodePoint(bytes, 2, 2);
-      assert.equal(codePoint, 0xa3);
+
+      const result = Bitstring.decodeUtf8CodePoint(bytes, 2, 2);
+
+      assert.equal(result, 0xa3);
     });
   });
 
