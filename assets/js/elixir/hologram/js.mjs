@@ -87,6 +87,26 @@ function unbox(term) {
 }
 
 const Elixir_Hologram_JS = {
+  "call/4": (callerModule, receiver, functionName, args) => {
+    let jsReceiver;
+
+    if (receiver.type === "native") {
+      jsReceiver = receiver.value;
+    } else {
+      const receiverName = Bitstring.toText(receiver);
+      const moduleProxy = Interpreter.moduleProxy(callerModule);
+
+      jsReceiver =
+        moduleProxy.__jsBindings__.get(receiverName) ??
+        globalThis[receiverName];
+    }
+
+    const jsFunctionName = Bitstring.toText(functionName);
+    const jsArgs = args.data.map(unbox);
+
+    return box(jsReceiver[jsFunctionName](...jsArgs));
+  },
+
   "exec/1": (code) => {
     return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
   },

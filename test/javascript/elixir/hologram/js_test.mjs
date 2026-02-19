@@ -10,6 +10,7 @@ import Elixir_Hologram_JS, {
   unbox,
 } from "../../../../assets/js/elixir/hologram/js.mjs";
 
+import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -361,6 +362,73 @@ describe("unbox()", () => {
 });
 
 describe("Elixir_Hologram_JS", () => {
+  describe("call/4", () => {
+    const call = Elixir_Hologram_JS["call/4"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_TestModule1;
+      delete globalThis.Elixir_TestModule2;
+      delete globalThis.__testObj__;
+    });
+
+    it("resolves receiver from module's JS bindings", () => {
+      const $1 = {add: (a, b) => a + b};
+
+      Interpreter.defineManuallyPortedFunction(
+        "TestModule1",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule1"));
+      moduleProxy.__jsBindings__.set("MyLib", $1);
+
+      const result = call(
+        Type.alias("TestModule1"),
+        Type.bitstring("MyLib"),
+        Type.bitstring("add"),
+        Type.list([Type.integer(2), Type.integer(3)]),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("falls back to globalThis when not in bindings", () => {
+      globalThis.__testObj__ = {greet: (name) => `hello ${name}`};
+
+      Interpreter.defineManuallyPortedFunction(
+        "TestModule2",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const result = call(
+        Type.alias("TestModule2"),
+        Type.bitstring("__testObj__"),
+        Type.bitstring("greet"),
+        Type.list([Type.bitstring("world")]),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("hello world"));
+    });
+
+    it("resolves native receiver directly", () => {
+      const obj = {getValue: () => 42};
+      const nativeReceiver = {type: "native", value: obj};
+
+      const result = call(
+        Type.alias("Unused"),
+        nativeReceiver,
+        Type.bitstring("getValue"),
+        Type.list(),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+  });
+
   describe("exec/1", () => {
     const exec = Elixir_Hologram_JS["exec/1"];
 
