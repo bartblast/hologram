@@ -90,116 +90,6 @@ const Erlang_Unicode = {
   "characters_to_list/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
-      // Decodes a UTF-8 sequence starting at the given position.
-      // Returns the decoded Unicode code point value.
-      const decodeCodePoint = (start, length) => {
-        if (length === 1) {
-          return bytes[start];
-        }
-
-        if (length === 2) {
-          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
-        }
-
-        if (length === 3) {
-          return (
-            ((bytes[start] & 0x0f) << 12) |
-            ((bytes[start + 1] & 0x3f) << 6) |
-            (bytes[start + 2] & 0x3f)
-          );
-        }
-
-        // length === 4
-        return (
-          ((bytes[start] & 0x07) << 18) |
-          ((bytes[start + 1] & 0x3f) << 12) |
-          ((bytes[start + 2] & 0x3f) << 6) |
-          (bytes[start + 3] & 0x3f)
-        );
-      };
-
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
-      // Validates a complete UTF-8 sequence at the given position.
-      // Checks: sufficient bytes, valid continuations, and valid code point.
-      const isValidSequence = (start, length) => {
-        // Check if we have enough bytes
-        if (start + length > bytes.length) return false;
-
-        // Verify all continuation bytes have correct pattern (10xxxxxx)
-        for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
-        }
-
-        // Decode and validate the code point value
-        const codePoint = decodeCodePoint(start, length);
-
-        return isValidCodePoint(codePoint, length);
-      };
-
-      // Checks if there's a truncated (incomplete) sequence at position.
-      // Returns true if bytes could be a valid prefix of a UTF-8 sequence.
-      const isTruncatedSequence = (start) => {
-        const leaderByte = bytes[start];
-        const expectedLength = Bitstring.getUtf8SequenceLength(leaderByte);
-
-        if (expectedLength === false) return false;
-
-        const availableBytes = bytes.length - start;
-        if (availableBytes >= expectedLength) return false;
-
-        // Check all available continuation bytes
-        for (let i = 1; i < availableBytes; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
-        }
-
-        return true;
-      };
-
-      // Main loop: scan forward, validating each sequence
-      let pos = 0;
-
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
-        pos += seqLength;
-      }
-
-      return {validLength: pos, isTruncated: isTruncatedSequence(pos)};
-    };
-
-    // Converts a binary to a list of codepoints.
-    const convertBinaryToCodepoints = (binary, preDecodedText = null) => {
-      const text =
-        preDecodedText !== null ? preDecodedText : Bitstring.toText(binary);
-
-      return Array.from(text).map((char) => Type.integer(char.codePointAt(0)));
-    };
-
     // Converts a single codepoint integer to a UTF-8 encoded binary.
     const convertCodepointToBinary = (codepoint) => {
       const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
@@ -221,13 +111,15 @@ const Erlang_Unicode = {
     const handleInvalidUtf8FromBinary = (invalidBinary) => {
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const {validLength, isTruncated} = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
 
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
 
       const codepoints =
-        validLength > 0 ? convertBinaryToCodepoints(validPrefix) : [];
+        validLength > 0 ? Bitstring.toCodepointArray(validPrefix) : [];
+
+      const isTruncated = Bitstring.isTruncatedUtf8Sequence(bytes, validLength);
 
       if (isTruncated) {
         return createIncompleteTuple(codepoints, invalidRest);
@@ -242,13 +134,14 @@ const Erlang_Unicode = {
       // Convert all valid chunks to codepoints
       const codepoints =
         chunks.length > 0
-          ? convertBinaryToCodepoints(Bitstring.concat(chunks))
+          ? Bitstring.toCodepointArray(Bitstring.concat(chunks))
           : [];
 
       // Check if it's a truncated sequence
       Bitstring.maybeSetBytesFromText(invalidBinary);
       const bytes = invalidBinary.bytes ?? new Uint8Array(0);
-      const {isTruncated} = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
+      const isTruncated = Bitstring.isTruncatedUtf8Sequence(bytes, validLength);
 
       if (isTruncated) {
         // Incomplete: rest is the binary directly (not wrapped in list)
@@ -270,7 +163,7 @@ const Erlang_Unicode = {
     ) => {
       const codepoints =
         chunks.length > 0
-          ? convertBinaryToCodepoints(Bitstring.concat(chunks))
+          ? Bitstring.toCodepointArray(Bitstring.concat(chunks))
           : [];
 
       // Build the rest list with invalid code point and remaining elements
@@ -336,7 +229,7 @@ const Erlang_Unicode = {
         return handleInvalidUtf8FromBinary(data);
       }
 
-      const codepoints = convertBinaryToCodepoints(data, text);
+      const codepoints = Bitstring.toCodepointArray(data);
 
       return Type.list(codepoints);
     }
@@ -368,7 +261,7 @@ const Erlang_Unicode = {
     }
 
     const binary = Bitstring.concat(chunks);
-    const codepoints = convertBinaryToCodepoints(binary);
+    const codepoints = Bitstring.toCodepointArray(binary);
 
     return Type.list(codepoints);
   },
@@ -378,89 +271,6 @@ const Erlang_Unicode = {
   // Start characters_to_nfc_binary/1
   "characters_to_nfc_binary/1": (data) => {
     // Helpers
-
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
-      // Decodes a UTF-8 sequence starting at the given position.
-      // Returns the decoded Unicode code point value.
-      const decodeCodePoint = (start, length) => {
-        if (length === 1) {
-          return bytes[start];
-        }
-
-        if (length === 2) {
-          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
-        }
-
-        if (length === 3) {
-          return (
-            ((bytes[start] & 0x0f) << 12) |
-            ((bytes[start + 1] & 0x3f) << 6) |
-            (bytes[start + 2] & 0x3f)
-          );
-        }
-
-        // length === 4
-        return (
-          ((bytes[start] & 0x07) << 18) |
-          ((bytes[start + 1] & 0x3f) << 12) |
-          ((bytes[start + 2] & 0x3f) << 6) |
-          (bytes[start + 3] & 0x3f)
-        );
-      };
-
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
-      // Validates a complete UTF-8 sequence at the given position.
-      // Checks: sufficient bytes, valid continuations, and valid code point.
-      const isValidSequence = (start, length) => {
-        // Check if we have enough bytes
-        if (start + length > bytes.length) return false;
-
-        // Verify all continuation bytes have correct pattern (10xxxxxx)
-        for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
-        }
-
-        // Decode and validate the code point value
-        const codePoint = decodeCodePoint(start, length);
-
-        return isValidCodePoint(codePoint, length);
-      };
-
-      // Main loop: scan forward, validating each sequence
-      let pos = 0;
-
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
 
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
@@ -500,7 +310,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
@@ -554,12 +364,9 @@ const Erlang_Unicode = {
       binary,
       preDecodedText = null,
     ) => {
-      const text =
-        preDecodedText !== null ? preDecodedText : Bitstring.toText(binary);
-
+      const text = preDecodedText ?? binary.text ?? Bitstring.toText(binary);
       const normalized = text.normalize("NFC");
-
-      return Array.from(normalized).map((char) =>
+      return Array.from(normalized, (char) =>
         Type.integer(char.codePointAt(0)),
       );
     };
@@ -695,87 +502,6 @@ const Erlang_Unicode = {
   "characters_to_nfd_binary/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
-      // Decodes a UTF-8 sequence starting at the given position.
-      // Returns the decoded Unicode code point value.
-      const decodeCodePoint = (start, length) => {
-        if (length === 1) {
-          return bytes[start];
-        }
-
-        if (length === 2) {
-          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
-        }
-
-        if (length === 3) {
-          return (
-            ((bytes[start] & 0x0f) << 12) |
-            ((bytes[start + 1] & 0x3f) << 6) |
-            (bytes[start + 2] & 0x3f)
-          );
-        }
-        // length === 4
-        return (
-          ((bytes[start] & 0x07) << 18) |
-          ((bytes[start + 1] & 0x3f) << 12) |
-          ((bytes[start + 2] & 0x3f) << 6) |
-          (bytes[start + 3] & 0x3f)
-        );
-      };
-
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
-      // Validates a complete UTF-8 sequence at the given position.
-      // Checks: sufficient bytes, valid continuations, and valid code point.
-      const isValidSequence = (start, length) => {
-        // Check if we have enough bytes
-        if (start + length > bytes.length) return false;
-
-        // Verify all continuation bytes have correct pattern (10xxxxxx)
-        for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
-        }
-
-        // Decode and validate the code point value
-        const codePoint = decodeCodePoint(start, length);
-
-        return isValidCodePoint(codePoint, length);
-      };
-
-      // Main loop: scan forward, validating each sequence
-      let pos = 0;
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
@@ -814,7 +540,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
@@ -862,87 +588,6 @@ const Erlang_Unicode = {
   "characters_to_nfkc_binary/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
-      // Decodes a UTF-8 sequence starting at the given position.
-      // Returns the decoded Unicode code point value.
-      const decodeCodePoint = (start, length) => {
-        if (length === 1) {
-          return bytes[start];
-        }
-
-        if (length === 2) {
-          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
-        }
-
-        if (length === 3) {
-          return (
-            ((bytes[start] & 0x0f) << 12) |
-            ((bytes[start + 1] & 0x3f) << 6) |
-            (bytes[start + 2] & 0x3f)
-          );
-        }
-
-        // length === 4
-        return (
-          ((bytes[start] & 0x07) << 18) |
-          ((bytes[start + 1] & 0x3f) << 12) |
-          ((bytes[start + 2] & 0x3f) << 6) |
-          (bytes[start + 3] & 0x3f)
-        );
-      };
-
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
-      // Validates a complete UTF-8 sequence at the given position.
-      // Checks: sufficient bytes, valid continuations, and valid code point.
-      const isValidSequence = (start, length) => {
-        // Check if we have enough bytes
-        if (start + length > bytes.length) return false;
-
-        // Verify all continuation bytes have correct pattern (10xxxxxx)
-        for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) return false;
-        }
-
-        // Decode and validate the code point value
-        const codePoint = decodeCodePoint(start, length);
-        return isValidCodePoint(codePoint, length);
-      };
-
-      // Main loop: scan forward, validating each sequence
-      let pos = 0;
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
@@ -981,7 +626,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
@@ -1028,90 +673,6 @@ const Erlang_Unicode = {
   "characters_to_nfkd_binary/1": (data) => {
     // Helpers
 
-    // Scans forward once to find the longest valid UTF-8 prefix.
-    // Validates UTF-8 by checking byte structure, decoding code points,
-    // and rejecting overlong encodings, surrogates, and out-of-range values.
-    // Time complexity: O(n) where n is the number of bytes.
-    const findValidUtf8Length = (bytes) => {
-      // Checks if a byte is a valid UTF-8 continuation byte (10xxxxxx).
-      const isValidContinuation = (byte) => (byte & 0xc0) === 0x80;
-
-      // Decodes a UTF-8 sequence starting at the given position.
-      // Returns the decoded Unicode code point value.
-      const decodeCodePoint = (start, length) => {
-        if (length === 1) {
-          return bytes[start];
-        }
-
-        if (length === 2) {
-          return ((bytes[start] & 0x1f) << 6) | (bytes[start + 1] & 0x3f);
-        }
-
-        if (length === 3) {
-          return (
-            ((bytes[start] & 0x0f) << 12) |
-            ((bytes[start + 1] & 0x3f) << 6) |
-            (bytes[start + 2] & 0x3f)
-          );
-        }
-
-        // length === 4
-        return (
-          ((bytes[start] & 0x07) << 18) |
-          ((bytes[start + 1] & 0x3f) << 12) |
-          ((bytes[start + 2] & 0x3f) << 6) |
-          (bytes[start + 3] & 0x3f)
-        );
-      };
-
-      // Validates that a code point is within UTF-8 rules:
-      // - Not an overlong encoding (using more bytes than necessary)
-      // - Not a UTF-16 surrogate (U+D800–U+DFFF)
-      // - Not above maximum Unicode (U+10FFFF)
-      const isValidCodePoint = (codePoint, encodingLength) => {
-        // Check for overlong encodings (security issue)
-        const minValueForLength = [0, 0, 0x80, 0x800, 0x10000];
-        if (codePoint < minValueForLength[encodingLength]) return false;
-
-        // Reject UTF-16 surrogates (U+D800–U+DFFF)
-        if (codePoint >= 0xd800 && codePoint <= 0xdfff) return false;
-
-        // Reject code points beyond Unicode range (> U+10FFFF)
-        if (codePoint > 0x10ffff) return false;
-
-        return true;
-      };
-
-      // Validates a complete UTF-8 sequence at the given position.
-      // Checks: sufficient bytes, valid continuations, and valid code point.
-      const isValidSequence = (start, length) => {
-        // Check if we have enough bytes
-        if (start + length > bytes.length) return false;
-
-        // Verify all continuation bytes have correct pattern (10xxxxxx)
-        for (let i = 1; i < length; i++) {
-          if (!isValidContinuation(bytes[start + i])) {
-            return false;
-          }
-        }
-
-        // Decode and validate the code point value
-        const codePoint = decodeCodePoint(start, length);
-
-        return isValidCodePoint(codePoint, length);
-      };
-
-      // Main loop: scan forward, validating each sequence
-      let pos = 0;
-      while (pos < bytes.length) {
-        const seqLength = Bitstring.getUtf8SequenceLength(bytes[pos]);
-        if (seqLength === false || !isValidSequence(pos, seqLength)) break;
-        pos += seqLength;
-      }
-
-      return pos;
-    };
-
     // Validates that rest is a list containing a binary (from invalid UTF-8).
     // Raises ArgumentError if it's a list of invalid codepoints instead.
     const validateListRest = (rest) => {
@@ -1150,7 +711,7 @@ const Erlang_Unicode = {
     // Finds the UTF-8 validity boundary, normalizes the valid prefix,
     // and returns error tuple with normalized prefix and invalid remainder.
     const handleInvalidUtf8 = (bytes) => {
-      const validLength = findValidUtf8Length(bytes);
+      const validLength = Bitstring.getValidUtf8Length(bytes);
       const validPrefix = Bitstring.fromBytes(bytes.slice(0, validLength));
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
       const validText = Bitstring.toText(validPrefix);
