@@ -4,6 +4,9 @@ import Bitstring from "../../bitstring.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Type from "../../type.mjs";
 
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+
 function box(value) {
   if (value === null || value === undefined) {
     return Type.nil();
@@ -38,11 +41,56 @@ function box(value) {
   return {type: "native", value: value};
 }
 
+function unbox(term) {
+  switch (term.type) {
+    case "atom":
+      if (term.value === "true") return true;
+      if (term.value === "false") return false;
+      if (term.value === "nil") return null;
+      return term.value;
+
+    case "bitstring":
+      return Bitstring.toText(term);
+
+    case "float":
+      return term.value;
+
+    case "integer":
+      if (term.value >= MIN_SAFE_BIGINT && term.value <= MAX_SAFE_BIGINT) {
+        return Number(term.value);
+      }
+
+      return term.value;
+
+    case "list":
+      return term.data.map(unbox);
+
+    case "map": {
+      const obj = {};
+
+      for (const [_encodedKey, [key, value]] of Object.entries(term.data)) {
+        obj[unbox(key)] = unbox(value);
+      }
+
+      return obj;
+    }
+
+    case "native":
+      return term.value;
+
+    case "tuple":
+      return term.data.map(unbox);
+
+    default:
+      return term;
+  }
+}
+
 const Elixir_Hologram_JS = {
   "exec/1": (code) => {
     return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
   },
 };
 
-export {box};
+export {box, unbox};
 export default Elixir_Hologram_JS;
