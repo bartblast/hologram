@@ -1,10 +1,14 @@
 defmodule HologramFeatureTests.JavaScriptInteropPage do
   use Hologram.Page
+  use Hologram.JS
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Hologram.JS, only: [js_import: 2, sigil_JS: 2]
   import Kernel, except: [inspect: 1]
 
   alias Hologram.JS
+
+  js_import "default", from: "./helpers.mjs", as: "helpers"
 
   route "/javascript-interop"
 
@@ -20,6 +24,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="call_global_fun"> Call global fun </button>
     </p>
     <p>
+      <button $click="call_imported_fun"> Call imported fun </button>
+    </p>
+    <p>
       <button $click="run_js_snippet"> Run JavaScript snippet </button>
     </p>
     <p>
@@ -33,6 +40,12 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
 
   def action(:call_global_fun, _params, component) do
     result = JS.call("Math", "round", [3.7])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:call_imported_fun, _params, component) do
+    result = JS.call("helpers", "sum", [1, 2])
 
     put_state(component, :result, {result, is_integer(result)})
   end

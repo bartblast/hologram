@@ -8,6 +8,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> click(button("Call global fun"))
       |> assert_text(css("#call_result"), "{4, true}")
     end
+
+    feature "imported fun", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Call imported fun"))
+      |> assert_text(css("#call_result"), "{3, true}")
+    end
   end
 
   feature "~JS sigil", %{session: session} do
