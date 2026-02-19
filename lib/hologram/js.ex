@@ -32,6 +32,23 @@ defmodule Hologram.JS do
   end
 
   @doc """
+  Calls a method on a JS receiver.
+  """
+  defmacro call(receiver, method, args) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.call(unquote(module), unquote(receiver), unquote(method), unquote(args))
+    end
+  end
+
+  @doc false
+  @spec call(module(), String.t(), String.t(), list()) :: any()
+  def call(_caller_module, _receiver, _method, _args) do
+    raise "Hologram.JS.call/4 is only available on the client-side"
+  end
+
+  @doc """
   Executes JavaScript code.
   Server-side implementation is just a dummy. The actual implementation is on the client-side.
   """
