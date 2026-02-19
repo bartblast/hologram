@@ -104,17 +104,17 @@ defmodule Hologram.CompilerTest do
 
       assert aggregate_js_imports(mfas) == %{
                imports: [
-                 %{from: "./utils.js", export: "formatDate", alias: "$1"},
-                 %{from: "chart.js", export: "Chart", alias: "$2"},
-                 %{from: "chart.js", export: "helpers", alias: "$3"}
+                 %{from: "chart.js", export: "Chart", alias: "$1"},
+                 %{from: "chart.js", export: "helpers", alias: "$2"},
+                 %{from: "utils.js", export: "formatDate", alias: "$3"}
                ],
                bindings: %{
                  Module12 => %{
-                   "MyChart" => "$2",
-                   "helpers" => "$3"
+                   "MyChart" => "$1",
+                   "helpers" => "$2"
                  },
                  Module17 => %{
-                   "myFormatDate" => "$1"
+                   "myFormatDate" => "$3"
                  }
                }
              }

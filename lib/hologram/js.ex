@@ -1,6 +1,8 @@
 defmodule Hologram.JS do
   @moduledoc false
 
+  alias Hologram.Reflection
+
   defmacro __using__(_opts) do
     quote do
       import Hologram.JS, only: [js_import: 2]
@@ -67,7 +69,18 @@ defmodule Hologram.JS do
     as = Keyword.get(opts, :as, export)
 
     quote do
-      @__js_imports__ %{export: unquote(export), from: unquote(from), as: unquote(as)}
+      from = unquote(from)
+
+      resolved_from =
+        if String.starts_with?(from, "./") or String.starts_with?(from, "../") do
+          [Reflection.root_dir(), "assets", "js", from]
+          |> Path.join()
+          |> Path.expand()
+        else
+          from
+        end
+
+      @__js_imports__ %{export: unquote(export), from: resolved_from, as: unquote(as)}
     end
   end
 
