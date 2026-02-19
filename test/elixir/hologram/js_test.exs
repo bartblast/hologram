@@ -8,11 +8,6 @@ defmodule Hologram.JSTest do
   alias Hologram.Test.Fixtures.JS.Module4
   alias Hologram.Test.Fixtures.JS.Module6
 
-  test "exec/1" do
-    code = "console.log('Hello, world!');"
-    assert exec(code) == code
-  end
-
   describe "js_import/2" do
     test "no imports" do
       assert Module2.__js_imports__() == []
@@ -64,6 +59,6 @@ defmodule Hologram.JSTest do
 
   test "sigil_JS/2" do
     assert Code.eval_string("~JS\"console.log('Hello, world!');\"", [], __ENV__) ==
-             {"console.log('Hello, world!');", []}
+             {:ok, []}
   end
 end

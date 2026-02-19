@@ -42,18 +42,17 @@ defmodule Hologram.JS do
     end
   end
 
+  # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec call(module(), String.t(), String.t(), list()) :: any()
-  def call(_caller_module, _receiver, _method, _args) do
-    raise "Hologram.JS.call/4 is only available on the client-side"
-  end
+  @spec call(module(), String.t(), String.t(), list()) :: :ok
+  def call(_caller_module, _receiver, _method, _args), do: :ok
 
+  # Server-side pass-through; implemented in JavaScript.
   @doc """
   Executes JavaScript code.
-  Server-side implementation is just a dummy. The actual implementation is on the client-side.
   """
-  @spec exec(String.t()) :: String.t()
-  def exec(code), do: code
+  @spec exec(String.t()) :: :ok
+  def exec(_code), do: :ok
 
   @doc """
   Imports a JS export and binds it to a name available via JS.ref/1.
@@ -75,6 +74,6 @@ defmodule Hologram.JS do
   @doc """
   Provides a convenient syntax for executing JavaScript code using the ~JS sigil.
   """
-  @spec sigil_JS(String.t(), []) :: String.t()
+  @spec sigil_JS(String.t(), []) :: :ok
   def sigil_JS(code, []), do: exec(code)
 end
