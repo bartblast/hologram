@@ -326,6 +326,13 @@ export default class Bitstring {
     };
   }
 
+  // Converts a Unicode codepoint integer to a UTF-8 encoded bitstring.
+  // Accepts Type.integer or plain number/bigint.
+  static fromCodepoint(codepoint) {
+    const value = Type.isInteger(codepoint) ? codepoint.value : codepoint;
+    return Type.bitstring(String.fromCodePoint(Number(value)));
+  }
+
   static fromSegments(segments) {
     const bitstrings = segments.map((segment) => {
       switch (segment.value.type) {

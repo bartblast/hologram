@@ -1396,6 +1396,32 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("fromCodepoint()", () => {
+    it("converts Type.integer codepoint", () => {
+      const codepoint = Type.integer(65); // 'A'
+      const result = Bitstring.fromCodepoint(codepoint);
+      const expected = Type.bitstring("A");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts plain number codepoint", () => {
+      const codepoint = 72; // 'H'
+      const result = Bitstring.fromCodepoint(codepoint);
+      const expected = Type.bitstring("H");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts BigInt codepoint", () => {
+      const codepoint = BigInt(128512); // 😀
+      const result = Bitstring.fromCodepoint(codepoint);
+      const expected = Type.bitstring("😀");
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("fromSegments()", () => {
     it("returns an empty bitstring for an empty array of segments", () => {
       assert.deepStrictEqual(Bitstring.fromSegments([]), Type.bitstring(""));

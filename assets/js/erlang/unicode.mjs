@@ -60,8 +60,7 @@ const Erlang_Unicode = {
         chunks.push(elem);
       } else if (Type.isInteger(elem)) {
         if (Bitstring.validateCodePoint(elem.value)) {
-          const segment = Type.bitstringSegment(elem, {type: "utf8"});
-          chunks.push(Bitstring.fromSegments([segment]));
+          chunks.push(Bitstring.fromCodepoint(elem));
         } else {
           const remainingElems = flatInput.data.slice(i);
 
@@ -89,12 +88,6 @@ const Erlang_Unicode = {
   // Start characters_to_list/1
   "characters_to_list/1": (data) => {
     // Helpers
-
-    // Converts a single codepoint integer to a UTF-8 encoded binary.
-    const convertCodepointToBinary = (codepoint) => {
-      const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
-      return Bitstring.fromSegments([segment]);
-    };
 
     // Creates an error tuple: {:error, converted_so_far, rest}
     const createErrorTuple = (codepoints, rest) => {
@@ -199,7 +192,7 @@ const Erlang_Unicode = {
         };
       }
 
-      return {type: "valid", data: convertCodepointToBinary(elem)};
+      return {type: "valid", data: Bitstring.fromCodepoint(elem)};
     };
 
     const raiseInvalidChardataError = () => {
@@ -371,12 +364,6 @@ const Erlang_Unicode = {
       );
     };
 
-    // Converts a single codepoint integer to a UTF-8 encoded binary.
-    const convertCodepointToBinary = (codepoint) => {
-      const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
-      return Bitstring.fromSegments([segment]);
-    };
-
     // Creates an error tuple: {:error, normalized_so_far, rest}
     const createErrorTuple = (normalizedCodepoints, rest) => {
       return Type.tuple([
@@ -424,7 +411,7 @@ const Erlang_Unicode = {
         raiseInvalidChardataError();
       }
 
-      return {type: "valid", data: convertCodepointToBinary(elem)};
+      return {type: "valid", data: Bitstring.fromCodepoint(elem)};
     };
 
     const raiseInvalidChardataError = () => {
