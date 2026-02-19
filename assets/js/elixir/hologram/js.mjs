@@ -87,7 +87,7 @@ function unbox(term) {
 }
 
 const Elixir_Hologram_JS = {
-  "call/4": (callerModule, receiver, functionName, args) => {
+  "call/4": (callerModule, receiver, methodName, args) => {
     let jsReceiver;
 
     if (receiver.type === "native") {
@@ -101,10 +101,10 @@ const Elixir_Hologram_JS = {
         globalThis[receiverName];
     }
 
-    const jsFunctionName = Bitstring.toText(functionName);
+    const jsMethodName = Bitstring.toText(methodName);
     const jsArgs = args.data.map(unbox);
 
-    return box(jsReceiver[jsFunctionName](...jsArgs));
+    return box(jsReceiver[jsMethodName](...jsArgs));
   },
 
   "exec/1": (code) => {
