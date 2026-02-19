@@ -21,12 +21,21 @@ function box(value) {
 
     case "string":
       return Type.bitstring(value);
-
-    default:
-      return Array.isArray(value)
-        ? Type.list(value.map(box))
-        : {type: "native", value: value};
   }
+
+  if (Array.isArray(value)) {
+    return Type.list(value.map(box));
+  }
+
+  const proto = Object.getPrototypeOf(value);
+
+  if (proto === Object.prototype || proto === null) {
+    return Type.map(
+      Object.entries(value).map(([k, v]) => [Type.bitstring(k), box(v)]),
+    );
+  }
+
+  return {type: "native", value: value};
 }
 
 const Elixir_Hologram_JS = {

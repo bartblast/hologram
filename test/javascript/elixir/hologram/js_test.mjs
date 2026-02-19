@@ -123,14 +123,48 @@ describe("box()", () => {
     });
   });
 
-  describe("native", () => {
-    it("object -> native", () => {
-      const obj = {a: 1};
-      const result = box(obj);
+  describe("plain object", () => {
+    it("plain object -> map (recursive)", () => {
+      const result = box({a: 1, b: "hello"});
 
-      assert.deepStrictEqual(result, {type: "native", value: obj});
+      const expected = Type.map([
+        [Type.bitstring("a"), Type.integer(1)],
+        [Type.bitstring("b"), Type.bitstring("hello")],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
+    it("empty object -> empty map", () => {
+      assert.deepStrictEqual(box({}), Type.map());
+    });
+
+    it("nested plain objects -> nested maps", () => {
+      const result = box({a: {b: 1}});
+
+      const expected = Type.map([
+        [
+          Type.bitstring("a"),
+          Type.map([[Type.bitstring("b"), Type.integer(1)]]),
+        ],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("null prototype object -> map", () => {
+      const obj = Object.create(null);
+      obj.a = 1;
+
+      const result = box(obj);
+
+      const expected = Type.map([[Type.bitstring("a"), Type.integer(1)]]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("native", () => {
     it("function -> native", () => {
       const fn = () => 42;
       const result = box(fn);
