@@ -1,6 +1,4 @@
 defmodule Hologram.JS do
-  @moduledoc false
-
   alias Hologram.Reflection
 
   defmacro __using__(_opts) do
