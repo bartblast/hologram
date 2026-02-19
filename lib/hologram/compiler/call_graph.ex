@@ -175,6 +175,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
+    {Hologram.JS, :call, 4},
     {Hologram.JS, :exec, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
