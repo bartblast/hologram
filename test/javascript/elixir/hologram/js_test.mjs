@@ -96,7 +96,7 @@ describe("box()", () => {
   });
 
   describe("array", () => {
-    it("array -> list (recursive)", () => {
+    it("array -> list", () => {
       const result = box([1, "two", true]);
 
       const expected = Type.list([
@@ -125,7 +125,7 @@ describe("box()", () => {
   });
 
   describe("plain object", () => {
-    it("plain object -> map (recursive)", () => {
+    it("plain object -> map", () => {
       const result = box({a: 1, b: "hello"});
 
       const expected = Type.map([
