@@ -90,14 +90,6 @@ const Erlang_Unicode = {
   "characters_to_list/1": (data) => {
     // Helpers
 
-    // Converts a binary to a list of codepoints.
-    const convertBinaryToCodepoints = (binary, preDecodedText = null) => {
-      const text =
-        preDecodedText !== null ? preDecodedText : Bitstring.toText(binary);
-
-      return Array.from(text).map((char) => Type.integer(char.codePointAt(0)));
-    };
-
     // Converts a single codepoint integer to a UTF-8 encoded binary.
     const convertCodepointToBinary = (codepoint) => {
       const segment = Type.bitstringSegment(codepoint, {type: "utf8"});
@@ -125,7 +117,7 @@ const Erlang_Unicode = {
       const invalidRest = Bitstring.fromBytes(bytes.slice(validLength));
 
       const codepoints =
-        validLength > 0 ? convertBinaryToCodepoints(validPrefix) : [];
+        validLength > 0 ? Bitstring.toCodepointArray(validPrefix) : [];
 
       const isTruncated = Bitstring.isTruncatedUtf8Sequence(bytes, validLength);
 
@@ -142,7 +134,7 @@ const Erlang_Unicode = {
       // Convert all valid chunks to codepoints
       const codepoints =
         chunks.length > 0
-          ? convertBinaryToCodepoints(Bitstring.concat(chunks))
+          ? Bitstring.toCodepointArray(Bitstring.concat(chunks))
           : [];
 
       // Check if it's a truncated sequence
@@ -171,7 +163,7 @@ const Erlang_Unicode = {
     ) => {
       const codepoints =
         chunks.length > 0
-          ? convertBinaryToCodepoints(Bitstring.concat(chunks))
+          ? Bitstring.toCodepointArray(Bitstring.concat(chunks))
           : [];
 
       // Build the rest list with invalid code point and remaining elements
@@ -237,7 +229,7 @@ const Erlang_Unicode = {
         return handleInvalidUtf8FromBinary(data);
       }
 
-      const codepoints = convertBinaryToCodepoints(data, text);
+      const codepoints = Bitstring.toCodepointArray(data);
 
       return Type.list(codepoints);
     }
@@ -269,7 +261,7 @@ const Erlang_Unicode = {
     }
 
     const binary = Bitstring.concat(chunks);
-    const codepoints = convertBinaryToCodepoints(binary);
+    const codepoints = Bitstring.toCodepointArray(binary);
 
     return Type.list(codepoints);
   },
@@ -372,12 +364,9 @@ const Erlang_Unicode = {
       binary,
       preDecodedText = null,
     ) => {
-      const text =
-        preDecodedText !== null ? preDecodedText : Bitstring.toText(binary);
-
+      const text = preDecodedText ?? binary.text ?? Bitstring.toText(binary);
       const normalized = text.normalize("NFC");
-
-      return Array.from(normalized).map((char) =>
+      return Array.from(normalized, (char) =>
         Type.integer(char.codePointAt(0)),
       );
     };

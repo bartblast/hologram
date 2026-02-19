@@ -829,6 +829,15 @@ export default class Bitstring {
     };
   }
 
+  // Converts a bitstring to an array of codepoint integers.
+  // Returns a plain array (not wrapped in Type.list).
+  static toCodepointArray(bitstring) {
+    $.maybeSetTextFromBytes(bitstring);
+    return Array.from(bitstring.text, (char) =>
+      Type.integer(char.codePointAt(0)),
+    );
+  }
+
   static toCodepoints(bitstring) {
     $.maybeSetTextFromBytes(bitstring);
     return Type.charlist(bitstring.text);

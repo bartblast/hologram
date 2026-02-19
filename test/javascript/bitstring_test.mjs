@@ -6242,6 +6242,85 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("toCodepointArray()", () => {
+    it("single codepoint (1 byte)", () => {
+      const bitstring = Type.bitstring("A");
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [Type.integer(65)];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single codepoint (2 bytes)", () => {
+      const bitstring = Type.bitstring("£");
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [Type.integer(163)];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single codepoint (3 bytes)", () => {
+      const bitstring = Type.bitstring("€");
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [Type.integer(8364)];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single codepoint (4 bytes)", () => {
+      const bitstring = Type.bitstring("𐍈");
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [Type.integer(66376)];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple codepoints", () => {
+      const bitstring = Type.bitstring("A£€𐍈");
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [
+        Type.integer(65),
+        Type.integer(163),
+        Type.integer(8364),
+        Type.integer(66376),
+      ];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty bitstring", () => {
+      const bitstring = Type.bitstring("");
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("uses cached text when available", () => {
+      const bitstring = Type.bitstring("cached");
+      // Bitstring already has text cached from Type.bitstring()
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [
+        Type.integer(99),
+        Type.integer(97),
+        Type.integer(99),
+        Type.integer(104),
+        Type.integer(101),
+        Type.integer(100),
+      ];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("decodes bytes and caches text when needed", () => {
+      const bitstring = Bitstring.fromBytes([97, 98, 99]);
+      const result = Bitstring.toCodepointArray(bitstring);
+      const expected = [Type.integer(97), Type.integer(98), Type.integer(99)];
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("toCodepoints()", () => {
     describe("single codepoint", () => {
       it("$ (1 byte)", () => {
