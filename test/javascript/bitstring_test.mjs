@@ -5097,6 +5097,36 @@ describe("Bitstring", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  describe("getUtf8SequenceLength()", () => {
+    it("returns 1 for 0x41 (ASCII)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0x41), 1);
+    });
+
+    it("returns 2 for 0xC2 (2-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xc2), 2);
+    });
+
+    it("returns 3 for 0xE0 (3-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xe0), 3);
+    });
+
+    it("returns 4 for 0xF0 (4-byte leader)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xf0), 4);
+    });
+
+    it("returns false for 0xC0 (invalid: overlong encoding)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xc0), false);
+    });
+
+    it("returns false for 0xF5 (invalid: > U+10FFFF)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0xf5), false);
+    });
+
+    it("returns false for 0x80 (invalid: continuation byte)", () => {
+      assert.equal(Bitstring.getUtf8SequenceLength(0x80), false);
+    });
+  });
+
   describe("isEmpty()", () => {
     describe("empty", () => {
       it("with text field", () => {
@@ -7425,36 +7455,6 @@ describe("Bitstring", () => {
           );
         });
       });
-    });
-  });
-
-  describe("getUtf8SequenceLength()", () => {
-    it("returns 1 for 0x41 (ASCII)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0x41), 1);
-    });
-
-    it("returns 2 for 0xC2 (2-byte leader)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xc2), 2);
-    });
-
-    it("returns 3 for 0xE0 (3-byte leader)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xe0), 3);
-    });
-
-    it("returns 4 for 0xF0 (4-byte leader)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xf0), 4);
-    });
-
-    it("returns false for 0xC0 (invalid: overlong encoding)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xc0), false);
-    });
-
-    it("returns false for 0xF5 (invalid: > U+10FFFF)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0xf5), false);
-    });
-
-    it("returns false for 0x80 (invalid: continuation byte)", () => {
-      assert.equal(Bitstring.getUtf8SequenceLength(0x80), false);
     });
   });
 });
