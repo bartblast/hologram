@@ -645,6 +645,7 @@ defmodule Hologram.Template.Parser do
 
   def parse_tokens(%{raw?: false} = context, :text, [{:symbol, "{%raw}"} = token | rest]) do
     context
+    |> maybe_add_text_tag()
     |> add_processed_token(token)
     |> add_processed_tag({:block_start, "raw"})
     |> enable_raw_mode()
