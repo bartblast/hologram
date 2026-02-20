@@ -90,15 +90,17 @@ const Elixir_Hologram_JS = {
   "call/4": (callerModule, receiver, methodName, args) => {
     let jsReceiver;
 
-    if (receiver.type === "native") {
-      jsReceiver = receiver.value;
-    } else {
-      const receiverName = Bitstring.toText(receiver);
+    if (receiver.type === "atom") {
+      const receiverName = receiver.value;
       const moduleProxy = Interpreter.moduleProxy(callerModule);
 
       jsReceiver =
         moduleProxy.__jsBindings__.get(receiverName) ??
         globalThis[receiverName];
+    } else if (receiver.type === "native") {
+      jsReceiver = receiver.value;
+    } else {
+      jsReceiver = unbox(receiver);
     }
 
     const jsMethodName = Bitstring.toText(methodName);
@@ -114,15 +116,17 @@ const Elixir_Hologram_JS = {
   "new/3": (callerModule, className, args) => {
     let jsClass;
 
-    if (className.type === "native") {
-      jsClass = className.value;
-    } else {
-      const classNameStr = Bitstring.toText(className);
+    if (className.type === "atom") {
+      const classNameStr = className.value;
       const moduleProxy = Interpreter.moduleProxy(callerModule);
 
       jsClass =
         moduleProxy.__jsBindings__.get(classNameStr) ??
         globalThis[classNameStr];
+    } else if (className.type === "native") {
+      jsClass = className.value;
+    } else {
+      jsClass = unbox(className);
     }
 
     const jsArgs = args.data.map(unbox);

@@ -386,7 +386,7 @@ describe("Elixir_Hologram_JS", () => {
 
       const result = call(
         Type.alias("TestModule1"),
-        Type.bitstring("MyLib"),
+        Type.atom("MyLib"),
         Type.bitstring("add"),
         Type.list([Type.integer(2), Type.integer(3)]),
       );
@@ -406,7 +406,7 @@ describe("Elixir_Hologram_JS", () => {
 
       const result = call(
         Type.alias("TestModule2"),
-        Type.bitstring("__testObj__"),
+        Type.atom("__testObj__"),
         Type.bitstring("greet"),
         Type.list([Type.bitstring("world")]),
       );
@@ -466,7 +466,7 @@ describe("Elixir_Hologram_JS", () => {
 
       const result = new3(
         Type.alias("TestModule3"),
-        Type.bitstring("MyBoundClass"),
+        Type.atom("MyBoundClass"),
         Type.list([Type.integer(10)]),
       );
 
@@ -491,7 +491,7 @@ describe("Elixir_Hologram_JS", () => {
 
       const result = new3(
         Type.alias("TestModule4"),
-        Type.bitstring("__TestClass__"),
+        Type.atom("__TestClass__"),
         Type.list([Type.integer(10)]),
       );
 
