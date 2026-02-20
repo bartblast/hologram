@@ -17,6 +17,15 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
+  describe "JS.new/2 + JS.call/3" do
+    feature "instantiate and call method on object ref", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("New and call"))
+      |> assert_text(css("#call_result"), "{15, true}")
+    end
+  end
+
   feature "~JS sigil", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)

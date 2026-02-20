@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
 
   alias Hologram.JS
 
+  js_import "default", from: "./calculator.mjs", as: "Calculator"
   js_import "default", from: "./helpers.mjs", as: "helpers"
 
   route "/javascript-interop"
@@ -25,6 +26,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     </p>
     <p>
       <button $click="call_imported_fun"> Call imported fun </button>
+    </p>
+    <p>
+      <button $click="new_and_call"> New and call </button>
     </p>
     <p>
       <button $click="run_js_snippet"> Run JavaScript snippet </button>
@@ -46,6 +50,13 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
 
   def action(:call_imported_fun, _params, component) do
     result = JS.call("helpers", "sum", [1, 2])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:new_and_call, _params, component) do
+    calculator = JS.new("Calculator", [10])
+    result = JS.call(calculator, "add", [5])
 
     put_state(component, :result, {result, is_integer(result)})
   end
