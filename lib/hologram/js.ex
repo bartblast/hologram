@@ -83,6 +83,22 @@ defmodule Hologram.JS do
   end
 
   @doc """
+  Instantiates a JS class.
+  """
+  defmacro new(class, args) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.new(unquote(module), unquote(class), unquote(args))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec new(module(), String.t(), list()) :: :ok
+  def new(_caller_module, _class, _args), do: :ok
+
+  @doc """
   Provides a convenient syntax for executing JavaScript code using the ~JS sigil.
   """
   @spec sigil_JS(String.t(), []) :: :ok
