@@ -432,6 +432,13 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "Hologram.JS",
+      "new/3",
+      "public",
+      ManuallyPortedElixirHologramJS["new/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Hologram.Router.Helpers",
       "asset_path/1",
       "public",

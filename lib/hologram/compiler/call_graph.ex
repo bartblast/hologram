@@ -177,6 +177,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Code, :ensure_loaded, 1},
     {Hologram.JS, :call, 4},
     {Hologram.JS, :exec, 1},
+    {Hologram.JS, :new, 3},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},
