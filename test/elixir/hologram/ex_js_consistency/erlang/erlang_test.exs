@@ -1967,6 +1967,553 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_to_term/1" do
+    test "decodes small positive integer (SMALL_INTEGER_EXT)" do
+      binary = :erlang.term_to_binary(42)
+      assert :erlang.binary_to_term(binary) == 42
+    end
+
+    test "decodes small positive integer (max value 255)" do
+      binary = :erlang.term_to_binary(255)
+      assert :erlang.binary_to_term(binary) == 255
+    end
+
+    test "decodes positive integer (INTEGER_EXT)" do
+      binary = :erlang.term_to_binary(1000)
+      assert :erlang.binary_to_term(binary) == 1000
+    end
+
+    test "decodes negative integer (INTEGER_EXT)" do
+      binary = :erlang.term_to_binary(-100)
+      assert :erlang.binary_to_term(binary) == -100
+    end
+
+    test "decodes large positive integer (SMALL_BIG_EXT)" do
+      binary = :erlang.term_to_binary(1_000_000_000_000)
+      assert :erlang.binary_to_term(binary) == 1_000_000_000_000
+    end
+
+    test "decodes large negative integer (SMALL_BIG_EXT)" do
+      binary = :erlang.term_to_binary(-1_000_000_000_000)
+      assert :erlang.binary_to_term(binary) == -1_000_000_000_000
+    end
+
+    test "decodes large positive integer (LARGE_BIG_EXT)" do
+      # LARGE_BIG_EXT requires integers with >255 bytes +
+      # 2^2048 requires 257 bytes, triggering LARGE_BIG_EXT encoding
+      large_int = trunc(Integer.pow(2, 2048))
+
+      binary = :erlang.term_to_binary(large_int)
+      assert :erlang.binary_to_term(binary) == large_int
+    end
+
+    test "decodes atom UTF-8 (ATOM_UTF8_EXT)" do
+      name = "élixir"
+      binary = <<131, 118, byte_size(name)::16, name::binary>>
+      assert :erlang.binary_to_term(binary) == :élixir
+    end
+
+    test "decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)" do
+      binary = :erlang.term_to_binary(:test)
+      assert :erlang.binary_to_term(binary) == :test
+    end
+
+    test "decodes atom (ATOM_EXT)" do
+      name = "elixir"
+      binary = <<131, 100, byte_size(name)::16, name::binary>>
+      assert :erlang.binary_to_term(binary) == :elixir
+    end
+
+    test "decodes small atom (SMALL_ATOM_EXT)" do
+      name = "elixir"
+      binary = <<131, 115, byte_size(name)::8, name::binary>>
+      assert :erlang.binary_to_term(binary) == :elixir
+    end
+
+    test "decodes longer atom" do
+      binary = :erlang.term_to_binary(:test_atom)
+      assert :erlang.binary_to_term(binary) == :test_atom
+    end
+
+    test "decodes true atom" do
+      binary = :erlang.term_to_binary(true)
+      assert :erlang.binary_to_term(binary) == true
+    end
+
+    test "decodes false atom" do
+      binary = :erlang.term_to_binary(false)
+      assert :erlang.binary_to_term(binary) == false
+    end
+
+    test "decodes binary string (BINARY_EXT)" do
+      binary = :erlang.term_to_binary("hello")
+      assert :erlang.binary_to_term(binary) == "hello"
+    end
+
+    test "decodes empty binary" do
+      binary = :erlang.term_to_binary("")
+      assert :erlang.binary_to_term(binary) == ""
+    end
+
+    test "decodes small tuple (SMALL_TUPLE_EXT)" do
+      binary = :erlang.term_to_binary({1, 2, 3})
+      assert :erlang.binary_to_term(binary) == {1, 2, 3}
+    end
+
+    test "decodes large tuple (LARGE_TUPLE_EXT)" do
+      arity = 300
+
+      tuple =
+        1..arity
+        |> Enum.to_list()
+        |> List.to_tuple()
+
+      binary = :erlang.term_to_binary(tuple)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_tuple(result)
+      assert tuple_size(result) == arity
+      assert elem(result, 0) == 1
+    end
+
+    test "decodes empty tuple" do
+      binary = :erlang.term_to_binary({})
+      assert :erlang.binary_to_term(binary) == {}
+    end
+
+    test "decodes nested tuple" do
+      binary = :erlang.term_to_binary({1, {2, 3}})
+      assert :erlang.binary_to_term(binary) == {1, {2, 3}}
+    end
+
+    test "decodes empty list (NIL_EXT)" do
+      binary = :erlang.term_to_binary([])
+      assert :erlang.binary_to_term(binary) == []
+    end
+
+    test "decodes string list (STRING_EXT)" do
+      binary = :erlang.term_to_binary([1, 2, 3])
+      assert :erlang.binary_to_term(binary) == [1, 2, 3]
+    end
+
+    test "decodes proper list (LIST_EXT)" do
+      binary = :erlang.term_to_binary([100, 200, 300])
+      assert :erlang.binary_to_term(binary) == [100, 200, 300]
+    end
+
+    test "decodes improper list (LIST_EXT)" do
+      binary = :erlang.term_to_binary([1 | [2 | [3 | 4]]])
+      assert :erlang.binary_to_term(binary) == [1 | [2 | [3 | 4]]]
+    end
+
+    test "decodes empty map" do
+      binary = :erlang.term_to_binary(%{})
+      assert :erlang.binary_to_term(binary) == %{}
+    end
+
+    test "decodes map with atom keys" do
+      binary = :erlang.term_to_binary(%{a: 1, b: 2})
+      assert :erlang.binary_to_term(binary) == %{a: 1, b: 2}
+    end
+
+    test "decodes NEW_FLOAT_EXT (IEEE 754 double)" do
+      binary = :erlang.term_to_binary(3.14159)
+      assert :erlang.binary_to_term(binary) == 3.14159
+    end
+
+    test "decodes NEW_FLOAT_EXT for negative float" do
+      binary = :erlang.term_to_binary(-2.5)
+      assert :erlang.binary_to_term(binary) == -2.5
+    end
+
+    test "decodes NEW_FLOAT_EXT for zero" do
+      binary = :erlang.term_to_binary(0.0)
+      assert :erlang.binary_to_term(binary) == 0.0
+    end
+
+    test "decodes FLOAT_EXT (deprecated string format)" do
+      # Manually construct FLOAT_EXT binary
+      iodata = :io_lib.format("~.20e", [1.5])
+      float_str = IO.iodata_to_binary(iodata)
+      padded = String.pad_trailing(float_str, 31, <<0>>)
+      binary = <<131, 99, padded::binary>>
+
+      assert :erlang.binary_to_term(binary) == 1.5
+    end
+
+    test "decodes BIT_BINARY_EXT with partial byte" do
+      # Bitstring with 5 bits
+      bitstring = <<1::5>>
+      binary = :erlang.term_to_binary(bitstring)
+      assert :erlang.binary_to_term(binary) == bitstring
+    end
+
+    test "decodes BIT_BINARY_EXT with full bytes" do
+      bitstring = <<255, 0>>
+      binary = :erlang.term_to_binary(bitstring)
+      assert :erlang.binary_to_term(binary) == bitstring
+    end
+
+    test "decodes REFERENCE_EXT" do
+      binary =
+        <<131, 101, 119, 13, "nonode@nohost", 0, 0, 0, 42, 1>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes NEW_REFERENCE_EXT" do
+      # Create a reference and encode/decode it
+      ref = make_ref()
+      binary = :erlang.term_to_binary(ref)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes NEW_REFERENCE_EXT with ATOM_EXT" do
+      binary =
+        <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT" do
+      # Manually construct NEWER_REFERENCE_EXT binary
+      binary =
+        <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
+          3>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes NEWER_REFERENCE_EXT with ATOM_EXT" do
+      # Manually construct NEWER_REFERENCE_EXT binary with ATOM_EXT node
+      binary =
+        <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
+          3>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
+    test "decodes PID_EXT" do
+      # Manually construct PID_EXT binary
+      # 131 - VERSION, 103 - PID_EXT, then node atom, ID, Serial, Creation
+      binary =
+        <<131, 103, 119, 13, "nonode@nohost", 0, 0, 0, 100, 0, 0, 0, 50, 0>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_pid(decoded)
+    end
+
+    test "decodes NEW_PID_EXT" do
+      # Create a PID and encode/decode it
+      pid = self()
+      binary = :erlang.term_to_binary(pid)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_pid(decoded)
+    end
+
+    test "decodes PORT_EXT" do
+      # Manually construct PORT_EXT binary
+      # 131 - VERSION, 102 - PORT_EXT, then node atom, ID, Creation
+      binary = <<131, 102, 119, 13, "nonode@nohost", 0, 0, 0, 5, 0>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_port(decoded)
+    end
+
+    test "decodes NEW_PORT_EXT" do
+      # Manually construct NEW_PORT_EXT binary
+      # 131 - VERSION, 89 - NEW_PORT_EXT, then node atom, ID (4 bytes), Creation (4 bytes)
+      binary = <<131, 89, 119, 13, "nonode@nohost", 0, 0, 0, 5, 0, 0, 0, 0>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_port(decoded)
+    end
+
+    test "decodes V4_PORT_EXT" do
+      # Create a port and encode/decode it (modern Erlang uses V4_PORT_EXT)
+      port = hd(Port.list())
+      binary = :erlang.term_to_binary(port)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_port(decoded)
+    end
+
+    test "decodes EXPORT_EXT (function capture)" do
+      # Create a function capture and encode/decode it
+      fun = &Enum.map/2
+      binary = :erlang.term_to_binary(fun)
+      decoded = :erlang.binary_to_term(binary)
+      assert is_function(decoded, 2)
+    end
+
+    test "decodes Code.fetch_docs/1 style tuple" do
+      term = {:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []}
+      binary = :erlang.term_to_binary(term)
+      assert :erlang.binary_to_term(binary) == term
+    end
+
+    test "decodes complex nested structure" do
+      term =
+        {:docs_v1, 1, :elixir, "text/markdown", %{"en" => "Module docs"}, %{since: "1.0.0"},
+         [{{:function, :my_func, 2}, 10, ["signature"], %{}, %{}}]}
+
+      binary = :erlang.term_to_binary(term)
+      assert :erlang.binary_to_term(binary) == term
+    end
+
+    test "decodes compressed term (COMPRESSED tag 80) with repeated string" do
+      # Real Erlang-generated compressed term for String.duplicate("hello", 100)
+      # Generated with: :erlang.term_to_binary(String.duplicate("hello", 100), [compressed: 9])
+      binary =
+        <<131, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146, 145, 154, 147, 147, 63, 74,
+          140, 40, 2, 0, 21, 94, 209, 51>>
+
+      expected = String.duplicate("hello", 100)
+      assert :erlang.binary_to_term(binary) == expected
+    end
+
+    test "decodes compressed term with list of tuples" do
+      # Real Erlang-generated compressed term for a list of 50 identical tuples
+      # Generated with: :erlang.term_to_binary(List.duplicate({:ok, 42}, 50), [compressed: 9])
+      binary =
+        <<131, 80, 0, 0, 1, 150, 120, 218, 203, 97, 96, 96, 48, 202, 96, 42, 103, 202, 207, 78,
+          212, 26, 165, 7, 7, 157, 5, 0, 189, 136, 115, 25>>
+
+      expected = List.duplicate({:ok, 42}, 50)
+      assert :erlang.binary_to_term(binary) == expected
+    end
+
+    test "decodes compressed term round-trip" do
+      # Test that we can decode Erlang's compressed format
+      term = %{
+        data: List.duplicate({:item, "value", 123}, 100),
+        metadata: %{compressed: true, version: 1}
+      }
+
+      binary = :erlang.term_to_binary(term, compressed: 9)
+      assert :erlang.binary_to_term(binary) == term
+    end
+
+    test "raises ArgumentError for compressed term with truncated uncompressed size" do
+      # COMPRESSED tag but missing uncompressed size bytes
+      binary = <<131, 80, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for compressed term with invalid zlib data" do
+      # COMPRESSED tag with invalid compressed data
+      binary = <<131, 80, 0, 0, 0, 2, 255, 255, 255>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for compressed term with size mismatch" do
+      # COMPRESSED tag where decompressed size doesn't match declared size
+      binary = <<131, 80, 0, 0, 0, 10, 120, 156, 74, 180, 2, 0, 0, 121, 0, 121>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError if argument is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_term, [:test]}
+    end
+
+    test "raises ArgumentError if argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_term, [<<1::1, 0::1, 1::1>>]}
+    end
+
+    test "raises ArgumentError if binary has invalid version byte" do
+      # Wrong version byte (130 instead of 131)
+      binary = <<130, 97, 42>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError if binary is truncated" do
+      # Only version byte, no data
+      binary = <<131>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for FLOAT_EXT with truncated data" do
+      # FLOAT_EXT (tag 99) with only 10 bytes instead of required 31
+      binary = <<131, 99, "1.23", 0, 0, 0, 0, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for malformed SMALL_ATOM_UTF8_EXT with length exceeding data" do
+      # SMALL_ATOM_UTF8_EXT (119) with length 50 but only 2 bytes
+      binary = <<131, 119, 50, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for malformed ATOM_EXT with length exceeding data" do
+      # ATOM_EXT (100) with length 100 but only 2 bytes
+      binary = <<131, 100, 0, 100, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for malformed STRING_EXT with length exceeding data" do
+      # STRING_EXT (107) with length 100 but only 2 bytes of data
+      binary = <<131, 107, 0, 100, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # Consistency tests for specific external term formats
+
+    test "STRING_EXT format with various byte values" do
+      # Test STRING_EXT (tag 107) with different byte ranges
+      test_cases = [
+        [0, 1, 2],
+        [255, 254, 253],
+        # ABC
+        [65, 66, 67],
+        [128, 129, 130],
+        # empty string
+        []
+      ]
+
+      for bytes <- test_cases do
+        binary = :erlang.term_to_binary(bytes)
+        assert :erlang.binary_to_term(binary) == bytes
+      end
+    end
+
+    test "ATOM_EXT format with Latin-1 atoms" do
+      # Test ATOM_EXT (tag 100) with various atom names
+      test_atoms = [
+        :test,
+        :hello_world,
+        :a,
+        # empty atom
+        :"",
+        :"special-atom!@#",
+        :atom_with_underscores_123
+      ]
+
+      for atom <- test_atoms do
+        # Manually construct ATOM_EXT binary
+        name = Atom.to_string(atom)
+        binary = <<131, 100, byte_size(name)::16, name::binary>>
+        assert :erlang.binary_to_term(binary) == atom
+      end
+    end
+
+    test "SMALL_ATOM_UTF8_EXT format with UTF-8 atoms" do
+      # Test SMALL_ATOM_UTF8_EXT (tag 119) with UTF-8 characters
+      test_atoms = [
+        :élixir,
+        :café,
+        :测试,
+        :"🚀",
+        :ñoño,
+        # regular ASCII for comparison
+        :test
+      ]
+
+      for atom <- test_atoms do
+        binary = :erlang.term_to_binary(atom)
+        assert :erlang.binary_to_term(binary) == atom
+      end
+    end
+
+    test "BINARY_EXT format with various binary data" do
+      # Test BINARY_EXT (tag 109) with different binary content
+      test_binaries = [
+        "",
+        "hello",
+        "world with spaces",
+        "binary\0with\0nulls",
+        "UTF-8: élixir café 测试 🚀",
+        <<0, 1, 2, 255, 254, 253>>,
+        # larger binary
+        String.duplicate("x", 1000)
+      ]
+
+      for bin <- test_binaries do
+        binary = :erlang.term_to_binary(bin)
+        assert :erlang.binary_to_term(binary) == bin
+      end
+    end
+
+    test "BIT_BINARY_EXT format with partial bytes" do
+      # Test BIT_BINARY_EXT (tag 77) with various bit lengths
+      test_bitstrings = [
+        <<1::1>>,
+        <<1::3>>,
+        <<15::4>>,
+        <<31::5>>,
+        # full byte
+        <<255::8>>,
+        # mixed bytes and bits
+        <<1, 2, 3::6>>,
+        # multiple bytes + 1 bit
+        <<255, 255, 1::1>>
+      ]
+
+      for bitstring <- test_bitstrings do
+        binary = :erlang.term_to_binary(bitstring)
+        assert :erlang.binary_to_term(binary) == bitstring
+      end
+    end
+
+    test "FLOAT_EXT format (deprecated string format)" do
+      # Test FLOAT_EXT (tag 99) - manually constructed deprecated format
+      test_floats = [
+        1.5,
+        -2.5,
+        3.14159,
+        0.0,
+        -0.0,
+        1.0e10,
+        1.23e-5
+      ]
+
+      for float_val <- test_floats do
+        # Manually construct FLOAT_EXT binary (31-byte null-terminated string)
+        iodata = :io_lib.format("~.20e", [float_val])
+        float_str = IO.iodata_to_binary(iodata)
+        padded = String.pad_trailing(float_str, 31, <<0>>)
+        binary = <<131, 99, padded::binary>>
+
+        decoded = :erlang.binary_to_term(binary)
+        assert_in_delta decoded, float_val, 1.0e-15
+      end
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert :erlang.bit_size(<<2::7>>) == 7
