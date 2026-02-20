@@ -266,6 +266,23 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:end_tag, rest)
   end
 
+  def parse_tokens(context, :end_tag, [
+        {:symbol, "-"} = token1 | [{:string, str} = token2 | rest]
+      ]) do
+    context
+    |> set_tag_name(context.tag_name <> "-" <> str)
+    |> add_processed_token(token1)
+    |> add_processed_token(token2)
+    |> parse_tokens(:end_tag, rest)
+  end
+
+  def parse_tokens(context, :end_tag, [{:symbol, "-"} = token | rest]) do
+    context
+    |> set_tag_name(context.tag_name <> "-")
+    |> add_processed_token(token)
+    |> parse_tokens(:end_tag, rest)
+  end
+
   def parse_tokens(context, :end_tag, [{:symbol, ">"} = token | rest]) do
     context
     |> add_end_tag()
@@ -435,7 +452,6 @@ defmodule Hologram.Template.Parser do
     context
     |> reset_attributes()
     |> set_tag_name(tag_name)
-    |> maybe_enable_script_mode(tag_name)
     |> add_processed_token(token)
     |> set_prev_status(:start_tag_name)
     |> parse_tokens(:start_tag, rest)
@@ -476,11 +492,36 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
-    parse_start_tag_end(context, token, rest, true)
+    context
+    |> maybe_enable_script_mode(context.tag_name)
+    |> parse_start_tag_end(token, rest, true)
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, ">"} = token | rest]) do
-    parse_start_tag_end(context, token, rest, false)
+    context
+    |> maybe_enable_script_mode(context.tag_name)
+    |> parse_start_tag_end(token, rest, false)
+  end
+
+  def parse_tokens(%{prev_status: :start_tag_name} = context, :start_tag, [
+        {:symbol, "-"} = token1 | [{:string, str} = token2 | rest]
+      ]) do
+    context
+    |> set_tag_name(context.tag_name <> "-" <> str)
+    |> add_processed_token(token1)
+    |> add_processed_token(token2)
+    |> set_prev_status(:start_tag_name)
+    |> parse_tokens(:start_tag, rest)
+  end
+
+  def parse_tokens(%{prev_status: :start_tag_name} = context, :start_tag, [
+        {:symbol, "-"} = token | rest
+      ]) do
+    context
+    |> set_tag_name(context.tag_name <> "-")
+    |> add_processed_token(token)
+    |> set_prev_status(:start_tag_name)
+    |> parse_tokens(:start_tag, rest)
   end
 
   def parse_tokens(context, :start_tag, [{:string, _str} = token | rest]) do

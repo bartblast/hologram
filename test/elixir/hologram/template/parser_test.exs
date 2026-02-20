@@ -111,6 +111,66 @@ defmodule Hologram.Template.ParserTest do
     test "whitespaces after end tag name" do
       assert parse_markup("</div \n\r\t>") == [end_tag: "div"]
     end
+
+    test "hyphenated element start tag" do
+      assert parse_markup("<foo-bar>") == [start_tag: {"foo-bar", []}]
+    end
+
+    test "multi-hyphenated element start tag" do
+      assert parse_markup("<foo-bar-baz>") == [start_tag: {"foo-bar-baz", []}]
+    end
+
+    test "hyphenated ending element start tag" do
+      assert parse_markup("<foo-bar->") == [start_tag: {"foo-bar-", []}]
+    end
+
+    test "element name cannot start with a hyphen" do
+      assert_raise TemplateSyntaxError, fn ->
+        parse_markup("<-foo>")
+      end
+    end
+
+    test "multiple simultaneous hyphenated element start tag" do
+      assert parse_markup("<foo--bar>") == [start_tag: {"foo--bar", []}]
+    end
+
+    test "hyphenated element start tag with attributes" do
+      assert parse_markup(~s'<foo-bar class="x">') == [
+               start_tag: {"foo-bar", [{"class", [text: "x"]}]}
+             ]
+    end
+
+    test "hyphenated element self-closed start tag" do
+      assert parse_markup("<foo-bar />") == [self_closing_tag: {"foo-bar", []}]
+    end
+
+    test "multi-hyphenated element self-closed start tag" do
+      assert parse_markup("<foo-bar-baz />") == [self_closing_tag: {"foo-bar-baz", []}]
+    end
+
+    test "hyphenated ending element self-closed start tag" do
+      assert parse_markup("<foo-bar- />") == [self_closing_tag: {"foo-bar-", []}]
+    end
+
+    test "multiple consecutive hyphenated element self-closed start tag" do
+      assert parse_markup("<foo--bar />") == [self_closing_tag: {"foo--bar", []}]
+    end
+
+    test "hyphenated element end tag" do
+      assert parse_markup("</foo-bar>") == [end_tag: "foo-bar"]
+    end
+
+    test "multi-hyphenated element end tag" do
+      assert parse_markup("</foo-bar-baz>") == [end_tag: "foo-bar-baz"]
+    end
+
+    test "hyphenated ending element end tag" do
+      assert parse_markup("</foo-bar->") == [end_tag: "foo-bar-"]
+    end
+
+    test "multiple simultaneous hyphenated element end tag" do
+      assert parse_markup("</foo--bar>") == [end_tag: "foo--bar"]
+    end
   end
 
   describe "component tags" do
