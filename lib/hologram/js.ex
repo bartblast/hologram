@@ -3,7 +3,7 @@ defmodule Hologram.JS do
 
   defmacro __using__(_opts) do
     quote do
-      import Hologram.JS, only: [js_import: 2]
+      import Hologram.JS, only: [js_import: 2, sigil_JS: 2]
 
       @before_compile Hologram.JS
 

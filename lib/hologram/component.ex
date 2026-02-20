@@ -63,7 +63,6 @@ defmodule Hologram.Component do
             put_state: 3
           ]
 
-        import Hologram.JS, only: [sigil_JS: 2]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
 
         import Hologram.Server,
