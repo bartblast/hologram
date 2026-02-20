@@ -110,6 +110,25 @@ const Elixir_Hologram_JS = {
   "exec/1": (code) => {
     return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
   },
+
+  "new/3": (callerModule, className, args) => {
+    let jsClass;
+
+    if (className.type === "native") {
+      jsClass = className.value;
+    } else {
+      const classNameStr = Bitstring.toText(className);
+      const moduleProxy = Interpreter.moduleProxy(callerModule);
+
+      jsClass =
+        moduleProxy.__jsBindings__.get(classNameStr) ??
+        globalThis[classNameStr];
+    }
+
+    const jsArgs = args.data.map(unbox);
+
+    return box(new jsClass(...jsArgs));
+  },
 };
 
 export {box, unbox};

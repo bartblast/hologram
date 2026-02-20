@@ -437,4 +437,87 @@ describe("Elixir_Hologram_JS", () => {
       assert.equal(exec(code), 3);
     });
   });
+
+  describe("new/3", () => {
+    const new3 = Elixir_Hologram_JS["new/3"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_TestModule3;
+      delete globalThis.Elixir_TestModule4;
+      delete globalThis.__TestClass__;
+    });
+
+    it("resolves class from module's JS bindings", () => {
+      class MyClass {
+        constructor(value) {
+          this.initial = value;
+        }
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "TestModule3",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule3"));
+      moduleProxy.__jsBindings__.set("MyBoundClass", MyClass);
+
+      const result = new3(
+        Type.alias("TestModule3"),
+        Type.bitstring("MyBoundClass"),
+        Type.list([Type.integer(10)]),
+      );
+
+      assert.strictEqual(result.type, "native");
+      assert.isTrue(result.value instanceof MyClass);
+      assert.strictEqual(result.value.initial, 10);
+    });
+
+    it("falls back to globalThis when not in bindings", () => {
+      globalThis.__TestClass__ = class {
+        constructor(value) {
+          this.initial = value;
+        }
+      };
+
+      Interpreter.defineManuallyPortedFunction(
+        "TestModule4",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const result = new3(
+        Type.alias("TestModule4"),
+        Type.bitstring("__TestClass__"),
+        Type.list([Type.integer(10)]),
+      );
+
+      assert.strictEqual(result.type, "native");
+      assert.isTrue(result.value instanceof globalThis.__TestClass__);
+      assert.strictEqual(result.value.initial, 10);
+    });
+
+    it("resolves native class reference directly", () => {
+      class Direct {
+        constructor(value) {
+          this.initial = value;
+        }
+      }
+
+      const nativeClass = {type: "native", value: Direct};
+
+      const result = new3(
+        Type.alias("Unused"),
+        nativeClass,
+        Type.list([Type.integer(10)]),
+      );
+
+      assert.strictEqual(result.type, "native");
+      assert.isTrue(result.value instanceof Direct);
+      assert.strictEqual(result.value.initial, 10);
+    });
+  });
 });
