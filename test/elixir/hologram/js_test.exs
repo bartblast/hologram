@@ -49,7 +49,7 @@ defmodule Hologram.JSTest do
         defmodule Hologram.Test.Fixtures.JS.RelativeDotSlash do
           use Hologram.JS
 
-          js_import "foo", from: "./utils.js", as: "foo"
+          js_import :foo, from: "./utils.js", as: :foo
         end
         """)
 
@@ -67,7 +67,7 @@ defmodule Hologram.JSTest do
         defmodule Hologram.Test.Fixtures.JS.RelativeDotDotSlash do
           use Hologram.JS
 
-          js_import "foo", from: "../vendor/utils.js", as: "foo"
+          js_import :foo, from: "../vendor/utils.js", as: :foo
         end
         """)
 
@@ -82,7 +82,7 @@ defmodule Hologram.JSTest do
         defmodule Hologram.Test.Fixtures.JS.AbsolutePath do
           use Hologram.JS
 
-          js_import "foo", from: "/absolute/path/utils.js", as: "foo"
+          js_import :foo, from: "/absolute/path/utils.js", as: :foo
         end
         """)
 
@@ -97,7 +97,7 @@ defmodule Hologram.JSTest do
         defmodule Hologram.Test.Fixtures.JS.NpmPackage do
           use Hologram.JS
 
-          js_import "Chart", from: "chart.js", as: "Chart"
+          js_import :Chart, from: "chart.js", as: :Chart
         end
         """)
 
@@ -115,8 +115,8 @@ defmodule Hologram.JSTest do
         defmodule Hologram.Test.Fixtures.JS.DuplicateBindingName do
           use Hologram.JS
 
-          js_import "Chart", from: "chart.js", as: "MyChart"
-          js_import "Other", from: "other.js", as: "MyChart"
+          js_import :Chart, from: "chart.js", as: :MyChart
+          js_import :Other, from: "other.js", as: :MyChart
         end
         """)
       end

@@ -59,8 +59,8 @@ defmodule Hologram.JS do
 
   ## Examples
 
-      js_import "Chart", from: "chart.js"
-      js_import "Chart", from: "chart.js", as: "MyChart"
+      js_import :Chart, from: "chart.js"
+      js_import :Chart, from: "chart.js", as: :MyChart
   """
   defmacro js_import(export, opts) do
     from = Keyword.fetch!(opts, :from)
@@ -78,7 +78,11 @@ defmodule Hologram.JS do
           from
         end
 
-      @__js_imports__ %{export: unquote(export), from: resolved_from, as: unquote(as)}
+      @__js_imports__ %{
+        export: Atom.to_string(unquote(export)),
+        from: resolved_from,
+        as: Atom.to_string(unquote(as))
+      }
     end
   end
 
