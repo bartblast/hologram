@@ -41,6 +41,23 @@ function box(value) {
   return {type: "native", value: value};
 }
 
+function resolveReceiver(callerModule, receiver) {
+  if (receiver.type === "atom") {
+    const receiverName = receiver.value;
+    const moduleProxy = Interpreter.moduleProxy(callerModule);
+
+    return (
+      moduleProxy.__jsBindings__.get(receiverName) ?? globalThis[receiverName]
+    );
+  }
+
+  if (receiver.type === "native") {
+    return receiver.value;
+  }
+
+  return unbox(receiver);
+}
+
 function unbox(term) {
   switch (term.type) {
     case "atom":
@@ -88,21 +105,7 @@ function unbox(term) {
 
 const Elixir_Hologram_JS = {
   "call/4": (callerModule, receiver, methodName, args) => {
-    let jsReceiver;
-
-    if (receiver.type === "atom") {
-      const receiverName = receiver.value;
-      const moduleProxy = Interpreter.moduleProxy(callerModule);
-
-      jsReceiver =
-        moduleProxy.__jsBindings__.get(receiverName) ??
-        globalThis[receiverName];
-    } else if (receiver.type === "native") {
-      jsReceiver = receiver.value;
-    } else {
-      jsReceiver = unbox(receiver);
-    }
-
+    const jsReceiver = resolveReceiver(callerModule, receiver);
     const jsMethodName = Bitstring.toText(methodName);
     const jsArgs = args.data.map(unbox);
 
@@ -114,47 +117,19 @@ const Elixir_Hologram_JS = {
   },
 
   "get/3": (callerModule, receiver, property) => {
-    let jsReceiver;
-
-    if (receiver.type === "atom") {
-      const receiverName = receiver.value;
-      const moduleProxy = Interpreter.moduleProxy(callerModule);
-
-      jsReceiver =
-        moduleProxy.__jsBindings__.get(receiverName) ??
-        globalThis[receiverName];
-    } else if (receiver.type === "native") {
-      jsReceiver = receiver.value;
-    } else {
-      jsReceiver = unbox(receiver);
-    }
-
+    const jsReceiver = resolveReceiver(callerModule, receiver);
     const jsPropertyName = property.value;
 
     return box(jsReceiver[jsPropertyName]);
   },
 
   "new/3": (callerModule, className, args) => {
-    let jsClass;
-
-    if (className.type === "atom") {
-      const classNameStr = className.value;
-      const moduleProxy = Interpreter.moduleProxy(callerModule);
-
-      jsClass =
-        moduleProxy.__jsBindings__.get(classNameStr) ??
-        globalThis[classNameStr];
-    } else if (className.type === "native") {
-      jsClass = className.value;
-    } else {
-      jsClass = unbox(className);
-    }
-
+    const jsClass = resolveReceiver(callerModule, className);
     const jsArgs = args.data.map(unbox);
 
     return box(new jsClass(...jsArgs));
   },
 };
 
-export {box, unbox};
+export {box, resolveReceiver, unbox};
 export default Elixir_Hologram_JS;

@@ -7,6 +7,7 @@ import {
 
 import Elixir_Hologram_JS, {
   box,
+  resolveReceiver,
   unbox,
 } from "../../../../assets/js/elixir/hologram/js.mjs";
 
@@ -181,6 +182,70 @@ describe("box()", () => {
 
       assert.deepStrictEqual(result, {type: "native", value: instance});
     });
+  });
+});
+
+describe("resolveReceiver()", () => {
+  beforeEach(() => {
+    delete globalThis.Elixir_TestModule1;
+    delete globalThis.Elixir_TestModule2;
+    delete globalThis.__testObj__;
+  });
+
+  it("resolves from module's JS bindings when receiver is an atom", () => {
+    class Chart {
+      render() {}
+    }
+
+    Interpreter.defineManuallyPortedFunction(
+      "TestModule1",
+      "dummy/0",
+      "public",
+      () => {},
+    );
+
+    const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule1"));
+    moduleProxy.__jsBindings__.set("MyChart", Chart);
+
+    const result = resolveReceiver(
+      Type.alias("TestModule1"),
+      Type.atom("MyChart"),
+    );
+
+    assert.strictEqual(result, Chart);
+  });
+
+  it("falls back to globalThis when not in bindings", () => {
+    globalThis.__testObj__ = {x: 42};
+
+    Interpreter.defineManuallyPortedFunction(
+      "TestModule2",
+      "dummy/0",
+      "public",
+      () => {},
+    );
+
+    const result = resolveReceiver(
+      Type.alias("TestModule2"),
+      Type.atom("__testObj__"),
+    );
+
+    assert.strictEqual(result, globalThis.__testObj__);
+  });
+
+  it("unwraps native receiver directly", () => {
+    const obj = {a: 1};
+    const nativeReceiver = {type: "native", value: obj};
+
+    const result = resolveReceiver(Type.alias("Unused"), nativeReceiver);
+
+    assert.strictEqual(result, obj);
+  });
+
+  it("unboxes other receiver types", () => {
+    const result = resolveReceiver(Type.alias("Unused"), Type.integer(42));
+
+    assert.strictEqual(result, 42);
   });
 });
 
@@ -366,66 +431,31 @@ describe("Elixir_Hologram_JS", () => {
     const call = Elixir_Hologram_JS["call/4"];
 
     beforeEach(() => {
-      delete globalThis.Elixir_TestModule1;
-      delete globalThis.Elixir_TestModule2;
-      delete globalThis.__testObj__;
+      delete globalThis.Elixir_CallTestModule;
     });
 
-    it("resolves receiver from module's JS bindings", () => {
-      const $1 = {add: (a, b) => a + b};
+    it("calls method on receiver with unboxed args and boxes result", () => {
+      const mathHelpers = {add: (a, b) => a + b};
 
       Interpreter.defineManuallyPortedFunction(
-        "TestModule1",
+        "CallTestModule",
         "dummy/0",
         "public",
         () => {},
       );
 
-      const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule1"));
-      moduleProxy.__jsBindings__.set("MyLib", $1);
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
+
+      moduleProxy.__jsBindings__.set("helpers", mathHelpers);
 
       const result = call(
-        Type.alias("TestModule1"),
-        Type.atom("MyLib"),
+        Type.alias("CallTestModule"),
+        Type.atom("helpers"),
         Type.bitstring("add"),
         Type.list([Type.integer(2), Type.integer(3)]),
       );
 
       assert.deepStrictEqual(result, Type.integer(5));
-    });
-
-    it("falls back to globalThis when not in bindings", () => {
-      globalThis.__testObj__ = {greet: (name) => `hello ${name}`};
-
-      Interpreter.defineManuallyPortedFunction(
-        "TestModule2",
-        "dummy/0",
-        "public",
-        () => {},
-      );
-
-      const result = call(
-        Type.alias("TestModule2"),
-        Type.atom("__testObj__"),
-        Type.bitstring("greet"),
-        Type.list([Type.bitstring("world")]),
-      );
-
-      assert.deepStrictEqual(result, Type.bitstring("hello world"));
-    });
-
-    it("resolves native receiver directly", () => {
-      const obj = {getValue: () => 42};
-      const nativeReceiver = {type: "native", value: obj};
-
-      const result = call(
-        Type.alias("Unused"),
-        nativeReceiver,
-        Type.bitstring("getValue"),
-        Type.list(),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(42));
     });
   });
 
@@ -442,74 +472,51 @@ describe("Elixir_Hologram_JS", () => {
     const get = Elixir_Hologram_JS["get/3"];
 
     beforeEach(() => {
-      delete globalThis.Elixir_TestModule5;
-      delete globalThis.Elixir_TestModule6;
-      delete globalThis.__testObj__;
+      delete globalThis.Elixir_GetTestModule;
     });
 
-    it("resolves receiver from module's JS bindings", () => {
-      class MyClass {
+    it("gets property from receiver and boxes result", () => {
+      class Config {
         static version = 3;
       }
 
       Interpreter.defineManuallyPortedFunction(
-        "TestModule5",
+        "GetTestModule",
         "dummy/0",
         "public",
         () => {},
       );
 
-      const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule5"));
-      moduleProxy.__jsBindings__.set("MyBoundClass", MyClass);
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("GetTestModule"));
+
+      moduleProxy.__jsBindings__.set("AppConfig", Config);
 
       const result = get(
-        Type.alias("TestModule5"),
-        Type.atom("MyBoundClass"),
+        Type.alias("GetTestModule"),
+        Type.atom("AppConfig"),
         Type.atom("version"),
       );
 
       assert.deepStrictEqual(result, Type.integer(3));
     });
 
-    it("falls back to globalThis when not in bindings", () => {
-      globalThis.__testObj__ = {x: 42};
+    it("returns nil for undefined properties", () => {
+      class Config {}
 
       Interpreter.defineManuallyPortedFunction(
-        "TestModule6",
+        "GetTestModule",
         "dummy/0",
         "public",
         () => {},
       );
 
-      const result = get(
-        Type.alias("TestModule6"),
-        Type.atom("__testObj__"),
-        Type.atom("x"),
-      );
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("GetTestModule"));
 
-      assert.deepStrictEqual(result, Type.integer(42));
-    });
-
-    it("resolves native receiver directly", () => {
-      const obj = {color: "red"};
-      const nativeReceiver = {type: "native", value: obj};
+      moduleProxy.__jsBindings__.set("AppConfig", Config);
 
       const result = get(
-        Type.alias("Unused"),
-        nativeReceiver,
-        Type.atom("color"),
-      );
-
-      assert.deepStrictEqual(result, Type.bitstring("red"));
-    });
-
-    it("returns nil for undefined properties", () => {
-      const obj = {a: 1};
-      const nativeReceiver = {type: "native", value: obj};
-
-      const result = get(
-        Type.alias("Unused"),
-        nativeReceiver,
+        Type.alias("GetTestModule"),
+        Type.atom("AppConfig"),
         Type.atom("missing"),
       );
 
@@ -521,81 +528,35 @@ describe("Elixir_Hologram_JS", () => {
     const new3 = Elixir_Hologram_JS["new/3"];
 
     beforeEach(() => {
-      delete globalThis.Elixir_TestModule3;
-      delete globalThis.Elixir_TestModule4;
-      delete globalThis.__TestClass__;
+      delete globalThis.Elixir_NewTestModule;
     });
 
-    it("resolves class from module's JS bindings", () => {
-      class MyClass {
+    it("instantiates class with unboxed args and boxes result", () => {
+      class Calculator {
         constructor(value) {
           this.initial = value;
         }
       }
 
       Interpreter.defineManuallyPortedFunction(
-        "TestModule3",
+        "NewTestModule",
         "dummy/0",
         "public",
         () => {},
       );
 
-      const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule3"));
-      moduleProxy.__jsBindings__.set("MyBoundClass", MyClass);
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("NewTestModule"));
+
+      moduleProxy.__jsBindings__.set("Calc", Calculator);
 
       const result = new3(
-        Type.alias("TestModule3"),
-        Type.atom("MyBoundClass"),
+        Type.alias("NewTestModule"),
+        Type.atom("Calc"),
         Type.list([Type.integer(10)]),
       );
 
       assert.strictEqual(result.type, "native");
-      assert.isTrue(result.value instanceof MyClass);
-      assert.strictEqual(result.value.initial, 10);
-    });
-
-    it("falls back to globalThis when not in bindings", () => {
-      globalThis.__TestClass__ = class {
-        constructor(value) {
-          this.initial = value;
-        }
-      };
-
-      Interpreter.defineManuallyPortedFunction(
-        "TestModule4",
-        "dummy/0",
-        "public",
-        () => {},
-      );
-
-      const result = new3(
-        Type.alias("TestModule4"),
-        Type.atom("__TestClass__"),
-        Type.list([Type.integer(10)]),
-      );
-
-      assert.strictEqual(result.type, "native");
-      assert.isTrue(result.value instanceof globalThis.__TestClass__);
-      assert.strictEqual(result.value.initial, 10);
-    });
-
-    it("resolves native class reference directly", () => {
-      class Direct {
-        constructor(value) {
-          this.initial = value;
-        }
-      }
-
-      const nativeClass = {type: "native", value: Direct};
-
-      const result = new3(
-        Type.alias("Unused"),
-        nativeClass,
-        Type.list([Type.integer(10)]),
-      );
-
-      assert.strictEqual(result.type, "native");
-      assert.isTrue(result.value instanceof Direct);
+      assert.isTrue(result.value instanceof Calculator);
       assert.strictEqual(result.value.initial, 10);
     });
   });
