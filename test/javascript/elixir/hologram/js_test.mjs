@@ -438,6 +438,85 @@ describe("Elixir_Hologram_JS", () => {
     });
   });
 
+  describe("get/3", () => {
+    const get = Elixir_Hologram_JS["get/3"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_TestModule5;
+      delete globalThis.Elixir_TestModule6;
+      delete globalThis.__testObj__;
+    });
+
+    it("resolves receiver from module's JS bindings", () => {
+      class MyClass {
+        static version = 3;
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "TestModule5",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule5"));
+      moduleProxy.__jsBindings__.set("MyBoundClass", MyClass);
+
+      const result = get(
+        Type.alias("TestModule5"),
+        Type.atom("MyBoundClass"),
+        Type.atom("version"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("falls back to globalThis when not in bindings", () => {
+      globalThis.__testObj__ = {x: 42};
+
+      Interpreter.defineManuallyPortedFunction(
+        "TestModule6",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const result = get(
+        Type.alias("TestModule6"),
+        Type.atom("__testObj__"),
+        Type.atom("x"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("resolves native receiver directly", () => {
+      const obj = {color: "red"};
+      const nativeReceiver = {type: "native", value: obj};
+
+      const result = get(
+        Type.alias("Unused"),
+        nativeReceiver,
+        Type.atom("color"),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("red"));
+    });
+
+    it("returns nil for undefined properties", () => {
+      const obj = {a: 1};
+      const nativeReceiver = {type: "native", value: obj};
+
+      const result = get(
+        Type.alias("Unused"),
+        nativeReceiver,
+        Type.atom("missing"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("nil"));
+    });
+  });
+
   describe("new/3", () => {
     const new3 = Elixir_Hologram_JS["new/3"];
 

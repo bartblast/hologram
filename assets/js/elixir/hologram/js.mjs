@@ -113,6 +113,27 @@ const Elixir_Hologram_JS = {
     return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
   },
 
+  "get/3": (callerModule, receiver, property) => {
+    let jsReceiver;
+
+    if (receiver.type === "atom") {
+      const receiverName = receiver.value;
+      const moduleProxy = Interpreter.moduleProxy(callerModule);
+
+      jsReceiver =
+        moduleProxy.__jsBindings__.get(receiverName) ??
+        globalThis[receiverName];
+    } else if (receiver.type === "native") {
+      jsReceiver = receiver.value;
+    } else {
+      jsReceiver = unbox(receiver);
+    }
+
+    const jsPropertyName = property.value;
+
+    return box(jsReceiver[jsPropertyName]);
+  },
+
   "new/3": (callerModule, className, args) => {
     let jsClass;
 
