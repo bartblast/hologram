@@ -22,13 +22,19 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   def template do
     ~HOLO"""
     <p>
-      <button $click="call_global_fun"> Call global fun </button>
+      <button $click="call_method"> Call method </button>
     </p>
     <p>
-      <button $click="call_imported_fun"> Call imported fun </button>
+      <button $click="new_instance"> New instance </button>
     </p>
     <p>
-      <button $click="new_and_call"> New and call </button>
+      <button $click="resolve_global"> Resolve global </button>
+    </p>
+    <p>
+      <button $click="resolve_imported"> Resolve imported </button>
+    </p>
+    <p>
+      <button $click="resolve_object_ref"> Resolve object ref </button>
     </p>
     <p>
       <button $click="run_js_snippet"> Run JavaScript snippet </button>
@@ -42,19 +48,32 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     """
   end
 
-  def action(:call_global_fun, _params, component) do
-    result = JS.call(:Math, :round, [3.7])
-
-    put_state(component, :result, {result, is_integer(result)})
-  end
-
-  def action(:call_imported_fun, _params, component) do
+  def action(:call_method, _params, component) do
     result = JS.call(:helpers, :sum, [1, 2])
 
     put_state(component, :result, {result, is_integer(result)})
   end
 
-  def action(:new_and_call, _params, component) do
+  def action(:new_instance, _params, component) do
+    calculator = JS.new(:Calculator, [10])
+    result = JS.get(calculator, :value)
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:resolve_global, _params, component) do
+    result = JS.call(:Math, :round, [3.7])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:resolve_imported, _params, component) do
+    result = JS.call(:helpers, :sum, [1, 2])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:resolve_object_ref, _params, component) do
     calculator = JS.new(:Calculator, [10])
     result = JS.call(calculator, :add, [5])
 
