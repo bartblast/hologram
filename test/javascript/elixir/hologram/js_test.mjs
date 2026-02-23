@@ -451,7 +451,7 @@ describe("Elixir_Hologram_JS", () => {
       const result = call(
         Type.alias("CallTestModule"),
         Type.atom("helpers"),
-        Type.bitstring("add"),
+        Type.atom("add"),
         Type.list([Type.integer(2), Type.integer(3)]),
       );
 

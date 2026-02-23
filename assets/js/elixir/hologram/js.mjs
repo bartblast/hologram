@@ -106,7 +106,7 @@ function unbox(term) {
 const Elixir_Hologram_JS = {
   "call/4": (callerModule, receiver, methodName, args) => {
     const jsReceiver = resolveReceiver(callerModule, receiver);
-    const jsMethodName = Bitstring.toText(methodName);
+    const jsMethodName = methodName.value;
     const jsArgs = args.data.map(unbox);
 
     return box(jsReceiver[jsMethodName](...jsArgs));

@@ -44,7 +44,7 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec call(module(), any(), String.t(), list()) :: :ok
+  @spec call(module(), any(), atom(), list()) :: :ok
   def call(_caller_module, _receiver, _method, _args), do: :ok
 
   # Server-side pass-through; implemented in JavaScript.
