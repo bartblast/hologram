@@ -33,6 +33,15 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
+  describe "JS.get/2" do
+    feature "gets property and returns boxed result", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Get property"))
+      |> assert_text(css("#call_result"), "{10, true}")
+    end
+  end
+
   describe "JS.new/2" do
     feature "instantiates and returns object ref", %{session: session} do
       session

@@ -25,6 +25,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="call_method"> Call method </button>
     </p>
     <p>
+      <button $click="get_property"> Get property </button>
+    </p>
+    <p>
       <button $click="new_instance"> New instance </button>
     </p>
     <p>
@@ -50,6 +53,13 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
 
   def action(:call_method, _params, component) do
     result = JS.call(:helpers, :sum, [1, 2])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:get_property, _params, component) do
+    calculator = JS.new(:Calculator, [10])
+    result = JS.get(calculator, :value)
 
     put_state(component, :result, {result, is_integer(result)})
   end
