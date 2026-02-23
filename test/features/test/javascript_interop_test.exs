@@ -24,31 +24,25 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
-  describe "JS.call/3" do
-    feature "calls method with args and returns boxed result", %{session: session} do
-      session
-      |> visit(HologramFeatureTests.JavaScriptInteropPage)
-      |> click(button("Call method"))
-      |> assert_text(css("#call_result"), "{3, true}")
-    end
+  feature "JS.call/3", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Call method"))
+    |> assert_text(css("#call_result"), "{3, true}")
   end
 
-  describe "JS.get/2" do
-    feature "gets property and returns boxed result", %{session: session} do
-      session
-      |> visit(HologramFeatureTests.JavaScriptInteropPage)
-      |> click(button("Get property"))
-      |> assert_text(css("#call_result"), "{10, true}")
-    end
+  feature "JS.get/2", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Get property"))
+    |> assert_text(css("#call_result"), "{10, true}")
   end
 
-  describe "JS.new/2" do
-    feature "instantiates and returns object ref", %{session: session} do
-      session
-      |> visit(HologramFeatureTests.JavaScriptInteropPage)
-      |> click(button("New instance"))
-      |> assert_text(css("#call_result"), "{10, true}")
-    end
+  feature "JS.new/2", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("New instance"))
+    |> assert_text(css("#call_result"), "{10, true}")
   end
 
   feature "~JS sigil", %{session: session} do
