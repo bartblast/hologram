@@ -136,8 +136,8 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec set(module(), any(), atom(), any()) :: :ok
-  def set(_caller_module, _receiver, _property, _value), do: :ok
+  @spec set(module(), any(), atom(), any()) :: any()
+  def set(_caller_module, receiver, _property, _value), do: receiver
 
   @doc """
   Provides a convenient syntax for executing JavaScript code using the ~JS sigil.
