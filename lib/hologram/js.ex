@@ -119,6 +119,27 @@ defmodule Hologram.JS do
   def new(_caller_module, _class, _args), do: :ok
 
   @doc """
+  Sets a property on a JS receiver.
+  """
+  defmacro set(receiver, property, value) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.set(
+        unquote(module),
+        unquote(receiver),
+        unquote(property),
+        unquote(value)
+      )
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec set(module(), any(), atom(), any()) :: :ok
+  def set(_caller_module, _receiver, _property, _value), do: :ok
+
+  @doc """
   Provides a convenient syntax for executing JavaScript code using the ~JS sigil.
   """
   @spec sigil_JS(String.t(), []) :: :ok
