@@ -55,6 +55,22 @@ defmodule Hologram.JS do
   def exec(_code), do: :ok
 
   @doc """
+  Gets a property from a JS receiver.
+  """
+  defmacro get(receiver, property) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.get(unquote(module), unquote(receiver), unquote(property))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec get(module(), any(), atom()) :: :ok
+  def get(_caller_module, _receiver, _property), do: :ok
+
+  @doc """
   Imports a JS export and binds it to a name available via JS.ref/1.
 
   ## Examples
