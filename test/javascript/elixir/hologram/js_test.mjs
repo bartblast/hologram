@@ -560,4 +560,62 @@ describe("Elixir_Hologram_JS", () => {
       assert.strictEqual(result.value.initial, 10);
     });
   });
+
+  describe("set/4", () => {
+    const set = Elixir_Hologram_JS["set/4"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_SetTestModule;
+    });
+
+    it("sets property on receiver with unboxed value", () => {
+      class Settings {
+        static theme = "light";
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "SetTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("SetTestModule"));
+      moduleProxy.__jsBindings__.set("AppSettings", Settings);
+
+      set(
+        Type.alias("SetTestModule"),
+        Type.atom("AppSettings"),
+        Type.atom("theme"),
+        Type.bitstring("dark"),
+      );
+
+      assert.strictEqual(Settings.theme, "dark");
+    });
+
+    it("returns the receiver", () => {
+      class Settings {
+        static theme = "light";
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "SetTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("SetTestModule"));
+      moduleProxy.__jsBindings__.set("AppSettings", Settings);
+
+      const result = set(
+        Type.alias("SetTestModule"),
+        Type.atom("AppSettings"),
+        Type.atom("theme"),
+        Type.bitstring("dark"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("AppSettings"));
+    });
+  });
 });

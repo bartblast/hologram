@@ -129,6 +129,15 @@ const Elixir_Hologram_JS = {
 
     return box(new jsClass(...jsArgs));
   },
+
+  "set/4": (callerModule, receiver, property, value) => {
+    const jsReceiver = resolveReceiver(callerModule, receiver);
+    const jsPropertyName = property.value;
+
+    jsReceiver[jsPropertyName] = unbox(value);
+
+    return receiver;
+  },
 };
 
 export {box, resolveReceiver, unbox};
