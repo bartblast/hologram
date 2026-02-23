@@ -18,6 +18,7 @@ test_locals_without_parens = [
 
 [
   export: [locals_without_parens: exported_locals_without_parens],
+  plugins: [Hologram.Template.Formatter],
   import_deps: [:phoenix],
   inputs:
     Enum.flat_map(
