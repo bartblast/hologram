@@ -45,6 +45,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> assert_text(css("#call_result"), "{10, true}")
   end
 
+  feature "JS.set/3", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Set property"))
+    |> assert_text(css("#call_result"), "{20, true}")
+  end
+
   feature "~JS sigil", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)

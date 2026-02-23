@@ -43,6 +43,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="run_js_snippet"> Run JavaScript snippet </button>
     </p>
     <p>
+      <button $click="set_property"> Set property </button>
+    </p>
+    <p>
       Call result: <strong id="call_result"><code>{inspect(@result)}</code></strong>
     </p>
     <p>
@@ -96,5 +99,13 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     """
 
     component
+  end
+
+  def action(:set_property, _params, component) do
+    calculator = JS.new(:Calculator, [10])
+    JS.set(calculator, :value, 20)
+    result = JS.get(calculator, :value)
+
+    put_state(component, :result, {result, is_integer(result)})
   end
 end
