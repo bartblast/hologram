@@ -41,29 +41,36 @@ function box(value) {
   return {type: "native", value: value};
 }
 
-function resolveReceiver(callerModule, receiver) {
-  if (receiver.type === "atom") {
-    const receiverName = receiver.value;
+function resolveBinding(term, callerModule) {
+  if (term.type === "atom") {
+    const name = term.value;
     const moduleProxy = Interpreter.moduleProxy(callerModule);
 
-    return (
-      moduleProxy.__jsBindings__.get(receiverName) ?? globalThis[receiverName]
-    );
+    return moduleProxy.__jsBindings__.get(name) ?? globalThis[name];
   }
 
-  if (receiver.type === "native") {
-    return receiver.value;
+  if (term.type === "native") {
+    return term.value;
   }
 
-  return unbox(receiver);
+  return unbox(term, callerModule);
 }
 
-function unbox(term) {
+function unbox(term, callerModule) {
   switch (term.type) {
     case "atom":
       if (term.value === "true") return true;
       if (term.value === "false") return false;
       if (term.value === "nil") return null;
+
+      {
+        const name = term.value;
+        const moduleProxy = Interpreter.moduleProxy(callerModule);
+        const binding = moduleProxy.__jsBindings__.get(name);
+
+        if (binding !== undefined) return binding;
+      }
+
       return term.value;
 
     case "bitstring":
@@ -80,13 +87,13 @@ function unbox(term) {
       return term.value;
 
     case "list":
-      return term.data.map(unbox);
+      return term.data.map((item) => unbox(item, callerModule));
 
     case "map": {
       const obj = {};
 
       for (const [_encodedKey, [key, value]] of Object.entries(term.data)) {
-        obj[unbox(key)] = unbox(value);
+        obj[unbox(key, callerModule)] = unbox(value, callerModule);
       }
 
       return obj;
@@ -96,7 +103,7 @@ function unbox(term) {
       return term.value;
 
     case "tuple":
-      return term.data.map(unbox);
+      return term.data.map((item) => unbox(item, callerModule));
 
     default:
       return term;
@@ -105,11 +112,10 @@ function unbox(term) {
 
 const Elixir_Hologram_JS = {
   "call/4": (callerModule, receiver, methodName, args) => {
-    const jsReceiver = resolveReceiver(callerModule, receiver);
+    const jsReceiver = resolveBinding(receiver, callerModule);
     const jsMethodName = methodName.value;
-    const jsArgs = args.data.map(unbox);
 
-    return box(jsReceiver[jsMethodName](...jsArgs));
+    return box(jsReceiver[jsMethodName](...unbox(args, callerModule)));
   },
 
   "exec/1": (code) => {
@@ -117,28 +123,27 @@ const Elixir_Hologram_JS = {
   },
 
   "get/3": (callerModule, receiver, property) => {
-    const jsReceiver = resolveReceiver(callerModule, receiver);
+    const jsReceiver = resolveBinding(receiver, callerModule);
     const jsPropertyName = property.value;
 
     return box(jsReceiver[jsPropertyName]);
   },
 
   "new/3": (callerModule, className, args) => {
-    const jsClass = resolveReceiver(callerModule, className);
-    const jsArgs = args.data.map(unbox);
+    const jsClass = resolveBinding(className, callerModule);
 
-    return box(new jsClass(...jsArgs));
+    return box(new jsClass(...unbox(args, callerModule)));
   },
 
   "set/4": (callerModule, receiver, property, value) => {
-    const jsReceiver = resolveReceiver(callerModule, receiver);
+    const jsReceiver = resolveBinding(receiver, callerModule);
     const jsPropertyName = property.value;
 
-    jsReceiver[jsPropertyName] = unbox(value);
+    jsReceiver[jsPropertyName] = unbox(value, callerModule);
 
     return receiver;
   },
 };
 
-export {box, resolveReceiver, unbox};
+export {box, resolveBinding, unbox};
 export default Elixir_Hologram_JS;

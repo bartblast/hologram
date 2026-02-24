@@ -7,7 +7,7 @@ import {
 
 import Elixir_Hologram_JS, {
   box,
-  resolveReceiver,
+  resolveBinding,
   unbox,
 } from "../../../../assets/js/elixir/hologram/js.mjs";
 
@@ -185,7 +185,7 @@ describe("box()", () => {
   });
 });
 
-describe("resolveReceiver()", () => {
+describe("resolveBinding()", () => {
   beforeEach(() => {
     delete globalThis.Elixir_TestModule1;
     delete globalThis.Elixir_TestModule2;
@@ -207,9 +207,9 @@ describe("resolveReceiver()", () => {
     const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule1"));
     moduleProxy.__jsBindings__.set("MyChart", Chart);
 
-    const result = resolveReceiver(
-      Type.alias("TestModule1"),
+    const result = resolveBinding(
       Type.atom("MyChart"),
+      Type.alias("TestModule1"),
     );
 
     assert.strictEqual(result, Chart);
@@ -225,9 +225,9 @@ describe("resolveReceiver()", () => {
       () => {},
     );
 
-    const result = resolveReceiver(
-      Type.alias("TestModule2"),
+    const result = resolveBinding(
       Type.atom("__testObj__"),
+      Type.alias("TestModule2"),
     );
 
     assert.strictEqual(result, globalThis.__testObj__);
@@ -237,94 +237,119 @@ describe("resolveReceiver()", () => {
     const obj = {a: 1};
     const nativeReceiver = {type: "native", value: obj};
 
-    const result = resolveReceiver(Type.alias("Unused"), nativeReceiver);
+    const result = resolveBinding(nativeReceiver, Type.alias("Unused"));
 
     assert.strictEqual(result, obj);
   });
 
   it("unboxes other receiver types", () => {
-    const result = resolveReceiver(Type.alias("Unused"), Type.integer(42));
+    const result = resolveBinding(Type.integer(42), Type.alias("Unused"));
 
     assert.strictEqual(result, 42);
   });
 });
 
 describe("unbox()", () => {
+  const callerModule = Type.alias("UnboxTestModule");
+
+  beforeEach(() => {
+    delete globalThis.Elixir_UnboxTestModule;
+
+    Interpreter.defineManuallyPortedFunction(
+      "UnboxTestModule",
+      "dummy/0",
+      "public",
+      () => {},
+    );
+  });
+
   describe("atom", () => {
     it("atom true -> true", () => {
-      assert.strictEqual(unbox(Type.atom("true")), true);
+      assert.strictEqual(unbox(Type.atom("true"), callerModule), true);
     });
 
     it("atom false -> false", () => {
-      assert.strictEqual(unbox(Type.atom("false")), false);
+      assert.strictEqual(unbox(Type.atom("false"), callerModule), false);
     });
 
     it("atom nil -> null", () => {
-      assert.strictEqual(unbox(Type.atom("nil")), null);
+      assert.strictEqual(unbox(Type.atom("nil"), callerModule), null);
     });
 
-    it("other atom -> string", () => {
-      assert.strictEqual(unbox(Type.atom("hello")), "hello");
+    it("atom resolves to module binding", () => {
+      class Chart {}
+
+      const moduleProxy = Interpreter.moduleProxy(callerModule);
+      moduleProxy.__jsBindings__.set("MyChart", Chart);
+
+      assert.strictEqual(unbox(Type.atom("MyChart"), callerModule), Chart);
+    });
+
+    it("atom falls back to string when not in bindings", () => {
+      assert.strictEqual(
+        unbox(Type.atom("nonexistent"), callerModule),
+        "nonexistent",
+      );
     });
   });
 
   describe("bitstring", () => {
     it("bitstring -> string", () => {
-      assert.strictEqual(unbox(Type.bitstring("hello")), "hello");
+      assert.strictEqual(unbox(Type.bitstring("hello"), callerModule), "hello");
     });
 
     it("empty bitstring -> empty string", () => {
-      assert.strictEqual(unbox(Type.bitstring("")), "");
+      assert.strictEqual(unbox(Type.bitstring(""), callerModule), "");
     });
   });
 
   describe("float", () => {
     it("float -> number", () => {
-      assert.strictEqual(unbox(Type.float(3.14)), 3.14);
+      assert.strictEqual(unbox(Type.float(3.14), callerModule), 3.14);
     });
 
     it("negative float -> negative number", () => {
-      assert.strictEqual(unbox(Type.float(-3.14)), -3.14);
+      assert.strictEqual(unbox(Type.float(-3.14), callerModule), -3.14);
     });
   });
 
   describe("integer", () => {
     it("safe integer -> number", () => {
-      assert.strictEqual(unbox(Type.integer(42)), 42);
+      assert.strictEqual(unbox(Type.integer(42), callerModule), 42);
     });
 
     it("negative safe integer -> number", () => {
-      assert.strictEqual(unbox(Type.integer(-42)), -42);
+      assert.strictEqual(unbox(Type.integer(-42), callerModule), -42);
     });
 
     it("0 -> number 0", () => {
-      assert.strictEqual(unbox(Type.integer(0)), 0);
+      assert.strictEqual(unbox(Type.integer(0), callerModule), 0);
     });
 
     it("MAX_SAFE_INTEGER -> number", () => {
       assert.strictEqual(
-        unbox(Type.integer(9_007_199_254_740_991)),
+        unbox(Type.integer(9_007_199_254_740_991), callerModule),
         9_007_199_254_740_991,
       );
     });
 
     it("above MAX_SAFE_INTEGER -> bigint", () => {
       assert.strictEqual(
-        unbox(Type.integer(9_007_199_254_740_992n)),
+        unbox(Type.integer(9_007_199_254_740_992n), callerModule),
         9_007_199_254_740_992n,
       );
     });
 
     it("MIN_SAFE_INTEGER -> number", () => {
       assert.strictEqual(
-        unbox(Type.integer(-9_007_199_254_740_991)),
+        unbox(Type.integer(-9_007_199_254_740_991), callerModule),
         -9_007_199_254_740_991,
       );
     });
 
     it("below MIN_SAFE_INTEGER -> bigint", () => {
       assert.strictEqual(
-        unbox(Type.integer(-9_007_199_254_740_992n)),
+        unbox(Type.integer(-9_007_199_254_740_992n), callerModule),
         -9_007_199_254_740_992n,
       );
     });
@@ -338,11 +363,11 @@ describe("unbox()", () => {
         Type.atom("true"),
       ]);
 
-      assert.deepStrictEqual(unbox(term), [1, "two", true]);
+      assert.deepStrictEqual(unbox(term, callerModule), [1, "two", true]);
     });
 
     it("empty list -> empty array", () => {
-      assert.deepStrictEqual(unbox(Type.list()), []);
+      assert.deepStrictEqual(unbox(Type.list(), callerModule), []);
     });
 
     it("nested lists -> nested arrays", () => {
@@ -351,7 +376,7 @@ describe("unbox()", () => {
         Type.list([Type.integer(3)]),
       ]);
 
-      assert.deepStrictEqual(unbox(term), [[1, 2], [3]]);
+      assert.deepStrictEqual(unbox(term, callerModule), [[1, 2], [3]]);
     });
   });
 
@@ -362,17 +387,17 @@ describe("unbox()", () => {
         [Type.bitstring("b"), Type.bitstring("hello")],
       ]);
 
-      assert.deepStrictEqual(unbox(term), {a: 1, b: "hello"});
+      assert.deepStrictEqual(unbox(term, callerModule), {a: 1, b: "hello"});
     });
 
     it("empty map -> empty object", () => {
-      assert.deepStrictEqual(unbox(Type.map()), {});
+      assert.deepStrictEqual(unbox(Type.map(), callerModule), {});
     });
 
     it("atom keys -> string keys", () => {
       const term = Type.map([[Type.atom("name"), Type.bitstring("Alice")]]);
 
-      assert.deepStrictEqual(unbox(term), {name: "Alice"});
+      assert.deepStrictEqual(unbox(term, callerModule), {name: "Alice"});
     });
 
     it("nested maps -> nested objects", () => {
@@ -383,7 +408,7 @@ describe("unbox()", () => {
         ],
       ]);
 
-      assert.deepStrictEqual(unbox(term), {a: {b: 1}});
+      assert.deepStrictEqual(unbox(term, callerModule), {a: {b: 1}});
     });
   });
 
@@ -392,7 +417,7 @@ describe("unbox()", () => {
       const obj = {a: 1};
       const term = {type: "native", value: obj};
 
-      assert.strictEqual(unbox(term), obj);
+      assert.strictEqual(unbox(term, callerModule), obj);
     });
   });
 
@@ -400,11 +425,11 @@ describe("unbox()", () => {
     it("tuple -> array", () => {
       const term = Type.tuple([Type.integer(1), Type.bitstring("two")]);
 
-      assert.deepStrictEqual(unbox(term), [1, "two"]);
+      assert.deepStrictEqual(unbox(term, callerModule), [1, "two"]);
     });
 
     it("empty tuple -> empty array", () => {
-      assert.deepStrictEqual(unbox(Type.tuple()), []);
+      assert.deepStrictEqual(unbox(Type.tuple(), callerModule), []);
     });
 
     it("nested tuples -> nested arrays", () => {
@@ -413,7 +438,7 @@ describe("unbox()", () => {
         Type.tuple([Type.integer(3)]),
       ]);
 
-      assert.deepStrictEqual(unbox(term), [[1, 2], [3]]);
+      assert.deepStrictEqual(unbox(term, callerModule), [[1, 2], [3]]);
     });
   });
 
@@ -421,7 +446,7 @@ describe("unbox()", () => {
     it("unknown type -> pass through", () => {
       const ref = Type.reference("nonode@nohost", 0, [1, 2, 3]);
 
-      assert.deepStrictEqual(unbox(ref), ref);
+      assert.deepStrictEqual(unbox(ref, callerModule), ref);
     });
   });
 });
@@ -456,6 +481,35 @@ describe("Elixir_Hologram_JS", () => {
       );
 
       assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("resolves atom args to bindings", () => {
+      const itemRegistry = {
+        register: (item) => item.label,
+      };
+
+      const myWidget = {label: "my_widget"};
+
+      Interpreter.defineManuallyPortedFunction(
+        "CallTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
+
+      moduleProxy.__jsBindings__.set("Registry", itemRegistry);
+      moduleProxy.__jsBindings__.set("Widget", myWidget);
+
+      const result = call(
+        Type.alias("CallTestModule"),
+        Type.atom("Registry"),
+        Type.atom("register"),
+        Type.list([Type.atom("Widget")]),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("my_widget"));
     });
   });
 
@@ -559,6 +613,42 @@ describe("Elixir_Hologram_JS", () => {
       assert.isTrue(result.value instanceof Calculator);
       assert.strictEqual(result.value.initial, 10);
     });
+
+    it("resolves atom args to bindings", () => {
+      class DefaultOpts {
+        constructor() {
+          this.enabled = true;
+        }
+      }
+
+      class Widget {
+        constructor(opts) {
+          this.opts = opts;
+        }
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "NewTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("NewTestModule"));
+
+      moduleProxy.__jsBindings__.set("MyWidget", Widget);
+      moduleProxy.__jsBindings__.set("Options", DefaultOpts);
+
+      const result = new3(
+        Type.alias("NewTestModule"),
+        Type.atom("MyWidget"),
+        Type.list([Type.atom("Options")]),
+      );
+
+      assert.strictEqual(result.type, "native");
+      assert.isTrue(result.value instanceof Widget);
+      assert.strictEqual(result.value.opts, DefaultOpts);
+    });
   });
 
   describe("set/4", () => {
@@ -616,6 +706,37 @@ describe("Elixir_Hologram_JS", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("AppSettings"));
+    });
+
+    it("resolves atom value to binding", () => {
+      class Theme {
+        static name = "dark";
+      }
+
+      class Config {
+        static activeTheme = null;
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "SetTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("SetTestModule"));
+
+      moduleProxy.__jsBindings__.set("AppConfig", Config);
+      moduleProxy.__jsBindings__.set("DarkTheme", Theme);
+
+      set(
+        Type.alias("SetTestModule"),
+        Type.atom("AppConfig"),
+        Type.atom("activeTheme"),
+        Type.atom("DarkTheme"),
+      );
+
+      assert.strictEqual(Config.activeTheme, Theme);
     });
   });
 });
