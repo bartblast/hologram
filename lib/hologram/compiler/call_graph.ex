@@ -176,6 +176,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
     {Hologram.JS, :call, 4},
+    {Hologram.JS, :call_async, 4},
     {Hologram.JS, :exec, 1},
     {Hologram.JS, :get, 3},
     {Hologram.JS, :new, 3},

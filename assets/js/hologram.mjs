@@ -426,6 +426,13 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.JS",
+      "call_async/4",
+      "public",
+      ManuallyPortedElixirHologramJS["call_async/4"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.JS",
       "exec/1",
       "public",
       ManuallyPortedElixirHologramJS["exec/1"],
