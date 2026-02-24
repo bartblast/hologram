@@ -71,7 +71,7 @@ defmodule Hologram.JS do
   def get(_receiver, _property, _caller_module), do: :ok
 
   @doc """
-  Imports a JS export and binds it to a name available via JS.ref/1.
+  Imports a JS export and binds it to a name that can be used as a receiver in other JS functions.
 
   ## Examples
 
