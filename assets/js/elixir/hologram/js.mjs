@@ -8,12 +8,13 @@ const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
 
 function box(value) {
-  if (value === null || value === undefined) {
+  if (value === null) {
     return Type.nil();
   }
 
   switch (typeof value) {
     case "bigint":
+    case "undefined":
       return {type: "native", value: value};
 
     case "boolean":

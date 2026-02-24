@@ -22,8 +22,11 @@ describe("box()", () => {
       assert.deepStrictEqual(box(null), Type.atom("nil"));
     });
 
-    it("undefined -> atom nil", () => {
-      assert.deepStrictEqual(box(undefined), Type.atom("nil"));
+    it("undefined -> native", () => {
+      assert.deepStrictEqual(box(undefined), {
+        type: "native",
+        value: undefined,
+      });
     });
   });
 
@@ -542,7 +545,7 @@ describe("Elixir_Hologram_JS", () => {
       assert.deepStrictEqual(result, Type.integer(3));
     });
 
-    it("returns nil for undefined properties", () => {
+    it("returns native undefined for undefined properties", () => {
       class Config {}
 
       Interpreter.defineManuallyPortedFunction(
@@ -562,7 +565,7 @@ describe("Elixir_Hologram_JS", () => {
         Type.alias("GetTestModule"),
       );
 
-      assert.deepStrictEqual(result, Type.atom("nil"));
+      assert.deepStrictEqual(result, {type: "native", value: undefined});
     });
   });
 
