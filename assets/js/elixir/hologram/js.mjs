@@ -143,6 +143,12 @@ const Elixir_Hologram_JS = {
 
     return receiver;
   },
+
+  "typeof/2": (value, callerModule) => {
+    const jsValue = unbox(value, callerModule);
+
+    return box(typeof jsValue);
+  },
 };
 
 export {box, resolveBinding, unbox};

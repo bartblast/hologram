@@ -739,4 +739,93 @@ describe("Elixir_Hologram_JS", () => {
       assert.strictEqual(Config.activeTheme, Theme);
     });
   });
+
+  describe("typeof/2", () => {
+    const typeofFn = Elixir_Hologram_JS["typeof/2"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_TypeofTestModule;
+
+      Interpreter.defineManuallyPortedFunction(
+        "TypeofTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+    });
+
+    it("integer -> number", () => {
+      const result = typeofFn(Type.integer(42), Type.alias("TypeofTestModule"));
+
+      assert.deepStrictEqual(result, Type.bitstring("number"));
+    });
+
+    it("float -> number", () => {
+      const result = typeofFn(Type.float(3.14), Type.alias("TypeofTestModule"));
+
+      assert.deepStrictEqual(result, Type.bitstring("number"));
+    });
+
+    it("bitstring -> string", () => {
+      const result = typeofFn(
+        Type.bitstring("hello"),
+        Type.alias("TypeofTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("string"));
+    });
+
+    it("boolean true -> boolean", () => {
+      const result = typeofFn(
+        Type.atom("true"),
+        Type.alias("TypeofTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("boolean"));
+    });
+
+    it("nil -> object", () => {
+      const result = typeofFn(Type.atom("nil"), Type.alias("TypeofTestModule"));
+
+      assert.deepStrictEqual(result, Type.bitstring("object"));
+    });
+
+    it("native object -> object", () => {
+      class MyClass {}
+      const instance = new MyClass();
+
+      const result = typeofFn(
+        {type: "native", value: instance},
+        Type.alias("TypeofTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("object"));
+    });
+
+    it("binding to a class -> function", () => {
+      class Calculator {}
+
+      const moduleProxy = Interpreter.moduleProxy(
+        Type.alias("TypeofTestModule"),
+      );
+
+      moduleProxy.__jsBindings__.set("Calculator", Calculator);
+
+      const result = typeofFn(
+        Type.atom("Calculator"),
+        Type.alias("TypeofTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("function"));
+    });
+
+    it("atom not in bindings -> string", () => {
+      const result = typeofFn(
+        Type.atom("nonExistentBinding"),
+        Type.alias("TypeofTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("string"));
+    });
+  });
 });
