@@ -111,7 +111,7 @@ function unbox(term, callerModule) {
 }
 
 const Elixir_Hologram_JS = {
-  "call/4": (callerModule, receiver, methodName, args) => {
+  "call/4": (receiver, methodName, args, callerModule) => {
     const jsReceiver = resolveBinding(receiver, callerModule);
     const jsMethodName = methodName.value;
 
@@ -122,20 +122,20 @@ const Elixir_Hologram_JS = {
     return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
   },
 
-  "get/3": (callerModule, receiver, property) => {
+  "get/3": (receiver, property, callerModule) => {
     const jsReceiver = resolveBinding(receiver, callerModule);
     const jsPropertyName = property.value;
 
     return box(jsReceiver[jsPropertyName]);
   },
 
-  "new/3": (callerModule, className, args) => {
+  "new/3": (className, args, callerModule) => {
     const jsClass = resolveBinding(className, callerModule);
 
     return box(new jsClass(...unbox(args, callerModule)));
   },
 
-  "set/4": (callerModule, receiver, property, value) => {
+  "set/4": (receiver, property, value, callerModule) => {
     const jsReceiver = resolveBinding(receiver, callerModule);
     const jsPropertyName = property.value;
 

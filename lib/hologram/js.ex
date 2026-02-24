@@ -38,14 +38,14 @@ defmodule Hologram.JS do
     module = __CALLER__.module
 
     quote do
-      Hologram.JS.call(unquote(module), unquote(receiver), unquote(method), unquote(args))
+      Hologram.JS.call(unquote(receiver), unquote(method), unquote(args), unquote(module))
     end
   end
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec call(module(), any(), atom(), list()) :: :ok
-  def call(_caller_module, _receiver, _method, _args), do: :ok
+  @spec call(any(), atom(), list(), module()) :: :ok
+  def call(_receiver, _method, _args, _caller_module), do: :ok
 
   # Server-side pass-through; implemented in JavaScript.
   @doc """
@@ -61,14 +61,14 @@ defmodule Hologram.JS do
     module = __CALLER__.module
 
     quote do
-      Hologram.JS.get(unquote(module), unquote(receiver), unquote(property))
+      Hologram.JS.get(unquote(receiver), unquote(property), unquote(module))
     end
   end
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec get(module(), any(), atom()) :: :ok
-  def get(_caller_module, _receiver, _property), do: :ok
+  @spec get(any(), atom(), module()) :: :ok
+  def get(_receiver, _property, _caller_module), do: :ok
 
   @doc """
   Imports a JS export and binds it to a name available via JS.ref/1.
@@ -109,14 +109,14 @@ defmodule Hologram.JS do
     module = __CALLER__.module
 
     quote do
-      Hologram.JS.new(unquote(module), unquote(class), unquote(args))
+      Hologram.JS.new(unquote(class), unquote(args), unquote(module))
     end
   end
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec new(module(), any(), list()) :: :ok
-  def new(_caller_module, _class, _args), do: :ok
+  @spec new(any(), list(), module()) :: :ok
+  def new(_class, _args, _caller_module), do: :ok
 
   @doc """
   Sets a property on a JS receiver.
@@ -126,18 +126,18 @@ defmodule Hologram.JS do
 
     quote do
       Hologram.JS.set(
-        unquote(module),
         unquote(receiver),
         unquote(property),
-        unquote(value)
+        unquote(value),
+        unquote(module)
       )
     end
   end
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec set(module(), any(), atom(), any()) :: any()
-  def set(_caller_module, receiver, _property, _value), do: receiver
+  @spec set(any(), atom(), any(), module()) :: any()
+  def set(receiver, _property, _value, _caller_module), do: receiver
 
   @doc """
   Provides a convenient syntax for executing JavaScript code using the ~JS sigil.

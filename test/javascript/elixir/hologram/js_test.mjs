@@ -474,10 +474,10 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("helpers", mathHelpers);
 
       const result = call(
-        Type.alias("CallTestModule"),
         Type.atom("helpers"),
         Type.atom("add"),
         Type.list([Type.integer(2), Type.integer(3)]),
+        Type.alias("CallTestModule"),
       );
 
       assert.deepStrictEqual(result, Type.integer(5));
@@ -503,10 +503,10 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("Widget", myWidget);
 
       const result = call(
-        Type.alias("CallTestModule"),
         Type.atom("Registry"),
         Type.atom("register"),
         Type.list([Type.atom("Widget")]),
+        Type.alias("CallTestModule"),
       );
 
       assert.deepStrictEqual(result, Type.bitstring("my_widget"));
@@ -546,9 +546,9 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("AppConfig", Config);
 
       const result = get(
-        Type.alias("GetTestModule"),
         Type.atom("AppConfig"),
         Type.atom("version"),
+        Type.alias("GetTestModule"),
       );
 
       assert.deepStrictEqual(result, Type.integer(3));
@@ -569,9 +569,9 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("AppConfig", Config);
 
       const result = get(
-        Type.alias("GetTestModule"),
         Type.atom("AppConfig"),
         Type.atom("missing"),
+        Type.alias("GetTestModule"),
       );
 
       assert.deepStrictEqual(result, Type.atom("nil"));
@@ -604,9 +604,9 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("Calc", Calculator);
 
       const result = new3(
-        Type.alias("NewTestModule"),
         Type.atom("Calc"),
         Type.list([Type.integer(10)]),
+        Type.alias("NewTestModule"),
       );
 
       assert.strictEqual(result.type, "native");
@@ -640,9 +640,9 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("Options", DefaultOpts);
 
       const result = new3(
-        Type.alias("NewTestModule"),
         Type.atom("MyWidget"),
         Type.list([Type.atom("Options")]),
+        Type.alias("NewTestModule"),
       );
 
       assert.strictEqual(result.type, "native");
@@ -674,10 +674,10 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("AppSettings", Settings);
 
       set(
-        Type.alias("SetTestModule"),
         Type.atom("AppSettings"),
         Type.atom("theme"),
         Type.bitstring("dark"),
+        Type.alias("SetTestModule"),
       );
 
       assert.strictEqual(Settings.theme, "dark");
@@ -699,10 +699,10 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("AppSettings", Settings);
 
       const result = set(
-        Type.alias("SetTestModule"),
         Type.atom("AppSettings"),
         Type.atom("theme"),
         Type.bitstring("dark"),
+        Type.alias("SetTestModule"),
       );
 
       assert.deepStrictEqual(result, Type.atom("AppSettings"));
@@ -730,10 +730,10 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("DarkTheme", Theme);
 
       set(
-        Type.alias("SetTestModule"),
         Type.atom("AppConfig"),
         Type.atom("activeTheme"),
         Type.atom("DarkTheme"),
+        Type.alias("SetTestModule"),
       );
 
       assert.strictEqual(Config.activeTheme, Theme);
