@@ -745,78 +745,120 @@ describe("Elixir_Hologram_JS", () => {
       );
     });
 
-    it("integer -> number", () => {
-      const result = typeofFn(Type.integer(42), Type.alias("TypeofTestModule"));
+    describe("Elixir primitives", () => {
+      it("bitstring -> string", () => {
+        const result = typeofFn(
+          Type.bitstring("hello"),
+          Type.alias("TypeofTestModule"),
+        );
 
-      assert.deepStrictEqual(result, Type.bitstring("number"));
+        assert.deepStrictEqual(result, Type.bitstring("string"));
+      });
+
+      it("float -> number", () => {
+        const result = typeofFn(
+          Type.float(3.14),
+          Type.alias("TypeofTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("number"));
+      });
+
+      it("integer -> number", () => {
+        const result = typeofFn(
+          Type.integer(42),
+          Type.alias("TypeofTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("number"));
+      });
     });
 
-    it("float -> number", () => {
-      const result = typeofFn(Type.float(3.14), Type.alias("TypeofTestModule"));
+    describe("atoms", () => {
+      it("boolean true -> boolean", () => {
+        const result = typeofFn(
+          Type.atom("true"),
+          Type.alias("TypeofTestModule"),
+        );
 
-      assert.deepStrictEqual(result, Type.bitstring("number"));
+        assert.deepStrictEqual(result, Type.bitstring("boolean"));
+      });
+
+      it("boolean false -> boolean", () => {
+        const result = typeofFn(
+          Type.atom("false"),
+          Type.alias("TypeofTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("boolean"));
+      });
+
+      it("nil -> object", () => {
+        const result = typeofFn(
+          Type.atom("nil"),
+          Type.alias("TypeofTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("object"));
+      });
+
+      it("binding to a class -> function", () => {
+        class Calculator {}
+
+        const moduleProxy = Interpreter.moduleProxy(
+          Type.alias("TypeofTestModule"),
+        );
+
+        moduleProxy.__jsBindings__.set("Calculator", Calculator);
+
+        const result = typeofFn(
+          Type.atom("Calculator"),
+          Type.alias("TypeofTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("function"));
+      });
+
+      it("atom not in bindings -> string", () => {
+        const result = typeofFn(
+          Type.atom("nonExistentBinding"),
+          Type.alias("TypeofTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("string"));
+      });
     });
 
-    it("bitstring -> string", () => {
-      const result = typeofFn(
-        Type.bitstring("hello"),
-        Type.alias("TypeofTestModule"),
-      );
+    describe("native values", () => {
+      it("native bigint -> bigint", () => {
+        const result = typeofFn(
+          {type: "native", value: 42n},
+          Type.alias("TypeofTestModule"),
+        );
 
-      assert.deepStrictEqual(result, Type.bitstring("string"));
-    });
+        assert.deepStrictEqual(result, Type.bitstring("bigint"));
+      });
 
-    it("boolean true -> boolean", () => {
-      const result = typeofFn(
-        Type.atom("true"),
-        Type.alias("TypeofTestModule"),
-      );
+      it("native object -> object", () => {
+        class MyClass {}
+        const instance = new MyClass();
 
-      assert.deepStrictEqual(result, Type.bitstring("boolean"));
-    });
+        const result = typeofFn(
+          {type: "native", value: instance},
+          Type.alias("TypeofTestModule"),
+        );
 
-    it("nil -> object", () => {
-      const result = typeofFn(Type.atom("nil"), Type.alias("TypeofTestModule"));
+        assert.deepStrictEqual(result, Type.bitstring("object"));
+      });
 
-      assert.deepStrictEqual(result, Type.bitstring("object"));
-    });
+      it("native undefined -> undefined", () => {
+        const result = typeofFn(
+          {type: "native", value: undefined},
+          Type.alias("TypeofTestModule"),
+        );
 
-    it("native object -> object", () => {
-      class MyClass {}
-      const instance = new MyClass();
-
-      const result = typeofFn(
-        {type: "native", value: instance},
-        Type.alias("TypeofTestModule"),
-      );
-
-      assert.deepStrictEqual(result, Type.bitstring("object"));
-    });
-
-    it("binding to a class -> function", () => {
-      class Calculator {}
-
-      const moduleProxy = Interpreter.moduleProxy(
-        Type.alias("TypeofTestModule"),
-      );
-
-      moduleProxy.__jsBindings__.set("Calculator", Calculator);
-
-      const result = typeofFn(
-        Type.atom("Calculator"),
-        Type.alias("TypeofTestModule"),
-      );
-
-      assert.deepStrictEqual(result, Type.bitstring("function"));
-    });
-
-    it("atom not in bindings -> string", () => {
-      const result = typeofFn(
-        Type.atom("nonExistentBinding"),
-        Type.alias("TypeofTestModule"),
-      );
-
-      assert.deepStrictEqual(result, Type.bitstring("string"));
+        assert.deepStrictEqual(result, Type.bitstring("undefined"));
+      });
     });
   });
 });
