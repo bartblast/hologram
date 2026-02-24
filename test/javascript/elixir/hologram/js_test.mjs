@@ -38,20 +38,8 @@ describe("box()", () => {
   });
 
   describe("number", () => {
-    it("bigint -> integer", () => {
-      // Number.MAX_SAFE_INTEGER = 9_007_199_254_740_991
-      assert.deepStrictEqual(
-        box(9_007_199_254_740_992n),
-        Type.integer(9_007_199_254_740_992n),
-      );
-    });
-
-    it("negative bigint -> integer", () => {
-      // Number.MIN_SAFE_INTEGER = -9_007_199_254_740_991
-      assert.deepStrictEqual(
-        box(-9_007_199_254_740_991n),
-        Type.integer(-9_007_199_254_740_991n),
-      );
+    it("bigint -> native", () => {
+      assert.deepStrictEqual(box(42n), {type: "native", value: 42n});
     });
 
     it("integer number -> integer", () => {

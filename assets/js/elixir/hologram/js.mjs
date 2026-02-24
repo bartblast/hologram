@@ -14,7 +14,7 @@ function box(value) {
 
   switch (typeof value) {
     case "bigint":
-      return Type.integer(value);
+      return {type: "native", value: value};
 
     case "boolean":
       return Type.boolean(value);
