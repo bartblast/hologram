@@ -504,6 +504,71 @@ describe("Elixir_Hologram_JS", () => {
     });
   });
 
+  describe("call_async/4", () => {
+    const callAsync = Elixir_Hologram_JS["call_async/4"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_CallAsyncTestModule;
+    });
+
+    it("calls async method on receiver with unboxed args and boxes result", async () => {
+      const httpClient = {fetchSum: async (a, b) => a + b};
+
+      Interpreter.defineManuallyPortedFunction(
+        "CallAsyncTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(
+        Type.alias("CallAsyncTestModule"),
+      );
+
+      moduleProxy.__jsBindings__.set("api", httpClient);
+
+      const result = await callAsync(
+        Type.atom("api"),
+        Type.atom("fetchSum"),
+        Type.list([Type.integer(2), Type.integer(3)]),
+        Type.alias("CallAsyncTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("resolves atom args to bindings", async () => {
+      const itemRegistry = {
+        register: async (item) => item.label,
+      };
+
+      const myWidget = {label: "my_widget"};
+
+      Interpreter.defineManuallyPortedFunction(
+        "CallAsyncTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(
+        Type.alias("CallAsyncTestModule"),
+      );
+
+      moduleProxy.__jsBindings__.set("Registry", itemRegistry);
+      moduleProxy.__jsBindings__.set("Widget", myWidget);
+
+      const result = await callAsync(
+        Type.atom("Registry"),
+        Type.atom("register"),
+        Type.list([Type.atom("Widget")]),
+        Type.alias("CallAsyncTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.bitstring("my_widget"));
+    });
+  });
+
   describe("exec/1", () => {
     const exec = Elixir_Hologram_JS["exec/1"];
 
