@@ -952,20 +952,20 @@ defmodule Hologram.Compiler.Transformer do
          acc,
          context
        ) do
-    clause = %IR.Clause{
+    clause = %IR.WithClause{
       match: transform(match, %{context | pattern?: true}),
       guards: transform_guards(guards, context),
-      body: transform(body, context)
+      expression: transform(body, context)
     }
 
     %{acc | clauses: [clause | acc.clauses]}
   end
 
   defp transform_with_clause({:<-, _meta, [match, body]}, acc, context) do
-    clause = %IR.Clause{
+    clause = %IR.WithClause{
       match: transform(match, %{context | pattern?: true}),
       guards: [],
-      body: transform(body, context)
+      expression: transform(body, context)
     }
 
     %{acc | clauses: [clause | acc.clauses]}
@@ -973,10 +973,10 @@ defmodule Hologram.Compiler.Transformer do
 
   defp transform_with_clause(clause, acc, context) do
     clause =
-      %IR.Clause{
+      %IR.WithClause{
         match: %IR.MatchPlaceholder{},
         guards: [],
-        body: transform(clause, context)
+        expression: transform(clause, context)
       }
 
     %{acc | clauses: [clause | acc.clauses]}

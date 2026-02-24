@@ -442,6 +442,14 @@ defmodule Hologram.Compiler.Encoder do
     "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
   end
 
+  def encode_ir(%IR.WithClause{} = clause, context) do
+    match = encode_ir(clause.match, %{context | pattern?: true})
+    guards = encode_as_array(clause.guards, context, &encode_closure/2)
+    expression = encode_closure(clause.expression, context)
+
+    "{match: #{match}, guards: #{guards}, expression: #{expression}}"
+  end
+
   @doc """
   Encodes Elixir term into JavaScript.
   If the term can be encoded into JavaScript then the result is in the shape of {:ok, js}.

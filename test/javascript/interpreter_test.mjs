@@ -6865,6 +6865,21 @@ describe("Interpreter", () => {
       return Type.tuple([context.vars.a, context.vars.b]);
     };
 
+    it("handles an empty with", () => {
+      // with do: nil
+      const result = Interpreter.with(
+        (context) => {
+          return Type.atom("nil");
+        },
+        [],
+        [],
+        context,
+      );
+
+      const expected = Type.atom("nil");
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("successful match returns body result", () => {
       // with b <- a do
       //   {a, b}
@@ -6875,7 +6890,7 @@ describe("Interpreter", () => {
           {
             match: Type.variablePattern("b"),
             guards: [],
-            body: (context) => context.vars.a,
+            expression: (context) => context.vars.a,
           },
         ],
         [],
@@ -6898,7 +6913,7 @@ describe("Interpreter", () => {
           {
             match: Type.atom("error"),
             guards: [],
-            body: (context) => context.vars.a,
+            expression: (context) => context.vars.a,
           },
         ],
         [
@@ -6913,7 +6928,6 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-
     it("can fail to match on guard", () => {
       // with b when b == :no <- a do
       // else
@@ -6929,7 +6943,7 @@ describe("Interpreter", () => {
           {
             match: Type.variablePattern("b"),
             guards: [guard],
-            body: (context) => context.vars.a,
+            expression: (context) => context.vars.a,
           },
         ],
         [
@@ -6944,6 +6958,167 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+    it("handle plain expressions", () => {
+      // with b = a do
+      //   {a, b}
+      // end
+      const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (context) =>
+              Interpreter.matchOperator(
+                context.vars.a,
+                Type.variablePattern("a"),
+                context,
+              ),
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("gives the original context to the else clauses", () => {
+      // x = :original
+      // with x <- a,
+      //   :fail <- :mismatch do
+      //   :body
+      // else
+      //   _ ->
+      //     x
+      // end
+      const contextWithX = contextFixture({
+        vars: {
+          a: Type.atom("ok"),
+          x: Type.atom("original"),
+        },
+      });
+      const expected = Type.atom("original");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("x"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+          {
+            match: Type.atom("fail"),
+            guards: [],
+            expression: (_context) => Type.atom("mismatch"),
+          },
+        ],
+        [
+          {
+            match: Type.matchPlaceholder(),
+            guards: [],
+            body: (context) => context.vars.x,
+          },
+        ],
+        contextWithX,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("gives the original context to the else clauses (guard mismatch)", () => {
+      // x = :original
+      // with x <- a,
+      //   i when false <- :mismatch do
+      //   :body
+      // else
+      //   _ ->
+      //     x
+      // end
+      const contextWithX = contextFixture({
+        vars: {
+          a: Type.atom("ok"),
+          x: Type.atom("original"),
+        },
+      });
+      const expected = Type.atom("original");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("x"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+          {
+            match: Type.variablePattern("i"),
+            guards: [(_context) => Type.atom("false")],
+            expression: (_context) => Type.atom("mismatch"),
+          },
+        ],
+        [
+          {
+            match: Type.matchPlaceholder(),
+            guards: [],
+            body: (context) => context.vars.x,
+          },
+        ],
+        contextWithX,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("returns the unmatched value directly if there are no else clauses", () => {
+      // with :error <- a do
+      //   x
+      // end
+      const expected = Type.atom("ok");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple else clauses", () => {
+      const expected = Type.atom("second");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("a"),
+            guards: [],
+            body: (context) => Type.atom("first"),
+          },
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => Type.atom("second"),
+          },
+          {
+            match: Type.atom("c"),
+            guards: [],
+            body: (_context) => Type.atom("third"),
+          },
+        ],
+        context,
+      );
+    });
     it("throws error if no else clauses match", () => {
       // with  :error <- a do
       // else
@@ -6957,7 +7132,7 @@ describe("Interpreter", () => {
               {
                 match: Type.atom("error"),
                 guards: [],
-                body: (context) => context.vars.a,
+                expression: (context) => context.vars.a,
               },
             ],
             [
