@@ -6868,7 +6868,7 @@ describe("Interpreter", () => {
     it("handles an empty with", () => {
       // with do: nil
       const result = Interpreter.with(
-        (context) => {
+        (_context) => {
           return Type.atom("nil");
         },
         [],
@@ -7103,7 +7103,7 @@ describe("Interpreter", () => {
           {
             match: Type.atom("a"),
             guards: [],
-            body: (context) => Type.atom("first"),
+            body: (_context) => Type.atom("first"),
           },
           {
             match: Type.atom("ok"),
@@ -7118,6 +7118,8 @@ describe("Interpreter", () => {
         ],
         context,
       );
+
+      assert.deepStrictEqual(result, expected);
     });
     it("throws error if no else clauses match", () => {
       // with  :error <- a do
