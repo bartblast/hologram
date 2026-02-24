@@ -31,6 +31,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> assert_text(css("#call_result"), "{3, true}")
   end
 
+  feature "~JS sigil", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Run JavaScript snippet"))
+    |> assert_text(css("#js_snippet_result"), "Hologram")
+  end
+
   feature "JS.get/2", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)
@@ -52,10 +59,10 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> assert_text(css("#call_result"), "{20, true}")
   end
 
-  feature "~JS sigil", %{session: session} do
+  feature "JS.typeof/1", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)
-    |> click(button("Run JavaScript snippet"))
-    |> assert_text(css("#js_snippet_result"), "Hologram")
+    |> click(button("Typeof value"))
+    |> assert_text(css("#call_result"), ~s("object"))
   end
 end

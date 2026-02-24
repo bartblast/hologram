@@ -11,7 +11,7 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   js_import :default, from: "./calculator.mjs", as: :Calculator
   js_import :default, from: "./helpers.mjs", as: :helpers
 
-  route "/javascript-interop"
+  route "/js-interop"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
@@ -44,6 +44,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     </p>
     <p>
       <button $click="set_property"> Set property </button>
+    </p>
+    <p>
+      <button $click="typeof_value"> Typeof value </button>
     </p>
     <p>
       Call result: <strong id="call_result"><code>{inspect(@result)}</code></strong>
@@ -107,5 +110,12 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     result = JS.get(calculator, :value)
 
     put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:typeof_value, _params, component) do
+    calculator = JS.new(:Calculator, [10])
+    result = JS.typeof(calculator)
+
+    put_state(component, :result, result)
   end
 end
