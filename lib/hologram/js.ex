@@ -144,4 +144,20 @@ defmodule Hologram.JS do
   """
   @spec sigil_JS(String.t(), []) :: :ok
   def sigil_JS(code, []), do: exec(code)
+
+  @doc """
+  Returns the JavaScript type of a value.
+  """
+  defmacro typeof(value) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.typeof(unquote(value), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec typeof(any(), module()) :: :ok
+  def typeof(_value, _caller_module), do: :ok
 end
