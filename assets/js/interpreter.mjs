@@ -991,6 +991,7 @@ export default class Interpreter {
     return $.inspect(struct);
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
   static try(
     body,
     rescueClauses,
@@ -1004,6 +1005,50 @@ export default class Interpreter {
     try {
       const contextClone = Interpreter.cloneContext(context);
       result = body(contextClone);
+      // TODO: finish
+      // eslint-disable-next-line no-useless-catch
+    } catch (error) {
+      throw error;
+
+      // TODO: handle errors
+      // eslint-disable-next-line no-unreachable
+      result =
+        Interpreter.#evaluateRescueClauses(rescueClauses, error, context) ||
+        Interpreter.#evaluateCatchClauses(catchClauses, error, context);
+    } finally {
+      // TODO: handle after block
+      if (afterBlock) {
+        // eslint-disable-next-line no-unsafe-finally
+        throw new HologramInterpreterError(
+          '"try" expression after block is not yet implemented in Hologram',
+        );
+      }
+    }
+
+    if (elseClauses.length === 0) {
+      return result;
+    } else {
+      // TODO: handle else clauses
+      throw new HologramInterpreterError(
+        '"try" expression else clauses are not yet implemented in Hologram',
+      );
+    }
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update try().
+  static async asyncTry(
+    body,
+    rescueClauses,
+    catchClauses,
+    elseClauses,
+    afterBlock,
+    context,
+  ) {
+    let result;
+
+    try {
+      const contextClone = Interpreter.cloneContext(context);
+      result = await body(contextClone);
       // TODO: finish
       // eslint-disable-next-line no-useless-catch
     } catch (error) {

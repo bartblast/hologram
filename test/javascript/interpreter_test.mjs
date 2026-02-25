@@ -388,6 +388,68 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("asyncTry()", () => {
+    it("returns a Promise", () => {
+      const body = async (_context) => Type.atom("ok");
+      const context = contextFixture();
+      const result = Interpreter.asyncTry(body, [], [], [], null, context);
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("awaits body result", async () => {
+      const body = async (_context) => {
+        return new Promise((resolve) =>
+          setTimeout(() => resolve(Type.atom("delayed")), 1),
+        );
+      };
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+
+    it("returns body result when no else clauses", async () => {
+      const body = async (_context) => Type.atom("ok");
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+
+    it("re-throws errors (rescue not yet fully implemented)", async () => {
+      const body = async (_context) => {
+        throw new Error("test error");
+      };
+
+      const context = contextFixture();
+
+      try {
+        await Interpreter.asyncTry(body, [], [], [], null, context);
+        assert.fail("should have thrown");
+      } catch (error) {
+        assert.equal(error.message, "test error");
+      }
+    });
+  });
+
   it("buildArgumentErrorMsg()", () => {
     const result = Interpreter.buildArgumentErrorMsg(2, "my message");
 
