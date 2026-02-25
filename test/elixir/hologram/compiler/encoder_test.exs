@@ -556,6 +556,25 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "async" do
+      ir = %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        (await (async (context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        })(context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   describe "case" do

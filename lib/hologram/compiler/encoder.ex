@@ -200,6 +200,10 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.bitstring([", "])")
   end
 
+  def encode_ir(%IR.Block{} = block, %{async?: true} = context) do
+    "(await (#{encode_closure(block, context)})(context))"
+  end
+
   def encode_ir(%IR.Block{} = block, context) do
     "(#{encode_closure(block, context)})(context)"
   end
