@@ -1150,6 +1150,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  # credo:disable-for-lines:78 Credo.Check.Design.DuplicatedCode
   describe "encode_elixir_function/6" do
     test "sync" do
       clauses = [
