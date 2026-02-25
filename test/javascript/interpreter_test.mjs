@@ -1895,6 +1895,50 @@ describe("Interpreter", () => {
       delete globalThis.Elixir_Ddd;
     });
 
+    it("registers a sync function when isAsync is false", () => {
+      Interpreter.defineElixirFunction(
+        "Aaa.Bbb",
+        "my_sync",
+        0,
+        "public",
+        [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: (_context) => Type.atom("sync_result"),
+          },
+        ],
+        false,
+      );
+
+      const result = globalThis.Elixir_Aaa_Bbb["my_sync/0"]();
+
+      assert.deepStrictEqual(result, Type.atom("sync_result"));
+    });
+
+    it("registers an async function when isAsync is true", async () => {
+      Interpreter.defineElixirFunction(
+        "Aaa.Bbb",
+        "my_async",
+        0,
+        "public",
+        [
+          {
+            params: (_context) => [],
+            guards: [],
+            body: async (_context) => Type.atom("async_result"),
+          },
+        ],
+        true,
+      );
+
+      const result = globalThis.Elixir_Aaa_Bbb["my_async/0"]();
+      assert.instanceOf(result, Promise);
+
+      const resolved = await result;
+      assert.deepStrictEqual(resolved, Type.atom("async_result"));
+    });
+
     it("errors raised inside function body are not caught", () => {
       Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_f", 0, "public", [
         {

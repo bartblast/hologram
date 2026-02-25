@@ -455,54 +455,27 @@ export default class Interpreter {
     arity,
     visibility,
     clauses,
+    isAsync = false,
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
 
-    globalThis[moduleJsName][`${functionName}/${arity}`] = function () {
-      let startTime;
+    const fn = isAsync
+      ? Interpreter.#buildAsyncElixirFunction(
+          moduleExName,
+          functionName,
+          arity,
+          clauses,
+        )
+      : Interpreter.#buildSyncElixirFunction(
+          moduleExName,
+          functionName,
+          arity,
+          clauses,
+        );
 
-      if (globalThis.hologram.isProfilingEnabled) {
-        startTime = performance.now();
-      }
-
-      const mfa = `${moduleExName}.${functionName}/${arity}`;
-
-      // TODO: remove on release
-      // Interpreter.#logFunctionCall(mfa, arguments);
-
-      const args = Type.list([...arguments]);
-
-      for (const clause of clauses) {
-        const context = Interpreter.buildContext({module: moduleExName});
-        const pattern = Type.list(clause.params(context));
-
-        if (Interpreter.isMatched(pattern, args, context)) {
-          Interpreter.updateVarsToMatchedValues(context);
-
-          if (Interpreter.#evaluateGuards(clause.guards, context)) {
-            const result = clause.body(context);
-
-            // TODO: remove on release
-            // Interpreter.#logFunctionResult(mfa, result);
-
-            if (globalThis.hologram.isProfilingEnabled) {
-              console.log(
-                `Hologram: function ${mfa} executed in`,
-                PerformanceTimer.diff(startTime),
-              );
-            }
-
-            return result;
-          }
-        }
-      }
-
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
-      );
-    };
+    globalThis[moduleJsName][`${functionName}/${arity}`] = fn;
 
     if (visibility === "public") {
       globalThis[moduleJsName].__exports__.add(`${functionName}/${arity}`);
@@ -1191,6 +1164,100 @@ export default class Interpreter {
       ref1.node === ref2.node &&
       ref1.creation === ref2.creation
     );
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #buildSyncElixirFunction().
+  static #buildAsyncElixirFunction(moduleExName, functionName, arity, clauses) {
+    return async function () {
+      let startTime;
+
+      if (globalThis.hologram.isProfilingEnabled) {
+        startTime = performance.now();
+      }
+
+      const mfa = `${moduleExName}.${functionName}/${arity}`;
+
+      // TODO: remove on release
+      // Interpreter.#logFunctionCall(mfa, arguments);
+
+      const args = Type.list([...arguments]);
+
+      for (const clause of clauses) {
+        const context = Interpreter.buildContext({module: moduleExName});
+        const pattern = Type.list(clause.params(context));
+
+        if (Interpreter.isMatched(pattern, args, context)) {
+          Interpreter.updateVarsToMatchedValues(context);
+
+          if (Interpreter.#evaluateGuards(clause.guards, context)) {
+            const result = await clause.body(context);
+
+            // TODO: remove on release
+            // Interpreter.#logFunctionResult(mfa, result);
+
+            if (globalThis.hologram.isProfilingEnabled) {
+              console.log(
+                `Hologram: function ${mfa} executed in`,
+                PerformanceTimer.diff(startTime),
+              );
+            }
+
+            return result;
+          }
+        }
+      }
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+      );
+    };
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #buildAsyncElixirFunction().
+  static #buildSyncElixirFunction(moduleExName, functionName, arity, clauses) {
+    return function () {
+      let startTime;
+
+      if (globalThis.hologram.isProfilingEnabled) {
+        startTime = performance.now();
+      }
+
+      const mfa = `${moduleExName}.${functionName}/${arity}`;
+
+      // TODO: remove on release
+      // Interpreter.#logFunctionCall(mfa, arguments);
+
+      const args = Type.list([...arguments]);
+
+      for (const clause of clauses) {
+        const context = Interpreter.buildContext({module: moduleExName});
+        const pattern = Type.list(clause.params(context));
+
+        if (Interpreter.isMatched(pattern, args, context)) {
+          Interpreter.updateVarsToMatchedValues(context);
+
+          if (Interpreter.#evaluateGuards(clause.guards, context)) {
+            const result = clause.body(context);
+
+            // TODO: remove on release
+            // Interpreter.#logFunctionResult(mfa, result);
+
+            if (globalThis.hologram.isProfilingEnabled) {
+              console.log(
+                `Hologram: function ${mfa} executed in`,
+                PerformanceTimer.diff(startTime),
+              );
+            }
+
+            return result;
+          }
+        }
+      }
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+      );
+    };
   }
 
   static #comparePids(pid1, pid2) {
