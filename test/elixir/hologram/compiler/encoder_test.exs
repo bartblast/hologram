@@ -1938,6 +1938,36 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) ==
                ~s'Erlang["orelse/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
     end
+
+    test "async - wraps call with await when target MFA is in async_mfas" do
+      # Aaa.Bbb.my_fun(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :my_fun,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      async_mfas = MapSet.new([{Aaa.Bbb, :my_fun, 2}])
+      context = %Context{async_mfas: async_mfas}
+
+      assert encode_ir(ir, context) ==
+               "(await Elixir_Aaa_Bbb[\"my_fun/2\"](Type.integer(1n), Type.integer(2n)))"
+    end
+
+    test "async - no await when target MFA is not in async_mfas" do
+      # Aaa.Bbb.my_fun(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :my_fun,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      async_mfas = MapSet.new([{Aaa.Bbb, :other_fun, 2}])
+      context = %Context{async_mfas: async_mfas}
+
+      assert encode_ir(ir, context) ==
+               "Elixir_Aaa_Bbb[\"my_fun/2\"](Type.integer(1n), Type.integer(2n))"
+    end
   end
 
   describe "string type" do

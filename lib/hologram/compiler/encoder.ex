@@ -664,7 +664,13 @@ defmodule Hologram.Compiler.Encoder do
     arity = Enum.count(args)
     args_js = Enum.map_join(args, ", ", &encode_ir(&1, context))
 
-    "#{class}[\"#{function}/#{arity}\"](#{args_js})"
+    call = "#{class}[\"#{function}/#{arity}\"](#{args_js})"
+
+    if MapSet.member?(context.async_mfas, {module.value, function, arity}) do
+      "(await #{call})"
+    else
+      call
+    end
   end
 
   defp encode_named_function_call(module_ir, function, args, context) do
