@@ -1150,32 +1150,35 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  # credo:disable-for-lines:78 Credo.Check.Design.DuplicatedCode
   describe "encode_elixir_function/6" do
-    test "sync" do
-      clauses = [
-        %IR.FunctionClause{
-          params: [%IR.IntegerType{value: 9}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: :expr_2}]
-          }
-        },
-        %IR.FunctionClause{
-          params: [%IR.Variable{name: :z}],
-          guards: [
-            %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: :erlang},
-              function: :is_float,
-              args: [%IR.Variable{name: :z}]
+    setup do
+      [
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.IntegerType{value: 9}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :expr_2}]
             }
-          ],
-          body: %IR.Block{
-            expressions: [%IR.Variable{name: :z}]
+          },
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :z}],
+            guards: [
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :is_float,
+                args: [%IR.Variable{name: :z}]
+              }
+            ],
+            body: %IR.Block{
+              expressions: [%IR.Variable{name: :z}]
+            }
           }
-        }
+        ]
       ]
+    end
 
+    test "sync", %{clauses: clauses} do
       context = %Context{module: Aaa.Bbb}
 
       expected =
@@ -1190,30 +1193,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
     end
 
-    test "async" do
-      clauses = [
-        %IR.FunctionClause{
-          params: [%IR.IntegerType{value: 9}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: :expr_2}]
-          }
-        },
-        %IR.FunctionClause{
-          params: [%IR.Variable{name: :z}],
-          guards: [
-            %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: :erlang},
-              function: :is_float,
-              args: [%IR.Variable{name: :z}]
-            }
-          ],
-          body: %IR.Block{
-            expressions: [%IR.Variable{name: :z}]
-          }
-        }
-      ]
-
+    test "async", %{clauses: clauses} do
       async_mfas = MapSet.new([{Aaa.Bbb, :fun_2, 1}])
       context = %Context{module: Aaa.Bbb, async_mfas: async_mfas}
 
