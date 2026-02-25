@@ -291,6 +291,7 @@ export default class Interpreter {
     }
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncComprehension().
   // Deps: [Enum.into/2, Enum.to_list/1]
   static comprehension(
     generators,
@@ -336,6 +337,71 @@ export default class Interpreter {
       acc.push(mapper(contextClone));
       return acc;
     }, []);
+
+    if (unique) {
+      items = uniqWith(items, Interpreter.isStrictlyEqual);
+    }
+
+    return Elixir_Enum["into/2"](Type.list(items), collectable);
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update comprehension().
+  // Deps: [Enum.into/2, Enum.to_list/1]
+  static async asyncComprehension(
+    generators,
+    filters,
+    collectable,
+    unique,
+    mapper,
+    context,
+  ) {
+    const generatorsCount = generators.length;
+    const sets = [];
+
+    for (const generator of generators) {
+      sets.push(Elixir_Enum["to_list/1"](await generator.body(context)).data);
+    }
+
+    let items = [];
+
+    for (const combination of Utils.cartesianProduct(sets)) {
+      const contextClone = Interpreter.cloneContext(context);
+      let skip = false;
+
+      for (let i = 0; i < generatorsCount; ++i) {
+        if (
+          Interpreter.isMatched(
+            generators[i].match,
+            combination[i],
+            contextClone,
+          )
+        ) {
+          Interpreter.updateVarsToMatchedValues(contextClone);
+
+          if (Interpreter.#evaluateGuards(generators[i].guards, contextClone)) {
+            continue;
+          }
+        }
+
+        skip = true;
+        break;
+      }
+
+      if (skip) continue;
+
+      let filtered = false;
+
+      for (const filter of filters) {
+        if (Type.isFalsy(await filter(contextClone))) {
+          filtered = true;
+          break;
+        }
+      }
+
+      if (filtered) continue;
+
+      items.push(await mapper(contextClone));
+    }
 
     if (unique) {
       items = uniqWith(items, Interpreter.isStrictlyEqual);

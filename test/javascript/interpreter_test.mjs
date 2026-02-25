@@ -164,6 +164,157 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("asyncComprehension()", () => {
+    let context, prevIntoFun, prevToListFun;
+
+    beforeEach(() => {
+      context = contextFixture({
+        vars: {a: Type.integer(1), b: Type.integer(2)},
+      });
+
+      prevIntoFun = globalThis.Elixir_Enum["into/2"];
+
+      globalThis.Elixir_Enum["into/2"] = (enumerable, _collectable) => {
+        return enumerable;
+      };
+
+      prevToListFun = globalThis.Elixir_Enum["to_list/1"];
+
+      globalThis.Elixir_Enum["to_list/1"] = (enumerable) => {
+        return enumerable;
+      };
+    });
+
+    afterEach(() => {
+      globalThis.Elixir_Enum["into/2"] = prevIntoFun;
+      globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
+    });
+
+    it("returns a Promise", () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1)]),
+      };
+
+      const result = Interpreter.asyncComprehension(
+        [generator],
+        [],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("awaits generator body", async () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        [],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("awaits filters", async () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) =>
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const filter = async (context) => {
+        // keep only values > 1
+        return Erlang[">/2"](context.vars.x, Type.integer(1));
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        [filter],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      const expected = Type.list([Type.integer(2), Type.integer(3)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("awaits mapper", async () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        [],
+        Type.list(),
+        false,
+        async (context) => {
+          return new Promise((resolve) =>
+            setTimeout(() => resolve(context.vars.x), 1),
+          );
+        },
+        context,
+      );
+
+      const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates combinations with multiple generators", async () => {
+      const generator1 = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const generator2 = {
+        match: Type.variablePattern("y"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(3), Type.integer(4)]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator1, generator2],
+        [],
+        Type.map(),
+        false,
+        async (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+        Type.tuple([Type.integer(1), Type.integer(4)]),
+        Type.tuple([Type.integer(2), Type.integer(3)]),
+        Type.tuple([Type.integer(2), Type.integer(4)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("asyncCond()", () => {
     it("returns a Promise", () => {
       const clauses = [
@@ -177,7 +328,7 @@ describe("Interpreter", () => {
 
       const result = Interpreter.asyncCond(clauses, context);
 
-      assert.isTrue(result instanceof Promise);
+      assert.instanceOf(result, Promise);
     });
 
     it("matches first truthy condition", async () => {
@@ -232,7 +383,7 @@ describe("Interpreter", () => {
         await Interpreter.asyncCond(clauses, context);
         assert.fail("should have thrown");
       } catch (error) {
-        assert.isTrue(error instanceof HologramBoxedError);
+        assert.instanceOf(error, HologramBoxedError);
       }
     });
   });
