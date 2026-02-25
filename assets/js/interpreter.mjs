@@ -206,6 +206,7 @@ export default class Interpreter {
     return moduleProxy[functionArityStr](...args.data);
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncCase().
   // case() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/case_test.exs
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
@@ -222,6 +223,27 @@ export default class Interpreter {
 
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           return clause.body(contextClone);
+        }
+      }
+    }
+
+    Interpreter.raiseCaseClauseError(condition);
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update case().
+  static async asyncCase(condition, clauses, context) {
+    if (typeof condition === "function") {
+      condition = await condition(context);
+    }
+
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          return await clause.body(contextClone);
         }
       }
     }
