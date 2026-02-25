@@ -663,6 +663,30 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "async" do
+      ir = %IR.Case{
+        condition: %IR.Variable{name: :my_var},
+        clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.Variable{name: :x}]
+            }
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncCase(context.vars.my_var, [{match: Type.variablePattern("x"), guards: [], body: async (context) => {
+        return context.vars.x;
+        }}], context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   describe "clause" do
