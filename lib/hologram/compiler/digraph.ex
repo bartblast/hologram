@@ -201,6 +201,31 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Returns a list of all vertices from which the given target vertices can be reached.
+  Uses breadth-first search traversing incoming edges.
+  If none of the target vertices exist in the graph, returns an empty list.
+  Non-existent target vertices are ignored.
+  """
+  @spec reaching(t, [vertex]) :: [vertex]
+  def reaching(graph, target_vertices) do
+    %Digraph{vertices: vertices, incoming_edges: incoming_edges} = graph
+
+    existing_vertices = Enum.filter(target_vertices, &Map.has_key?(vertices, &1))
+
+    if existing_vertices == [] do
+      []
+    else
+      # BFS to find all reaching vertices
+      queue = :queue.from_list(existing_vertices)
+      visited = MapSet.new(existing_vertices)
+
+      queue
+      |> bfs_reachable(visited, incoming_edges)
+      |> MapSet.to_list()
+    end
+  end
+
+  @doc """
   Removes a vertex from the graph along with all edges connected to it.
   This includes both outgoing edges from the vertex and incoming edges to the vertex.
   """

@@ -649,6 +649,166 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "reaching/2" do
+    test "handles empty target vertices list" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reaching([])
+
+      assert result == []
+    end
+
+    test "returns empty list when graph is empty" do
+      result = reaching(new(), [:a])
+
+      assert result == []
+    end
+
+    test "returns empty list when target vertices don't exist in non-empty graph" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reaching([:x])
+
+      assert result == []
+    end
+
+    test "returns only the target vertex itself when it has no incoming edges" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> reaching([:a])
+
+      assert result == [:a]
+    end
+
+    test "returns target vertex and its direct predecessors" do
+      result =
+        new()
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :c)
+        |> reaching([:c])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "returns all vertices in a linear chain" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> reaching([:d])
+
+      assert Enum.sort(result) == [:a, :b, :c, :d]
+    end
+
+    test "returns only reaching part of linear chain when targeting middle" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> reaching([:c])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "handles cycles correctly" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :a)
+        |> reaching([:c])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "handles self-loops" do
+      result =
+        new()
+        |> add_edge(:a, :a)
+        |> add_edge(:b, :a)
+        |> reaching([:a])
+
+      assert Enum.sort(result) == [:a, :b]
+    end
+
+    test "returns only connected component in disconnected graph" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        # disconnected component
+        |> add_edge(:x, :y)
+        |> add_edge(:y, :z)
+        |> reaching([:c])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "handles complex graph with multiple paths" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :d)
+        |> add_edge(:c, :d)
+        |> add_edge(:d, :e)
+        |> add_edge(:b, :f)
+        |> reaching([:e])
+
+      assert Enum.sort(result) == [:a, :b, :c, :d, :e]
+    end
+
+    test "handles multiple target vertices" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:x, :y)
+        |> add_edge(:y, :z)
+        |> reaching([:c, :z])
+
+      assert Enum.sort(result) == [:a, :b, :c, :x, :y, :z]
+    end
+
+    test "handles multiple target vertices with overlapping reaching sets" do
+      result =
+        new()
+        |> add_edge(:source, :a)
+        |> add_edge(:source, :b)
+        |> add_edge(:a, :shared)
+        |> reaching([:a, :b])
+
+      assert Enum.sort(result) == [:a, :b, :source]
+    end
+
+    test "ignores non-existent vertices in target list" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reaching([:c, :nonexistent, :also_nonexistent])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "returns empty list when all target vertices are non-existent" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reaching([:nonexistent, :also_nonexistent])
+
+      assert result == []
+    end
+  end
+
   describe "remove_vertex/2" do
     test "handles a vertex that doesn't exist" do
       result = remove_vertex(new(), :a)
