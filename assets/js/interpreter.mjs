@@ -344,6 +344,7 @@ export default class Interpreter {
     return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncCond().
   // cond() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/cond_test.exs
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
@@ -354,6 +355,20 @@ export default class Interpreter {
       if (Type.isTruthy(clause.condition(contextClone))) {
         Interpreter.updateVarsToMatchedValues(contextClone);
         return clause.body(contextClone);
+      }
+    }
+
+    Interpreter.#raiseCondClauseError();
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update cond().
+  static async asyncCond(clauses, context) {
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Type.isTruthy(await clause.condition(contextClone))) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+        return await clause.body(contextClone);
       }
     }
 

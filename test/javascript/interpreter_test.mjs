@@ -59,11 +59,11 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.atom("my_default_value"));
     });
   });
-  
+
   describe("asyncCase()", () => {
     it("returns a Promise", () => {
       const condition = Type.integer(1);
-      
+
       const clauses = [
         {
           match: Type.integer(1),
@@ -71,17 +71,17 @@ describe("Interpreter", () => {
           body: async (_context) => Type.atom("ok"),
         },
       ];
-      
+
       const context = contextFixture();
 
       const result = Interpreter.asyncCase(condition, clauses, context);
-      
+
       assert.instanceOf(result, Promise);
     });
 
     it("evaluates condition function with await", async () => {
       const condition = async (_context) => Type.integer(1);
-      
+
       const clauses = [
         {
           match: Type.integer(1),
@@ -89,17 +89,17 @@ describe("Interpreter", () => {
           body: async (_context) => Type.atom("matched"),
         },
       ];
-      
+
       const context = contextFixture();
 
       const result = await Interpreter.asyncCase(condition, clauses, context);
-      
+
       assert.deepStrictEqual(result, Type.atom("matched"));
     });
 
     it("condition is a non-function value", async () => {
       const condition = Type.integer(2);
-      
+
       const clauses = [
         {
           match: Type.integer(1),
@@ -112,17 +112,17 @@ describe("Interpreter", () => {
           body: async (_context) => Type.atom("second"),
         },
       ];
-      
+
       const context = contextFixture();
 
       const result = await Interpreter.asyncCase(condition, clauses, context);
-      
+
       assert.deepStrictEqual(result, Type.atom("second"));
     });
 
     it("awaits clause body result", async () => {
       const condition = Type.integer(1);
-      
+
       const clauses = [
         {
           match: Type.integer(1),
@@ -134,17 +134,17 @@ describe("Interpreter", () => {
           },
         },
       ];
-      
+
       const context = contextFixture();
 
       const result = await Interpreter.asyncCase(condition, clauses, context);
-      
+
       assert.deepStrictEqual(result, Type.atom("delayed"));
     });
 
     it("raises CaseClauseError when no clause matches", async () => {
       const condition = Type.integer(999);
-      
+
       const clauses = [
         {
           match: Type.integer(1),
@@ -152,7 +152,7 @@ describe("Interpreter", () => {
           body: async (_context) => Type.atom("nope"),
         },
       ];
-      
+
       const context = contextFixture();
 
       try {
@@ -162,7 +162,80 @@ describe("Interpreter", () => {
         assert.instanceOf(error, HologramBoxedError);
       }
     });
-  });  
+  });
+
+  describe("asyncCond()", () => {
+    it("returns a Promise", () => {
+      const clauses = [
+        {
+          condition: async (_context) => Type.atom("true"),
+          body: async (_context) => Type.atom("ok"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = Interpreter.asyncCond(clauses, context);
+
+      assert.isTrue(result instanceof Promise);
+    });
+
+    it("matches first truthy condition", async () => {
+      const clauses = [
+        {
+          condition: async (_context) => Type.atom("false"),
+          body: async (_context) => Type.atom("first"),
+        },
+        {
+          condition: async (_context) => Type.atom("true"),
+          body: async (_context) => Type.atom("second"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncCond(clauses, context);
+
+      assert.deepStrictEqual(result, Type.atom("second"));
+    });
+
+    it("awaits clause body result", async () => {
+      const clauses = [
+        {
+          condition: async (_context) => Type.atom("true"),
+          body: async (_context) => {
+            return new Promise((resolve) =>
+              setTimeout(() => resolve(Type.atom("delayed")), 1),
+            );
+          },
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncCond(clauses, context);
+
+      assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+
+    it("raises CondClauseError when no clause matches", async () => {
+      const clauses = [
+        {
+          condition: async (_context) => Type.atom("false"),
+          body: async (_context) => Type.atom("nope"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      try {
+        await Interpreter.asyncCond(clauses, context);
+        assert.fail("should have thrown");
+      } catch (error) {
+        assert.isTrue(error instanceof HologramBoxedError);
+      }
+    });
+  });
 
   it("buildArgumentErrorMsg()", () => {
     const result = Interpreter.buildArgumentErrorMsg(2, "my message");
