@@ -3,7 +3,9 @@ defmodule HologramFeatureTests.MixProject do
 
   defp aliases do
     [
-      f: "format"
+      f: ["format", "format.js"],
+      "format.js":
+        "cmd ../../assets/node_modules/.bin/prettier 'assets/js/**' --config '../../assets/.prettierrc.json' --write"
     ]
   end
 
