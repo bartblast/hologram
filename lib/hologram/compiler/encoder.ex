@@ -276,7 +276,9 @@ defmodule Hologram.Compiler.Encoder do
     params_array = encode_as_array(clause.params, %{context | pattern?: true})
     params_closure = "(context) => #{params_array}"
 
-    guards = encode_as_array(clause.guards, context, &encode_closure/2)
+    # Guards are never async — Elixir guards are restricted to a safe subset of functions.
+    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+
     body = encode_closure(clause.body, context)
 
     "{params: #{params_closure}, guards: #{guards}, body: #{body}}"

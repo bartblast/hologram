@@ -1127,7 +1127,7 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: async (context) => {
         return Type.atom("expr_2");
-        }}, {params: (context) => [Type.variablePattern("z")], guards: [async (context) => Erlang["is_float/1"](context.vars.z)], body: async (context) => {
+        }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: async (context) => {
         return context.vars.z;
         }}], true);\
         """)
@@ -1289,6 +1289,31 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir) == expected
+    end
+
+    test "async — guards stay sync, body becomes async" do
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.Variable{name: :x}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [(context) => Erlang["is_integer/1"](context.vars.x)], body: async (context) => {
+        return context.vars.x;
+        }}\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
     end
   end
 
