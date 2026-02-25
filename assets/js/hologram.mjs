@@ -80,7 +80,7 @@ export default class Hologram {
 
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2, :maps.put/3]
-  static executeAction(action) {
+  static async executeAction(action) {
     const startTime = performance.now();
     globalThis.hologram.isProfilingEnabled = true;
 
@@ -97,12 +97,16 @@ export default class Hologram {
       vars: {},
     });
 
-    const resultComponentStruct = Interpreter.callNamedFunction(
+    let resultComponentStruct = Interpreter.callNamedFunction(
       componentModule,
       Type.atom("action"),
       Type.list(args),
       context,
     );
+
+    if (resultComponentStruct instanceof Promise) {
+      resultComponentStruct = await resultComponentStruct;
+    }
 
     let nextAction = Erlang_Maps["get/2"](
       Type.atom("next_action"),
@@ -281,6 +285,7 @@ export default class Hologram {
             );
 
             if (delay.value === 0n) {
+              // Not awaited — DOM event handlers ignore return values.
               return Hologram.executeAction(operation);
             } else {
               return Hologram.scheduleAction(operation);
@@ -382,6 +387,7 @@ export default class Hologram {
       Type.integer(0),
     );
 
+    // Not awaited — setTimeout callbacks ignore return values.
     setTimeout(() => Hologram.executeAction(action), Number(delay.value));
   }
 
