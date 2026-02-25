@@ -65,9 +65,15 @@ defmodule Hologram.Compiler.Encoder do
           Context.t()
         ) :: String.t()
   def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
-    clauses_js = encode_as_array(clauses, context)
+    async? = MapSet.member?(context.async_mfas, {context.module, function, arity})
+    clause_context = %{context | async?: async?}
+    clauses_js = encode_as_array(clauses, clause_context)
 
-    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    if async? do
+      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js}, true);/
+    else
+      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+    end
   end
 
   @doc """
