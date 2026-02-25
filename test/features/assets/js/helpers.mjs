@@ -7,11 +7,11 @@ const helpers = {
     return new Promise((resolve) => {
       setTimeout(() => resolve(a + b), 100);
     });
-  },  
-  
+  },
+
   sum(a, b) {
     return a + b;
   },
-}
+};
 
 export default helpers;
