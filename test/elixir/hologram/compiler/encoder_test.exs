@@ -694,6 +694,19 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) ==
                "{match: Type.variablePattern(\"x\"), guards: [(context) => context.vars.y, (context) => context.vars.z], body: (context) => {\nreturn Type.integer(1n);\n}}"
     end
+
+    test "async — guards stay sync, body becomes async" do
+      ir = %IR.Clause{
+        match: %IR.Variable{name: :x},
+        guards: [%IR.Variable{name: :y}],
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "{match: Type.variablePattern(\"x\"), guards: [(context) => context.vars.y], body: async (context) => {\nreturn Type.integer(1n);\n}}"
+    end
   end
 
   test "comprehension" do

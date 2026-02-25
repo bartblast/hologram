@@ -218,7 +218,10 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(%IR.Clause{} = clause, context) do
     match = encode_ir(clause.match, %{context | pattern?: true})
-    guards = encode_as_array(clause.guards, context, &encode_closure/2)
+
+    # Guards are never async — Elixir guards are restricted to a safe subset of functions.
+    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+
     body = encode_closure(clause.body, context)
 
     "{match: #{match}, guards: #{guards}, body: #{body}}"
