@@ -167,8 +167,8 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_page_js_4/README.md
   """
-  @spec build_page_js(module, CallGraph.t(), PLT.t(), T.file_path()) :: String.t()
-  def build_page_js(page_module, call_graph, ir_plt, js_dir) do
+  @spec build_page_js(module, CallGraph.t(), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
+  def build_page_js(page_module, call_graph, ir_plt, async_mfas, js_dir) do
     mfas = CallGraph.list_page_mfas(call_graph, page_module)
 
     %{imports: imports, bindings: bindings} = aggregate_js_imports(mfas)
@@ -194,7 +194,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       mfas
-      |> render_elixir_function_defs(ir_plt)
+      |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
     """
@@ -227,8 +227,8 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), T.file_path()) :: String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, js_dir) do
+  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, js_dir) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -236,7 +236,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       runtime_mfas
-      |> render_elixir_function_defs(ir_plt)
+      |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
     """
@@ -350,16 +350,16 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_page_entry_files_4/README.md
   """
-  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), T.opts()) ::
+  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
           list({module, T.file_path()})
-  def create_page_entry_files(page_modules, call_graph, ir_plt, opts) do
+  def create_page_entry_files(page_modules, call_graph, ir_plt, async_mfas, opts) do
     page_modules
     |> TaskUtils.async_many(fn page_module ->
       entry_name = Reflection.module_name(page_module)
 
       entry_file_path =
         page_module
-        |> build_page_js(call_graph, ir_plt, opts[:js_dir])
+        |> build_page_js(call_graph, ir_plt, async_mfas, opts[:js_dir])
         |> create_entry_file(entry_name, opts[:tmp_dir])
 
       {page_module, entry_file_path}
@@ -372,10 +372,10 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file_3/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), T.opts()) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, opts) do
+  @spec create_runtime_entry_file(list(mfa), PLT.t(), MapSet.t(mfa), T.opts()) :: T.file_path()
+  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -724,7 +724,7 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp render_elixir_function_defs(mfas, ir_plt) do
+  defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
     mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
@@ -733,7 +733,7 @@ defmodule Hologram.Compiler do
       ir_plt
       |> PLT.get!(module)
       |> prune_module_def(module_mfas)
-      |> Encoder.encode_ir(%Context{module: module})
+      |> Encoder.encode_ir(%Context{module: module, async_mfas: async_mfas})
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")

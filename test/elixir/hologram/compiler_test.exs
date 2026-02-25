@@ -156,7 +156,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_page_js/3" do
+  describe "build_page_js/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -167,7 +167,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "has both Erlang and Elixir function defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module9, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module9, call_graph, ir_plt, MapSet.new(), @js_dir)
 
       js_fragment_1 = ~s/globalThis.hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -179,7 +179,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "has only Elixir defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module11, call_graph, ir_plt, MapSet.new(), @js_dir)
 
       js_fragment_1 = ~s/globalThis.hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -191,14 +191,14 @@ defmodule Hologram.CompilerTest do
     end
 
     test "no JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module11, call_graph, ir_plt, MapSet.new(), @js_dir)
 
       refute String.contains?(result, "import {")
       refute String.contains?(result, "registerJsBindings")
     end
 
     test "single JS import", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module19, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module19, call_graph, ir_plt, MapSet.new(), @js_dir)
       js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
 
       assert length(Regex.scan(~r/import \{/, result)) == 1
@@ -213,7 +213,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "multiple JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module21, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module21, call_graph, ir_plt, MapSet.new(), @js_dir)
       js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
 
       assert length(Regex.scan(~r/import \{/, result)) == 2
@@ -229,7 +229,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "multiple modules with JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module23, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module23, call_graph, ir_plt, MapSet.new(), @js_dir)
       js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
       js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
 
@@ -324,8 +324,8 @@ defmodule Hologram.CompilerTest do
     assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
   end
 
-  test "build_runtime_js/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-    js = build_runtime_js(runtime_mfas, ir_plt, @js_dir)
+  test "build_runtime_js/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+    js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
 
     assert String.contains?(
              js,
@@ -547,7 +547,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "create_page_entry_files/4", %{
+  test "create_page_entry_files/5", %{
     call_graph: call_graph,
     ir_plt: ir_plt,
     runtime_mfas: runtime_mfas
@@ -566,7 +566,14 @@ defmodule Hologram.CompilerTest do
       |> CallGraph.clone()
       |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
-    result = create_page_entry_files(page_modules, call_graph_without_runtime_mfas, ir_plt, opts)
+    result =
+      create_page_entry_files(
+        page_modules,
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        MapSet.new(),
+        opts
+      )
 
     assert Enum.count(result) == Enum.count(page_modules)
 
@@ -582,15 +589,15 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
-  test "create_runtime_entry_file/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+  test "create_runtime_entry_file/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_3"])
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_4"])
     ]
 
     clean_dir(opts[:tmp_dir])
 
-    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, opts)
+    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, MapSet.new(), opts)
 
     assert entry_file_path == Path.join(opts[:tmp_dir], "runtime.entry.js")
 
