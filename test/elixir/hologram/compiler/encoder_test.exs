@@ -939,6 +939,111 @@ defmodule Hologram.Compiler.EncoderTest do
              "Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\"))"
   end
 
+  describe "encode_closure/2 (private, tested indirectly)" do
+    test "nil" do
+      ir = %IR.CondClause{
+        condition: nil,
+        body: nil
+      }
+
+      assert encode_ir(ir) == "{condition: null, body: null}"
+    end
+
+    test "non-block, sync" do
+      ir = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 3}
+          ]
+        },
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {condition: (context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n)), body: (context) => {
+        return Type.integer(1n);
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "non-block, async" do
+      ir = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 3}
+          ]
+        },
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {condition: async (context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n)), body: async (context) => {
+        return Type.integer(1n);
+        }}\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+
+    test "block, sync" do
+      ir = %IR.CondClause{
+        condition: %IR.AtomType{value: true},
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1},
+            %IR.IntegerType{value: 2}
+          ]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {condition: (context) => Type.atom("true"), body: (context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "block, async" do
+      ir = %IR.CondClause{
+        condition: %IR.AtomType{value: true},
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1},
+            %IR.IntegerType{value: 2}
+          ]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {condition: async (context) => Type.atom("true"), body: async (context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        }}\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+  end
+
   describe "encode_elixir_function/6" do
     test "sync" do
       clauses = [
@@ -1007,9 +1112,9 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: async (context) => {
         return Type.atom("expr_2");
-        }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
+        }}, {params: (context) => [Type.variablePattern("z")], guards: [async (context) => Erlang["is_float/1"](context.vars.z)], body: async (context) => {
         return context.vars.z;
         }}], true);\
         """)

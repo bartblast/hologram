@@ -596,8 +596,16 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_closure(nil, _context), do: "null"
 
+  defp encode_closure(%IR.Block{} = ir, %{async?: true} = context) do
+    "async (context) => #{encode_block_body(ir, context)}"
+  end
+
   defp encode_closure(%IR.Block{} = ir, context) do
     "(context) => #{encode_block_body(ir, context)}"
+  end
+
+  defp encode_closure(ir, %{async?: true} = context) do
+    "async (context) => #{encode_ir(ir, context)}"
   end
 
   defp encode_closure(ir, context) do
