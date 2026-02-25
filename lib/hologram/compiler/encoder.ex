@@ -242,7 +242,11 @@ defmodule Hologram.Compiler.Encoder do
     unique = comprehension.unique.value
     mapper = encode_closure(comprehension.mapper, context)
 
-    "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context)"
+    if context.async? do
+      "(await Interpreter.asyncComprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context))"
+    else
+      "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context)"
+    end
   end
 
   def encode_ir(%IR.ComprehensionFilter{expression: expr}, context) do
