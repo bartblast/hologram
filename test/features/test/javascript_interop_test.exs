@@ -13,7 +13,7 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
       |> click(button("Resolve imported"))
-      |> assert_text(css("#call_result"), "{3, true}")
+      |> assert_text(css("#call_result"), "{12, true}")
     end
 
     feature "object ref", %{session: session} do
@@ -24,10 +24,26 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
+  describe "JS.call_async/3" do
+    feature "async function", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Call async method"))
+      |> assert_text(css("#call_result"), "{30, true}")
+    end
+
+    feature "promise-returning function", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Call promise method"))
+      |> assert_text(css("#call_result"), "{300, true}")
+    end
+  end
+
   feature "JS.call/3", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)
-    |> click(button("Call method"))
+    |> click(button("Call sync method"))
     |> assert_text(css("#call_result"), "{3, true}")
   end
 
@@ -49,7 +65,7 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)
     |> click(button("New instance"))
-    |> assert_text(css("#call_result"), "{10, true}")
+    |> assert_text(css("#call_result"), "{42, true}")
   end
 
   feature "JS.set/3", %{session: session} do

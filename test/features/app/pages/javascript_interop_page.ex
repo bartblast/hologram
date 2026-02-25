@@ -22,7 +22,13 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   def template do
     ~HOLO"""
     <p>
-      <button $click="call_method"> Call method </button>
+      <button $click="call_async_method"> Call async method </button>
+    </p>
+    <p>
+      <button $click="call_promise_method"> Call promise method </button>
+    </p>
+    <p>
+      <button $click="call_sync_method"> Call sync method</button>
     </p>
     <p>
       <button $click="get_property"> Get property </button>
@@ -57,7 +63,19 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     """
   end
 
-  def action(:call_method, _params, component) do
+  def action(:call_async_method, _params, component) do
+    result = JS.call_async(:helpers, :asyncSum, [10, 20])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:call_promise_method, _params, component) do
+    result = JS.call_async(:helpers, :promiseSum, [100, 200])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:call_sync_method, _params, component) do
     result = JS.call(:helpers, :sum, [1, 2])
 
     put_state(component, :result, {result, is_integer(result)})
@@ -71,7 +89,7 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   end
 
   def action(:new_instance, _params, component) do
-    calculator = JS.new(:Calculator, [10])
+    calculator = JS.new(:Calculator, [42])
     result = JS.get(calculator, :value)
 
     put_state(component, :result, {result, is_integer(result)})
@@ -84,7 +102,7 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   end
 
   def action(:resolve_imported, _params, component) do
-    result = JS.call(:helpers, :sum, [1, 2])
+    result = JS.call(:helpers, :sum, [5, 7])
 
     put_state(component, :result, {result, is_integer(result)})
   end
