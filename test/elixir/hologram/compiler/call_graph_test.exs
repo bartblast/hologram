@@ -710,6 +710,61 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_async_mfas/1" do
+    test "returns empty set when call_async/4 is not in the graph" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {MyModule, :helper, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new()
+    end
+
+    test "returns MFAs that directly call call_async/4" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {Hologram.JS, :call_async, 4})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{Hologram.JS, :call_async, 4}, {MyModule, :action, 3}])
+    end
+
+    test "returns MFAs that transitively call call_async/4" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {MyModule, :fetch_data, 1})
+        |> add_edge({MyModule, :fetch_data, 1}, {Hologram.JS, :call_async, 4})
+        |> list_async_mfas()
+
+      assert result ==
+               MapSet.new([
+                 {Hologram.JS, :call_async, 4},
+                 {MyModule, :action, 3},
+                 {MyModule, :fetch_data, 1}
+               ])
+    end
+
+    test "excludes MFAs that do not reach call_async/4" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {Hologram.JS, :call_async, 4})
+        |> add_edge({OtherModule, :action, 3}, {OtherModule, :sync_helper, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{Hologram.JS, :call_async, 4}, {MyModule, :action, 3}])
+    end
+
+    test "excludes module vertices (non-MFA)" do
+      result =
+        start()
+        |> add_edge(MyModule, {MyModule, :action, 3})
+        |> add_edge({MyModule, :action, 3}, {Hologram.JS, :call_async, 4})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{Hologram.JS, :call_async, 4}, {MyModule, :action, 3}])
+    end
+  end
+
   test "list_page_entry_mfas/1" do
     assert list_page_entry_mfas(Module19) == [
              {Module19, :__layout_module__, 0},

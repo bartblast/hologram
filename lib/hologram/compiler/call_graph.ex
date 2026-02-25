@@ -501,6 +501,25 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns a MapSet of MFAs that transitively call `Hologram.JS.call_async/4`.
+
+  Must be called on the original call graph before `remove_manually_ported_mfas/1`
+  strips the `call_async/4` vertex.
+  """
+  @spec list_async_mfas(t) :: MapSet.t(mfa)
+  def list_async_mfas(call_graph) do
+    graph = get_graph(call_graph)
+
+    graph
+    |> Digraph.reaching([{Hologram.JS, :call_async, 4}])
+    # Excludes bare module atom vertices, keeping only MFA tuples.
+    # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
+    # the result is only used for MapSet.member? lookups against already-included MFAs.
+    |> Enum.filter(&is_tuple/1)
+    |> MapSet.new()
+  end
+
+  @doc """
   Lists the entry MFAs {module, function, arity} for a given page module.
 
   This function returns a list of MFAs that are considered entry points for a page,
