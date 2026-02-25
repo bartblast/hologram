@@ -251,7 +251,12 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(%IR.Cond{clauses: clauses_ir}, context) do
     clauses_js = encode_as_array(clauses_ir, context)
-    "Interpreter.cond(#{clauses_js}, context)"
+
+    if context.async? do
+      "(await Interpreter.asyncCond(#{clauses_js}, context))"
+    else
+      "Interpreter.cond(#{clauses_js}, context)"
+    end
   end
 
   def encode_ir(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do

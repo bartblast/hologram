@@ -883,55 +883,79 @@ defmodule Hologram.Compiler.EncoderTest do
              "{match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guards: [(context) => Elixir_MyModule[\"my_guard/2\"](context.vars.a, Type.integer(2n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}"
   end
 
-  test "cond" do
-    clause_1 = %IR.CondClause{
-      condition: %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: :erlang},
-        function: :<,
-        args: [
-          %IR.Variable{name: :x},
-          %IR.IntegerType{value: 1}
-        ]
-      },
-      body: %IR.Block{
-        expressions: [
-          %IR.IntegerType{value: 1}
+  describe "cond" do
+    test "sync" do
+      clause_1 = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 1}
+          ]
+        },
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1}
+          ]
+        }
+      }
+
+      clause_2 = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 2}
+          ]
+        },
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 2}
+          ]
+        }
+      }
+
+      # cond do
+      #   :erlang.<(x, 1) -> 1
+      #   :erlang.<(x, 2) -> 2
+      # end
+      ir = %IR.Cond{clauses: [clause_1, clause_2]}
+
+      expected =
+        normalize_newlines("""
+        Interpreter.cond([{condition: (context) => Erlang["</2"](context.vars.x, Type.integer(1n)), body: (context) => {
+        return Type.integer(1n);
+        }}, {condition: (context) => Erlang["</2"](context.vars.x, Type.integer(2n)), body: (context) => {
+        return Type.integer(2n);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "async" do
+      ir = %IR.Cond{
+        clauses: [
+          %IR.CondClause{
+            condition: %IR.Variable{name: :x},
+            body: %IR.Block{
+              expressions: [%IR.IntegerType{value: 1}]
+            }
+          }
         ]
       }
-    }
 
-    clause_2 = %IR.CondClause{
-      condition: %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: :erlang},
-        function: :<,
-        args: [
-          %IR.Variable{name: :x},
-          %IR.IntegerType{value: 2}
-        ]
-      },
-      body: %IR.Block{
-        expressions: [
-          %IR.IntegerType{value: 2}
-        ]
-      }
-    }
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncCond([{condition: async (context) => context.vars.x, body: async (context) => {
+        return Type.integer(1n);
+        }}], context))\
+        """)
 
-    # cond do
-    #   :erlang.<(x, 1) -> 1
-    #   :erlang.<(x, 2) -> 2
-    # end
-    ir = %IR.Cond{clauses: [clause_1, clause_2]}
-
-    expected =
-      normalize_newlines("""
-      Interpreter.cond([{condition: (context) => Erlang["</2"](context.vars.x, Type.integer(1n)), body: (context) => {
-      return Type.integer(1n);
-      }}, {condition: (context) => Erlang["</2"](context.vars.x, Type.integer(2n)), body: (context) => {
-      return Type.integer(2n);
-      }}], context)\
-      """)
-
-    assert encode_ir(ir) == expected
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   test "cond clause" do
