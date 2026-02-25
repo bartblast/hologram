@@ -432,7 +432,11 @@ defmodule Hologram.Compiler.Encoder do
     body_js = encode_closure(ir.body, context)
     rescue_clauses_js = encode_as_array(ir.rescue_clauses, context)
 
-    "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, context)"
+    if context.async? do
+      "(await Interpreter.asyncTry(#{body_js}, #{rescue_clauses_js}, [], [], null, context))"
+    else
+      "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, context)"
+    end
   end
 
   def encode_ir(%IR.TryRescueClause{} = ir, context) do

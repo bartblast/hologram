@@ -2384,6 +2384,27 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "async" do
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil
+      }
+
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncTry(async (context) => {
+        return Type.atom("ok");
+        }, [], [], [], null, context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   describe "tuple type" do
