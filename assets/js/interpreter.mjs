@@ -461,7 +461,7 @@ export default class Interpreter {
 
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
 
-    const fn = isAsync
+    globalThis[moduleJsName][`${functionName}/${arity}`] = isAsync
       ? Interpreter.#buildAsyncElixirFunction(
           moduleExName,
           functionName,
@@ -474,8 +474,6 @@ export default class Interpreter {
           arity,
           clauses,
         );
-
-    globalThis[moduleJsName][`${functionName}/${arity}`] = fn;
 
     if (visibility === "public") {
       globalThis[moduleJsName].__exports__.add(`${functionName}/${arity}`);
