@@ -709,14 +709,32 @@ export default class Hologram {
     // });
 
     // TODO: consider when porting Elixir error handling
-    window.addEventListener("error", (event) => {
-      if (event.error instanceof HologramBoxedError) {
+    // Handle both sync errors ("error") and async errors ("unhandledrejection")
+    // since executeAction is async and surfaces errors as rejected Promises.
+    const handleBoxedError = (error) => {
+      if (error instanceof HologramBoxedError) {
         GlobalRegistry.set("lastBoxedError", {
           module: Interpreter.inspect(
-            Erlang_Maps["get/2"](Type.atom("__struct__"), event.error.struct),
+            Erlang_Maps["get/2"](Type.atom("__struct__"), error.struct),
           ),
-          message: Interpreter.resolveErrorMessage(event.error.struct),
+          message: Interpreter.resolveErrorMessage(error.struct),
         });
+      }
+    };
+
+    window.addEventListener("error", (event) => {
+      handleBoxedError(event.error);
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      handleBoxedError(event.reason);
+
+      // Re-throw synchronously so the error appears in the browser console
+      // as a regular uncaught error (needed for Wallaby/ChromeDriver detection).
+      if (event.reason instanceof HologramBoxedError) {
+        setTimeout(() => {
+          throw event.reason;
+        }, 0);
       }
     });
 
