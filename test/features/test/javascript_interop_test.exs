@@ -25,14 +25,14 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
   end
 
   describe "JS.call_async/3" do
-    feature "async function", %{session: session} do
+    feature "async method", %{session: session} do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
       |> click(button("Call async method"))
       |> assert_text(css("#call_result"), "{30, true}")
     end
 
-    feature "promise-returning function", %{session: session} do
+    feature "promise-returning method", %{session: session} do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
       |> click(button("Call promise method"))
@@ -44,6 +44,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
       |> click(button("Async anonymous function call"))
       |> assert_text(css("#call_result"), "{27, true}")
+    end
+
+    feature "async apply", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Async apply"))
+      |> assert_text(css("#call_result"), "{31, true}")
     end
 
     feature "async case", %{session: session} do
@@ -65,6 +72,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
       |> click(button("Async cond"))
       |> assert_text(css("#call_result"), ":correct")
+    end
+
+    feature "async dynamic call", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Async dynamic call"))
+      |> assert_text(css("#call_result"), "{33, true}")
     end
 
     # TODO: add "async try" feature test once async try expression is fully implemented

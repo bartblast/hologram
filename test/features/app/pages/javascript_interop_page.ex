@@ -25,6 +25,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="async_anonymous_function_call"> Async anonymous function call </button>
     </p>
     <p>
+      <button $click="async_apply"> Async apply </button>
+    </p>
+    <p>
       <button $click="async_case"> Async case </button>
     </p>
     <p>
@@ -32,6 +35,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     </p>
     <p>
       <button $click="async_cond"> Async cond </button>
+    </p>
+    <p>
+      <button $click="async_dynamic_call"> Async dynamic call </button>
     </p>
     <p>
       <button $click="call_async_method"> Call async method </button>
@@ -85,6 +91,13 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     put_state(component, :result, {result, is_integer(result)})
   end
 
+  def action(:async_apply, _params, component) do
+    result = JS.call_async(:helpers, :asyncSum, [15, 16])
+    is_int = apply(Kernel, :is_integer, [result])
+
+    put_state(component, :result, {result, is_int})
+  end
+
   def action(:async_case, _params, component) do
     result = JS.call_async(:helpers, :asyncSum, [12, 23])
 
@@ -117,6 +130,15 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       end
 
     put_state(component, :result, label)
+  end
+
+  def action(:async_dynamic_call, _params, component) do
+    result = JS.call_async(:helpers, :asyncSum, [17, 16])
+
+    module = Kernel
+    is_int = module.is_integer(result)
+
+    put_state(component, :result, {result, is_int})
   end
 
   def action(:call_async_method, _params, component) do
