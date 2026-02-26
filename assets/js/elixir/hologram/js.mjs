@@ -126,6 +126,15 @@ const Elixir_Hologram_JS = {
     return box(await jsReceiver[jsMethodName](...unbox(args, callerModule)));
   },
 
+  "delete/3": (receiver, property, callerModule) => {
+    const jsReceiver = resolveBinding(receiver, callerModule);
+    const jsPropertyName = property.value;
+
+    delete jsReceiver[jsPropertyName];
+
+    return receiver;
+  },
+
   "exec/1": (code) => {
     return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
   },

@@ -569,6 +569,71 @@ describe("Elixir_Hologram_JS", () => {
     });
   });
 
+  describe("delete/3", () => {
+    const deleteFn = Elixir_Hologram_JS["delete/3"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_DeleteTestModule;
+    });
+
+    it("deletes property from receiver", () => {
+      class Settings {
+        static theme = "light";
+        static lang = "en";
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "DeleteTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(
+        Type.alias("DeleteTestModule"),
+      );
+
+      moduleProxy.__jsBindings__.set("AppSettings", Settings);
+
+      deleteFn(
+        Type.atom("AppSettings"),
+        Type.atom("theme"),
+        Type.alias("DeleteTestModule"),
+      );
+
+      assert.strictEqual(Settings.theme, undefined);
+      assert.isFalse("theme" in Settings);
+      assert.strictEqual(Settings.lang, "en");
+    });
+
+    it("returns the receiver", () => {
+      class Settings {
+        static theme = "light";
+      }
+
+      Interpreter.defineManuallyPortedFunction(
+        "DeleteTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(
+        Type.alias("DeleteTestModule"),
+      );
+
+      moduleProxy.__jsBindings__.set("AppSettings", Settings);
+
+      const result = deleteFn(
+        Type.atom("AppSettings"),
+        Type.atom("theme"),
+        Type.alias("DeleteTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("AppSettings"));
+    });
+  });
+
   describe("exec/1", () => {
     const exec = Elixir_Hologram_JS["exec/1"];
 
