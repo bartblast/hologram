@@ -78,7 +78,7 @@ export default class Hologram {
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
 
-  // This function is intentionally NOT async. Actions that use JS.call_async return
+  // This function is intentionally NOT async. Actions that use JS.call_async/3 return
   // a Promise, but we handle it with .then() instead of async/await. Making this
   // function async would wrap ALL errors (including from sync actions) in rejected
   // Promises, breaking ChromeDriver/Wallaby error detection which relies on the
