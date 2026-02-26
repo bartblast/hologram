@@ -7121,6 +7121,42 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+    it("handles shadowing correctly", () => {
+      const expected = Type.integer(3n);
+      const result = Interpreter.with(
+        (context) => Erlang["+/2"](context.vars.a, context.vars.b),
+        [
+          {
+            match: Type.variablePattern("a"),
+            guards: [],
+            expression: (context) => {
+              Interpreter.matchOperator(
+                Type.integer(1n),
+                Type.variablePattern("b"),
+                context,
+              );
+              Interpreter.updateVarsToMatchedValues(context);
+              Interpreter.matchOperator(
+                context.vars.b,
+                Type.matchPlaceholder(),
+                context,
+              );
+              Interpreter.updateVarsToMatchedValues(context);
+              return Type.integer(1n);
+            },
+          },
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (context) => Type.integer(2n),
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
     it("throws error if no else clauses match", () => {
       // with  :error <- a do
       // else

@@ -2343,6 +2343,80 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "with pin in else clauses" do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.PinOperator{variable: %IR.Variable{name: :key}},
+            guards: [],
+            body: %IR.Block{expressions: []}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [], [{match: context.vars.key, guards: [], body: (context) => {
+        return Type.atom("nil");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "shadowing" do
+      ir = %IR.With{
+        clauses: [
+          %IR.WithClause{
+            match: %IR.Variable{name: :a, version: nil},
+            guards: [],
+            expression: %IR.Block{
+              expressions: [
+                %IR.MatchOperator{
+                  left: %IR.Variable{name: :b, version: nil},
+                  right: %IR.IntegerType{value: 1}
+                },
+                %IR.MatchOperator{
+                  left: %IR.MatchPlaceholder{},
+                  right: %IR.Variable{name: :b, version: nil}
+                },
+                %IR.IntegerType{value: 1}
+              ]
+            }
+          },
+          %IR.WithClause{
+            match: %IR.Variable{name: :b, version: nil},
+            guards: [],
+            expression: %IR.IntegerType{value: 2}
+          }
+        ],
+        body: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :+,
+          args: [
+            %IR.Variable{name: :a, version: nil},
+            %IR.Variable{name: :b, version: nil}
+          ]
+        },
+        else_clauses: []
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Erlang["+/2"](context.vars.a, context.vars.b), [{match: Type.variablePattern("a"), guards: [], expression: (context) => {
+        Interpreter.matchOperator(Type.integer(1n), Type.variablePattern("b"), context);
+        Interpreter.updateVarsToMatchedValues(context);
+        Interpreter.matchOperator(context.vars.b, Type.matchPlaceholder(), context);
+        Interpreter.updateVarsToMatchedValues(context);
+        return Type.integer(1n);
+        }}, {match: Type.variablePattern("b"), guards: [], expression: (context) => Type.integer(2n)}], [], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
   end
 
   describe "WithClause" do
@@ -2407,6 +2481,17 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                ~s|{match: Type.matchPlaceholder(), guards: [], expression: (context) => Erlang_["baz/1"](Type.integer(5n))}|
+    end
+
+    test "with pin match" do
+      ir = %IR.WithClause{
+        match: %IR.PinOperator{variable: %IR.Variable{name: :key}},
+        guards: [],
+        expression: %IR.Variable{name: :y}
+      }
+
+      assert encode_ir(ir) ==
+               ~s|{match: context.vars.key, guards: [], expression: (context) => context.vars.y}|
     end
   end
 
