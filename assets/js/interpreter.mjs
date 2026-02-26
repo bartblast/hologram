@@ -1319,6 +1319,7 @@ export default class Interpreter {
     return 0;
   }
 
+  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
@@ -1345,6 +1346,7 @@ export default class Interpreter {
     return false;
   }
 
+  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
   static #evaluateRescueClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
