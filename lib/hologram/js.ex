@@ -44,8 +44,8 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec call(any(), atom(), list(), module()) :: :ok
-  def call(_receiver, _method, _args, _caller_module), do: :ok
+  @spec call(any(), atom(), list(), module()) :: any()
+  def call(_receiver, _method, _args, _caller_module), do: __server_pass_through__()
 
   @doc """
   Calls an async method on a JS receiver and awaits the result.
@@ -65,8 +65,8 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec call_async(any(), atom(), list(), module()) :: :ok
-  def call_async(_receiver, _method, _args, _caller_module), do: :ok
+  @spec call_async(any(), atom(), list(), module()) :: any()
+  def call_async(_receiver, _method, _args, _caller_module), do: __server_pass_through__()
 
   # Server-side pass-through; implemented in JavaScript.
   @doc """
@@ -88,8 +88,8 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec get(any(), atom(), module()) :: :ok
-  def get(_receiver, _property, _caller_module), do: :ok
+  @spec get(any(), atom(), module()) :: any()
+  def get(_receiver, _property, _caller_module), do: __server_pass_through__()
 
   @doc """
   Imports a JS export and binds it to a name that can be used as a receiver in other JS functions.
@@ -136,8 +136,8 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec new(any(), list(), module()) :: :ok
-  def new(_class, _args, _caller_module), do: :ok
+  @spec new(any(), list(), module()) :: any()
+  def new(_class, _args, _caller_module), do: __server_pass_through__()
 
   @doc """
   Sets a property on a JS receiver.
@@ -179,6 +179,14 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc false
-  @spec typeof(any(), module()) :: :ok
-  def typeof(_value, _caller_module), do: :ok
+  @spec typeof(any(), module()) :: any()
+  def typeof(_value, _caller_module), do: __server_pass_through__()
+
+  # Returns :ok at runtime, but the use of Application.get_env/3 makes the return type
+  # opaque to the Elixir type checker. This prevents false positive type warnings when
+  # end users compare JS interop results with specific values (e.g. in case/cond expressions).
+  # On the client side, these functions are replaced by actual JavaScript implementations.
+  defp __server_pass_through__ do
+    Application.get_env(:hologram, :__server_pass_through__, :ok)
+  end
 end
