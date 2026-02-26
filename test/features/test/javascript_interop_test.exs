@@ -98,6 +98,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> assert_text(css("#js_snippet_result"), "Hologram")
   end
 
+  feature "JS.delete/2", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Delete property"))
+    |> assert_text(css("#call_result"), ~s({"undefined", true}))
+  end
+
   feature "JS.get/2", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)
