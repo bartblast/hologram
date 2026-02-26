@@ -131,6 +131,7 @@ export default class Interpreter {
     return `function ${moduleName}.${functionName}/${arity} is undefined (module ${moduleName} is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)`;
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncCallAnonymousFunction().
   // callAnonymousFunction() has no unit tests in interpreter_test.mjs, only:
   // * feature tests in test/features/test/function_calls/anonymous_function_test.exs,
   // * feature tests in test/features/test/function_calls/function_capture_test.exs,
@@ -154,6 +155,35 @@ export default class Interpreter {
 
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           return clause.body(contextClone);
+        }
+      }
+    }
+
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(
+        `anonymous fn/${fun.arity}`,
+        argsArray,
+      ),
+    );
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update callAnonymousFunction().
+  static async asyncCallAnonymousFunction(fun, argsArray) {
+    if (argsArray.length !== fun.arity) {
+      Interpreter.raiseBadArityError(fun.arity, argsArray);
+    }
+
+    const args = Type.list(argsArray);
+
+    for (const clause of fun.clauses) {
+      const contextClone = Interpreter.cloneContext(fun.context);
+      const pattern = Type.list(clause.params(contextClone));
+
+      if (Interpreter.isMatched(pattern, args, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          return await clause.body(contextClone);
         }
       }
     }

@@ -60,6 +60,52 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("asyncCallAnonymousFunction()", () => {
+    it("returns a Promise", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: async (context) => context.vars.x,
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = Interpreter.asyncCallAnonymousFunction(fun, [
+        Type.integer(1),
+      ]);
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("awaits clause body result", async () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: async (_context) => {
+              return new Promise((resolve) =>
+                setTimeout(() => resolve(Type.atom("delayed")), 1),
+              );
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = await Interpreter.asyncCallAnonymousFunction(fun, [
+        Type.integer(1),
+      ]);
+
+      assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+  });
+
   describe("asyncCase()", () => {
     it("returns a Promise", () => {
       const condition = Type.integer(1);
