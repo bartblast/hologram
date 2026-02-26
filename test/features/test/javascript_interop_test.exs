@@ -39,6 +39,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> assert_text(css("#call_result"), "{300, true}")
     end
 
+    feature "async case", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Async case"))
+      |> assert_text(css("#call_result"), ":matched")
+    end
+
     feature "async cond", %{session: session} do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
