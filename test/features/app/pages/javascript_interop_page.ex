@@ -22,6 +22,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click="async_anonymous_function_call"> Async anonymous function call </button>
+    </p>
+    <p>
       <button $click="async_case"> Async case </button>
     </p>
     <p>
@@ -70,6 +73,16 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       JS snippet result: <strong id="js_snippet_result"><code>nil</code></strong>
     </p>
     """
+  end
+
+  def action(:async_anonymous_function_call, _params, component) do
+    fun = fn x, y ->
+      JS.call_async(:helpers, :asyncSum, [x, y])
+    end
+
+    result = fun.(13, 14)
+
+    put_state(component, :result, {result, is_integer(result)})
   end
 
   def action(:async_case, _params, component) do
