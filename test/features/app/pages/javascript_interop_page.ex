@@ -22,6 +22,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click="async_cond"> Async cond </button>
+    </p>
+    <p>
       <button $click="call_async_method"> Call async method </button>
     </p>
     <p>
@@ -61,6 +64,19 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       JS snippet result: <strong id="js_snippet_result"><code>nil</code></strong>
     </p>
     """
+  end
+
+  def action(:async_cond, _params, component) do
+    result = JS.call_async(:helpers, :asyncSum, [15, 25])
+
+    label =
+      cond do
+        result == 41 -> :wrong
+        result == 40 -> :correct
+        true -> :unknown
+      end
+
+    put_state(component, :result, label)
   end
 
   def action(:call_async_method, _params, component) do

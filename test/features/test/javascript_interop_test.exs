@@ -38,6 +38,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> click(button("Call promise method"))
       |> assert_text(css("#call_result"), "{300, true}")
     end
+
+    feature "async cond", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Async cond"))
+      |> assert_text(css("#call_result"), ":correct")
+    end
   end
 
   feature "JS.call/3", %{session: session} do
