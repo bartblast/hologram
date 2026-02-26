@@ -647,7 +647,13 @@ defmodule Hologram.Compiler.Encoder do
     function_js = encode_ir(function, context)
     args_js = encode_ir(args, context)
 
-    "Interpreter.callNamedFunction(#{module_js}, #{function_js}, #{args_js}, context)"
+    call = "Interpreter.callNamedFunction(#{module_js}, #{function_js}, #{args_js}, context)"
+
+    if context.async? do
+      "(await #{call})"
+    else
+      call
+    end
   end
 
   defp encode_identifier(type, value, segments, context) do

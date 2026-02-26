@@ -2053,6 +2053,39 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, context) ==
                "Elixir_Aaa_Bbb[\"my_fun/2\"](Type.integer(1n), Type.integer(2n))"
     end
+
+    test "async - dynamic named function call" do
+      # x.my_fun!(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.Variable{name: :x},
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               ~s'(await Interpreter.callNamedFunction(context.vars.x, Type.atom("my_fun!"), Type.list([Type.integer(1n), Type.integer(2n)]), context))'
+    end
+
+    test "async - :erlang.apply/3 call" do
+      # :erlang.apply(MyModule, :my_fun, [1, 2])
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.AtomType{value: MyModule},
+          %IR.AtomType{value: :my_fun},
+          %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.IntegerType{value: 2}
+            ]
+          }
+        ]
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               ~s'(await Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), Type.atom("my_fun"), Type.list([Type.integer(1n), Type.integer(2n)]), context))'
+    end
   end
 
   describe "string type" do
