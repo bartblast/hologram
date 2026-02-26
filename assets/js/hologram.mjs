@@ -78,9 +78,15 @@ export default class Hologram {
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
 
+  // This function is intentionally NOT async. Actions that use JS.call_async return
+  // a Promise, but we handle it with .then() instead of async/await. Making this
+  // function async would wrap ALL errors (including from sync actions) in rejected
+  // Promises, breaking ChromeDriver/Wallaby error detection which relies on the
+  // synchronous "error" event. Async action errors are caught separately via the
+  // "unhandledrejection" event listener in #init().
   // TODO: make private (tested implicitely in feature tests)
-  // Deps: [:maps.get/2, :maps.put/3]
-  static async executeAction(action) {
+  // Deps: [:maps.get/2]
+  static executeAction(action) {
     const startTime = performance.now();
     globalThis.hologram.isProfilingEnabled = true;
 
@@ -97,7 +103,7 @@ export default class Hologram {
       vars: {},
     });
 
-    let resultComponentStruct = Interpreter.callNamedFunction(
+    const resultComponentStruct = Interpreter.callNamedFunction(
       componentModule,
       Type.atom("action"),
       Type.list(args),
@@ -105,77 +111,16 @@ export default class Hologram {
     );
 
     if (resultComponentStruct instanceof Promise) {
-      resultComponentStruct = await resultComponentStruct;
-    }
-
-    let nextAction = Erlang_Maps["get/2"](
-      Type.atom("next_action"),
-      resultComponentStruct,
-    );
-
-    const nextPage = Erlang_Maps["get/2"](
-      Type.atom("next_page"),
-      resultComponentStruct,
-    );
-
-    let nextCommand = Erlang_Maps["get/2"](
-      Type.atom("next_command"),
-      resultComponentStruct,
-    );
-
-    if (!Type.isNil(nextCommand)) {
-      if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextCommand))) {
-        nextCommand = Erlang_Maps["put/3"](
-          Type.atom("target"),
-          target,
-          nextCommand,
-        );
-      }
-
-      Client.sendCommand(nextCommand);
-    }
-
-    let savedComponentStruct = Erlang_Maps["put/3"](
-      Type.atom("next_action"),
-      Type.nil(),
-      resultComponentStruct,
-    );
-
-    savedComponentStruct = Erlang_Maps["put/3"](
-      Type.atom("next_command"),
-      Type.nil(),
-      savedComponentStruct,
-    );
-
-    ComponentRegistry.putComponentStruct(target, savedComponentStruct);
-
-    globalThis.hologram.isProfilingEnabled = false;
-
-    console.log(
-      "Hologram: action",
-      `:${name.value}`,
-      "executed in",
-      PerformanceTimer.diff(startTime),
-    );
-
-    Hologram.render();
-
-    Hologram.#scheduleQueuedInitActions();
-
-    if (!Type.isNil(nextAction)) {
-      if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
-        nextAction = Erlang_Maps["put/3"](
-          Type.atom("target"),
-          target,
-          nextAction,
-        );
-      }
-
-      Hologram.scheduleAction(nextAction);
-    }
-
-    if (!Type.isNil(nextPage)) {
-      $.#navigateToPage(nextPage);
+      resultComponentStruct.then((resolved) =>
+        Hologram.#processActionResult(resolved, name, target, startTime),
+      );
+    } else {
+      Hologram.#processActionResult(
+        resultComponentStruct,
+        name,
+        target,
+        startTime,
+      );
     }
   }
 
@@ -285,7 +230,6 @@ export default class Hologram {
             );
 
             if (delay.value === 0n) {
-              // Not awaited — DOM event handlers ignore return values.
               return Hologram.executeAction(operation);
             } else {
               return Hologram.scheduleAction(operation);
@@ -387,7 +331,6 @@ export default class Hologram {
       Type.integer(0),
     );
 
-    // Not awaited — setTimeout callbacks ignore return values.
     setTimeout(() => Hologram.executeAction(action), Number(delay.value));
   }
 
@@ -709,8 +652,6 @@ export default class Hologram {
     // });
 
     // TODO: consider when porting Elixir error handling
-    // Handle both sync errors ("error") and async errors ("unhandledrejection")
-    // since executeAction is async and surfaces errors as rejected Promises.
     const handleBoxedError = (error) => {
       if (error instanceof HologramBoxedError) {
         GlobalRegistry.set("lastBoxedError", {
@@ -722,21 +663,13 @@ export default class Hologram {
       }
     };
 
-    window.addEventListener("error", (event) => {
-      handleBoxedError(event.error);
-    });
+    window.addEventListener("error", (event) => handleBoxedError(event.error));
 
-    window.addEventListener("unhandledrejection", (event) => {
-      handleBoxedError(event.reason);
-
-      // Re-throw synchronously so the error appears in the browser console
-      // as a regular uncaught error (needed for Wallaby/ChromeDriver detection).
-      if (event.reason instanceof HologramBoxedError) {
-        setTimeout(() => {
-          throw event.reason;
-        }, 0);
-      }
-    });
+    // Async action errors surface as rejected Promises (from the .then() path
+    // in executeAction) and fire "unhandledrejection" instead of "error".
+    window.addEventListener("unhandledrejection", (event) =>
+      handleBoxedError(event.reason),
+    );
 
     window.addEventListener("beforeunload", () => {
       // Force synchronous session storage save since async OPFS may not complete before page termination
@@ -898,6 +831,79 @@ export default class Hologram {
       Hologram.virtualDocument,
       newVirtualDocument,
     );
+  }
+
+  // Deps: [:maps.get/2, :maps.put/3]
+  static #processActionResult(resultComponentStruct, name, target, startTime) {
+    let nextAction = Erlang_Maps["get/2"](
+      Type.atom("next_action"),
+      resultComponentStruct,
+    );
+
+    const nextPage = Erlang_Maps["get/2"](
+      Type.atom("next_page"),
+      resultComponentStruct,
+    );
+
+    let nextCommand = Erlang_Maps["get/2"](
+      Type.atom("next_command"),
+      resultComponentStruct,
+    );
+
+    if (!Type.isNil(nextCommand)) {
+      if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextCommand))) {
+        nextCommand = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          target,
+          nextCommand,
+        );
+      }
+
+      Client.sendCommand(nextCommand);
+    }
+
+    let savedComponentStruct = Erlang_Maps["put/3"](
+      Type.atom("next_action"),
+      Type.nil(),
+      resultComponentStruct,
+    );
+
+    savedComponentStruct = Erlang_Maps["put/3"](
+      Type.atom("next_command"),
+      Type.nil(),
+      savedComponentStruct,
+    );
+
+    ComponentRegistry.putComponentStruct(target, savedComponentStruct);
+
+    globalThis.hologram.isProfilingEnabled = false;
+
+    console.log(
+      "Hologram: action",
+      `:${name.value}`,
+      "executed in",
+      PerformanceTimer.diff(startTime),
+    );
+
+    Hologram.render();
+
+    Hologram.#scheduleQueuedInitActions();
+
+    if (!Type.isNil(nextAction)) {
+      if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
+        nextAction = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          target,
+          nextAction,
+        );
+      }
+
+      Hologram.scheduleAction(nextAction);
+    }
+
+    if (!Type.isNil(nextPage)) {
+      $.#navigateToPage(nextPage);
+    }
   }
 
   static #registerPageModule(pageModule) {
