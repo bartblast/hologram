@@ -24,6 +24,20 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
+  feature "~JS sigil", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Run JavaScript snippet"))
+    |> assert_text(css("#js_snippet_result"), "Hologram")
+  end
+
+  feature "JS.call/3", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Call sync method"))
+    |> assert_text(css("#call_result"), "{3, true}")
+  end
+
   describe "JS.call_async/3" do
     feature "async method", %{session: session} do
       session
@@ -82,20 +96,6 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
 
     # TODO: add "async try" feature test once async try expression is fully implemented
-  end
-
-  feature "JS.call/3", %{session: session} do
-    session
-    |> visit(HologramFeatureTests.JavaScriptInteropPage)
-    |> click(button("Call sync method"))
-    |> assert_text(css("#call_result"), "{3, true}")
-  end
-
-  feature "~JS sigil", %{session: session} do
-    session
-    |> visit(HologramFeatureTests.JavaScriptInteropPage)
-    |> click(button("Run JavaScript snippet"))
-    |> assert_text(css("#js_snippet_result"), "Hologram")
   end
 
   feature "JS.delete/2", %{session: session} do
