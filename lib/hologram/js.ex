@@ -68,6 +68,22 @@ defmodule Hologram.JS do
   @spec call_async(any(), atom(), list(), module()) :: any()
   def call_async(_receiver, _method, _args, _caller_module), do: __server_pass_through__()
 
+  @doc """
+  Deletes a property from a JS receiver.
+  """
+  defmacro delete(receiver, property) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.delete(unquote(receiver), unquote(property), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec delete(any(), atom(), module()) :: any()
+  def delete(receiver, _property, _caller_module), do: receiver
+
   # Server-side pass-through; implemented in JavaScript.
   @doc """
   Executes JavaScript code.
