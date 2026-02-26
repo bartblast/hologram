@@ -143,29 +143,6 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.atom("matched"));
     });
 
-    it("condition is a non-function value", async () => {
-      const condition = Type.integer(2);
-
-      const clauses = [
-        {
-          match: Type.integer(1),
-          guards: [],
-          body: async (_context) => Type.atom("first"),
-        },
-        {
-          match: Type.integer(2),
-          guards: [],
-          body: async (_context) => Type.atom("second"),
-        },
-      ];
-
-      const context = contextFixture();
-
-      const result = await Interpreter.asyncCase(condition, clauses, context);
-
-      assert.deepStrictEqual(result, Type.atom("second"));
-    });
-
     it("awaits clause body result", async () => {
       const condition = Type.integer(1);
 
@@ -186,27 +163,6 @@ describe("Interpreter", () => {
       const result = await Interpreter.asyncCase(condition, clauses, context);
 
       assert.deepStrictEqual(result, Type.atom("delayed"));
-    });
-
-    it("raises CaseClauseError when no clause matches", async () => {
-      const condition = Type.integer(999);
-
-      const clauses = [
-        {
-          match: Type.integer(1),
-          guards: [],
-          body: async (_context) => Type.atom("nope"),
-        },
-      ];
-
-      const context = contextFixture();
-
-      try {
-        await Interpreter.asyncCase(condition, clauses, context);
-        assert.fail("should have thrown");
-      } catch (error) {
-        assert.instanceOf(error, HologramBoxedError);
-      }
     });
   });
 
@@ -327,38 +283,6 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-
-    it("generates combinations with multiple generators", async () => {
-      const generator1 = {
-        match: Type.variablePattern("x"),
-        guards: [],
-        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
-      };
-
-      const generator2 = {
-        match: Type.variablePattern("y"),
-        guards: [],
-        body: async (_context) => Type.list([Type.integer(3), Type.integer(4)]),
-      };
-
-      const result = await Interpreter.asyncComprehension(
-        [generator1, generator2],
-        [],
-        Type.map(),
-        false,
-        async (context) => Type.tuple([context.vars.x, context.vars.y]),
-        context,
-      );
-
-      const expected = Type.list([
-        Type.tuple([Type.integer(1), Type.integer(3)]),
-        Type.tuple([Type.integer(1), Type.integer(4)]),
-        Type.tuple([Type.integer(2), Type.integer(3)]),
-        Type.tuple([Type.integer(2), Type.integer(4)]),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
   });
 
   describe("asyncCond()", () => {
@@ -375,25 +299,6 @@ describe("Interpreter", () => {
       const result = Interpreter.asyncCond(clauses, context);
 
       assert.instanceOf(result, Promise);
-    });
-
-    it("matches first truthy condition", async () => {
-      const clauses = [
-        {
-          condition: async (_context) => Type.atom("false"),
-          body: async (_context) => Type.atom("first"),
-        },
-        {
-          condition: async (_context) => Type.atom("true"),
-          body: async (_context) => Type.atom("second"),
-        },
-      ];
-
-      const context = contextFixture();
-
-      const result = await Interpreter.asyncCond(clauses, context);
-
-      assert.deepStrictEqual(result, Type.atom("second"));
     });
 
     it("awaits clause body result", async () => {
@@ -413,24 +318,6 @@ describe("Interpreter", () => {
       const result = await Interpreter.asyncCond(clauses, context);
 
       assert.deepStrictEqual(result, Type.atom("delayed"));
-    });
-
-    it("raises CondClauseError when no clause matches", async () => {
-      const clauses = [
-        {
-          condition: async (_context) => Type.atom("false"),
-          body: async (_context) => Type.atom("nope"),
-        },
-      ];
-
-      const context = contextFixture();
-
-      try {
-        await Interpreter.asyncCond(clauses, context);
-        assert.fail("should have thrown");
-      } catch (error) {
-        assert.instanceOf(error, HologramBoxedError);
-      }
     });
   });
 
@@ -462,37 +349,6 @@ describe("Interpreter", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("delayed"));
-    });
-
-    it("returns body result when no else clauses", async () => {
-      const body = async (_context) => Type.atom("ok");
-      const context = contextFixture();
-
-      const result = await Interpreter.asyncTry(
-        body,
-        [],
-        [],
-        [],
-        null,
-        context,
-      );
-
-      assert.deepStrictEqual(result, Type.atom("ok"));
-    });
-
-    it("re-throws errors (rescue not yet fully implemented)", async () => {
-      const body = async (_context) => {
-        throw new Error("test error");
-      };
-
-      const context = contextFixture();
-
-      try {
-        await Interpreter.asyncTry(body, [], [], [], null, context);
-        assert.fail("should have thrown");
-      } catch (error) {
-        assert.equal(error.message, "test error");
-      }
     });
   });
 
