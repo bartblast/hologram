@@ -71,7 +71,7 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  describe "element tags" do
+  describe "standard element tags" do
     test "non-void HTML element start tag" do
       assert parse_markup("<div>") == [start_tag: {"div", []}]
     end
@@ -110,6 +110,122 @@ defmodule Hologram.Template.ParserTest do
 
     test "whitespaces after end tag name" do
       assert parse_markup("</div \n\r\t>") == [end_tag: "div"]
+    end
+  end
+
+  describe "custom element tags" do
+    test "start tag with single hyphen" do
+      assert parse_markup("<foo-bar>") == [start_tag: {"foo-bar", []}]
+    end
+
+    test "start tag with multiple hyphens" do
+      assert parse_markup("<foo-bar-baz>") == [start_tag: {"foo-bar-baz", []}]
+    end
+
+    test "start tag with trailing hyphen" do
+      assert parse_markup("<foo->") == [start_tag: {"foo-", []}]
+    end
+
+    test "start tag with consecutive hyphens" do
+      assert parse_markup("<foo--bar>") == [start_tag: {"foo--bar", []}]
+    end
+
+    test "self-closed start tag with single hyphen" do
+      assert parse_markup("<foo-bar />") == [self_closing_tag: {"foo-bar", []}]
+    end
+
+    test "self-closed start tag with multiple hyphens" do
+      assert parse_markup("<foo-bar-baz />") == [self_closing_tag: {"foo-bar-baz", []}]
+    end
+
+    test "self-closed start tag with trailing hyphen" do
+      assert parse_markup("<foo- />") == [self_closing_tag: {"foo-", []}]
+    end
+
+    test "self-closed start tag with consecutive hyphens" do
+      assert parse_markup("<foo--bar />") == [self_closing_tag: {"foo--bar", []}]
+    end
+
+    test "end tag with single hyphen" do
+      assert parse_markup("</foo-bar>") == [end_tag: "foo-bar"]
+    end
+
+    test "end tag with multiple hyphens" do
+      assert parse_markup("</foo-bar-baz>") == [end_tag: "foo-bar-baz"]
+    end
+
+    test "end tag with trailing hyphen" do
+      assert parse_markup("</foo->") == [end_tag: "foo-"]
+    end
+
+    test "end tag with consecutive hyphens" do
+      assert parse_markup("</foo--bar>") == [end_tag: "foo--bar"]
+    end
+
+    test "start tag with attribute" do
+      assert parse_markup(~s(<foo-bar class="x">)) == [
+               start_tag: {"foo-bar", [{"class", [text: "x"]}]}
+             ]
+    end
+
+    test "whitespaces after start tag name" do
+      assert parse_markup("<foo-bar \n\r\t>") == [start_tag: {"foo-bar", []}]
+    end
+
+    test "round-trip with text content" do
+      assert parse_markup("<foo-bar>text</foo-bar>") == [
+               start_tag: {"foo-bar", []},
+               text: "text",
+               end_tag: "foo-bar"
+             ]
+    end
+
+    test "leading hyphen in start tag raises error" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Element names beginning with '-' are invalid.
+
+        Hint:
+        Prefix your WebComponent name with at least one lower case letter.
+
+        <-foo>
+         ^
+        """)
+
+      test_syntax_error_msg("<-foo>", expected_msg)
+    end
+
+    test "leading hyphen in end tag raises error" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Element names beginning with '-' are invalid.
+
+        Hint:
+        Prefix your WebComponent name with at least one lower case letter.
+
+        </-foo>
+          ^
+        """)
+
+      test_syntax_error_msg("</-foo>", expected_msg)
+    end
+
+    test "script mode is not activated for script-prefixed custom element" do
+      assert parse_markup("<script-widget>{@var}</script-widget>") == [
+               start_tag: {"script-widget", []},
+               expression: "{@var}",
+               end_tag: "script-widget"
+             ]
+    end
+
+    test "script mode is still activated for script tag with attributes" do
+      assert parse_markup(~s(<script defer>var x = "<div>";</script>)) == [
+               start_tag: {"script", [{"defer", []}]},
+               text: ~s(var x = "<div>";),
+               end_tag: "script"
+             ]
     end
   end
 

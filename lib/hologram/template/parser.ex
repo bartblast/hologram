@@ -103,6 +103,9 @@ defmodule Hologram.Template.Parser do
           }
   end
 
+  defguardp is_valid_element_name_token(type, value)
+            when type == :string or (type == :symbol and value == "-")
+
   @doc """
   Parses markup into tags.
 
@@ -248,8 +251,37 @@ defmodule Hologram.Template.Parser do
   end
 
   # --- END TAG NAME ---
+  def parse_tokens(%{tag_name: ""} = context, :end_tag_name, [{:symbol, "-"} = token | rest]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Element names beginning with '-' are invalid.
 
-  def parse_tokens(context, :end_tag_name, [{:string, tag_name} = token | rest]) do
+      Hint:
+      Prefix your WebComponent name with at least one lower case letter.
+      """)
+
+    raise_error(details, context, :end_tag_name, token, rest)
+  end
+
+  def parse_tokens(
+        context,
+        :end_tag_name,
+        [{first_type, first_value} = token, {second_type, second_value} | _rest] = tokens
+      )
+      when is_valid_element_name_token(first_type, first_value) and
+             is_valid_element_name_token(second_type, second_value) do
+    context
+    |> set_tag_name(context.tag_name <> first_value)
+    |> add_processed_token(token)
+    |> parse_tokens(:end_tag_name, tl(tokens))
+  end
+
+  # Anything else (or no more tokens) -> name is complete, transition
+  def parse_tokens(context, :end_tag_name, [{type, value} = token | rest])
+      when type == :string or (type == :symbol and value == "-") do
+    tag_name = context.tag_name <> value
+
     context
     |> set_tag_name(tag_name)
     |> maybe_disable_script_mode(tag_name)
@@ -430,8 +462,37 @@ defmodule Hologram.Template.Parser do
   end
 
   # --- START TAG NAME ---
+  def parse_tokens(%{tag_name: ""} = context, :start_tag_name, [{:symbol, "-"} = token | rest]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Element names beginning with '-' are invalid.
 
-  def parse_tokens(context, :start_tag_name, [{:string, tag_name} = token | rest]) do
+      Hint:
+      Prefix your WebComponent name with at least one lower case letter.
+      """)
+
+    raise_error(details, context, :start_tag_name, token, rest)
+  end
+
+  def parse_tokens(
+        context,
+        :start_tag_name,
+        [{first_type, first_value} = token, {second_type, second_value} | _rest] = tokens
+      )
+      when is_valid_element_name_token(first_type, first_value) and
+             is_valid_element_name_token(second_type, second_value) do
+    context
+    |> set_tag_name(context.tag_name <> first_value)
+    |> add_processed_token(token)
+    |> parse_tokens(:start_tag_name, tl(tokens))
+  end
+
+  # Anything else (or no more tokens) -> name is complete, transition
+  def parse_tokens(context, :start_tag_name, [{type, value} = token | rest])
+      when type == :string or (type == :symbol and value == "-") do
+    tag_name = context.tag_name <> value
+
     context
     |> reset_attributes()
     |> set_tag_name(tag_name)
@@ -748,18 +809,21 @@ defmodule Hologram.Template.Parser do
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> set_prev_status(:text)
+    |> set_tag_name("")
     |> parse_tokens(:end_tag_name, rest)
   end
 
   def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
-        {:symbol, "<"} = token | [{:string, _value} | _tokens] = rest
-      ]) do
+        {:symbol, "<"} = token | [{next_type, next_value} | _tokens] = rest
+      ])
+      when is_valid_element_name_token(next_type, next_value) do
     context
     |> maybe_add_text_tag()
     |> reset_token_buffer()
     |> add_processed_token(token)
     |> set_prev_status(:text)
     |> set_node_type(:tag)
+    |> set_tag_name("")
     |> parse_tokens(:start_tag_name, rest)
   end
 
