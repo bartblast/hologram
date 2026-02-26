@@ -125,7 +125,11 @@ defmodule Hologram.Compiler.Encoder do
     function_js = encode_ir(function, context)
     args_js = encode_as_array(args, context)
 
-    "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
+    if context.async? do
+      "(await Interpreter.asyncCallAnonymousFunction(#{function_js}, #{args_js}))"
+    else
+      "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
+    end
   end
 
   def encode_ir(

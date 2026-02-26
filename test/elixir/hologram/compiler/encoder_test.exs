@@ -11,18 +11,29 @@ defmodule Hologram.Compiler.EncoderTest do
 
   @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
-  test "anonymous function call" do
-    # my_fun.(1, 2)
-    ir = %IR.AnonymousFunctionCall{
-      function: %IR.Variable{name: :my_fun},
-      args: [
-        %IR.IntegerType{value: 1},
-        %IR.IntegerType{value: 2}
-      ]
-    }
+  describe "anonymous function call" do
+    setup do
+      # my_fun.(1, 2)
+      ir = %IR.AnonymousFunctionCall{
+        function: %IR.Variable{name: :my_fun},
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
 
-    assert encode_ir(ir) ==
-             "Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)])"
+      [ir: ir]
+    end
+
+    test "sync", %{ir: ir} do
+      assert encode_ir(ir) ==
+               "Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)])"
+    end
+
+    test "async", %{ir: ir} do
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "(await Interpreter.asyncCallAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
+    end
   end
 
   describe "anonymous function type" do
