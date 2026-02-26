@@ -46,6 +46,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> assert_text(css("#call_result"), ":matched")
     end
 
+    feature "async comprehension", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Async comprehension"))
+      |> assert_text(css("#call_result"), "[30, 60, 90]")
+    end
+
     feature "async cond", %{session: session} do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)

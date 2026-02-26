@@ -25,6 +25,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="async_case"> Async case </button>
     </p>
     <p>
+      <button $click="async_comprehension"> Async comprehension </button>
+    </p>
+    <p>
       <button $click="async_cond"> Async cond </button>
     </p>
     <p>
@@ -80,6 +83,14 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       end
 
     put_state(component, :result, label)
+  end
+
+  def action(:async_comprehension, _params, component) do
+    multiplier = JS.call_async(:helpers, :asyncSum, [1, 2])
+
+    result = for x <- [10, 20, 30], do: x * multiplier
+
+    put_state(component, :result, result)
   end
 
   def action(:async_cond, _params, component) do
