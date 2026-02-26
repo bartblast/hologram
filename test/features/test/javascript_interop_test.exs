@@ -59,6 +59,8 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> click(button("Async cond"))
       |> assert_text(css("#call_result"), ":correct")
     end
+
+    # TODO: add "async try" feature test once async try expression is fully implemented
   end
 
   feature "JS.call/3", %{session: session} do
