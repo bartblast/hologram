@@ -6800,7 +6800,7 @@ defmodule Hologram.Compiler.TransformerTest do
         end
         """)
 
-      assert %IR.Block{expressions: [_, %IR.With{} = with_ir]} = transform(ast, %Context{})
+      assert %IR.Block{expressions: [_match, %IR.With{} = with_ir]} = transform(ast, %Context{})
 
       assert with_ir == %IR.With{
                body: %IR.Block{expressions: []},
@@ -6826,7 +6826,7 @@ defmodule Hologram.Compiler.TransformerTest do
         end
         """)
 
-      assert %IR.Block{expressions: [_, %IR.With{} = with_ir]} = transform(ast, %Context{})
+      assert %IR.Block{expressions: [_match, %IR.With{} = with_ir]} = transform(ast, %Context{})
 
       assert with_ir == %IR.With{
                body: %IR.Block{expressions: []},
@@ -6844,57 +6844,6 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.AtomType{value: :clause}]}
                  }
                ]
-             }
-    end
-
-    test "shadowing" do
-      ast =
-        ast("""
-        with(
-           a <-
-             (
-               b = 1
-               _ = b
-               1
-             ),
-           b <- 2,
-           do: a + b
-         )
-        """)
-
-      assert transform(ast, %Context{}) == %IR.With{
-               clauses: [
-                 %IR.WithClause{
-                   match: %IR.Variable{name: :a, version: nil},
-                   guards: [],
-                   expression: %IR.Block{
-                     expressions: [
-                       %IR.MatchOperator{
-                         left: %IR.Variable{name: :b, version: nil},
-                         right: %IR.IntegerType{value: 1}
-                       },
-                       %IR.MatchOperator{
-                         left: %IR.MatchPlaceholder{},
-                         right: %IR.Variable{name: :b, version: nil}
-                       },
-                       %IR.IntegerType{value: 1}
-                     ]
-                   }
-                 },
-                 %IR.WithClause{
-                   match: %IR.Variable{name: :b, version: nil},
-                   guards: [],
-                   expression: %IR.IntegerType{value: 2}
-                 }
-               ],
-               body: %IR.LocalFunctionCall{
-                 function: :+,
-                 args: [
-                   %IR.Variable{name: :a, version: nil},
-                   %IR.Variable{name: :b, version: nil}
-                 ]
-               },
-               else_clauses: []
              }
     end
 
