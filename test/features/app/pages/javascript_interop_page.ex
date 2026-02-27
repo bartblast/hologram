@@ -52,6 +52,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="delete_property"> Delete property </button>
     </p>
     <p>
+      <button $click="exec_code"> Execute code </button>
+    </p>
+    <p>
       <button $click="get_property"> Get property </button>
     </p>
     <p>
@@ -67,7 +70,10 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="resolve_object_ref"> Resolve object ref </button>
     </p>
     <p>
-      <button $click="run_js_snippet"> Run JavaScript snippet </button>
+      <button $click="run_snippet"> Run snippet </button>
+    </p>
+    <p>
+      <button $click="run_snippet_returning_value"> Run snippet returning value </button>
     </p>
     <p>
       <button $click="set_property"> Set property </button>
@@ -172,6 +178,12 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     put_state(component, :result, {result, is_binary(result)})
   end
 
+  def action(:exec_code, _params, component) do
+    result = JS.exec("2 + 3")
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
   def action(:get_property, _params, component) do
     calculator = JS.new(:Calculator, [10])
     result = JS.get(calculator, :value)
@@ -205,12 +217,20 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     put_state(component, :result, {result, is_integer(result)})
   end
 
-  def action(:run_js_snippet, _params, component) do
+  def action(:run_snippet, _params, component) do
     ~JS"""
     document.getElementById('js_snippet_result').querySelector('code').textContent = 'Hologram';
     """
 
     component
+  end
+
+  def action(:run_snippet_returning_value, _params, component) do
+    result = ~JS"""
+    return 7 + 4;
+    """
+
+    put_state(component, :result, {result, is_integer(result)})
   end
 
   def action(:set_property, _params, component) do

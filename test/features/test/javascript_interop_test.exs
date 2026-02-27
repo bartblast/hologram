@@ -24,11 +24,20 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
-  feature "~JS sigil", %{session: session} do
-    session
-    |> visit(HologramFeatureTests.JavaScriptInteropPage)
-    |> click(button("Run JavaScript snippet"))
-    |> assert_text(css("#js_snippet_result"), "Hologram")
+  describe "~JS sigil" do
+    feature "DOM manipulation", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Run snippet"))
+      |> assert_text(css("#js_snippet_result"), "Hologram")
+    end
+
+    feature "return value is boxed", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Run snippet returning value"))
+      |> assert_text(css("#call_result"), "{11, true}")
+    end
   end
 
   feature "JS.call/3", %{session: session} do
@@ -103,6 +112,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> visit(HologramFeatureTests.JavaScriptInteropPage)
     |> click(button("Delete property"))
     |> assert_text(css("#call_result"), ~s({"undefined", true}))
+  end
+
+  feature "JS.exec/1", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Execute code"))
+    |> assert_text(css("#call_result"), "{5, true}")
   end
 
   feature "JS.get/2", %{session: session} do
