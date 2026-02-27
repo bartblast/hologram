@@ -3,6 +3,10 @@ const helpers = {
     return a + b;
   },
 
+  mapArray(arr, fn) {
+    return arr.map(fn);
+  },
+
   promiseSum(a, b) {
     return new Promise((resolve) => {
       setTimeout(() => resolve(a + b), 100);

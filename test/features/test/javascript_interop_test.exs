@@ -40,11 +40,20 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
-  feature "JS.call/3", %{session: session} do
-    session
-    |> visit(HologramFeatureTests.JavaScriptInteropPage)
-    |> click(button("Call sync method"))
-    |> assert_text(css("#call_result"), "{3, true}")
+  describe "JS.call/3" do
+    feature "sync method", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Call sync method"))
+      |> assert_text(css("#call_result"), "{3, true}")
+    end
+
+    feature "callback interop", %{session: session} do
+      session
+      |> visit(HologramFeatureTests.JavaScriptInteropPage)
+      |> click(button("Callback interop"))
+      |> assert_text(css("#call_result"), "[2, 4, 6]")
+    end
   end
 
   describe "JS.call_async/3" do

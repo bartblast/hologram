@@ -49,6 +49,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="call_sync_method"> Call sync method</button>
     </p>
     <p>
+      <button $click="callback_interop"> Callback interop </button>
+    </p>
+    <p>
       <button $click="delete_property"> Delete property </button>
     </p>
     <p>
@@ -172,6 +175,12 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     result = JS.call(:helpers, :sum, [1, 2])
 
     put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:callback_interop, _params, component) do
+    result = JS.call(:helpers, :mapArray, [[1, 2, 3], fn x -> x * 2 end])
+
+    put_state(component, :result, result)
   end
 
   def action(:delete_property, _params, component) do
