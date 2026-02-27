@@ -52,6 +52,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="delete_property"> Delete property </button>
     </p>
     <p>
+      <button $click="eval_expression"> Evaluate expression </button>
+    </p>
+    <p>
       <button $click="exec_code"> Execute code </button>
     </p>
     <p>
@@ -179,6 +182,12 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     result = JS.typeof(deleted_value)
 
     put_state(component, :result, {result, is_binary(result)})
+  end
+
+  def action(:eval_expression, _params, component) do
+    result = JS.eval("3 + 4")
+
+    put_state(component, :result, {result, is_integer(result)})
   end
 
   def action(:exec_code, _params, component) do

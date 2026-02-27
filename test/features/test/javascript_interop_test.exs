@@ -114,6 +114,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> assert_text(css("#call_result"), ~s({"undefined", true}))
   end
 
+  feature "JS.eval/1", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Evaluate expression"))
+    |> assert_text(css("#call_result"), "{7, true}")
+  end
+
   feature "JS.exec/1", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)
