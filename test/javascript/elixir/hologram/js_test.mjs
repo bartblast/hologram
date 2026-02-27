@@ -254,6 +254,58 @@ describe("unbox()", () => {
     );
   });
 
+  describe("anonymous_function", () => {
+    it("wraps anonymous function into a callable JS function", () => {
+      const context = Interpreter.buildContext({module: "UnboxTestModule"});
+
+      // fn x -> x end (identity function)
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return context.vars.x;
+            },
+          },
+        ],
+        context,
+      );
+
+      const jsFunc = unbox(fun, callerModule);
+
+      assert.isFunction(jsFunc);
+      assert.strictEqual(jsFunc(42), 42);
+    });
+
+    it("handles multi-arity functions", () => {
+      const context = Interpreter.buildContext({module: "UnboxTestModule"});
+
+      // fn a, b -> {a, b} end
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("a"),
+              Type.variablePattern("b"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Type.tuple([context.vars.a, context.vars.b]);
+            },
+          },
+        ],
+        context,
+      );
+
+      const jsFunc = unbox(fun, callerModule);
+
+      assert.deepStrictEqual(jsFunc(3, 4), [3, 4]);
+    });
+  });
+
   describe("atom", () => {
     it("atom true -> true", () => {
       assert.strictEqual(unbox(Type.atom("true"), callerModule), true);

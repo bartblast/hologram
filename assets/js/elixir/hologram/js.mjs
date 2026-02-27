@@ -59,6 +59,14 @@ function resolveBinding(term, callerModule) {
 
 function unbox(term, callerModule) {
   switch (term.type) {
+    case "anonymous_function":
+      return (...jsArgs) => {
+        const boxedArgs = jsArgs.map(box);
+        const result = Interpreter.callAnonymousFunction(term, boxedArgs);
+
+        return unbox(result, callerModule);
+      };
+
     case "atom":
       if (term.value === "true") return true;
       if (term.value === "false") return false;
