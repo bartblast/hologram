@@ -700,6 +700,67 @@ describe("Elixir_Hologram_JS", () => {
     });
   });
 
+  describe("instanceof/3", () => {
+    const instanceofFn = Elixir_Hologram_JS["instanceof/3"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_InstanceofTestModule;
+    });
+
+    it("returns true when value is an instance of the class", () => {
+      class Calculator {}
+      const instance = new Calculator();
+
+      Interpreter.defineManuallyPortedFunction(
+        "InstanceofTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(
+        Type.alias("InstanceofTestModule"),
+      );
+
+      moduleProxy.__jsBindings__.set("Calc", Calculator);
+
+      const result = instanceofFn(
+        {type: "native", value: instance},
+        Type.atom("Calc"),
+        Type.alias("InstanceofTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("true"));
+    });
+
+    it("returns false when value is not an instance of the class", () => {
+      class Calculator {}
+      class Widget {}
+      const instance = new Widget();
+
+      Interpreter.defineManuallyPortedFunction(
+        "InstanceofTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+
+      const moduleProxy = Interpreter.moduleProxy(
+        Type.alias("InstanceofTestModule"),
+      );
+
+      moduleProxy.__jsBindings__.set("Calc", Calculator);
+
+      const result = instanceofFn(
+        {type: "native", value: instance},
+        Type.atom("Calc"),
+        Type.alias("InstanceofTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("false"));
+    });
+  });
+
   describe("new/3", () => {
     const new3 = Elixir_Hologram_JS["new/3"];
 

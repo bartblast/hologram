@@ -146,6 +146,13 @@ const Elixir_Hologram_JS = {
     return box(jsReceiver[jsPropertyName]);
   },
 
+  "instanceof/3": (value, className, callerModule) => {
+    const jsValue = resolveBinding(value, callerModule);
+    const jsClass = resolveBinding(className, callerModule);
+
+    return box(jsValue instanceof jsClass);
+  },
+
   "new/3": (className, args, callerModule) => {
     const jsClass = resolveBinding(className, callerModule);
 
