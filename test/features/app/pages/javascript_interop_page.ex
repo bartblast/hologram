@@ -73,10 +73,10 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="resolve_object_ref"> Resolve object ref </button>
     </p>
     <p>
-      <button $click="run_snippet"> Run snippet </button>
+      <button $click="run_js_sigil_returning_value"> Run JS sigil returning value </button>
     </p>
     <p>
-      <button $click="run_snippet_returning_value"> Run snippet returning value </button>
+      <button $click="run_js_sigil_void"> Run JS sigil void </button>
     </p>
     <p>
       <button $click="set_property"> Set property </button>
@@ -88,7 +88,7 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       Call result: <strong id="call_result"><code>{inspect(@result)}</code></strong>
     </p>
     <p>
-      JS snippet result: <strong id="js_snippet_result"><code>nil</code></strong>
+      JS snippet result: <strong id="js_sigil_result"><code>nil</code></strong>
     </p>
     """
   end
@@ -182,7 +182,11 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   end
 
   def action(:exec_code, _params, component) do
-    result = JS.exec("2 + 3")
+    result =
+      JS.exec("""
+      const x = 2;
+      return x + 3;
+      """)
 
     put_state(component, :result, {result, is_integer(result)})
   end
@@ -227,20 +231,22 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     put_state(component, :result, {result, is_integer(result)})
   end
 
-  def action(:run_snippet, _params, component) do
-    ~JS"""
-    document.getElementById('js_snippet_result').querySelector('code').textContent = 'Hologram';
-    """
-
-    component
-  end
-
-  def action(:run_snippet_returning_value, _params, component) do
+  def action(:run_js_sigil_returning_value, _params, component) do
     result = ~JS"""
-    return 7 + 4;
+    const x = 7;
+    return x + 4;
     """
 
     put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:run_js_sigil_void, _params, component) do
+    ~JS"""
+    const element = document.getElementById('js_sigil_result').querySelector('code');
+    element.textContent = 'Hologram';
+    """
+
+    component
   end
 
   def action(:set_property, _params, component) do

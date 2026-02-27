@@ -28,14 +28,14 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     feature "DOM manipulation", %{session: session} do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
-      |> click(button("Run snippet"))
-      |> assert_text(css("#js_snippet_result"), "Hologram")
+      |> click(button("Run JS sigil void"))
+      |> assert_text(css("#js_sigil_result"), "Hologram")
     end
 
     feature "return value is boxed", %{session: session} do
       session
       |> visit(HologramFeatureTests.JavaScriptInteropPage)
-      |> click(button("Run snippet returning value"))
+      |> click(button("Run JS sigil returning value"))
       |> assert_text(css("#call_result"), "{11, true}")
     end
   end
