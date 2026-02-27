@@ -128,6 +128,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> assert_text(css("#call_result"), "{10, true}")
   end
 
+  feature "JS.instanceof/2", %{session: session} do
+    session
+    |> visit(HologramFeatureTests.JavaScriptInteropPage)
+    |> click(button("Instanceof check"))
+    |> assert_text(css("#call_result"), "{true, true}")
+  end
+
   feature "JS.new/2", %{session: session} do
     session
     |> visit(HologramFeatureTests.JavaScriptInteropPage)

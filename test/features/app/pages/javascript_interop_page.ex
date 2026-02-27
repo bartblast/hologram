@@ -58,6 +58,9 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
       <button $click="get_property"> Get property </button>
     </p>
     <p>
+      <button $click="instanceof_check"> Instanceof check </button>
+    </p>
+    <p>
       <button $click="new_instance"> New instance </button>
     </p>
     <p>
@@ -189,6 +192,13 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
     result = JS.get(calculator, :value)
 
     put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:instanceof_check, _params, component) do
+    calculator = JS.new(:Calculator, [10])
+    result = JS.instanceof(calculator, :Calculator)
+
+    put_state(component, :result, {result, is_boolean(result)})
   end
 
   def action(:new_instance, _params, component) do
