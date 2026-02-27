@@ -88,8 +88,8 @@ defmodule Hologram.JS do
   @doc """
   Executes JavaScript code.
   """
-  @spec exec(String.t()) :: :ok
-  def exec(_code), do: :ok
+  @spec exec(String.t()) :: any()
+  def exec(_code), do: __server_pass_through__()
 
   @doc """
   Gets a property from a JS receiver.
