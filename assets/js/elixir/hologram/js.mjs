@@ -61,7 +61,7 @@ function unbox(term, callerModule) {
   switch (term.type) {
     case "anonymous_function":
       return (...jsArgs) => {
-        const boxedArgs = jsArgs.map(box);
+        const boxedArgs = jsArgs.slice(0, term.arity).map(box);
         const result = Interpreter.callAnonymousFunction(term, boxedArgs);
 
         return unbox(result, callerModule);

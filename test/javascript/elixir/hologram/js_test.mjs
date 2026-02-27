@@ -304,6 +304,30 @@ describe("unbox()", () => {
 
       assert.deepStrictEqual(jsFunc(3, 4), [3, 4]);
     });
+
+    it("ignores extra JS arguments beyond the function arity", () => {
+      const context = Interpreter.buildContext({module: "UnboxTestModule"});
+
+      // fn x -> x end (arity 1, like a callback passed to Array.map)
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return context.vars.x;
+            },
+          },
+        ],
+        context,
+      );
+
+      const jsFunc = unbox(fun, callerModule);
+
+      // Array.map passes (element, index, array) — extra args should be ignored
+      assert.strictEqual(jsFunc(5, 0, [5, 10, 15]), 5);
+    });
   });
 
   describe("atom", () => {
