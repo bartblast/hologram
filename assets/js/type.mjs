@@ -39,7 +39,7 @@ export default class Type {
     return Type.atom(`Elixir.${aliasStr}`);
   }
 
-  static anonymousFunction(arity, clauses, context) {
+  static anonymousFunction(arity, clauses, context, isAsync = false) {
     return {
       type: "anonymous_function",
       arity: arity,
@@ -47,6 +47,7 @@ export default class Type {
       capturedModule: null,
       clauses: clauses,
       context: Interpreter.cloneContext(context),
+      isAsync: isAsync,
       uniq: ERTS.funSequence.next(),
     };
   }
@@ -197,6 +198,7 @@ export default class Type {
     arity,
     clauses,
     context,
+    isAsync = false,
   ) {
     return {
       type: "anonymous_function",
@@ -205,6 +207,7 @@ export default class Type {
       capturedModule: capturedModule,
       clauses: clauses,
       context: Interpreter.buildContext({module: context.module, vars: {}}),
+      isAsync: isAsync,
       uniq: ERTS.funSequence.next(),
     };
   }
