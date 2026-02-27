@@ -181,6 +181,258 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "async parent, sync body — body stays sync" do
+      # fn x -> :expr end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :expr}]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "async parent, body with async remote call — body becomes async" do
+      # fn x -> Aaa.Bbb.some_async(x) end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Aaa.Bbb},
+                  function: :some_async,
+                  args: [%IR.Variable{name: :x}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "async parent, body with async local call — body becomes async" do
+      # fn x -> some_async(x) end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.LocalFunctionCall{
+                  function: :some_async,
+                  args: [%IR.Variable{name: :x}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "sync parent, body with async call — body becomes async" do
+      # fn x -> Aaa.Bbb.some_async(x) end
+      # Parent function is not async, but async_mfas is non-empty.
+      # The anon fn must independently detect its own async calls.
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Aaa.Bbb},
+                  function: :some_async,
+                  args: [%IR.Variable{name: :x}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: false,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "function capture variant stays sync when no async calls" do
+      # &Calendar.ISO.parse_date/2  (inside async context, but body has no async calls)
+      ir = %IR.AnonymousFunctionType{
+        arity: 2,
+        captured_module: Calendar.ISO,
+        captured_function: :parse_date,
+        clauses: [
+          %IR.FunctionClause{
+            params: [
+              %IR.Variable{name: :"$1"},
+              %IR.Variable{name: :"$2"}
+            ],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Calendar.ISO},
+                  function: :parse_date,
+                  args: [
+                    %IR.Variable{name: :"$1"},
+                    %IR.Variable{name: :"$2"}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.functionCapture("Calendar.ISO", "parse_date", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+        return Elixir_Calendar_ISO["parse_date/2"](context.vars["$1"], context.vars["$2"]);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "nested: async call in inner does not make outer async" do
+      # fn x -> fn y -> Aaa.Bbb.some_async(y) end end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.AnonymousFunctionType{
+                  arity: 1,
+                  captured_module: nil,
+                  captured_function: nil,
+                  clauses: [
+                    %IR.FunctionClause{
+                      params: [%IR.Variable{name: :y}],
+                      guards: [],
+                      body: %IR.Block{
+                        expressions: [
+                          %IR.RemoteFunctionCall{
+                            module: %IR.AtomType{value: Aaa.Bbb},
+                            function: :some_async,
+                            args: [%IR.Variable{name: :y}]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("y")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.y));
+        }}], context);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
   end
 
   describe "atom type" do

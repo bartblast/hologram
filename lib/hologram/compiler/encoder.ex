@@ -141,7 +141,9 @@ defmodule Hologram.Compiler.Encoder do
         },
         context
       ) do
-    clauses_js = encode_as_array(clauses, context)
+    clause_context = %{context | async?: has_async_call?(clauses, context)}
+    clauses_js = encode_as_array(clauses, clause_context)
+
     "Type.anonymousFunction(#{arity}, #{clauses_js}, context)"
   end
 
@@ -165,7 +167,8 @@ defmodule Hologram.Compiler.Encoder do
 
     captured_module_js = encode_as_string(captured_module_str, true)
 
-    clauses_js = encode_as_array(clauses, context)
+    clause_context = %{context | async?: has_async_call?(clauses, context)}
+    clauses_js = encode_as_array(clauses, clause_context)
 
     "Type.functionCapture(#{captured_module_js}, #{captured_function_js}, #{arity}, #{clauses_js}, context)"
   end
@@ -820,6 +823,11 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp escape_non_printable_and_special_chars(""), do: ""
+
+  defp has_async_call?(clauses, context) do
+    MapSet.size(context.async_mfas) > 0 and
+      IR.has_call_to?(clauses, context.module, context.async_mfas)
+  end
 
   defp has_match_operator?(ir)
 
