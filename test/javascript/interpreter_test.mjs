@@ -7498,7 +7498,7 @@ describe("Interpreter", () => {
           {
             match: Type.variablePattern("b"),
             guards: [],
-            expression: (context) => Type.integer(2n),
+            expression: (_context) => Type.integer(2n),
           },
         ],
         [],
