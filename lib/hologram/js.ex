@@ -108,6 +108,22 @@ defmodule Hologram.JS do
   def get(_receiver, _property, _caller_module), do: __server_pass_through__()
 
   @doc """
+  Checks if a value is an instance of a JS class.
+  """
+  defmacro instanceof(value, class) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.instanceof(unquote(value), unquote(class), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec instanceof(any(), any(), module()) :: boolean()
+  def instanceof(_value, _class, _caller_module), do: __server_pass_through__()
+
+  @doc """
   Imports a JS export and binds it to a name that can be used as a receiver in other JS functions.
 
   ## Examples
