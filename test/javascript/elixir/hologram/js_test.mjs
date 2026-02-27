@@ -634,6 +634,16 @@ describe("Elixir_Hologram_JS", () => {
     });
   });
 
+  describe("eval/1", () => {
+    const evalFn = Elixir_Hologram_JS["eval/1"];
+
+    it("evaluates expression and boxes the result", () => {
+      const expression = Type.bitstring("1 + 2");
+
+      assert.deepStrictEqual(evalFn(expression), Type.integer(3));
+    });
+  });
+
   describe("exec/1", () => {
     const exec = Elixir_Hologram_JS["exec/1"];
 

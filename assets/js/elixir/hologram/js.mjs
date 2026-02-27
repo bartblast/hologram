@@ -135,8 +135,16 @@ const Elixir_Hologram_JS = {
     return receiver;
   },
 
+  "eval/1": (expression) => {
+    return box(
+      Interpreter.evaluateJavaScriptCode(
+        "return (" + Bitstring.toText(expression) + ")",
+      ),
+    );
+  },
+
   "exec/1": (code) => {
-    return box(Interpreter.evaluateJavaScriptCode(unbox(code)));
+    return box(Interpreter.evaluateJavaScriptCode(Bitstring.toText(code)));
   },
 
   "get/3": (receiver, property, callerModule) => {
