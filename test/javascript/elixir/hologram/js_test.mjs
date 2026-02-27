@@ -637,9 +637,10 @@ describe("Elixir_Hologram_JS", () => {
   describe("exec/1", () => {
     const exec = Elixir_Hologram_JS["exec/1"];
 
-    it("delegates to Interpreter.evaluateJavaScriptCode()", () => {
+    it("delegates to Interpreter.evaluateJavaScriptCode() and boxes the result", () => {
       const code = Type.bitstring("return 1 + 2");
-      assert.equal(exec(code), 3);
+
+      assert.deepStrictEqual(exec(code), Type.integer(3));
     });
   });
 

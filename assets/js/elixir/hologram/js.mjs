@@ -136,7 +136,7 @@ const Elixir_Hologram_JS = {
   },
 
   "exec/1": (code) => {
-    return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
+    return box(Interpreter.evaluateJavaScriptCode(unbox(code)));
   },
 
   "get/3": (receiver, property, callerModule) => {
