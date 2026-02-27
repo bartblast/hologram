@@ -378,6 +378,45 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, context) == expected
     end
 
+    test "function capture variant becomes async when body has async call" do
+      # &Calendar.ISO.some_async/1
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: Calendar.ISO,
+        captured_function: :some_async,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :"$1"}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Calendar.ISO},
+                  function: :some_async,
+                  args: [%IR.Variable{name: :"$1"}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Calendar.ISO, :some_async, 1}]),
+        module: Calendar.ISO
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.functionCapture("Calendar.ISO", "some_async", 1, [{params: (context) => [Type.variablePattern("$1")], guards: [], body: async (context) => {
+        return (await Elixir_Calendar_ISO["some_async/1"](context.vars["$1"]));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
     test "nested: async call in inner does not make outer async" do
       # fn x -> fn y -> Aaa.Bbb.some_async(y) end end
       ir = %IR.AnonymousFunctionType{
