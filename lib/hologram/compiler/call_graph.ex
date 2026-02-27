@@ -178,6 +178,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.JS, :call, 4},
     {Hologram.JS, :call_async, 4},
     {Hologram.JS, :delete, 3},
+    {Hologram.JS, :eval, 1},
     {Hologram.JS, :exec, 1},
     {Hologram.JS, :get, 3},
     {Hologram.JS, :instanceof, 3},
