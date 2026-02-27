@@ -365,4 +365,153 @@ defmodule Hologram.Compiler.IRTest do
              }
     end
   end
+
+  describe "has_call_to?/3" do
+    @mfas MapSet.new([{Aaa.Bbb, :my_fun, 1}])
+    @module Ccc.Ddd
+
+    test "stops at nested AnonymousFunctionType" do
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :y}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Aaa.Bbb},
+                  function: :my_fun,
+                  args: [%IR.Variable{name: :y}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      refute has_call_to?(ir, @module, @mfas)
+    end
+
+    test "local call in MFAs" do
+      mfas = MapSet.new([{Ccc.Ddd, :my_fun, 1}])
+
+      ir = %IR.LocalFunctionCall{
+        function: :my_fun,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      assert has_call_to?(ir, @module, mfas)
+    end
+
+    test "local call NOT in MFAs" do
+      ir = %IR.LocalFunctionCall{
+        function: :other_fun,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      refute has_call_to?(ir, @module, @mfas)
+    end
+
+    test "recurses into local call args" do
+      ir = %IR.LocalFunctionCall{
+        function: :other_fun,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: Aaa.Bbb},
+            function: :my_fun,
+            args: [%IR.Variable{name: :x}]
+          }
+        ]
+      }
+
+      assert has_call_to?(ir, @module, @mfas)
+    end
+
+    test "remote call in MFAs" do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :my_fun,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      assert has_call_to?(ir, @module, @mfas)
+    end
+
+    test "remote call NOT in MFAs" do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :other_fun,
+        args: [%IR.Variable{name: :x}]
+      }
+
+      refute has_call_to?(ir, @module, @mfas)
+    end
+
+    test "recurses into remote call args" do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :other_fun,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: Aaa.Bbb},
+            function: :my_fun,
+            args: [%IR.Variable{name: :x}]
+          }
+        ]
+      }
+
+      assert has_call_to?(ir, @module, @mfas)
+    end
+
+    test "traverses lists" do
+      ir = [
+        %IR.AtomType{value: :ok},
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Aaa.Bbb},
+          function: :my_fun,
+          args: [%IR.Variable{name: :x}]
+        }
+      ]
+
+      assert has_call_to?(ir, @module, @mfas)
+    end
+
+    test "traverses tuples" do
+      ir = {
+        %IR.AtomType{value: :ok},
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Aaa.Bbb},
+          function: :my_fun,
+          args: [%IR.Variable{name: :x}]
+        }
+      }
+
+      assert has_call_to?(ir, @module, @mfas)
+    end
+
+    test "traverses structs" do
+      ir = %IR.TupleType{
+        data: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: Aaa.Bbb},
+            function: :my_fun,
+            args: [%IR.Variable{name: :x}]
+          }
+        ]
+      }
+
+      assert has_call_to?(ir, @module, @mfas)
+    end
+
+    test "literal (catch-all)" do
+      refute has_call_to?(%IR.AtomType{value: :expr}, @module, @mfas)
+    end
+
+    test "empty list" do
+      refute has_call_to?([], @module, @mfas)
+    end
+  end
 end
