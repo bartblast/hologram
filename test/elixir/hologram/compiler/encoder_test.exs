@@ -248,7 +248,7 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
         return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
-        }}], context)\
+        }}], context, true)\
         """)
 
       assert encode_ir(ir, context) == expected
@@ -286,7 +286,7 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
         return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
-        }}], context)\
+        }}], context, true)\
         """)
 
       assert encode_ir(ir, context) == expected
@@ -327,7 +327,7 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
         return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
-        }}], context)\
+        }}], context, true)\
         """)
 
       assert encode_ir(ir, context) == expected
@@ -411,7 +411,7 @@ defmodule Hologram.Compiler.EncoderTest do
         normalize_newlines("""
         Type.functionCapture("Calendar.ISO", "some_async", 1, [{params: (context) => [Type.variablePattern("$1")], guards: [], body: async (context) => {
         return (await Elixir_Calendar_ISO["some_async/1"](context.vars["$1"]));
-        }}], context)\
+        }}], context, true)\
         """)
 
       assert encode_ir(ir, context) == expected
@@ -466,7 +466,7 @@ defmodule Hologram.Compiler.EncoderTest do
         Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
         return Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("y")], guards: [], body: async (context) => {
         return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.y));
-        }}], context);
+        }}], context, true);
         }}], context)\
         """)
 
