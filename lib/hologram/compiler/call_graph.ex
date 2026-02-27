@@ -180,6 +180,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.JS, :delete, 3},
     {Hologram.JS, :exec, 1},
     {Hologram.JS, :get, 3},
+    {Hologram.JS, :instanceof, 3},
     {Hologram.JS, :new, 3},
     {Hologram.JS, :set, 4},
     {Hologram.JS, :typeof, 2},
