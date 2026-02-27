@@ -86,6 +86,13 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc """
+  Evaluates a JavaScript expression and returns the result.
+  """
+  @spec eval(String.t()) :: any()
+  def eval(_expression), do: __server_pass_through__()
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc """
   Executes JavaScript code.
   """
   @spec exec(String.t()) :: any()
