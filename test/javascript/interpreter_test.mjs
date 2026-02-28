@@ -6855,12 +6855,336 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  // TODO: finish implementing
-  it("with()", () => {
-    assert.throw(
-      () => Interpreter.with(),
-      Error,
-      '"with" expression is not yet implemented in Hologram',
-    );
+  describe("with()", () => {
+    const context = contextFixture({
+      vars: {
+        a: Type.atom("ok"),
+      },
+    });
+    const body = (context) => {
+      return Type.tuple([context.vars.a, context.vars.b]);
+    };
+
+    it("handles an empty with", () => {
+      // with do: nil
+      const result = Interpreter.with(
+        (_context) => {
+          return Type.atom("nil");
+        },
+        [],
+        [],
+        context,
+      );
+
+      const expected = Type.atom("nil");
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("successful match returns body result", () => {
+      // with b <- a do
+      //   {a, b}
+      // end
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [],
+        context,
+      );
+
+      const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("can fail to match on match condition", () => {
+      // with :error <- a do
+      // else
+      //   :ok -> {:error, :nomatch}
+      // end
+      const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => expected,
+          },
+        ],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("can fail to match on guard", () => {
+      // with b when b == :no <- a do
+      // else
+      //   :ok -> {:error, :nomatch}
+      // end
+      const guard = (context) =>
+        Erlang["==/2"](context.vars.b, Type.atom("no"));
+      const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
+
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("b"),
+            guards: [guard],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => expected,
+          },
+        ],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("handle plain expressions", () => {
+      // with b = a do
+      //   {a, b}
+      // end
+      const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (context) =>
+              Interpreter.matchOperator(
+                context.vars.a,
+                Type.variablePattern("a"),
+                context,
+              ),
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("gives the original context to the else clauses", () => {
+      // x = :original
+      // with x <- a,
+      //   :fail <- :mismatch do
+      //   :body
+      // else
+      //   _ ->
+      //     x
+      // end
+      const contextWithX = contextFixture({
+        vars: {
+          a: Type.atom("ok"),
+          x: Type.atom("original"),
+        },
+      });
+      const expected = Type.atom("original");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("x"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+          {
+            match: Type.atom("fail"),
+            guards: [],
+            expression: (_context) => Type.atom("mismatch"),
+          },
+        ],
+        [
+          {
+            match: Type.matchPlaceholder(),
+            guards: [],
+            body: (context) => context.vars.x,
+          },
+        ],
+        contextWithX,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("gives the original context to the else clauses (guard mismatch)", () => {
+      // x = :original
+      // with x <- a,
+      //   i when false <- :mismatch do
+      //   :body
+      // else
+      //   _ ->
+      //     x
+      // end
+      const contextWithX = contextFixture({
+        vars: {
+          a: Type.atom("ok"),
+          x: Type.atom("original"),
+        },
+      });
+      const expected = Type.atom("original");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("x"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+          {
+            match: Type.variablePattern("i"),
+            guards: [(_context) => Type.atom("false")],
+            expression: (_context) => Type.atom("mismatch"),
+          },
+        ],
+        [
+          {
+            match: Type.matchPlaceholder(),
+            guards: [],
+            body: (context) => context.vars.x,
+          },
+        ],
+        contextWithX,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("returns the unmatched value directly if there are no else clauses", () => {
+      // with :error <- a do
+      //   x
+      // end
+      const expected = Type.atom("ok");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles multiple else clauses", () => {
+      const expected = Type.atom("second");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("a"),
+            guards: [],
+            body: (_context) => Type.atom("first"),
+          },
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => Type.atom("second"),
+          },
+          {
+            match: Type.atom("c"),
+            guards: [],
+            body: (_context) => Type.atom("third"),
+          },
+        ],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("handles shadowing correctly", () => {
+      const expected = Type.integer(3n);
+      const result = Interpreter.with(
+        (context) => Erlang["+/2"](context.vars.a, context.vars.b),
+        [
+          {
+            match: Type.variablePattern("a"),
+            guards: [],
+            expression: (context) => {
+              Interpreter.matchOperator(
+                Type.integer(1n),
+                Type.variablePattern("b"),
+                context,
+              );
+              Interpreter.updateVarsToMatchedValues(context);
+              Interpreter.matchOperator(
+                context.vars.b,
+                Type.matchPlaceholder(),
+                context,
+              );
+              Interpreter.updateVarsToMatchedValues(context);
+              return Type.integer(1n);
+            },
+          },
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (_context) => Type.integer(2n),
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("throws error if no else clauses match", () => {
+      // with  :error <- a do
+      // else
+      //   :other -> {:error, :nomatch}
+      // end
+      assertBoxedError(
+        () =>
+          Interpreter.with(
+            body,
+            [
+              {
+                match: Type.atom("error"),
+                guards: [],
+                expression: (context) => context.vars.a,
+              },
+            ],
+            [
+              {
+                match: Type.atom("other"),
+                guards: [],
+                body: (_context) => null,
+              },
+            ],
+            context,
+          ),
+        "WithClauseError",
+        "no with clause matching: :ok",
+      );
+    });
   });
 });

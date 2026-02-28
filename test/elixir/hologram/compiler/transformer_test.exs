@@ -6452,15 +6452,419 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  # TODO: finish implementing
-  test "with" do
-    ast =
-      ast("""
-      with true <- true do
-        :ok
-      end
-      """)
+  describe "with" do
+    test "empty with" do
+      ast =
+        ast("""
+        with do
+        end  
+        """)
 
-    assert transform(ast, %Context{}) == %Hologram.Compiler.IR.With{}
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [],
+               else_clauses: [],
+               body: %IR.Block{expressions: []}
+             }
+    end
+
+    test "multiple clauses and else clauses" do
+      ast =
+        ast("""
+        with {:ok, x} when not is_nil(x) <- {:ok, foo(y)},
+          {x, bar} <- baz(x),
+          :test = :test do
+          :ok
+        else
+          :error ->
+            {:error, :wrong_data}
+          {:error, value} ->
+            {:error, :wrong_data, value}
+        end
+        """)
+
+      assert %Hologram.Compiler.IR.With{
+               body: body,
+               clauses: [first_clause, _second, _third],
+               else_clauses: [first_else, _second_else]
+             } = transform(ast, %Context{})
+
+      assert body == %IR.AtomType{value: :ok}
+      assert %IR.WithClause{} = first_clause
+      assert %IR.Clause{} = first_else
+    end
+
+    test "clause without guards" do
+      ast =
+        ast("""
+        with :ok <- y  do
+        end  
+        """)
+
+      assert %IR.With{
+               clauses: [clause],
+               else_clauses: [],
+               body: body
+             } = transform(ast, %Context{})
+
+      assert body == %IR.Block{expressions: []}
+
+      assert clause == %IR.WithClause{
+               match: %IR.AtomType{value: :ok},
+               guards: [],
+               expression: %IR.Variable{name: :y}
+             }
+    end
+
+    test "clause with guards" do
+      ast =
+        ast("""
+        with i when is_integer(i) <- x, do: x
+        """)
+
+      assert %{clauses: [clause], body: body} = transform(ast, %Context{})
+
+      assert clause == %IR.WithClause{
+               match: %IR.Variable{
+                 name: :i
+               },
+               guards: [
+                 %IR.LocalFunctionCall{
+                   args: [%IR.Variable{name: :i}],
+                   function: :is_integer
+                 }
+               ],
+               expression: %IR.Variable{name: :x}
+             }
+
+      assert body == %IR.Variable{name: :x}
+    end
+
+    test "with compound guard calls" do
+      ast =
+        ast("""
+        with x when is_integer(x) and x > 5 <- y, do: nil
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.AtomType{value: nil},
+               else_clauses: [],
+               clauses: [
+                 %IR.WithClause{
+                   match: %IR.Variable{
+                     name: :x
+                   },
+                   expression: %IR.Variable{name: :y},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :and,
+                       args: [
+                         %IR.LocalFunctionCall{
+                           function: :is_integer,
+                           args: [
+                             %IR.Variable{
+                               name: :x
+                             }
+                           ]
+                         },
+                         %IR.LocalFunctionCall{
+                           function: :>,
+                           args: [
+                             %IR.Variable{
+                               name: :x
+                             },
+                             %IR.IntegerType{
+                               value: 5
+                             }
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "with plain expressions" do
+      ast =
+        ast("""
+        with x = foo(5),
+          y <- x do
+        end
+        """)
+
+      assert %{clauses: [plain_clause, arrow_clause]} = transform(ast, %Context{})
+
+      assert plain_clause == %IR.WithClause{
+               match: %IR.MatchPlaceholder{},
+               guards: [],
+               expression: %IR.MatchOperator{
+                 left: %IR.Variable{name: :x},
+                 right: %IR.LocalFunctionCall{
+                   function: :foo,
+                   args: [
+                     %IR.IntegerType{value: 5}
+                   ]
+                 }
+               }
+             }
+
+      assert arrow_clause == %IR.WithClause{
+               match: %IR.Variable{name: :y},
+               guards: [],
+               expression: %IR.Variable{name: :x}
+             }
+    end
+
+    test "with plain expression (function call)" do
+      ast =
+        ast("""
+        with baz(5) do
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [
+                 %IR.WithClause{
+                   match: %IR.MatchPlaceholder{},
+                   guards: [],
+                   expression: %IR.LocalFunctionCall{
+                     function: :baz,
+                     args: [
+                       %IR.IntegerType{value: 5}
+                     ]
+                   }
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with single expression do block" do
+      ast =
+        ast("""
+        with {:ok, x} <- y do
+          foo(x)
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithClause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :ok},
+                       %IR.Variable{name: :x}
+                     ]
+                   },
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [],
+               body: %IR.LocalFunctionCall{
+                 function: :foo,
+                 args: [
+                   %IR.Variable{name: :x}
+                 ]
+               }
+             }
+    end
+
+    test "with multi-expression do block" do
+      ast =
+        ast("""
+        with x <- y do
+          x = 5
+          foo(x)
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [],
+               body: %IR.Block{
+                 expressions: [
+                   %IR.MatchOperator{
+                     left: %IR.Variable{name: :x},
+                     right: %IR.IntegerType{value: 5}
+                   },
+                   %IR.LocalFunctionCall{
+                     function: :foo,
+                     args: [
+                       %IR.Variable{name: :x}
+                     ]
+                   }
+                 ]
+               }
+             }
+    end
+
+    test "single clause else block" do
+      ast =
+        ast("""
+        with do
+        else
+          {:error, other} ->
+            :error
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :error},
+                       %IR.Variable{name: :other}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+                 }
+               ]
+             }
+    end
+
+    test "multi clause else block" do
+      ast =
+        ast("""
+        with do
+        else
+          {:error, :timeout} ->
+            foo(y)
+          {:error, other} ->
+            other
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :error},
+                       %IR.AtomType{
+                         value: :timeout
+                       }
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.LocalFunctionCall{
+                         function: :foo,
+                         args: [
+                           %IR.Variable{name: :y}
+                         ]
+                       }
+                     ]
+                   }
+                 },
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :error},
+                       %IR.Variable{name: :other}
+                     ]
+                   },
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.Variable{
+                         name: :other
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "pin match" do
+      ast =
+        ast("""
+        key = :ok
+        with ^key <- y do
+        end
+        """)
+
+      assert %IR.Block{expressions: [_match, %IR.With{} = with_ir]} = transform(ast, %Context{})
+
+      assert with_ir == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [
+                 %IR.WithClause{
+                   match: %IR.PinOperator{variable: %IR.Variable{name: :key, version: nil}},
+                   expression: %IR.Variable{name: :y},
+                   guards: []
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "pin in else clause" do
+      ast =
+        ast("""
+        key = :error
+        with x <- y do
+        else
+          ^key ->
+            :clause
+        end
+        """)
+
+      assert %IR.Block{expressions: [_match, %IR.With{} = with_ir]} = transform(ast, %Context{})
+
+      assert with_ir == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [
+                 %IR.WithClause{
+                   match: %IR.Variable{name: :x},
+                   expression: %IR.Variable{name: :y},
+                   guards: []
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.PinOperator{variable: %IR.Variable{name: :key}},
+                   guards: [],
+                   body: %IR.Block{expressions: [%IR.AtomType{value: :clause}]}
+                 }
+               ]
+             }
+    end
+
+    test "without else block" do
+      ast =
+        ast("""
+        with x <- y do
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [
+                 %IR.WithClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
   end
 end

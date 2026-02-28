@@ -47,6 +47,7 @@ defmodule Hologram.Compiler.IR do
           | IR.TupleType.t()
           | IR.Variable.t()
           | IR.With.t()
+          | IR.WithClause.t()
 
   defmodule AnonymousFunctionCall do
     @moduledoc false
@@ -384,13 +385,24 @@ defmodule Hologram.Compiler.IR do
     @type t :: %__MODULE__{name: atom, version: integer | nil}
   end
 
-  # TODO: finish implementing
   defmodule With do
     @moduledoc false
 
-    defstruct []
+    defstruct [:clauses, :body, :else_clauses]
 
-    @type t :: %__MODULE__{}
+    @type t :: %__MODULE__{
+            clauses: list(IR.Clause.t()),
+            body: IR.t(),
+            else_clauses: list(IR.Clause.t())
+          }
+  end
+
+  defmodule WithClause do
+    @moduledoc false
+
+    defstruct [:match, :guards, :expression]
+
+    @type t :: %__MODULE__{match: IR.t(), guards: list(IR.t()), expression: IR.Block.t()}
   end
 
   @doc """

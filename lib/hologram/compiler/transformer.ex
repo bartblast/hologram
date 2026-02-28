@@ -442,9 +442,21 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir(context)
   end
 
-  # TODO: finish implementing
-  def transform({:with, _meta, parts}, _context) when is_list(parts) do
-    %IR.With{}
+  def transform({:with, _meta, parts}, context) when is_list(parts) do
+    initial_acc = %IR.With{
+      clauses: [],
+      else_clauses: [],
+      body: nil
+    }
+
+    parts
+    |> Enum.reduce(
+      initial_acc,
+      &transform_with_clause(&1, &2, context)
+    )
+    |> then(fn %{clauses: clauses} = ir ->
+      %{ir | clauses: Enum.reverse(clauses)}
+    end)
   end
 
   # --- PRESERVE ORDER (BEGIN) ---
@@ -919,5 +931,54 @@ defmodule Hologram.Compiler.Transformer do
       _fallback ->
         %IR.Variable{name: name, version: version}
     end
+  end
+
+  defp transform_with_clause(do_and_else, acc, context) when is_list(do_and_else) do
+    do_part =
+      do_and_else
+      |> Keyword.get(:do)
+      |> transform(context)
+
+    else_part =
+      do_and_else
+      |> Keyword.get(:else, [])
+      |> Enum.map(&transform(&1, context))
+
+    %{acc | body: do_part, else_clauses: else_part}
+  end
+
+  defp transform_with_clause(
+         {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, body]},
+         acc,
+         context
+       ) do
+    clause = %IR.WithClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: transform_guards(guards, context),
+      expression: transform(body, context)
+    }
+
+    %{acc | clauses: [clause | acc.clauses]}
+  end
+
+  defp transform_with_clause({:<-, _meta, [match, body]}, acc, context) do
+    clause = %IR.WithClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: [],
+      expression: transform(body, context)
+    }
+
+    %{acc | clauses: [clause | acc.clauses]}
+  end
+
+  defp transform_with_clause(clause, acc, context) do
+    clause =
+      %IR.WithClause{
+        match: %IR.MatchPlaceholder{},
+        guards: [],
+        expression: transform(clause, context)
+      }
+
+    %{acc | clauses: [clause | acc.clauses]}
   end
 end
