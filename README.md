@@ -37,7 +37,6 @@ Website: https://hologram.page
 ### Framework Visionary Tier
 
 * [@absowoot](https://github.com/absowoot)
-* Uzair Aslam, [@uzairaslam196](https://github.com/uzairaslam196)
 * Oban, [@oban-bg](https://github.com/oban-bg)
 * Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 * Robert Urbańczyk, [@robertu](https://github.com/robertu)
@@ -45,16 +44,11 @@ Website: https://hologram.page
 ### Early Adopter Tier
 
 * Daniel Calancea, [@D4no0](https://github.com/D4no0)
-* Darren Black, [@totaltrash](https://github.com/totaltrash)
-* [@jzimmek](https://github.com/jzimmek)
-* Nicholas Moen, [@arcanemachine](https://github.com/arcanemachine)
 * [@pasila](https://github.com/pasila)
 * Jonatan Männchen, [@maennchen](https://github.com/maennchen)
 * Douglas Manzelmann, [@douglasmanzelmann](https://github.com/douglasmanzelmann)
 * James Harton, [@jimsynz](https://github.com/jimsynz)
 * Ian Asaff, [@montague](https://github.com/montague)
-* Juozas Norkus, [@jozuas](https://github.com/jozuas)
-* Thomas, [@thomaswhyyou](https://github.com/thomaswhyyou)
 * Max, [@Makesesama](https://github.com/Makesesama)
 * Dawid Danieluk, [@nxy7](https://github.com/nxy7)
 
