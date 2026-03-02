@@ -1057,14 +1057,22 @@ export default class Interpreter {
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           context = contextClone;
         } else {
-          return Interpreter.#withElse(condition, elseClauses, originalContext);
+          return Interpreter.#withElse(
+            condition,
+            elseClauses,
+            Interpreter.cloneContext(originalContext),
+          );
         }
       } else {
-        return Interpreter.#withElse(condition, elseClauses, originalContext);
+        return Interpreter.#withElse(
+          condition,
+          elseClauses,
+          Interpreter.cloneContext(originalContext),
+        );
       }
     }
 
-    return body(context);
+    return body(Interpreter.cloneContext(context));
   }
 
   static #areBitstringsEqual(bitstring1, bitstring2) {

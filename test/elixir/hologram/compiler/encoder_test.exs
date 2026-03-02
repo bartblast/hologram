@@ -2817,9 +2817,9 @@ defmodule Hologram.Compiler.EncoderTest do
       ir = %IR.With{
         body: %IR.AtomType{value: :ok},
         clauses: [
-          %IR.Clause{
+          %IR.WithClause{
             match: %IR.Variable{name: :x},
-            body: %IR.Variable{name: :y},
+            expression: %IR.Variable{name: :y},
             guards: []
           }
         ],
@@ -2834,7 +2834,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], body: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
         return Type.atom("error");
         }}], context)\
         """)
@@ -2846,9 +2846,9 @@ defmodule Hologram.Compiler.EncoderTest do
       ir = %IR.With{
         body: %IR.AtomType{value: nil},
         clauses: [
-          %IR.Clause{
+          %IR.WithClause{
             match: %IR.Variable{name: :x},
-            body: %IR.Variable{name: :y},
+            expression: %IR.Variable{name: :y},
             guards: []
           }
         ],
@@ -2863,7 +2863,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.with((context) => Type.atom("nil"), [{match: Type.variablePattern("x"), guards: [], body: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        Interpreter.with((context) => Type.atom("nil"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
         return Type.atom("error");
         }}], context)\
         """)
@@ -2888,9 +2888,9 @@ defmodule Hologram.Compiler.EncoderTest do
           ]
         },
         clauses: [
-          %IR.Clause{
+          %IR.WithClause{
             match: %IR.Variable{name: :x},
-            body: %IR.Variable{name: :y},
+            expression: %IR.Variable{name: :y},
             guards: []
           }
         ],
@@ -2909,7 +2909,7 @@ defmodule Hologram.Compiler.EncoderTest do
         Interpreter.matchOperator(Type.integer(5n), Type.variablePattern("x"), context);
         Interpreter.updateVarsToMatchedValues(context);
         return Erlang_["foo/1"](context.vars.x);
-        }, [{match: Type.variablePattern("x"), guards: [], body: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
         return Type.atom("error");
         }}], context)\
         """)
@@ -2934,9 +2934,9 @@ defmodule Hologram.Compiler.EncoderTest do
           ]
         },
         clauses: [
-          %IR.Clause{
+          %IR.WithClause{
             match: %IR.Variable{name: :x},
-            body: %IR.Variable{name: :y},
+            expression: %IR.Variable{name: :y},
             guards: []
           }
         ],
@@ -2949,7 +2949,7 @@ defmodule Hologram.Compiler.EncoderTest do
         Interpreter.matchOperator(Type.integer(5n), Type.variablePattern("x"), context);
         Interpreter.updateVarsToMatchedValues(context);
         return Erlang_["foo/1"](context.vars.x);
-        }, [{match: Type.variablePattern("x"), guards: [], body: (context) => context.vars.y}], [], context)\
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [], context)\
         """)
 
       assert encode_ir(ir) == expected
@@ -2959,9 +2959,9 @@ defmodule Hologram.Compiler.EncoderTest do
       ir = %IR.With{
         body: %IR.AtomType{value: :ok},
         clauses: [
-          %IR.Clause{
+          %IR.WithClause{
             match: %IR.Variable{name: :x},
-            body: %IR.Variable{name: :y},
+            expression: %IR.Variable{name: :y},
             guards: []
           }
         ],
@@ -2981,7 +2981,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], body: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
         return Type.atom("error");
         }}, {match: Type.atom("timeout"), guards: [], body: (context) => {
         return Type.atom("error");
