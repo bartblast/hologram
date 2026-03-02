@@ -6958,7 +6958,7 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-    it("handle plain expressions", () => {
+    it("handles plain expressions", () => {
       // with b = a do
       //   {a, b}
       // end
@@ -7185,6 +7185,22 @@ describe("Interpreter", () => {
         "WithClauseError",
         "no with clause matching: :ok",
       );
+    });
+    it("does not leak into the original context", () => {
+      Interpreter.with(
+        (context) => {
+          Interpreter.matchOperator(
+            Type.integer(2n),
+            Type.variablePattern("a"),
+            context,
+          );
+          return Interpreter.updateVarsToMatchedValues(context);
+        },
+        [],
+        [],
+        context,
+      );
+      assert.deepStrictEqual(context.vars.a, Type.atom("ok"));
     });
   });
 });

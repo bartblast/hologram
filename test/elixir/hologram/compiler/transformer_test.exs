@@ -6489,8 +6489,41 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
 
       assert body == %IR.AtomType{value: :ok}
-      assert %IR.WithClause{} = first_clause
-      assert %IR.Clause{} = first_else
+
+      assert %IR.WithClause{
+               match: %IR.TupleType{data: [%IR.AtomType{value: :ok}, %IR.Variable{name: :x}]},
+               guards: [
+                 %IR.LocalFunctionCall{
+                   function: :not,
+                   args: [
+                     %IR.LocalFunctionCall{
+                       function: :is_nil,
+                       args: [
+                         %IR.Variable{name: :x}
+                       ]
+                     }
+                   ]
+                 }
+               ],
+               expression: %IR.TupleType{
+                 data: [
+                   %IR.AtomType{value: :ok},
+                   %IR.LocalFunctionCall{function: :foo, args: [%IR.Variable{name: :y}]}
+                 ]
+               }
+             } = first_clause
+
+      assert %IR.Clause{
+               match: %IR.AtomType{value: :error},
+               guards: [],
+               body: %IR.Block{
+                 expressions: [
+                   %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.AtomType{value: :wrong_data}]
+                   }
+                 ]
+               }
+             } = first_else
     end
 
     test "clause without guards" do

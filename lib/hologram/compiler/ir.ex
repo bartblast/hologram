@@ -391,7 +391,7 @@ defmodule Hologram.Compiler.IR do
     defstruct [:clauses, :body, :else_clauses]
 
     @type t :: %__MODULE__{
-            clauses: list(IR.Clause.t()),
+            clauses: list(IR.WithClause.t()),
             body: IR.t(),
             else_clauses: list(IR.Clause.t())
           }
@@ -402,7 +402,7 @@ defmodule Hologram.Compiler.IR do
 
     defstruct [:match, :guards, :expression]
 
-    @type t :: %__MODULE__{match: IR.t(), guards: list(IR.t()), expression: IR.Block.t()}
+    @type t :: %__MODULE__{match: IR.t(), guards: list(IR.t()), expression: IR.t()}
   end
 
   @doc """
