@@ -3092,7 +3092,8 @@ defmodule Hologram.Compiler.EncoderTest do
         expression: %IR.Variable{name: :x}
       }
 
-      assert encode_ir(ir) =~ ~s|guards: [(context) => Erlang_["is_integer/1"](context.vars.i)]|
+      assert encode_ir(ir) ==
+               ~s|{match: Type.variablePattern("i"), guards: [(context) => Erlang_["is_integer/1"](context.vars.i)], expression: (context) => context.vars.x}|
     end
 
     test "with plain expression" do

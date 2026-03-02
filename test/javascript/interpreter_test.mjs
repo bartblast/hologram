@@ -7401,7 +7401,7 @@ describe("Interpreter", () => {
           },
           {
             match: Type.variablePattern("i"),
-            guards: [(_context) => Type.atom("false")],
+            guards: [(_context) => Type.atom(false)],
             expression: (_context) => Type.atom("mismatch"),
           },
         ],
@@ -7472,7 +7472,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, expected);
     });
     it("handles shadowing correctly", () => {
-      const expected = Type.integer(3n);
+      const expected = Type.integer(3);
       const result = Interpreter.with(
         (context) => Erlang["+/2"](context.vars.a, context.vars.b),
         [
@@ -7481,7 +7481,7 @@ describe("Interpreter", () => {
             guards: [],
             expression: (context) => {
               Interpreter.matchOperator(
-                Type.integer(1n),
+                Type.integer(1),
                 Type.variablePattern("b"),
                 context,
               );
@@ -7492,13 +7492,13 @@ describe("Interpreter", () => {
                 context,
               );
               Interpreter.updateVarsToMatchedValues(context);
-              return Type.integer(1n);
+              return Type.integer(1);
             },
           },
           {
             match: Type.variablePattern("b"),
             guards: [],
-            expression: (_context) => Type.integer(2n),
+            expression: (_context) => Type.integer(2),
           },
         ],
         [],
@@ -7540,7 +7540,7 @@ describe("Interpreter", () => {
       Interpreter.with(
         (context) => {
           Interpreter.matchOperator(
-            Type.integer(2n),
+            Type.integer(2),
             Type.variablePattern("a"),
             context,
           );
