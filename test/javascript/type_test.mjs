@@ -61,31 +61,29 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  describe("anonymousFunction()", () => {
-    it("default (sync)", () => {
-      ERTS.funSequence.reset();
+  it("anonymousFunction()", () => {
+    ERTS.funSequence.reset();
 
-      const arity = 3;
-      const clauses = ["clause_dummy_1", "clause_dummy_2"];
+    const arity = 3;
+    const clauses = ["clause_dummy_1", "clause_dummy_2"];
 
-      const context = contextFixture({
-        vars: {a: Type.integer(1), b: Type.integer(2)},
-      });
-
-      const result = Type.anonymousFunction(arity, clauses, context);
-
-      const expected = {
-        type: "anonymous_function",
-        arity: arity,
-        capturedFunction: null,
-        capturedModule: null,
-        clauses: clauses,
-        context: context,
-        uniq: 1,
-      };
-
-      assert.deepStrictEqual(result, expected);
+    const context = contextFixture({
+      vars: {a: Type.integer(1), b: Type.integer(2)},
     });
+
+    const result = Type.anonymousFunction(arity, clauses, context);
+
+    const expected = {
+      type: "anonymous_function",
+      arity: arity,
+      capturedFunction: null,
+      capturedModule: null,
+      clauses: clauses,
+      context: context,
+      uniq: 1,
+    };
+
+    assert.deepStrictEqual(result, expected);
   });
 
   it("atom()", () => {
@@ -539,40 +537,38 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  describe("functionCapture()", () => {
-    it("default (sync)", () => {
-      ERTS.funSequence.reset();
+  it("functionCapture()", () => {
+    ERTS.funSequence.reset();
 
-      const capturedModule = "MyModule";
-      const capturedFunction = "my_fun";
-      const arity = 2;
-      const clauses = ["clause_dummy_1", "clause_dummy_2"];
+    const capturedModule = "MyModule";
+    const capturedFunction = "my_fun";
+    const arity = 2;
+    const clauses = ["clause_dummy_1", "clause_dummy_2"];
 
-      const context = contextFixture({
-        module: "Aaa.Bbb",
-        vars: {a: Type.integer(1), b: Type.integer(2)},
-      });
-
-      const result = Type.functionCapture(
-        capturedModule,
-        capturedFunction,
-        arity,
-        clauses,
-        context,
-      );
-
-      const expected = {
-        type: "anonymous_function",
-        arity: arity,
-        capturedFunction: capturedFunction,
-        capturedModule: capturedModule,
-        clauses: clauses,
-        context: contextFixture({module: "Aaa.Bbb", vars: {}}),
-        uniq: 1,
-      };
-
-      assert.deepStrictEqual(result, expected);
+    const context = contextFixture({
+      module: "Aaa.Bbb",
+      vars: {a: Type.integer(1), b: Type.integer(2)},
     });
+
+    const result = Type.functionCapture(
+      capturedModule,
+      capturedFunction,
+      arity,
+      clauses,
+      context,
+    );
+
+    const expected = {
+      type: "anonymous_function",
+      arity: arity,
+      capturedFunction: capturedFunction,
+      capturedModule: capturedModule,
+      clauses: clauses,
+      context: contextFixture({module: "Aaa.Bbb", vars: {}}),
+      uniq: 1,
+    };
+
+    assert.deepStrictEqual(result, expected);
   });
 
   describe("improperList()", () => {
