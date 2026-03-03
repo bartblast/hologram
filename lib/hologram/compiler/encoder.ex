@@ -144,9 +144,8 @@ defmodule Hologram.Compiler.Encoder do
     async? = has_async_call?(clauses, context)
     clause_context = %{context | async?: async?}
     clauses_js = encode_as_array(clauses, clause_context)
-    async_arg_js = if async?, do: ", true", else: ""
 
-    "Type.anonymousFunction(#{arity}, #{clauses_js}, context#{async_arg_js})"
+    "Type.anonymousFunction(#{arity}, #{clauses_js}, context)"
   end
 
   def encode_ir(
@@ -172,9 +171,8 @@ defmodule Hologram.Compiler.Encoder do
     async? = has_async_call?(clauses, context)
     clause_context = %{context | async?: async?}
     clauses_js = encode_as_array(clauses, clause_context)
-    async_arg_js = if async?, do: ", true", else: ""
 
-    "Type.functionCapture(#{captured_module_js}, #{captured_function_js}, #{arity}, #{clauses_js}, context#{async_arg_js})"
+    "Type.functionCapture(#{captured_module_js}, #{captured_function_js}, #{arity}, #{clauses_js}, context)"
   end
 
   def encode_ir(%IR.AtomType{value: value}, _context) do
