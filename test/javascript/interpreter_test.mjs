@@ -1797,42 +1797,28 @@ describe("Interpreter", () => {
       delete globalThis.Elixir_Ddd;
     });
 
-    it("registers a sync function when isAsync is false", () => {
-      Interpreter.defineElixirFunction(
-        "Aaa.Bbb",
-        "my_sync",
-        0,
-        "public",
-        [
-          {
-            params: (_context) => [],
-            guards: [],
-            body: (_context) => Type.atom("sync_result"),
-          },
-        ],
-        false,
-      );
+    it("registers a sync function", () => {
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_sync", 0, "public", [
+        {
+          params: (_context) => [],
+          guards: [],
+          body: (_context) => Type.atom("sync_result"),
+        },
+      ]);
 
       const result = globalThis.Elixir_Aaa_Bbb["my_sync/0"]();
 
       assert.deepStrictEqual(result, Type.atom("sync_result"));
     });
 
-    it("registers an async function when isAsync is true", async () => {
-      Interpreter.defineElixirFunction(
-        "Aaa.Bbb",
-        "my_async",
-        0,
-        "public",
-        [
-          {
-            params: (_context) => [],
-            guards: [],
-            body: async (_context) => Type.atom("async_result"),
-          },
-        ],
-        true,
-      );
+    it("returns a Promise when body closure is async", async () => {
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_async", 0, "public", [
+        {
+          params: (_context) => [],
+          guards: [],
+          body: async (_context) => Type.atom("async_result"),
+        },
+      ]);
 
       const result = globalThis.Elixir_Aaa_Bbb["my_async/0"]();
       assert.instanceOf(result, Promise);
