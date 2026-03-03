@@ -69,11 +69,7 @@ defmodule Hologram.Compiler.Encoder do
     clause_context = %{context | async?: async?}
     clauses_js = encode_as_array(clauses, clause_context)
 
-    if async? do
-      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js}, true);/
-    else
-      ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
-    end
+    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
   end
 
   @doc """

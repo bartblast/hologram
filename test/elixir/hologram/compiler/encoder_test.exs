@@ -1505,7 +1505,7 @@ defmodule Hologram.Compiler.EncoderTest do
         return Type.atom("expr_2");
         }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: async (context) => {
         return context.vars.z;
-        }}], true);\
+        }}]);\
         """)
 
       assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
