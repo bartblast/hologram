@@ -32,7 +32,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "async", %{ir: ir} do
       assert encode_ir(ir, %Context{async?: true}) ==
-               "(await Interpreter.asyncCallAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
+               "(await Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
     end
   end
 
