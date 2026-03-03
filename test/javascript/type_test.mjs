@@ -81,33 +81,6 @@ describe("Type", () => {
         capturedModule: null,
         clauses: clauses,
         context: context,
-        isAsync: false,
-        uniq: 1,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("with isAsync", () => {
-      ERTS.funSequence.reset();
-
-      const arity = 2;
-      const clauses = ["clause_dummy_1"];
-
-      const context = contextFixture({
-        vars: {a: Type.integer(1)},
-      });
-
-      const result = Type.anonymousFunction(arity, clauses, context, true);
-
-      const expected = {
-        type: "anonymous_function",
-        arity: arity,
-        capturedFunction: null,
-        capturedModule: null,
-        clauses: clauses,
-        context: context,
-        isAsync: true,
         uniq: 1,
       };
 
@@ -595,43 +568,6 @@ describe("Type", () => {
         capturedModule: capturedModule,
         clauses: clauses,
         context: contextFixture({module: "Aaa.Bbb", vars: {}}),
-        isAsync: false,
-        uniq: 1,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("with isAsync", () => {
-      ERTS.funSequence.reset();
-
-      const capturedModule = "MyModule";
-      const capturedFunction = "my_fun";
-      const arity = 2;
-      const clauses = ["clause_dummy_1"];
-
-      const context = contextFixture({
-        module: "Aaa.Bbb",
-        vars: {a: Type.integer(1)},
-      });
-
-      const result = Type.functionCapture(
-        capturedModule,
-        capturedFunction,
-        arity,
-        clauses,
-        context,
-        true,
-      );
-
-      const expected = {
-        type: "anonymous_function",
-        arity: arity,
-        capturedFunction: capturedFunction,
-        capturedModule: capturedModule,
-        clauses: clauses,
-        context: contextFixture({module: "Aaa.Bbb", vars: {}}),
-        isAsync: true,
         uniq: 1,
       };
 
