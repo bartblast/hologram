@@ -1,11 +1,18 @@
 "use strict";
 
 import Bitstring from "../../bitstring.mjs";
+import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Type from "../../type.mjs";
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+
+const TASK_MFA = Type.tuple([
+  Type.alias("Hologram.JS"),
+  Type.atom("call"),
+  Type.integer(3),
+]);
 
 function box(value) {
   if (value === null) {
@@ -40,6 +47,13 @@ function box(value) {
   }
 
   return {type: "native", value: value};
+}
+
+function registerPromise(promise) {
+  const ref = ERTS.uniqueReference();
+  ERTS.promiseRegistry.put(ref, promise);
+
+  return Type.taskStruct(TASK_MFA, ERTS.INIT_PID, ref);
 }
 
 function resolveBinding(term, callerModule) {
@@ -191,5 +205,5 @@ const Elixir_Hologram_JS = {
   },
 };
 
-export {box, resolveBinding, unbox};
+export {box, registerPromise, resolveBinding, unbox};
 export default Elixir_Hologram_JS;
