@@ -374,15 +374,8 @@ export default class Type {
     return Type.isList(term) && term.isProper === true;
   }
 
-  // Deps: [:maps.get/3]
   static isRange(term) {
-    return (
-      Type.isMap(term) &&
-      Interpreter.isEqual(
-        Erlang_Maps["get/3"](Type.atom("__struct__"), term, Type.nil()),
-        Type.alias("Range"),
-      )
-    );
+    return Type.isStruct(term, "Range");
   }
 
   static isReference(term) {
