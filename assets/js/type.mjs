@@ -389,19 +389,11 @@ export default class Type {
     return term.type === "reference";
   }
 
-  // Deps: [:maps.get/3, :maps.is_key/2]
-  static isStruct(term, module = null) {
-    if (!Type.isMap(term)) return false;
-
-    if (module === null) {
-      return Type.isTrue(
-        Erlang_Maps["is_key/2"](Type.atom("__struct__"), term),
-      );
-    }
-
-    return Interpreter.isEqual(
-      Erlang_Maps["get/3"](Type.atom("__struct__"), term, Type.nil()),
-      Type.alias(module),
+  // Deps: [:maps.is_key/2]
+  static isStruct(term) {
+    return (
+      Type.isMap(term) &&
+      Type.isTrue(Erlang_Maps["is_key/2"](Type.atom("__struct__"), term))
     );
   }
 
