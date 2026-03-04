@@ -334,6 +334,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "function capture variant stays sync when no async calls" do
+      # credo:disable-for-lines:27 Credo.Check.Design.DuplicatedCode
       # &Calendar.ISO.parse_date/2  (inside async context, but body has no async calls)
       ir = %IR.AnonymousFunctionType{
         arity: 2,
