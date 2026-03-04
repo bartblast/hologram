@@ -57,7 +57,7 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
   #   end
   # end
 
-  # describe "JS.call_async/3" do
+  # describe "Task.await/1" do
   #   feature "async method", %{session: session} do
   #     session
   #     |> visit(HologramFeatureTests.JavaScriptInteropPage)

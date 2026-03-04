@@ -133,13 +133,6 @@ const Elixir_Hologram_JS = {
     return box(result);
   },
 
-  "call_async/4": async (receiver, methodName, args, callerModule) => {
-    const jsReceiver = resolveBinding(receiver, callerModule);
-    const jsMethodName = methodName.value;
-
-    return box(await jsReceiver[jsMethodName](...unbox(args, callerModule)));
-  },
-
   "delete/3": (receiver, property, callerModule) => {
     const jsReceiver = resolveBinding(receiver, callerModule);
     const jsPropertyName = property.value;

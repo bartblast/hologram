@@ -48,27 +48,6 @@ defmodule Hologram.JS do
   def call(_receiver, _method, _args, _caller_module), do: __server_pass_through__()
 
   @doc """
-  Calls an async method on a JS receiver and awaits the result.
-  """
-  defmacro call_async(receiver, method, args) do
-    module = __CALLER__.module
-
-    quote do
-      Hologram.JS.call_async(
-        unquote(receiver),
-        unquote(method),
-        unquote(args),
-        unquote(module)
-      )
-    end
-  end
-
-  # Server-side pass-through; implemented in JavaScript.
-  @doc false
-  @spec call_async(any(), atom(), list(), module()) :: any()
-  def call_async(_receiver, _method, _args, _caller_module), do: __server_pass_through__()
-
-  @doc """
   Deletes a property from a JS receiver.
   """
   defmacro delete(receiver, property) do

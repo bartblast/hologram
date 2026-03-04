@@ -176,7 +176,6 @@ defmodule Hologram.Compiler.CallGraph do
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
     {Hologram.JS, :call, 4},
-    {Hologram.JS, :call_async, 4},
     {Hologram.JS, :delete, 3},
     {Hologram.JS, :eval, 1},
     {Hologram.JS, :exec, 1},
@@ -505,17 +504,17 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns a MapSet of MFAs that transitively call `Task.await/1` or `Hologram.JS.call_async/4`.
+  Returns a MapSet of MFAs that transitively call `Task.await/1`.
 
   Must be called on the original call graph before `remove_manually_ported_mfas/1`
-  strips these vertices.
+  strips the `Task.await/1` vertex.
   """
   @spec list_async_mfas(t) :: MapSet.t(mfa)
   def list_async_mfas(call_graph) do
     graph = get_graph(call_graph)
 
     graph
-    |> Digraph.reaching([{Task, :await, 1}, {Hologram.JS, :call_async, 4}])
+    |> Digraph.reaching([{Task, :await, 1}])
     # Excludes bare module atom vertices, keeping only MFA tuples.
     # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
     # the result is only used for MapSet.member? lookups against already-included MFAs.

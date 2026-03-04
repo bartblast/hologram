@@ -109,7 +109,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
 
-    # Must be computed before remove_manually_ported_mfas/1 strips the call_async/4 vertex.
+    # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
     async_mfas = CallGraph.list_async_mfas(call_graph)
 
     call_graph_for_runtime =
