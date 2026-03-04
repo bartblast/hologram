@@ -379,7 +379,7 @@ jobs:
       - name: Archive fail screenshots
         # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
         if: success() || failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/features/tmp/screenshots
