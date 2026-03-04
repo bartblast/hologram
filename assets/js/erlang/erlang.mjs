@@ -2010,17 +2010,7 @@ const Erlang = {
 
   // Start make_ref/0
   "make_ref/0": () => {
-    const node = ERTS.nodeTable.CLIENT_NODE;
-    const creation = 0;
-
-    // TODO: implement ID words similarly to how it's done in Erlang
-    const idWords = [
-      Utils.randomUint32(),
-      Utils.randomUint32(),
-      ERTS.referenceSequence.next(),
-    ];
-
-    return Type.reference(node, creation, idWords);
+    return ERTS.uniqueReference();
   },
   // End make_ref/0
   // Deps: []

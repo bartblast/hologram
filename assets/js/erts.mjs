@@ -5,6 +5,7 @@ import NodeTable from "./erts/node_table.mjs";
 import PromiseRegistry from "./erts/promise_registry.mjs";
 import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
+import Utils from "./utils.mjs";
 
 export default class ERTS {
   // The PID of the init process (#PID<0.0.0>), which is the first process started
@@ -36,6 +37,20 @@ export default class ERTS {
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+
+  static uniqueReference() {
+    const node = $.nodeTable.CLIENT_NODE;
+    const creation = 0;
+
+    // TODO: implement ID words similarly to how it's done in Erlang
+    const idWords = [
+      Utils.randomUint32(),
+      Utils.randomUint32(),
+      $.referenceSequence.next(),
+    ];
+
+    return Type.reference(node, creation, idWords);
+  }
 }
 
 const $ = ERTS;
