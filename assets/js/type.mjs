@@ -495,6 +495,15 @@ export default class Type {
     return Type.map(data.concat([[key, value]]));
   }
 
+  static taskStruct(mfa, owner, ref, pid = Type.nil()) {
+    return Type.struct("Task", [
+      [Type.atom("mfa"), mfa],
+      [Type.atom("owner"), owner],
+      [Type.atom("pid"), pid],
+      [Type.atom("ref"), ref],
+    ]);
+  }
+
   static tuple(data = []) {
     return {type: "tuple", data: data};
   }

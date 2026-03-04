@@ -8,6 +8,7 @@ import {
 
 import ERTS from "../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -1504,6 +1505,48 @@ describe("Type", () => {
     const expected = {type: "map", data: expectedData};
 
     assert.deepStrictEqual(result, expected);
+  });
+
+  describe("taskStruct()", () => {
+    const mfa = Type.tuple([
+      Type.alias("MyModule"),
+      Type.atom("my_fun"),
+      Type.integer(1),
+    ]);
+
+    const owner = Type.pid("client", [0, 0, 1], "client");
+    const ref = Type.reference(NodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+    it("without pid (defaults to nil)", () => {
+      const result = Type.taskStruct(mfa, owner, ref);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Task")],
+          [Type.atom("mfa"), mfa],
+          [Type.atom("owner"), owner],
+          [Type.atom("pid"), Type.nil()],
+          [Type.atom("ref"), ref],
+        ]),
+      );
+    });
+
+    it("with pid", () => {
+      const pid = Type.pid("client", [0, 0, 2], "client");
+      const result = Type.taskStruct(mfa, owner, ref, pid);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Task")],
+          [Type.atom("mfa"), mfa],
+          [Type.atom("owner"), owner],
+          [Type.atom("pid"), pid],
+          [Type.atom("ref"), ref],
+        ]),
+      );
+    });
   });
 
   describe("tuple()", () => {
