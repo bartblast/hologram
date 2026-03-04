@@ -2,14 +2,20 @@
 
 import {
   assert,
+  assertBoxedError,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
 import Elixir_Task from "../../../assets/js/elixir/task.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
+
+// IMPORTANT!
+// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/elixir/task_test.exs
+// Always update both together.
 
 describe("Elixir_Task", () => {
   describe("await/1", () => {
@@ -33,6 +39,20 @@ describe("Elixir_Task", () => {
       const result = await taskAwait(taskStruct);
 
       assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the arg is not a Task struct", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        "Task.await/2",
+        [Type.integer(123), Type.integer(5000)],
+      );
+
+      assertBoxedError(
+        () => taskAwait(Type.integer(123)),
+        "FunctionClauseError",
+        expectedMessage,
+      );
     });
   });
 });
