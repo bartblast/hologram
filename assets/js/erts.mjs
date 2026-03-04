@@ -2,6 +2,7 @@
 
 import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
+import PromiseRegistry from "./erts/promise_registry.mjs";
 import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
 
@@ -19,6 +20,7 @@ export default class ERTS {
 
   static binaryPatternRegistry = BinaryPatternRegistry;
   static ets = {};
+  static promiseRegistry = PromiseRegistry;
 
   // Sequence for anonymous function `uniq` field.
   // Used to derive fun_info/1 fields: index, new_index, uniq, new_uniq.
