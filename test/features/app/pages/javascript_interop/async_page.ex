@@ -1,5 +1,6 @@
 defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
   use Hologram.Page
+  use Hologram.JS
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Hologram.JS, only: [js_import: 2]
