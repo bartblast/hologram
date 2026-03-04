@@ -9,6 +9,7 @@ import Elixir_Hologram_JS, {
   box,
   registerPromise,
   resolveBinding,
+  takePromise,
   unbox,
 } from "../../../../assets/js/elixir/hologram/js.mjs";
 
@@ -270,6 +271,31 @@ describe("resolveBinding()", () => {
     const result = resolveBinding(Type.integer(42), Type.alias("Unused"));
 
     assert.strictEqual(result, 42);
+  });
+});
+
+describe("takePromise()", () => {
+  it("returns the stored Promise for a registered Task struct", () => {
+    const promise = Promise.resolve(42);
+    const task = registerPromise(promise);
+
+    assert.strictEqual(takePromise(task), promise);
+  });
+
+  it("removes the Promise from the registry after taking", () => {
+    const promise = Promise.resolve(42);
+    const task = registerPromise(promise);
+
+    takePromise(task);
+
+    assert.isNull(takePromise(task));
+  });
+
+  it("returns null when the ref is not in the registry", () => {
+    const ref = ERTS.uniqueReference();
+    const task = Type.taskStruct("dummy_mfa", "dummy_owner", ref);
+
+    assert.isNull(takePromise(task));
   });
 });
 

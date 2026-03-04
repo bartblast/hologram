@@ -8,6 +8,8 @@ import Type from "../../type.mjs";
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
 
+const REF_KEY = Type.encodeMapKey(Type.atom("ref"));
+
 const TASK_MFA = Type.tuple([
   Type.alias("Hologram.JS"),
   Type.atom("call"),
@@ -69,6 +71,17 @@ function resolveBinding(term, callerModule) {
   }
 
   return unbox(term, callerModule);
+}
+
+function takePromise(taskStruct) {
+  const ref = taskStruct.data[REF_KEY][1];
+  const promise = ERTS.promiseRegistry.get(ref);
+
+  if (promise !== null) {
+    ERTS.promiseRegistry.delete(ref);
+  }
+
+  return promise;
 }
 
 function unbox(term, callerModule) {
@@ -205,5 +218,5 @@ const Elixir_Hologram_JS = {
   },
 };
 
-export {box, registerPromise, resolveBinding, unbox};
+export {box, registerPromise, resolveBinding, takePromise, unbox};
 export default Elixir_Hologram_JS;
