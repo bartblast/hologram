@@ -1206,22 +1206,44 @@ describe("Type", () => {
   });
 
   describe("isStruct()", () => {
+    const struct = Type.struct("Aaa.Bbb", [[Type.atom("a"), Type.integer(1)]]);
+
     it("not a map", () => {
-      assert.isFalse(Type.isStruct(Type.integer(123)));
+      const result = Type.isStruct(Type.integer(123));
+
+      assert.isFalse(result);
     });
 
     it("a map that is not a struct", () => {
-      assert.isFalse(
-        Type.isStruct(Type.map([[Type.atom("a"), Type.integer(1)]])),
+      const result = Type.isStruct(
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
       );
+
+      assert.isFalse(result);
     });
 
     it("a struct", () => {
-      assert.isTrue(
-        Type.isStruct(
-          Type.struct("Aaa.Bbb", [[Type.atom("a"), Type.integer(1)]]),
-        ),
-      );
+      const result = Type.isStruct(struct);
+
+      assert.isTrue(result);
+    });
+
+    it("a struct with matching module", () => {
+      const result = Type.isStruct(struct, "Aaa.Bbb");
+
+      assert.isTrue(result);
+    });
+
+    it("a struct with non-matching module", () => {
+      const result = Type.isStruct(struct, "Ccc.Ddd");
+
+      assert.isFalse(result);
+    });
+
+    it("not a struct with module specified", () => {
+      const result = Type.isStruct(Type.integer(123), "Aaa.Bbb");
+
+      assert.isFalse(result);
     });
   });
 
