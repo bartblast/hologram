@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.JavaScriptSyncInteropPage do
+defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
   use Hologram.Page
   use Hologram.JS
 
@@ -11,7 +11,7 @@ defmodule HologramFeatureTests.JavaScriptSyncInteropPage do
   js_import :default, from: "./calculator.mjs", as: :Calculator
   js_import :default, from: "./helpers.mjs", as: :helpers
 
-  route "/js-sync-interop"
+  route "/js-interop/sync"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.JavaScriptAsyncInteropPage do
+defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.JavaScriptAsyncInteropPage do
 
   js_import :default, from: "./helpers.mjs", as: :helpers
 
-  route "/js-async-interop"
+  route "/js-interop/async"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
