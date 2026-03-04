@@ -7,6 +7,14 @@ import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
+const REF_KEY = Type.encodeMapKey(Type.atom("ref"));
+
+const TASK_MFA = Type.tuple([
+  Type.alias("Hologram.JS"),
+  Type.atom("call"),
+  Type.integer(3),
+]);
+
 export default class ERTS {
   // The PID of the init process (#PID<0.0.0>), which is the first process started
   // by the Erlang runtime.
@@ -37,6 +45,24 @@ export default class ERTS {
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+
+  static registerPromise(promise) {
+    const ref = $.uniqueReference();
+    $.promiseRegistry.put(ref, promise);
+
+    return Type.taskStruct(TASK_MFA, $.INIT_PID, ref);
+  }
+
+  static takePromise(taskStruct) {
+    const ref = taskStruct.data[REF_KEY][1];
+    const promise = $.promiseRegistry.get(ref);
+
+    if (promise !== null) {
+      $.promiseRegistry.delete(ref);
+    }
+
+    return promise;
+  }
 
   static uniqueReference() {
     const node = $.nodeTable.CLIENT_NODE;

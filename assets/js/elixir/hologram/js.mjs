@@ -8,14 +8,6 @@ import Type from "../../type.mjs";
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
 
-const REF_KEY = Type.encodeMapKey(Type.atom("ref"));
-
-const TASK_MFA = Type.tuple([
-  Type.alias("Hologram.JS"),
-  Type.atom("call"),
-  Type.integer(3),
-]);
-
 function box(value) {
   if (value === null) {
     return Type.nil();
@@ -51,13 +43,6 @@ function box(value) {
   return {type: "native", value: value};
 }
 
-function registerPromise(promise) {
-  const ref = ERTS.uniqueReference();
-  ERTS.promiseRegistry.put(ref, promise);
-
-  return Type.taskStruct(TASK_MFA, ERTS.INIT_PID, ref);
-}
-
 function resolveBinding(term, callerModule) {
   if (term.type === "atom") {
     const name = term.value;
@@ -71,17 +56,6 @@ function resolveBinding(term, callerModule) {
   }
 
   return unbox(term, callerModule);
-}
-
-function takePromise(taskStruct) {
-  const ref = taskStruct.data[REF_KEY][1];
-  const promise = ERTS.promiseRegistry.get(ref);
-
-  if (promise !== null) {
-    ERTS.promiseRegistry.delete(ref);
-  }
-
-  return promise;
 }
 
 function unbox(term, callerModule) {
@@ -153,7 +127,7 @@ const Elixir_Hologram_JS = {
     const result = jsReceiver[jsMethodName](...unbox(args, callerModule));
 
     if (result instanceof Promise) {
-      return registerPromise(result);
+      return ERTS.registerPromise(result);
     }
 
     return box(result);
@@ -223,5 +197,5 @@ const Elixir_Hologram_JS = {
   },
 };
 
-export {box, registerPromise, resolveBinding, takePromise, unbox};
+export {box, resolveBinding, unbox};
 export default Elixir_Hologram_JS;
