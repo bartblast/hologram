@@ -150,8 +150,13 @@ const Elixir_Hologram_JS = {
   "call/4": (receiver, methodName, args, callerModule) => {
     const jsReceiver = resolveBinding(receiver, callerModule);
     const jsMethodName = methodName.value;
+    const result = jsReceiver[jsMethodName](...unbox(args, callerModule));
 
-    return box(jsReceiver[jsMethodName](...unbox(args, callerModule)));
+    if (result instanceof Promise) {
+      return registerPromise(result);
+    }
+
+    return box(result);
   },
 
   "call_async/4": async (receiver, methodName, args, callerModule) => {

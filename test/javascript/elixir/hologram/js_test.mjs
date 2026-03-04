@@ -583,10 +583,6 @@ describe("Elixir_Hologram_JS", () => {
 
     beforeEach(() => {
       delete globalThis.Elixir_CallTestModule;
-    });
-
-    it("calls method on receiver with unboxed args and boxes result", () => {
-      const mathHelpers = {add: (a, b) => a + b};
 
       Interpreter.defineManuallyPortedFunction(
         "CallTestModule",
@@ -594,9 +590,11 @@ describe("Elixir_Hologram_JS", () => {
         "public",
         () => {},
       );
+    });
 
+    it("calls method on receiver with unboxed args and boxes result", () => {
+      const mathHelpers = {add: (a, b) => a + b};
       const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
-
       moduleProxy.__jsBindings__.set("helpers", mathHelpers);
 
       const result = call(
@@ -616,13 +614,6 @@ describe("Elixir_Hologram_JS", () => {
 
       const myWidget = {label: "my_widget"};
 
-      Interpreter.defineManuallyPortedFunction(
-        "CallTestModule",
-        "dummy/0",
-        "public",
-        () => {},
-      );
-
       const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
 
       moduleProxy.__jsBindings__.set("Registry", itemRegistry);
@@ -636,6 +627,32 @@ describe("Elixir_Hologram_JS", () => {
       );
 
       assert.deepStrictEqual(result, Type.bitstring("my_widget"));
+    });
+
+    it("returns a Task struct when JS method returns a Promise", () => {
+      const httpClient = {fetchData: async () => 42};
+      const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
+      moduleProxy.__jsBindings__.set("HttpClient", httpClient);
+
+      const result = call(
+        Type.atom("HttpClient"),
+        Type.atom("fetchData"),
+        Type.list(),
+        Type.alias("CallTestModule"),
+      );
+
+      const mfa = Type.tuple([
+        Type.alias("Hologram.JS"),
+        Type.atom("call"),
+        Type.integer(3),
+      ]);
+
+      const refKey = Type.encodeMapKey(Type.atom("ref"));
+      const ref = result.data[refKey][1];
+
+      const expected = Type.taskStruct(mfa, ERTS.INIT_PID, ref);
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
