@@ -38,7 +38,7 @@ defmodule HologramFeatureTests.SecurityTest do
                         session
                         |> visit(Page1)
                         |> execute_script(
-                          "globalThis.hologram.csrfToken = 'invalid-token-12345';"
+                          "globalThis.Hologram.csrfToken = 'invalid-token-12345';"
                         )
                         |> click(button("Test Command"))
                       end
@@ -50,7 +50,7 @@ defmodule HologramFeatureTests.SecurityTest do
                       fn ->
                         session
                         |> visit(Page1)
-                        |> execute_script("delete globalThis.hologram.csrfToken;")
+                        |> execute_script("delete globalThis.Hologram.csrfToken;")
                         |> click(button("Test Command"))
                       end
     end
