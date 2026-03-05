@@ -8,6 +8,38 @@ defmodule Hologram.JSTest do
   alias Hologram.Test.Fixtures.JS.Module4
   alias Hologram.Test.Fixtures.JS.Module6
 
+  describe "js_import/1" do
+    test "imports default export with :as binding" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DefaultExportShorthand do
+          use Hologram.JS
+
+          js_import from: "chart.js", as: :Chart
+        end
+        """)
+
+      assert module.__js_imports__() == [
+               %{export: "default", from: "chart.js", as: "Chart"}
+             ]
+    end
+
+    test "raises when :as option is missing" do
+      expected_error_msg =
+        "the :as option is required when using js_import/1 (default export shorthand)"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DefaultExportNoAs do
+          use Hologram.JS
+
+          js_import from: "chart.js"
+        end
+        """)
+      end
+    end
+  end
+
   describe "js_import/2" do
     test "no imports" do
       assert Module2.__js_imports__() == []

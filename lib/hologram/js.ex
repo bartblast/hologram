@@ -3,7 +3,7 @@ defmodule Hologram.JS do
 
   defmacro __using__(_opts) do
     quote do
-      import Hologram.JS, only: [js_import: 2, sigil_JS: 2]
+      import Hologram.JS, only: [js_import: 1, js_import: 2, sigil_JS: 2]
 
       alias Hologram.JS
 
@@ -178,7 +178,27 @@ defmodule Hologram.JS do
   def instanceof(_value, _class, _caller_module), do: __server_pass_through__()
 
   @doc """
-  Imports a JS export and binds it to a name that can be used as a receiver in other JS functions.
+  Imports the default JS export and binds it to a name that can be used as a receiver
+  in other JS functions. The :as option is required.
+
+  ## Examples
+
+      js_import from: "chart.js", as: :Chart
+  """
+  defmacro js_import(opts) when is_list(opts) do
+    unless Keyword.has_key?(opts, :as) do
+      raise Hologram.CompileError,
+        message: "the :as option is required when using js_import/1 (default export shorthand)"
+    end
+
+    quote do
+      js_import(:default, unquote(opts))
+    end
+  end
+
+  @doc """
+  Imports a named JS export and binds it to a name that can be used as a receiver
+  in other JS functions.
 
   ## Examples
 
