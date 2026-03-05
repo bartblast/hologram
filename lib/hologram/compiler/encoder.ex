@@ -598,9 +598,9 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_block_expr(expr_js, true, true) do
     StringUtils.normalize_newlines("""
 
-    globalThis.hologram.return = #{expr_js};
+    globalThis.Hologram.return = #{expr_js};
     Interpreter.updateVarsToMatchedValues(context);
-    return globalThis.hologram.return;\
+    return globalThis.Hologram.return;\
     """)
   end
 

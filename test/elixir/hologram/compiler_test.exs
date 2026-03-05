@@ -169,7 +169,7 @@ defmodule Hologram.CompilerTest do
     test "has both Erlang and Elixir function defs", %{call_graph: call_graph, ir_plt: ir_plt} do
       result = build_page_js(Module9, call_graph, ir_plt, MapSet.new(), @js_dir)
 
-      js_fragment_1 = ~s/globalThis.hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
@@ -181,7 +181,7 @@ defmodule Hologram.CompilerTest do
     test "has only Elixir defs", %{call_graph: call_graph, ir_plt: ir_plt} do
       result = build_page_js(Module11, call_graph, ir_plt, MapSet.new(), @js_dir)
 
-      js_fragment_1 = ~s/globalThis.hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 

@@ -248,7 +248,7 @@ function defineElixirStringCharsModule() {
 }
 
 export function defineGlobalErlangAndElixirModules() {
-  globalThis.hologram ??= {};
+  globalThis.Hologram ??= {};
 
   defineGlobalModule("Erlang", Erlang);
   defineGlobalModule("Erlang_Binary", Erlang_Binary);

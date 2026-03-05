@@ -1161,7 +1161,7 @@ export default class Interpreter {
     return function () {
       let startTime;
 
-      if (globalThis.hologram.isProfilingEnabled) {
+      if (globalThis.Hologram.isProfilingEnabled) {
         startTime = performance.now();
       }
 
@@ -1185,7 +1185,7 @@ export default class Interpreter {
             // TODO: remove on release
             // Interpreter.#logFunctionResult(mfa, result);
 
-            if (globalThis.hologram.isProfilingEnabled) {
+            if (globalThis.Hologram.isProfilingEnabled) {
               console.log(
                 `Hologram: function ${mfa} executed in`,
                 PerformanceTimer.diff(startTime),

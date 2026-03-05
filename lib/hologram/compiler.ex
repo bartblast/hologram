@@ -204,7 +204,7 @@ defmodule Hologram.Compiler do
 
     const startTime = performance.now();
 
-    globalThis.hologram.pageReachableFunctionDefs = (deps) => {
+    globalThis.Hologram.pageReachableFunctionDefs = (deps) => {
       const {
         Bitstring,
         ERTS,
@@ -217,7 +217,7 @@ defmodule Hologram.Compiler do
       } = deps;#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
     }
 
-    globalThis.hologram.pageScriptLoaded = true;
+    globalThis.Hologram.pageScriptLoaded = true;
     document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
 
     console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));\
@@ -257,7 +257,7 @@ defmodule Hologram.Compiler do
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
-    if (globalThis.hologram.pageScriptLoaded) {
+    if (globalThis.Hologram.pageScriptLoaded) {
       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
     }
 

@@ -732,9 +732,9 @@ defmodule Hologram.Compiler.EncoderTest do
       expected =
         normalize_newlines("""
         ((context) => {
-        globalThis.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
+        globalThis.Hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
         Interpreter.updateVarsToMatchedValues(context);
-        return globalThis.hologram.return;
+        return globalThis.Hologram.return;
         })(context)\
         """)
 

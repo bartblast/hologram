@@ -89,7 +89,7 @@ export default class Hologram {
   // Deps: [:maps.get/2]
   static executeAction(action) {
     const startTime = performance.now();
-    globalThis.hologram.isProfilingEnabled = true;
+    globalThis.Hologram.isProfilingEnabled = true;
 
     const name = Erlang_Maps["get/2"](Type.atom("name"), action);
     const params = Erlang_Maps["get/2"](Type.atom("params"), action);
@@ -777,7 +777,7 @@ export default class Hologram {
   }
 
   static #loadMountData() {
-    const mountData = globalThis.hologram.pageMountData(Hologram.#deps);
+    const mountData = globalThis.Hologram.pageMountData(Hologram.#deps);
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
@@ -787,7 +787,7 @@ export default class Hologram {
 
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.populate(globalThis.hologram.assetManifest);
+      AssetPathRegistry.populate(globalThis.Hologram.assetManifest);
     }
   }
 
@@ -799,7 +799,7 @@ export default class Hologram {
     }
 
     if (!isPageModuleRegistered) {
-      globalThis.hologram.pageReachableFunctionDefs(Hologram.#deps);
+      globalThis.Hologram.pageReachableFunctionDefs(Hologram.#deps);
       $.#registerPageModule($.#pageModule);
     }
 
@@ -852,7 +852,7 @@ export default class Hologram {
 
   // TODO: raise error if there is no head or body
   static #patchPage(html) {
-    globalThis.hologram.pageScriptLoaded = false;
+    globalThis.Hologram.pageScriptLoaded = false;
 
     const newVirtualDocument = Vdom.from(html);
 
@@ -905,7 +905,7 @@ export default class Hologram {
 
     ComponentRegistry.putComponentStruct(target, savedComponentStruct);
 
-    globalThis.hologram.isProfilingEnabled = false;
+    globalThis.Hologram.isProfilingEnabled = false;
 
     console.log(
       "Hologram: action",

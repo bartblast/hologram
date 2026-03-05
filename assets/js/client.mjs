@@ -134,7 +134,7 @@ export default class Client {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Csrf-Token": globalThis.hologram.csrfToken,
+        "X-Csrf-Token": globalThis.Hologram.csrfToken,
       },
       body: Serializer.serialize($.buildCommandPayload(command), "server"),
     };
