@@ -3,7 +3,6 @@ defmodule HologramFeatureTests.JavaScriptInterop.DOMPatchingPage do
   use Hologram.JS
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
-  import Hologram.JS, only: [sigil_JS: 2]
   import Kernel, except: [inspect: 1]
 
   route "/js-interop/dom-patching"

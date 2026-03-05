@@ -3,7 +3,6 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
   use Hologram.JS
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
-  import Hologram.JS, only: [js_import: 2]
   import Kernel, except: [inspect: 1]
 
   alias Hologram.JS
