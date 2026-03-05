@@ -3,7 +3,24 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
 
   alias HologramFeatureTests.JavaScriptInterop.AsyncPage
   alias HologramFeatureTests.JavaScriptInterop.DispatchEventPage
+  alias HologramFeatureTests.JavaScriptInterop.DOMPatchingPage
   alias HologramFeatureTests.JavaScriptInterop.SyncPage
+
+  describe "~JS sigil" do
+    feature "DOM manipulation", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Run JS sigil void"))
+      |> assert_text(css("#js_sigil_result"), "Hologram")
+    end
+
+    feature "return value is boxed", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Run JS sigil returning value"))
+      |> assert_text(css("#call_result"), "{11, true}")
+    end
+  end
 
   describe "binding resolution" do
     feature "global", %{session: session} do
@@ -28,19 +45,16 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
-  describe "~JS sigil" do
-    feature "DOM manipulation", %{session: session} do
+  describe "DOM patching" do
+    feature "JS-managed subtree is preserved after state change", %{session: session} do
       session
-      |> visit(SyncPage)
-      |> click(button("Run JS sigil void"))
-      |> assert_text(css("#js_sigil_result"), "Hologram")
-    end
-
-    feature "return value is boxed", %{session: session} do
-      session
-      |> visit(SyncPage)
-      |> click(button("Run JS sigil returning value"))
-      |> assert_text(css("#call_result"), "{11, true}")
+      |> visit(DOMPatchingPage)
+      |> click(button("Populate JS subtree"))
+      |> assert_text(css("#counter"), "1")
+      |> assert_text(css("#js_managed"), "JS managed content")
+      |> click(button("Increment counter"))
+      |> assert_text(css("#counter"), "2")
+      |> assert_text(css("#js_managed"), "JS managed content")
     end
   end
 
