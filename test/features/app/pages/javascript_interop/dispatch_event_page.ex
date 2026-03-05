@@ -5,8 +5,6 @@ defmodule HologramFeatureTests.JavaScriptInterop.DispatchEventPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  alias Hologram.JS
-
   route "/js-interop/dispatch-event"
 
   layout HologramFeatureTests.Components.DefaultLayout
