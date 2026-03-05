@@ -355,6 +355,7 @@ export function registerWebApis() {
 
   globalThis.window = window;
   globalThis.console = window.console;
+  globalThis.document = window.document;
   globalThis.DOMParser = window.DOMParser;
 
   globalThis.fetch =

@@ -13,13 +13,16 @@ defineGlobalErlangAndElixirModules();
 registerWebApis();
 
 describe("LiveReload", () => {
+  let originalDocument;
+
   beforeEach(() => {
+    originalDocument = globalThis.document;
     const {window} = new JSDOM("<!DOCTYPE html><html><body></body></html>");
     globalThis.document = window.document;
   });
 
   afterEach(() => {
-    delete globalThis.document;
+    globalThis.document = originalDocument;
   });
 
   describe("showErrorOverlay()", () => {
