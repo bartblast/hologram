@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.JavaScriptInterop.AsyncPage
+  alias HologramFeatureTests.JavaScriptInterop.DispatchEventPage
   alias HologramFeatureTests.JavaScriptInterop.SyncPage
 
   describe "binding resolution" do
@@ -124,6 +125,43 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> visit(SyncPage)
     |> click(button("Delete property"))
     |> assert_text(css("#call_result"), ~s({"undefined", true}))
+  end
+
+  describe "JS.dispatch_event" do
+    feature "dispatch_event/2 (CustomEvent, no opts)", %{session: session} do
+      session
+      |> visit(DispatchEventPage)
+      |> click(button("Dispatch default"))
+      |> assert_text(css("#call_result"), ~s("test:alpha"))
+    end
+
+    feature "dispatch_event/3 with opts (CustomEvent, with detail)", %{session: session} do
+      session
+      |> visit(DispatchEventPage)
+      |> click(button("Dispatch with detail"))
+      |> assert_text(css("#call_result"), "{99, true}")
+    end
+
+    feature "dispatch_event/3 with type (MouseEvent, no opts)", %{session: session} do
+      session
+      |> visit(DispatchEventPage)
+      |> click(button("Dispatch with event type"))
+      |> assert_text(css("#call_result"), ~s("MouseEvent"))
+    end
+
+    feature "dispatch_event/4 (CustomEvent, cancelable)", %{session: session} do
+      session
+      |> visit(DispatchEventPage)
+      |> click(button("Dispatch cancelable"))
+      |> assert_text(css("#call_result"), "{false, true}")
+    end
+
+    feature "dispatch on :document target", %{session: session} do
+      session
+      |> visit(DispatchEventPage)
+      |> click(button("Dispatch on document"))
+      |> assert_text(css("#call_result"), ~s("test:delta"))
+    end
   end
 
   feature "JS.eval/1", %{session: session} do
