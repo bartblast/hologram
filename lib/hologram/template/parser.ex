@@ -103,7 +103,7 @@ defmodule Hologram.Template.Parser do
           }
   end
 
-  defguardp is_valid_element_name_token(type, value)
+  defguardp is_tag_name_token(type, value)
             when type == :string or (type == :symbol and value == "-")
 
   @doc """
@@ -269,8 +269,8 @@ defmodule Hologram.Template.Parser do
         :end_tag_name,
         [{first_type, first_value} = token, {second_type, second_value} | _rest] = tokens
       )
-      when is_valid_element_name_token(first_type, first_value) and
-             is_valid_element_name_token(second_type, second_value) do
+      when is_tag_name_token(first_type, first_value) and
+             is_tag_name_token(second_type, second_value) do
     context
     |> set_tag_name(context.tag_name <> first_value)
     |> add_processed_token(token)
@@ -480,8 +480,8 @@ defmodule Hologram.Template.Parser do
         :start_tag_name,
         [{first_type, first_value} = token, {second_type, second_value} | _rest] = tokens
       )
-      when is_valid_element_name_token(first_type, first_value) and
-             is_valid_element_name_token(second_type, second_value) do
+      when is_tag_name_token(first_type, first_value) and
+             is_tag_name_token(second_type, second_value) do
     context
     |> set_tag_name(context.tag_name <> first_value)
     |> add_processed_token(token)
@@ -816,7 +816,7 @@ defmodule Hologram.Template.Parser do
   def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
         {:symbol, "<"} = token | [{next_type, next_value} | _tokens] = rest
       ])
-      when is_valid_element_name_token(next_type, next_value) do
+      when is_tag_name_token(next_type, next_value) do
     context
     |> maybe_add_text_tag()
     |> reset_token_buffer()
