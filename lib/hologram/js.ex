@@ -63,6 +63,72 @@ defmodule Hologram.JS do
   @spec delete(any(), atom(), module()) :: any()
   def delete(receiver, _property, _caller_module), do: receiver
 
+  @doc """
+  Dispatches a JavaScript event on a target element.
+  """
+  defmacro dispatch_event(target, name) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        :CustomEvent,
+        unquote(name),
+        %{},
+        unquote(module)
+      )
+    end
+  end
+
+  defmacro dispatch_event(target, name, opts) when is_list(opts) do
+    module = __CALLER__.module
+    opts_map = {:%{}, [], opts}
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        :CustomEvent,
+        unquote(name),
+        unquote(opts_map),
+        unquote(module)
+      )
+    end
+  end
+
+  defmacro dispatch_event(target, type, name) when is_atom(type) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        unquote(type),
+        unquote(name),
+        %{},
+        unquote(module)
+      )
+    end
+  end
+
+  defmacro dispatch_event(target, type, name, opts) do
+    module = __CALLER__.module
+    opts_map = {:%{}, [], opts}
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        unquote(type),
+        unquote(name),
+        unquote(opts_map),
+        unquote(module)
+      )
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec dispatch_event(any(), atom(), String.t(), map(), module()) :: boolean()
+  def dispatch_event(_target, _type, _name, _opts, _caller_module), do: __server_pass_through__()
+
   # Server-side pass-through; implemented in JavaScript.
   @doc """
   Evaluates a JavaScript expression and returns the result.
