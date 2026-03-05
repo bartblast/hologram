@@ -5,8 +5,8 @@ defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  js_import :default, from: "./calculator.mjs", as: :Calculator
-  js_import :default, from: "./helpers.mjs", as: :helpers
+  js_import from: "./calculator.mjs", as: :Calculator
+  js_import from: "./helpers.mjs", as: :helpers
 
   route "/js-interop/sync"
 

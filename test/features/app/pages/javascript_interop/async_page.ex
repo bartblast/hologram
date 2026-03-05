@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  js_import :default, from: "./helpers.mjs", as: :helpers
+  js_import from: "./helpers.mjs", as: :helpers
 
   route "/js-interop/async"
 
