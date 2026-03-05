@@ -255,10 +255,10 @@ defmodule Hologram.Template.Parser do
     details =
       StringUtils.normalize_newlines("""
       Reason:
-      Element names beginning with '-' are invalid.
+      Tag names can't start with '-'.
 
       Hint:
-      Prefix your WebComponent name with at least one lower case letter.
+      Tag names must start with a letter.
       """)
 
     raise_error(details, context, :end_tag_name, token, rest)
@@ -466,10 +466,10 @@ defmodule Hologram.Template.Parser do
     details =
       StringUtils.normalize_newlines("""
       Reason:
-      Element names beginning with '-' are invalid.
+      Tag names can't start with '-'.
 
       Hint:
-      Prefix your WebComponent name with at least one lower case letter.
+      Tag names must start with a letter.
       """)
 
     raise_error(details, context, :start_tag_name, token, rest)

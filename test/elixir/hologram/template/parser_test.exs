@@ -184,10 +184,10 @@ defmodule Hologram.Template.ParserTest do
       expected_msg =
         normalize_newlines("""
         Reason:
-        Element names beginning with '-' are invalid.
+        Tag names can't start with '-'.
 
         Hint:
-        Prefix your WebComponent name with at least one lower case letter.
+        Tag names must start with a letter.
 
         <-foo>
          ^
@@ -200,10 +200,10 @@ defmodule Hologram.Template.ParserTest do
       expected_msg =
         normalize_newlines("""
         Reason:
-        Element names beginning with '-' are invalid.
+        Tag names can't start with '-'.
 
         Hint:
-        Prefix your WebComponent name with at least one lower case letter.
+        Tag names must start with a letter.
 
         </-foo>
           ^
