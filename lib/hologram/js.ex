@@ -5,6 +5,8 @@ defmodule Hologram.JS do
     quote do
       import Hologram.JS, only: [js_import: 2, sigil_JS: 2]
 
+      alias Hologram.JS
+
       @before_compile Hologram.JS
 
       Module.register_attribute(__MODULE__, :__js_imports__, accumulate: true)
