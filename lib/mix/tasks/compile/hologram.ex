@@ -14,12 +14,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
 
+  @ls_build_dirs [".elixir_ls", ".elixir-tools", ".expert", ".lexical"]
+
   @impl Mix.Task.Compiler
   # If the options are strings, it means that the task was executed directly by the Elixir compiler.
   def run([hd | _tail]) when is_binary(hd) do
     opts = build_default_opts()
 
-    if elixir_ls_build?(opts) do
+    if language_server_build?(opts) do
       :ok
     else
       run(opts)
@@ -168,8 +170,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     :ok
   end
 
-  defp elixir_ls_build?(opts) do
-    String.contains?(opts[:build_dir], "/.elixir_ls/")
+  defp language_server_build?(opts) do
+    path_components = Path.split(opts[:build_dir])
+    Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
   end
 
   defp maybe_adjust_formatter_bin_path(opts) do
