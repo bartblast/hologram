@@ -24,9 +24,24 @@ defmodule Hologram.JSTest do
              ]
     end
 
+    test "raises when :from option is missing" do
+      expected_error_msg =
+        "the :from option is required when using js_import/1"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DefaultExportNoFrom do
+          use Hologram.JS
+
+          js_import as: :Chart
+        end
+        """)
+      end
+    end
+
     test "raises when :as option is missing" do
       expected_error_msg =
-        "the :as option is required when using js_import/1 (default export shorthand)"
+        "the :as option is required when using js_import/1"
 
       assert_error Hologram.CompileError, expected_error_msg, fn ->
         Code.eval_string("""
@@ -136,6 +151,21 @@ defmodule Hologram.JSTest do
       assert module.__js_imports__() == [
                %{export: "Chart", from: "chart.js", as: "Chart"}
              ]
+    end
+
+    test "raises when :from option is missing" do
+      expected_error_msg =
+        "the :from option is required when using js_import/2"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.NamedExportNoFrom do
+          use Hologram.JS
+
+          js_import :Chart, as: :MyChart
+        end
+        """)
+      end
     end
 
     test "raises on duplicate binding name" do

@@ -186,9 +186,14 @@ defmodule Hologram.JS do
       js_import from: "chart.js", as: :Chart
   """
   defmacro js_import(opts) when is_list(opts) do
+    unless Keyword.has_key?(opts, :from) do
+      raise Hologram.CompileError,
+        message: "the :from option is required when using js_import/1"
+    end
+
     unless Keyword.has_key?(opts, :as) do
       raise Hologram.CompileError,
-        message: "the :as option is required when using js_import/1 (default export shorthand)"
+        message: "the :as option is required when using js_import/1"
     end
 
     quote do
@@ -206,6 +211,11 @@ defmodule Hologram.JS do
       js_import :Chart, from: "chart.js", as: :MyChart
   """
   defmacro js_import(export, opts) do
+    unless Keyword.has_key?(opts, :from) do
+      raise Hologram.CompileError,
+        message: "the :from option is required when using js_import/2"
+    end
+
     from = Keyword.fetch!(opts, :from)
     as = Keyword.get(opts, :as, export)
 
