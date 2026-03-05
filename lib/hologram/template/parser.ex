@@ -279,7 +279,7 @@ defmodule Hologram.Template.Parser do
 
   # Anything else (or no more tokens) -> tag name is complete, transition
   def parse_tokens(context, :end_tag_name, [{type, value} = token | rest])
-      when type == :string or (type == :symbol and value == "-") do
+      when is_tag_name_token(type, value) do
     tag_name = context.tag_name <> value
 
     context
