@@ -177,6 +177,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Code, :ensure_loaded, 1},
     {Hologram.JS, :call, 4},
     {Hologram.JS, :delete, 3},
+    {Hologram.JS, :dispatch_event, 5},
     {Hologram.JS, :eval, 1},
     {Hologram.JS, :exec, 1},
     {Hologram.JS, :get, 3},
