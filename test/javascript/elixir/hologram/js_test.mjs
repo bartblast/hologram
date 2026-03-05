@@ -683,8 +683,8 @@ describe("Elixir_Hologram_JS", () => {
       const target = document.createElement("div");
       let dispatched = null;
 
-      target.addEventListener("chart:update", (e) => {
-        dispatched = e;
+      target.addEventListener("chart:update", (event) => {
+        dispatched = event;
       });
 
       dispatchEvent(
@@ -704,8 +704,8 @@ describe("Elixir_Hologram_JS", () => {
       const target = document.createElement("div");
       let dispatched = null;
 
-      target.addEventListener("chart:update", (e) => {
-        dispatched = e;
+      target.addEventListener("chart:update", (event) => {
+        dispatched = event;
       });
 
       const opts = Type.map([
@@ -730,8 +730,8 @@ describe("Elixir_Hologram_JS", () => {
       const target = document.createElement("div");
       let dispatched = null;
 
-      target.addEventListener("click", (e) => {
-        dispatched = e;
+      target.addEventListener("click", (event) => {
+        dispatched = event;
       });
 
       const opts = Type.map([[Type.atom("bubbles"), Type.atom("true")]]);
@@ -751,8 +751,8 @@ describe("Elixir_Hologram_JS", () => {
     it("resolves atom target to globalThis (e.g. :document)", () => {
       let dispatched = null;
 
-      document.addEventListener("app:ready", (e) => {
-        dispatched = e;
+      document.addEventListener("app:ready", (event) => {
+        dispatched = event;
       });
 
       dispatchEvent(
@@ -783,8 +783,8 @@ describe("Elixir_Hologram_JS", () => {
     it("returns boxed false when event is cancelled", () => {
       const target = document.createElement("div");
 
-      target.addEventListener("test:cancel", (e) => {
-        e.preventDefault();
+      target.addEventListener("test:cancel", (event) => {
+        event.preventDefault();
       });
 
       const opts = Type.map([[Type.atom("cancelable"), Type.atom("true")]]);
