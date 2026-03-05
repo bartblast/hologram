@@ -3,6 +3,7 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  registerWebApis,
 } from "../../support/helpers.mjs";
 
 import Elixir_Hologram_JS, {
@@ -16,6 +17,7 @@ import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
+registerWebApis();
 
 describe("box()", () => {
   describe("nullish", () => {
@@ -660,6 +662,142 @@ describe("Elixir_Hologram_JS", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("AppSettings"));
+    });
+  });
+
+  describe("dispatch_event/5", () => {
+    const dispatchEvent = Elixir_Hologram_JS["dispatch_event/5"];
+
+    beforeEach(() => {
+      delete globalThis.Elixir_DispatchEventTestModule;
+
+      Interpreter.defineManuallyPortedFunction(
+        "DispatchEventTestModule",
+        "dummy/0",
+        "public",
+        () => {},
+      );
+    });
+
+    it("dispatches CustomEvent on target with no opts", () => {
+      const target = document.createElement("div");
+      let dispatched = null;
+
+      target.addEventListener("chart:update", (e) => {
+        dispatched = e;
+      });
+
+      dispatchEvent(
+        {type: "native", value: target},
+        Type.atom("CustomEvent"),
+        Type.bitstring("chart:update"),
+        Type.map(),
+        Type.alias("DispatchEventTestModule"),
+      );
+
+      assert.instanceOf(dispatched, CustomEvent);
+      assert.strictEqual(dispatched.type, "chart:update");
+      assert.isNull(dispatched.detail);
+    });
+
+    it("dispatches CustomEvent with detail opts", () => {
+      const target = document.createElement("div");
+      let dispatched = null;
+
+      target.addEventListener("chart:update", (e) => {
+        dispatched = e;
+      });
+
+      const opts = Type.map([
+        [
+          Type.atom("detail"),
+          Type.map([[Type.atom("data"), Type.integer(42)]]),
+        ],
+      ]);
+
+      dispatchEvent(
+        {type: "native", value: target},
+        Type.atom("CustomEvent"),
+        Type.bitstring("chart:update"),
+        opts,
+        Type.alias("DispatchEventTestModule"),
+      );
+
+      assert.deepStrictEqual(dispatched.detail, {data: 42});
+    });
+
+    it("dispatches native Event type with opts", () => {
+      const target = document.createElement("div");
+      let dispatched = null;
+
+      target.addEventListener("click", (e) => {
+        dispatched = e;
+      });
+
+      const opts = Type.map([[Type.atom("bubbles"), Type.atom("true")]]);
+
+      dispatchEvent(
+        {type: "native", value: target},
+        Type.atom("MouseEvent"),
+        Type.bitstring("click"),
+        opts,
+        Type.alias("DispatchEventTestModule"),
+      );
+
+      assert.instanceOf(dispatched, MouseEvent);
+      assert.isTrue(dispatched.bubbles);
+    });
+
+    it("resolves atom target to globalThis (e.g. :document)", () => {
+      let dispatched = null;
+
+      document.addEventListener("app:ready", (e) => {
+        dispatched = e;
+      });
+
+      dispatchEvent(
+        Type.atom("document"),
+        Type.atom("CustomEvent"),
+        Type.bitstring("app:ready"),
+        Type.map(),
+        Type.alias("DispatchEventTestModule"),
+      );
+
+      assert.strictEqual(dispatched.type, "app:ready");
+    });
+
+    it("returns boxed boolean result from dispatchEvent()", () => {
+      const target = document.createElement("div");
+
+      const result = dispatchEvent(
+        {type: "native", value: target},
+        Type.atom("CustomEvent"),
+        Type.bitstring("test:event"),
+        Type.map(),
+        Type.alias("DispatchEventTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("true"));
+    });
+
+    it("returns boxed false when event is cancelled", () => {
+      const target = document.createElement("div");
+
+      target.addEventListener("test:cancel", (e) => {
+        e.preventDefault();
+      });
+
+      const opts = Type.map([[Type.atom("cancelable"), Type.atom("true")]]);
+
+      const result = dispatchEvent(
+        {type: "native", value: target},
+        Type.atom("CustomEvent"),
+        Type.bitstring("test:cancel"),
+        opts,
+        Type.alias("DispatchEventTestModule"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("false"));
     });
   });
 

@@ -142,6 +142,15 @@ const Elixir_Hologram_JS = {
     return receiver;
   },
 
+  "dispatch_event/5": (target, eventType, eventName, opts, callerModule) => {
+    const jsTarget = resolveBinding(target, callerModule);
+    const EventClass = resolveBinding(eventType, callerModule);
+    const jsEventName = Bitstring.toText(eventName);
+    const jsOpts = unbox(opts, callerModule);
+
+    return box(jsTarget.dispatchEvent(new EventClass(jsEventName, jsOpts)));
+  },
+
   "eval/1": (expression) => {
     return box(
       Interpreter.evaluateJavaScriptCode(
