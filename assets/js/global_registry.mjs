@@ -5,7 +5,7 @@
 
 export default class GlobalRegistry {
   // Made public to make tests easier
-  static rootKey = "hologram";
+  static rootKey = "Hologram";
 
   static append(key, item) {
     const items = $.get(key) || [];
