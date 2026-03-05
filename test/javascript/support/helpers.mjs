@@ -42,26 +42,13 @@ export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 export const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-export function assertBoxedError(
-  callable,
-  expectedErrorType,
-  expectedErrorMessage,
-) {
+function validateBoxedError(error, expectedErrorType, expectedErrorMessage) {
   const isRegex = expectedErrorMessage instanceof RegExp;
-
   const expectedMessageDisplay = isRegex
     ? expectedErrorMessage.toString()
     : expectedErrorMessage;
 
   const failMessagePrefix = `\nexpected:\n${expectedErrorType}: ${expectedMessageDisplay}\n`;
-
-  let error;
-
-  try {
-    callable();
-  } catch (e) {
-    error = e;
-  }
 
   if (!error) {
     assert.fail(failMessagePrefix + "but got no error");
@@ -77,7 +64,6 @@ export function assertBoxedError(
   const receivedErrorMessage = Interpreter.resolveErrorMessage(error.struct);
 
   const typeMatches = receivedErrorType === expectedErrorType;
-
   const messageMatches = isRegex
     ? expectedErrorMessage.test(receivedErrorMessage)
     : Interpreter.isStrictlyEqual(
@@ -91,6 +77,34 @@ export function assertBoxedError(
         `but got:\n${receivedErrorType}: ${receivedErrorMessage}`,
     );
   }
+}
+
+export function assertBoxedError(
+  callable,
+  expectedErrorType,
+  expectedErrorMessage,
+) {
+  let error;
+  try {
+    callable();
+  } catch (e) {
+    error = e;
+  }
+  validateBoxedError(error, expectedErrorType, expectedErrorMessage);
+}
+
+export async function assertBoxedErrorAsync(
+  asyncCallable,
+  expectedErrorType,
+  expectedErrorMessage,
+) {
+  let error;
+  try {
+    await asyncCallable();
+  } catch (e) {
+    error = e;
+  }
+  validateBoxedError(error, expectedErrorType, expectedErrorMessage);
 }
 
 export function assertBoxedFalse(boxed) {
