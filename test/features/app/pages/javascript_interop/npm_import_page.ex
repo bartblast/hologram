@@ -27,10 +27,9 @@ defmodule HologramFeatureTests.JavaScriptInterop.NpmImportPage do
   end
 
   def action(:call_npm_method, _params, component) do
-    decimal = JS.new(:Decimal, [100])
-
     result =
-      decimal
+      :Decimal
+      |> JS.new([100])
       |> JS.call(:plus, [23])
       |> JS.call(:toNumber, [])
 
