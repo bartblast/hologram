@@ -2,8 +2,10 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.JavaScriptInterop.AsyncPage
+  alias HologramFeatureTests.JavaScriptInterop.DispatchActionPage
   alias HologramFeatureTests.JavaScriptInterop.DispatchEventPage
   alias HologramFeatureTests.JavaScriptInterop.DOMPatchingPage
+  alias HologramFeatureTests.JavaScriptInterop.PendingActionsPage
   alias HologramFeatureTests.JavaScriptInterop.SyncPage
 
   describe "~JS sigil" do
@@ -42,6 +44,30 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> visit(SyncPage)
       |> click(button("Resolve object ref"))
       |> assert_text(css("#call_result"), "{15, true}")
+    end
+  end
+
+  describe "Hologram.dispatchAction()" do
+    feature "with params", %{session: session} do
+      session
+      |> visit(DispatchActionPage)
+      |> execute_script(
+        "Hologram.dispatchAction('dispatch_with_params', 'page', {amount: 42, label: 'test'});"
+      )
+      |> assert_text(css("#call_result"), ~s({42, "test"}))
+    end
+
+    feature "without params", %{session: session} do
+      session
+      |> visit(DispatchActionPage)
+      |> execute_script("Hologram.dispatchAction('dispatch_without_params', 'page');")
+      |> assert_text(css("#call_result"), ":dispatched")
+    end
+
+    feature "pending action dispatched before runtime loads", %{session: session} do
+      session
+      |> visit(PendingActionsPage)
+      |> assert_text(css("#call_result"), "{99, true}")
     end
   end
 
