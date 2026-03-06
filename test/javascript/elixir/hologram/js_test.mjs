@@ -7,10 +7,11 @@ import {
 } from "../../support/helpers.mjs";
 
 import Elixir_Hologram_JS, {
-  box,
   resolveBinding,
   unbox,
 } from "../../../../assets/js/elixir/hologram/js.mjs";
+
+import {box} from "../../../../assets/js/js_interop.mjs";
 
 import ERTS from "../../../../assets/js/erts.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";

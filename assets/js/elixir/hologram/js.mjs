@@ -1,47 +1,13 @@
 "use strict";
 
+import {box} from "../../js_interop.mjs";
+
 import Bitstring from "../../bitstring.mjs";
 import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
-import Type from "../../type.mjs";
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
-
-function box(value) {
-  if (value === null) {
-    return Type.nil();
-  }
-
-  switch (typeof value) {
-    case "bigint":
-    case "undefined":
-      return {type: "native", value: value};
-
-    case "boolean":
-      return Type.boolean(value);
-
-    case "number":
-      return Number.isInteger(value) ? Type.integer(value) : Type.float(value);
-
-    case "string":
-      return Type.bitstring(value);
-  }
-
-  if (Array.isArray(value)) {
-    return Type.list(value.map(box));
-  }
-
-  const proto = Object.getPrototypeOf(value);
-
-  if (proto === Object.prototype || proto === null) {
-    return Type.map(
-      Object.entries(value).map(([k, v]) => [Type.bitstring(k), box(v)]),
-    );
-  }
-
-  return {type: "native", value: value};
-}
 
 function resolveBinding(term, callerModule) {
   if (term.type === "atom") {
@@ -199,5 +165,5 @@ const Elixir_Hologram_JS = {
   },
 };
 
-export {box, resolveBinding, unbox};
+export {resolveBinding, unbox};
 export default Elixir_Hologram_JS;

@@ -1,6 +1,7 @@
 "use strict";
 
-import {box} from "./hologram/js.mjs";
+import {box} from "../js_interop.mjs";
+
 import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
