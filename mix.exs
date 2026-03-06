@@ -19,7 +19,8 @@ defmodule Hologram.MixProject do
       setup: [
         "deps.get",
         "cmd --cd assets npm install",
-        "cmd --cd test/features mix deps.get"
+        "cmd --cd test/features mix deps.get",
+        "cmd --cd test/features/assets npm install"
       ],
       t: ["test", "test.js"],
       "test.js": [&test_js/1]
