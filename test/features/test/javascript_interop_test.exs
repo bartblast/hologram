@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
   alias HologramFeatureTests.JavaScriptInterop.DispatchActionPage
   alias HologramFeatureTests.JavaScriptInterop.DispatchEventPage
   alias HologramFeatureTests.JavaScriptInterop.DOMPatchingPage
+  alias HologramFeatureTests.JavaScriptInterop.NpmImportPage
   alias HologramFeatureTests.JavaScriptInterop.PendingActionsPage
   alias HologramFeatureTests.JavaScriptInterop.SyncPage
 
@@ -45,6 +46,13 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
       |> click(button("Resolve object ref"))
       |> assert_text(css("#call_result"), "{15, true}")
     end
+  end
+
+  feature "npm package import", %{session: session} do
+    session
+    |> visit(NpmImportPage)
+    |> click(button("Call npm method"))
+    |> assert_text(css("#call_result"), "{123, true}")
   end
 
   describe "Hologram.dispatchAction()" do
