@@ -765,9 +765,8 @@ export default class Hologram {
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
-    Hologram.#pendingJsInteropActions =
-      globalThis.Hologram._pendingJsInteropActions;
-    globalThis.Hologram.dispatchAction = Hologram.dispatchAction;
+    $.#pendingJsInteropActions = globalThis.Hologram._pendingJsInteropActions;
+    globalThis.Hologram.dispatchAction = $.dispatchAction;
     delete globalThis.Hologram._pendingJsInteropActions;
 
     Hologram.#isInitiated = true;
