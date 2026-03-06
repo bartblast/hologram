@@ -5,6 +5,7 @@ import {box} from "../../js_interop.mjs";
 import Bitstring from "../../bitstring.mjs";
 import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
+import Type from "../../type.mjs";
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
@@ -87,10 +88,17 @@ function unbox(term, callerModule) {
 }
 
 const Elixir_Hologram_JS = {
-  "call/4": (receiver, methodName, args, callerModule) => {
-    const jsReceiver = resolveBinding(receiver, callerModule);
-    const jsMethodName = methodName.value;
-    const result = jsReceiver[jsMethodName](...unbox(args, callerModule));
+  "call/4": (receiver, methodOrFunction, args, callerModule) => {
+    let jsFunction;
+
+    if (Type.isNil(receiver)) {
+      jsFunction = resolveBinding(methodOrFunction, callerModule);
+    } else {
+      const jsReceiver = resolveBinding(receiver, callerModule);
+      jsFunction = jsReceiver[methodOrFunction.value];
+    }
+
+    const result = jsFunction(...unbox(args, callerModule));
 
     if (result instanceof Promise) {
       return ERTS.registerPromise(result);

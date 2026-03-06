@@ -599,6 +599,72 @@ describe("Elixir_Hologram_JS", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    describe("receiverless (nil receiver)", () => {
+      it("calls imported binding directly", () => {
+        const myMultiply = (a, b) => a * b;
+
+        const moduleProxy = Interpreter.moduleProxy(
+          Type.alias("CallTestModule"),
+        );
+
+        moduleProxy.__jsBindings__.set("multiply", myMultiply);
+
+        const result = call(
+          Type.atom("nil"),
+          Type.atom("multiply"),
+          Type.list([Type.integer(3), Type.integer(7)]),
+          Type.alias("CallTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.integer(21));
+      });
+
+      it("falls back to global function", () => {
+        globalThis.__testGlobalFn__ = (x) => x + 100;
+
+        const result = call(
+          Type.atom("nil"),
+          Type.atom("__testGlobalFn__"),
+          Type.list([Type.integer(5)]),
+          Type.alias("CallTestModule"),
+        );
+
+        assert.deepStrictEqual(result, Type.integer(105));
+
+        delete globalThis.__testGlobalFn__;
+      });
+
+      it("returns a Task struct when function returns a Promise", () => {
+        const myAsyncDouble = async (x) => x * 2;
+
+        const moduleProxy = Interpreter.moduleProxy(
+          Type.alias("CallTestModule"),
+        );
+
+        moduleProxy.__jsBindings__.set("asyncDouble", myAsyncDouble);
+
+        const result = call(
+          Type.atom("nil"),
+          Type.atom("asyncDouble"),
+          Type.list([Type.integer(10)]),
+          Type.alias("CallTestModule"),
+        );
+
+        const mfa = Type.tuple([
+          Type.alias("Hologram.JS"),
+          Type.atom("call"),
+          Type.integer(3),
+        ]);
+
+        const refKey = Type.encodeMapKey(Type.atom("ref"));
+        const ref = result.data[refKey][1];
+
+        const expected = Type.taskStruct(mfa, ERTS.INIT_PID, ref);
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
   });
 
   describe("delete/3", () => {
