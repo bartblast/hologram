@@ -435,9 +435,19 @@ defmodule Hologram.Compiler.Encoder do
     encode_var(name, version)
   end
 
-  # TODO: finish implementing
-  def encode_ir(%IR.With{}, _context) do
-    "Interpreter.with()"
+  def encode_ir(%IR.With{body: body, clauses: clauses, else_clauses: else_clauses}, context) do
+    body_js = encode_closure(body, context)
+    clauses_js = encode_as_array(clauses, context)
+    else_clauses_js = encode_as_array(else_clauses, context)
+    "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
+  end
+
+  def encode_ir(%IR.WithClause{} = clause, context) do
+    match = encode_ir(clause.match, %{context | pattern?: true})
+    guards = encode_as_array(clause.guards, context, &encode_closure/2)
+    expression = encode_closure(clause.expression, context)
+
+    "{match: #{match}, guards: #{guards}, expression: #{expression}}"
   end
 
   @doc """
