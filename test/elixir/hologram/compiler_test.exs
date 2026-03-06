@@ -346,10 +346,12 @@ defmodule Hologram.CompilerTest do
   end
 
   test "bundle/2" do
+    node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
 
     opts = [
-      esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      node_modules_path: node_modules_path,
       static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
     ]
@@ -440,11 +442,14 @@ defmodule Hologram.CompilerTest do
 
   describe "bundle/4" do
     test "valid entry file" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_valid_entry_file"])
 
       opts = [
-        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
@@ -491,11 +496,14 @@ defmodule Hologram.CompilerTest do
     end
 
     test "invalid entry file" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_invalid_entry_file"])
 
       opts = [
-        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
@@ -516,11 +524,14 @@ defmodule Hologram.CompilerTest do
     end
 
     test "raises when the generated bundle exceeds the specified :max_bundle_size (and does not copy the bundle to the static dir in such case) " do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
 
       opts = [
-        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]

@@ -71,6 +71,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Biome is almost x20 faster than Prettier in Hologram benchmarks
       formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(assets_dir, "js"),
+      node_modules_path: node_modules_path,
       static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
       tmp_dir: Path.join(build_dir, "tmp")
     ]

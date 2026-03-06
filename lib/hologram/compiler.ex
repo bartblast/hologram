@@ -3,6 +3,7 @@ defmodule Hologram.Compiler do
 
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.MapUtils
+  alias Hologram.Commons.PathUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Commons.TaskUtils
@@ -302,8 +303,21 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
+    project_node_modules_path = Path.join([Reflection.root_dir(), "assets", "node_modules"])
+
+    node_path =
+      Enum.join(
+        [opts[:node_modules_path], project_node_modules_path],
+        PathUtils.env_path_separator()
+      )
+
+    esbuild_opts = [
+      env: [{"NODE_PATH", node_path}],
+      parallelism: true
+    ]
+
     {_exit_msg, exit_status} =
-      SystemUtils.cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
+      SystemUtils.cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, esbuild_opts)
 
     if exit_status != 0 do
       raise RuntimeError,
