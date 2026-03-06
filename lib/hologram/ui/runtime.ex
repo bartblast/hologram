@@ -13,8 +13,13 @@ defmodule Hologram.UI.Runtime do
     {%if @initial_page? && !@page_mounted?}
       <script>
         globalThis.Hologram ??= \{\};
+        globalThis.Hologram._pendingJsInteropActions = [];
+        globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
         globalThis.Hologram.csrfToken = "{@csrf_token}";
-        globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER
+
+        globalThis.Hologram.dispatchAction = function(actionName, target, params) \{
+          globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
+        \}
       </script>
     {/if}
 

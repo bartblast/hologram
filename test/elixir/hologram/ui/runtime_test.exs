@@ -33,8 +33,10 @@ defmodule Hologram.UI.RuntimeTest do
 
     markup = render_component(Runtime, %{}, context)
 
+    refute String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
+    refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
     refute String.contains?(markup, "hologram/page")
@@ -44,8 +46,10 @@ defmodule Hologram.UI.RuntimeTest do
     context = Map.put(context, {Hologram.Runtime, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
 
+    assert String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     assert String.contains?(markup, "globalThis.Hologram.assetManifest")
     assert String.contains?(markup, "globalThis.Hologram.csrfToken")
+    assert String.contains?(markup, "globalThis.Hologram.dispatchAction")
     assert String.contains?(markup, "globalThis.Hologram.pageMountData")
     assert String.contains?(markup, "hologram/runtime")
     assert String.contains?(markup, "hologram/page")
@@ -59,8 +63,10 @@ defmodule Hologram.UI.RuntimeTest do
 
     markup = render_component(Runtime, %{}, context)
 
+    refute String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
+    refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
     refute String.contains?(markup, "hologram/page")
@@ -70,8 +76,10 @@ defmodule Hologram.UI.RuntimeTest do
     context = Map.delete(initial_context, {Hologram.Runtime, :csrf_token})
     markup = render_component(Runtime, %{}, context)
 
+    refute String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
+    refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     assert String.contains?(markup, "globalThis.Hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
     assert String.contains?(markup, "hologram/page")
