@@ -13,6 +13,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
+import JsInterop from "./js_interop.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
@@ -75,9 +76,23 @@ export default class Hologram {
   static #isInitiated = false;
   static #pageModule = null;
   static #pageParams = null;
+  static #pendingJsInteropActions = [];
   static #registeredPageModules = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
+
+  // Public API for dispatching actions from JavaScript.
+  // Converts plain JS values to Hologram types and schedules the action for execution.
+  // Example: globalThis.Hologram.dispatchAction("increment", "page", {amount: 5})
+  static dispatchAction(actionName, target, params = {}) {
+    const action = Type.actionStruct({
+      name: Type.atom(actionName),
+      params: JsInterop.boxActionParam(params),
+      target: Type.bitstring(target),
+    });
+
+    Hologram.scheduleAction(action);
+  }
 
   // This function is intentionally NOT async. Actions that use Task.await/1 return
   // a Promise, but we handle it with .then() instead of async/await. Making this
@@ -543,6 +558,15 @@ export default class Hologram {
     );
   }
 
+  static #dispatchPendingJsInteropActions() {
+    const actions = Hologram.#pendingJsInteropActions;
+    Hologram.#pendingJsInteropActions = [];
+
+    actions.forEach(([actionName, target, params]) => {
+      Hologram.dispatchAction(actionName, target, params);
+    });
+  }
+
   static #ensureDomNodeHasHologramId(eventNode) {
     if (typeof eventNode.__hologramId__ === "undefined") {
       eventNode.__hologramId__ = crypto.randomUUID();
@@ -741,6 +765,11 @@ export default class Hologram {
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
+    Hologram.#pendingJsInteropActions =
+      globalThis.Hologram._pendingJsInteropActions;
+    globalThis.Hologram.dispatchAction = Hologram.dispatchAction;
+    delete globalThis.Hologram._pendingJsInteropActions;
+
     Hologram.#isInitiated = true;
   }
 
@@ -820,6 +849,7 @@ export default class Hologram {
       GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
 
       Hologram.#scheduleQueuedInitActions();
+      Hologram.#dispatchPendingJsInteropActions();
     });
   }
 
