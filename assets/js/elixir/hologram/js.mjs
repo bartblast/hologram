@@ -94,7 +94,7 @@ const Elixir_Hologram_JS = {
       jsFunction = resolveBinding(methodOrFunction, callerModule);
     } else {
       const jsReceiver = resolveBinding(receiver, callerModule);
-      jsFunction = jsReceiver[methodOrFunction.value];
+      jsFunction = jsReceiver[methodOrFunction.value].bind(jsReceiver);
     }
 
     return box(jsFunction(...unbox(args, callerModule)));

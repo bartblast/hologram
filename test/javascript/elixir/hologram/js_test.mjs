@@ -583,6 +583,24 @@ describe("Elixir_Hologram_JS", () => {
       assert.deepStrictEqual(result, Type.bitstring("my_widget"));
     });
 
+    it("preserves 'this' binding for methods that depend on it", () => {
+      const container = document.createElement("div");
+      container.id = "test-bind-target";
+      document.body.appendChild(container);
+
+      const result = call(
+        {type: "native", value: document},
+        Type.atom("getElementById"),
+        Type.list([Type.bitstring("test-bind-target")]),
+        Type.alias("CallTestModule"),
+      );
+
+      assert.strictEqual(result.type, "native");
+      assert.strictEqual(result.value, container);
+
+      container.remove();
+    });
+
     it("returns a Task struct when JS method returns a Promise", () => {
       const httpClient = {fetchData: async () => 42};
       moduleProxy.__jsBindings__.set("HttpClient", httpClient);
