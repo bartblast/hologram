@@ -595,8 +595,7 @@ describe("Elixir_Hologram_JS", () => {
         Type.alias("CallTestModule"),
       );
 
-      assert.strictEqual(result.type, "native");
-      assert.strictEqual(result.value, container);
+      assert.deepStrictEqual(result, {type: "native", value: container});
 
       container.remove();
     });
