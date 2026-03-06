@@ -116,6 +116,8 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
+  # Async tests use JS.call/3 but cover JS.call/2 as well, since both go through
+  # the same call/4 runtime implementation and Promise handling.
   describe "JS.call/3 with async methods" do
     feature "async method", %{session: session} do
       session
