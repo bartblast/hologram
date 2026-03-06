@@ -9,89 +9,6 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
   alias HologramFeatureTests.JavaScriptInterop.PendingActionsPage
   alias HologramFeatureTests.JavaScriptInterop.SyncPage
 
-  describe "~JS sigil" do
-    feature "DOM manipulation", %{session: session} do
-      session
-      |> visit(SyncPage)
-      |> click(button("Run JS sigil void"))
-      |> assert_text(css("#js_sigil_result"), "Hologram")
-    end
-
-    feature "return value is boxed", %{session: session} do
-      session
-      |> visit(SyncPage)
-      |> click(button("Run JS sigil returning value"))
-      |> assert_text(css("#call_result"), "{11, true}")
-    end
-  end
-
-  describe "binding resolution" do
-    feature "global", %{session: session} do
-      session
-      |> visit(SyncPage)
-      |> click(button("Resolve global"))
-      |> assert_text(css("#call_result"), "{4, true}")
-    end
-
-    feature "imported", %{session: session} do
-      session
-      |> visit(SyncPage)
-      |> click(button("Resolve imported"))
-      |> assert_text(css("#call_result"), "{12, true}")
-    end
-
-    feature "object ref", %{session: session} do
-      session
-      |> visit(SyncPage)
-      |> click(button("Resolve object ref"))
-      |> assert_text(css("#call_result"), "{15, true}")
-    end
-  end
-
-  feature "npm package import", %{session: session} do
-    session
-    |> visit(NpmImportPage)
-    |> click(button("Call npm method"))
-    |> assert_text(css("#call_result"), "{123, true}")
-  end
-
-  describe "Hologram.dispatchAction()" do
-    feature "with params", %{session: session} do
-      session
-      |> visit(DispatchActionPage)
-      |> execute_script(
-        "Hologram.dispatchAction('dispatch_with_params', 'page', {amount: 42, label: 'test'});"
-      )
-      |> assert_text(css("#call_result"), ~s({42, "test"}))
-    end
-
-    feature "without params", %{session: session} do
-      session
-      |> visit(DispatchActionPage)
-      |> execute_script("Hologram.dispatchAction('dispatch_without_params', 'page');")
-      |> assert_text(css("#call_result"), ":dispatched")
-    end
-
-    feature "pending action dispatched before runtime loads", %{session: session} do
-      session
-      |> visit(PendingActionsPage)
-      |> assert_text(css("#call_result"), "{99, true}")
-    end
-  end
-
-  describe "DOM patching" do
-    feature "JS-managed subtree is preserved after state change", %{session: session} do
-      session
-      |> visit(DOMPatchingPage)
-      |> click(button("Populate JS subtree"))
-      |> assert_text(css("#counter"), "1")
-      |> assert_text(css("#js_managed"), "JS managed content")
-      |> click(button("Increment counter"))
-      |> assert_text(css("#counter"), "2")
-      |> assert_text(css("#js_managed"), "JS managed content")
-    end
-  end
-
   describe "JS.call/2" do
     feature "calls imported function directly", %{session: session} do
       session
@@ -313,5 +230,88 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> visit(SyncPage)
     |> click(button("Typeof value"))
     |> assert_text(css("#call_result"), ~s("object"))
+  end
+
+  describe "~JS sigil" do
+    feature "DOM manipulation", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Run JS sigil void"))
+      |> assert_text(css("#js_sigil_result"), "Hologram")
+    end
+
+    feature "return value is boxed", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Run JS sigil returning value"))
+      |> assert_text(css("#call_result"), "{11, true}")
+    end
+  end
+
+  describe "Hologram.dispatchAction()" do
+    feature "with params", %{session: session} do
+      session
+      |> visit(DispatchActionPage)
+      |> execute_script(
+        "Hologram.dispatchAction('dispatch_with_params', 'page', {amount: 42, label: 'test'});"
+      )
+      |> assert_text(css("#call_result"), ~s({42, "test"}))
+    end
+
+    feature "without params", %{session: session} do
+      session
+      |> visit(DispatchActionPage)
+      |> execute_script("Hologram.dispatchAction('dispatch_without_params', 'page');")
+      |> assert_text(css("#call_result"), ":dispatched")
+    end
+
+    feature "pending action dispatched before runtime loads", %{session: session} do
+      session
+      |> visit(PendingActionsPage)
+      |> assert_text(css("#call_result"), "{99, true}")
+    end
+  end
+
+  describe "binding resolution" do
+    feature "global", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Resolve global"))
+      |> assert_text(css("#call_result"), "{4, true}")
+    end
+
+    feature "imported", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Resolve imported"))
+      |> assert_text(css("#call_result"), "{12, true}")
+    end
+
+    feature "object ref", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Resolve object ref"))
+      |> assert_text(css("#call_result"), "{15, true}")
+    end
+  end
+
+  feature "npm package import", %{session: session} do
+    session
+    |> visit(NpmImportPage)
+    |> click(button("Call npm method"))
+    |> assert_text(css("#call_result"), "{123, true}")
+  end
+
+  describe "DOM patching" do
+    feature "JS-managed subtree is preserved after state change", %{session: session} do
+      session
+      |> visit(DOMPatchingPage)
+      |> click(button("Populate JS subtree"))
+      |> assert_text(css("#counter"), "1")
+      |> assert_text(css("#js_managed"), "JS managed content")
+      |> click(button("Increment counter"))
+      |> assert_text(css("#counter"), "2")
+      |> assert_text(css("#js_managed"), "JS managed content")
+    end
   end
 end
