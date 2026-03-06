@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
 
   js_import from: "./calculator.mjs", as: :Calculator
   js_import from: "./helpers.mjs", as: :helpers
+  js_import :multiply, from: "./helpers.mjs"
 
   route "/js-interop/sync"
 
@@ -18,6 +19,12 @@ defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
 
   def template do
     ~HOLO"""
+    <p>
+      <button $click="call_global_function"> Call global function </button>
+    </p>
+    <p>
+      <button $click="call_receiverless"> Call receiverless function </button>
+    </p>
     <p>
       <button $click="call_sync_method"> Call sync method</button>
     </p>
@@ -70,6 +77,18 @@ defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
       JS snippet result: <strong id="js_sigil_result"><code>nil</code></strong>
     </p>
     """
+  end
+
+  def action(:call_global_function, _params, component) do
+    result = JS.call(:parseInt, ["42abc"])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:call_receiverless, _params, component) do
+    result = JS.call(:multiply, [3, 9])
+
+    put_state(component, :result, {result, is_integer(result)})
   end
 
   def action(:call_sync_method, _params, component) do

@@ -84,6 +84,22 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
+  describe "JS.call/2" do
+    feature "calls imported function directly", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Call receiverless function"))
+      |> assert_text(css("#call_result"), "{27, true}")
+    end
+
+    feature "calls global function", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Call global function"))
+      |> assert_text(css("#call_result"), "{42, true}")
+    end
+  end
+
   describe "JS.call/3 with sync methods" do
     feature "sync method", %{session: session} do
       session
