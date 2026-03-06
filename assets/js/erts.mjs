@@ -46,6 +46,8 @@ export default class ERTS {
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
 
+  // Each call creates a new Task with a unique ref, even for the same Promise.
+  // This is intentional: multiple Task handles can independently await the same Promise.
   static registerPromise(promise) {
     const ref = $.uniqueReference();
     $.promiseRegistry.put(ref, promise);
