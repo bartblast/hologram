@@ -18,8 +18,22 @@ const helpers = {
   },
 };
 
+export class AsyncCounter {
+  constructor(initial) {
+    return new Promise((resolve) => {
+      setTimeout(() => resolve({value: initial + 1}), 50);
+    });
+  }
+}
+
 export function multiply(a, b) {
   return a * b;
 }
+
+export const promiseValue = {
+  data: new Promise((resolve) => {
+    setTimeout(() => resolve(77), 50);
+  }),
+};
 
 export default helpers;

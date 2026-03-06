@@ -222,25 +222,52 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
-  feature "JS.eval/1", %{session: session} do
-    session
-    |> visit(SyncPage)
-    |> click(button("Evaluate expression"))
-    |> assert_text(css("#call_result"), "{7, true}")
+  describe "JS.eval/1" do
+    feature "sync", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Evaluate expression"))
+      |> assert_text(css("#call_result"), "{7, true}")
+    end
+
+    feature "async (Promise -> Task)", %{session: session} do
+      session
+      |> visit(AsyncPage)
+      |> click(button("Async eval"))
+      |> assert_text(css("#call_result"), "{88, true}")
+    end
   end
 
-  feature "JS.exec/1", %{session: session} do
-    session
-    |> visit(SyncPage)
-    |> click(button("Execute code"))
-    |> assert_text(css("#call_result"), "{5, true}")
+  describe "JS.exec/1" do
+    feature "sync", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Execute code"))
+      |> assert_text(css("#call_result"), "{5, true}")
+    end
+
+    feature "async (Promise -> Task)", %{session: session} do
+      session
+      |> visit(AsyncPage)
+      |> click(button("Async exec"))
+      |> assert_text(css("#call_result"), "{66, true}")
+    end
   end
 
-  feature "JS.get/2", %{session: session} do
-    session
-    |> visit(SyncPage)
-    |> click(button("Get property"))
-    |> assert_text(css("#call_result"), "{10, true}")
+  describe "JS.get/2" do
+    feature "sync", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Get property"))
+      |> assert_text(css("#call_result"), "{10, true}")
+    end
+
+    feature "async (Promise -> Task)", %{session: session} do
+      session
+      |> visit(AsyncPage)
+      |> click(button("Async get"))
+      |> assert_text(css("#call_result"), "{77, true}")
+    end
   end
 
   feature "JS.instanceof/2", %{session: session} do
@@ -250,11 +277,20 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     |> assert_text(css("#call_result"), "{true, true}")
   end
 
-  feature "JS.new/2", %{session: session} do
-    session
-    |> visit(SyncPage)
-    |> click(button("New instance"))
-    |> assert_text(css("#call_result"), "{42, true}")
+  describe "JS.new/2" do
+    feature "sync", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("New instance"))
+      |> assert_text(css("#call_result"), "{42, true}")
+    end
+
+    feature "async (Promise -> Task)", %{session: session} do
+      session
+      |> visit(AsyncPage)
+      |> click(button("Async new"))
+      |> assert_text(css("#call_result"), "{51, true}")
+    end
   end
 
   feature "JS.set/3", %{session: session} do

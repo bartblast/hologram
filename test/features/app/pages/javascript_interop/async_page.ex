@@ -6,6 +6,8 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
   import Kernel, except: [inspect: 1]
 
   js_import from: "./helpers.mjs", as: :helpers
+  js_import :AsyncCounter, from: "./helpers.mjs"
+  js_import :promiseValue, from: "./helpers.mjs"
 
   route "/js-interop/async"
 
@@ -34,6 +36,18 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
     </p>
     <p>
       <button $click="async_dynamic_call"> Async dynamic call </button>
+    </p>
+    <p>
+      <button $click="async_eval"> Async eval </button>
+    </p>
+    <p>
+      <button $click="async_exec"> Async exec </button>
+    </p>
+    <p>
+      <button $click="async_get"> Async get </button>
+    </p>
+    <p>
+      <button $click="async_new"> Async new </button>
     </p>
     <p>
       <button $click="call_async_method"> Call async method </button>
@@ -123,6 +137,44 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
     is_int = module.is_integer(result)
 
     put_state(component, :result, {result, is_int})
+  end
+
+  def action(:async_eval, _params, component) do
+    result =
+      "new Promise(resolve => setTimeout(() => resolve(88), 50))"
+      |> JS.eval()
+      |> Task.await()
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:async_exec, _params, component) do
+    result =
+      "return new Promise(resolve => setTimeout(() => resolve(66), 50))"
+      |> JS.exec()
+      |> Task.await()
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:async_get, _params, component) do
+    result =
+      :promiseValue
+      |> JS.get(:data)
+      |> Task.await()
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:async_new, _params, component) do
+    obj =
+      :AsyncCounter
+      |> JS.new([50])
+      |> Task.await()
+
+    result = JS.get(obj, :value)
+
+    put_state(component, :result, {result, is_integer(result)})
   end
 
   def action(:call_async_method, _params, component) do
