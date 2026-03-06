@@ -136,6 +136,13 @@ describe("JsInterop", () => {
 
         assert.deepStrictEqual(result, expected);
       });
+
+      it("promise -> Task struct via ERTS.registerPromise", () => {
+        const promise = new Promise((resolve) => resolve(42));
+        const result = JsInterop.boxActionParam(promise);
+
+        assert.isTrue(Type.isStruct(result, "Task"));
+      });
     });
 
     describe("plain objects use atom keys", () => {

@@ -3,7 +3,6 @@
 import {box} from "../../js_interop.mjs";
 
 import Bitstring from "../../bitstring.mjs";
-import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Type from "../../type.mjs";
 
@@ -98,13 +97,7 @@ const Elixir_Hologram_JS = {
       jsFunction = jsReceiver[methodOrFunction.value];
     }
 
-    const result = jsFunction(...unbox(args, callerModule));
-
-    if (result instanceof Promise) {
-      return ERTS.registerPromise(result);
-    }
-
-    return box(result);
+    return box(jsFunction(...unbox(args, callerModule)));
   },
 
   "delete/3": (receiver, property, callerModule) => {

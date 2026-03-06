@@ -162,6 +162,15 @@ describe("box()", () => {
     });
   });
 
+  describe("promise", () => {
+    it("promise -> Task struct via ERTS.registerPromise", () => {
+      const promise = new Promise((resolve) => resolve(42));
+      const result = box(promise);
+
+      assert.isTrue(Type.isStruct(result, "Task"));
+    });
+  });
+
   describe("native", () => {
     it("function -> native", () => {
       const fn = () => 42;

@@ -1,5 +1,6 @@
 "use strict";
 
+import ERTS from "./erts.mjs";
 import Type from "./type.mjs";
 
 export default class JsInterop {
@@ -28,6 +29,10 @@ export default class JsInterop {
 
     if (Array.isArray(value)) {
       return Type.list(value.map($.box));
+    }
+
+    if (value instanceof Promise) {
+      return ERTS.registerPromise(value);
     }
 
     const proto = Object.getPrototypeOf(value);
