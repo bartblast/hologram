@@ -525,6 +525,7 @@ describe("unbox()", () => {
 describe("Elixir_Hologram_JS", () => {
   describe("call/4", () => {
     const call = Elixir_Hologram_JS["call/4"];
+    let moduleProxy;
 
     beforeEach(() => {
       delete globalThis.Elixir_CallTestModule;
@@ -535,11 +536,12 @@ describe("Elixir_Hologram_JS", () => {
         "public",
         () => {},
       );
+
+      moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
     });
 
     it("calls method on receiver with unboxed args and boxes result", () => {
       const mathHelpers = {add: (a, b) => a + b};
-      const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
       moduleProxy.__jsBindings__.set("helpers", mathHelpers);
 
       const result = call(
@@ -559,8 +561,6 @@ describe("Elixir_Hologram_JS", () => {
 
       const myWidget = {label: "my_widget"};
 
-      const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
-
       moduleProxy.__jsBindings__.set("Registry", itemRegistry);
       moduleProxy.__jsBindings__.set("Widget", myWidget);
 
@@ -576,7 +576,6 @@ describe("Elixir_Hologram_JS", () => {
 
     it("returns a Task struct when JS method returns a Promise", () => {
       const httpClient = {fetchData: async () => 42};
-      const moduleProxy = Interpreter.moduleProxy(Type.alias("CallTestModule"));
       moduleProxy.__jsBindings__.set("HttpClient", httpClient);
 
       const result = call(
@@ -603,11 +602,6 @@ describe("Elixir_Hologram_JS", () => {
     describe("receiverless (nil receiver)", () => {
       it("calls imported binding directly", () => {
         const myMultiply = (a, b) => a * b;
-
-        const moduleProxy = Interpreter.moduleProxy(
-          Type.alias("CallTestModule"),
-        );
-
         moduleProxy.__jsBindings__.set("multiply", myMultiply);
 
         const result = call(
@@ -637,11 +631,6 @@ describe("Elixir_Hologram_JS", () => {
 
       it("returns a Task struct when function returns a Promise", () => {
         const myAsyncDouble = async (x) => x * 2;
-
-        const moduleProxy = Interpreter.moduleProxy(
-          Type.alias("CallTestModule"),
-        );
-
         moduleProxy.__jsBindings__.set("asyncDouble", myAsyncDouble);
 
         const result = call(
