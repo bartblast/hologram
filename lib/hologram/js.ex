@@ -34,6 +34,17 @@ defmodule Hologram.JS do
   end
 
   @doc """
+  Calls a function from the current scope (imported binding or global).
+  """
+  defmacro call(function, args) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.call(nil, unquote(function), unquote(args), unquote(module))
+    end
+  end
+
+  @doc """
   Calls a method on a JS receiver.
   """
   defmacro call(receiver, method, args) do
