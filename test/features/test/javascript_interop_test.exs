@@ -295,11 +295,27 @@ defmodule HologramFeatureTests.JavaScriptInteropTest do
     end
   end
 
-  feature "npm package import", %{session: session} do
-    session
-    |> visit(NpmImportPage)
-    |> click(button("Call npm method"))
-    |> assert_text(css("#call_result"), "{123, true}")
+  describe "js_import path resolution" do
+    feature "colocated file (relative to caller)", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Call colocated function"))
+      |> assert_text(css("#call_result"), "{24, true}")
+    end
+
+    feature "assets dir file (relative to caller)", %{session: session} do
+      session
+      |> visit(SyncPage)
+      |> click(button("Call assets dir function"))
+      |> assert_text(css("#call_result"), "{16, true}")
+    end
+
+    feature "npm package", %{session: session} do
+      session
+      |> visit(NpmImportPage)
+      |> click(button("Call npm method"))
+      |> assert_text(css("#call_result"), "{123, true}")
+    end
   end
 
   describe "DOM patching" do

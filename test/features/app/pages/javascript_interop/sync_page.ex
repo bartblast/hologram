@@ -5,9 +5,10 @@ defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  js_import :double, from: "../../../assets/js/assets_util.mjs"
+  js_import :multiply, from: "./helpers.mjs"
   js_import from: "./calculator.mjs", as: :Calculator
   js_import from: "./helpers.mjs", as: :helpers
-  js_import :multiply, from: "./helpers.mjs"
 
   route "/js-interop/sync"
 
@@ -19,6 +20,12 @@ defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
 
   def template do
     ~HOLO"""
+    <p>
+      <button $click="call_assets_dir_function"> Call assets dir function </button>
+    </p>
+    <p>
+      <button $click="call_colocated_function"> Call colocated function </button>
+    </p>
     <p>
       <button $click="call_global_function"> Call global function </button>
     </p>
@@ -77,6 +84,18 @@ defmodule HologramFeatureTests.JavaScriptInterop.SyncPage do
       JS snippet result: <strong id="js_sigil_result"><code>nil</code></strong>
     </p>
     """
+  end
+
+  def action(:call_assets_dir_function, _params, component) do
+    result = JS.call(:double, [8])
+
+    put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:call_colocated_function, _params, component) do
+    result = JS.call(:multiply, [4, 6])
+
+    put_state(component, :result, {result, is_integer(result)})
   end
 
   def action(:call_global_function, _params, component) do
