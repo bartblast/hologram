@@ -87,39 +87,49 @@ defmodule Hologram.JSTest do
              ]
     end
 
-    test "resolves ./ relative path to assets/js/" do
-      resolved_path =
-        Path.join([Reflection.root_dir(), "assets", "js", "utils.js"])
+    test "resolves ./ relative path to caller file directory" do
+      root_dir = Reflection.root_dir()
+      caller_file = Path.join([root_dir, "lib", "my_app", "pages", "my_page.ex"])
+      resolved_path = Path.join([root_dir, "lib", "my_app", "pages", "utils.js"])
 
       {{:module, module, _binary, _result}, _bindings} =
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.JS.RelativeDotSlash do
-          use Hologram.JS
+        Code.eval_string(
+          """
+          defmodule Hologram.Test.Fixtures.JS.RelativeDotSlash do
+            use Hologram.JS
 
-          js_import :foo, from: "./utils.js", as: :foo
-        end
-        """)
+            js_import :foo, from: "./utils.js", as: :my_foo
+          end
+          """,
+          [],
+          file: caller_file
+        )
 
       assert module.__js_imports__() == [
-               %{export: "foo", from: resolved_path, as: "foo"}
+               %{export: "foo", from: resolved_path, as: "my_foo"}
              ]
     end
 
-    test "resolves ../ relative path to assets/js/" do
-      resolved_path =
-        Path.join([Reflection.root_dir(), "assets", "vendor", "utils.js"])
+    test "resolves ../ relative path to caller file directory" do
+      root_dir = Reflection.root_dir()
+      caller_file = Path.join([root_dir, "lib", "my_app", "pages", "my_page.ex"])
+      resolved_path = Path.join([root_dir, "lib", "my_app", "vendor", "utils.js"])
 
       {{:module, module, _binary, _result}, _bindings} =
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.JS.RelativeDotDotSlash do
-          use Hologram.JS
+        Code.eval_string(
+          """
+          defmodule Hologram.Test.Fixtures.JS.RelativeDotDotSlash do
+            use Hologram.JS
 
-          js_import :foo, from: "../vendor/utils.js", as: :foo
-        end
-        """)
+            js_import :foo, from: "../vendor/utils.js", as: :my_foo
+          end
+          """,
+          [],
+          file: caller_file
+        )
 
       assert module.__js_imports__() == [
-               %{export: "foo", from: resolved_path, as: "foo"}
+               %{export: "foo", from: resolved_path, as: "my_foo"}
              ]
     end
 
@@ -129,12 +139,12 @@ defmodule Hologram.JSTest do
         defmodule Hologram.Test.Fixtures.JS.AbsolutePath do
           use Hologram.JS
 
-          js_import :foo, from: "/absolute/path/utils.js", as: :foo
+          js_import :foo, from: "/absolute/path/utils.js", as: :my_foo
         end
         """)
 
       assert module.__js_imports__() == [
-               %{export: "foo", from: "/absolute/path/utils.js", as: "foo"}
+               %{export: "foo", from: "/absolute/path/utils.js", as: "my_foo"}
              ]
     end
 
@@ -144,12 +154,12 @@ defmodule Hologram.JSTest do
         defmodule Hologram.Test.Fixtures.JS.NpmPackage do
           use Hologram.JS
 
-          js_import :Chart, from: "chart.js", as: :Chart
+          js_import :Chart, from: "chart.js", as: :MyChart
         end
         """)
 
       assert module.__js_imports__() == [
-               %{export: "Chart", from: "chart.js", as: "Chart"}
+               %{export: "Chart", from: "chart.js", as: "MyChart"}
              ]
     end
 

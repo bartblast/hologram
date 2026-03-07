@@ -1,6 +1,4 @@
 defmodule Hologram.JS do
-  alias Hologram.Reflection
-
   defmacro __using__(_opts) do
     quote do
       import Hologram.JS, only: [js_import: 1, js_import: 2, sigil_JS: 2]
@@ -230,21 +228,20 @@ defmodule Hologram.JS do
     from = Keyword.fetch!(opts, :from)
     as = Keyword.get(opts, :as, export)
 
+    resolved_from =
+      if is_binary(from) and relative_specifier?(from) do
+        __CALLER__.file
+        |> Path.dirname()
+        |> Path.join(from)
+        |> Path.expand()
+      else
+        from
+      end
+
     quote do
-      from = unquote(from)
-
-      resolved_from =
-        if String.starts_with?(from, "./") or String.starts_with?(from, "../") do
-          [Reflection.root_dir(), "assets", "js", from]
-          |> Path.join()
-          |> Path.expand()
-        else
-          from
-        end
-
       @__js_imports__ %{
         export: Atom.to_string(unquote(export)),
-        from: resolved_from,
+        from: unquote(resolved_from),
         as: Atom.to_string(unquote(as))
       }
     end
@@ -308,6 +305,10 @@ defmodule Hologram.JS do
   @doc false
   @spec typeof(any(), module()) :: any()
   def typeof(_value, _caller_module), do: __server_pass_through__()
+
+  defp relative_specifier?(path) do
+    String.starts_with?(path, "./") or String.starts_with?(path, "../")
+  end
 
   # Returns :ok at runtime, but the use of Application.get_env/3 makes the return type
   # opaque to the Elixir type checker. This prevents false positive type warnings when
