@@ -7838,7 +7838,7 @@ describe("Erlang", () => {
   describe("make_ref/0", () => {
     const make_ref = Erlang["make_ref/0"];
 
-    it("returns a client-side reference", () => {
+    it("generates a new reference", () => {
       const result = make_ref();
 
       assert.isTrue(Type.isReference(result));
