@@ -1406,6 +1406,44 @@ describe("Type", () => {
     });
   });
 
+  describe("maybeNormalizeNumberTerms()", () => {
+    it("left is integer, right is integer", () => {
+      const term1 = Type.integer(1);
+      const term2 = Type.integer(2);
+      const result = Type.maybeNormalizeNumberTerms(term1, term2);
+      const expected = ["integer", term1, term2];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("left is integer, right is float", () => {
+      const term1 = Type.integer(1);
+      const term2 = Type.float(2.0);
+      const result = Type.maybeNormalizeNumberTerms(term1, term2);
+      const expected = ["float", Type.float(1.0), term2];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("left is float, right is integer", () => {
+      const term1 = Type.float(1.0);
+      const term2 = Type.integer(2);
+      const result = Type.maybeNormalizeNumberTerms(term1, term2);
+      const expected = ["float", term1, Type.float(2.0)];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("left is float, right is float", () => {
+      const term1 = Type.float(1.0);
+      const term2 = Type.float(2.0);
+      const result = Type.maybeNormalizeNumberTerms(term1, term2);
+      const expected = ["float", term1, term2];
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("nativeValueStruct()", () => {
     it("object type with reference value", () => {
       const ref = ERTS.uniqueReference();
@@ -1456,44 +1494,6 @@ describe("Type", () => {
 
   it("nil()", () => {
     assert.deepStrictEqual(Type.nil(), Type.atom("nil"));
-  });
-
-  describe("maybeNormalizeNumberTerms()", () => {
-    it("left is integer, right is integer", () => {
-      const term1 = Type.integer(1);
-      const term2 = Type.integer(2);
-      const result = Type.maybeNormalizeNumberTerms(term1, term2);
-      const expected = ["integer", term1, term2];
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("left is integer, right is float", () => {
-      const term1 = Type.integer(1);
-      const term2 = Type.float(2.0);
-      const result = Type.maybeNormalizeNumberTerms(term1, term2);
-      const expected = ["float", Type.float(1.0), term2];
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("left is float, right is integer", () => {
-      const term1 = Type.float(1.0);
-      const term2 = Type.integer(2);
-      const result = Type.maybeNormalizeNumberTerms(term1, term2);
-      const expected = ["float", term1, Type.float(2.0)];
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("left is float, right is float", () => {
-      const term1 = Type.float(1.0);
-      const term2 = Type.float(2.0);
-      const result = Type.maybeNormalizeNumberTerms(term1, term2);
-      const expected = ["float", term1, term2];
-
-      assert.deepStrictEqual(result, expected);
-    });
   });
 
   it("pid()", () => {

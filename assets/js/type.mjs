@@ -435,17 +435,6 @@ export default class Type {
     return {type: "match_placeholder"};
   }
 
-  static nativeValueStruct(jsType, boxedValue) {
-    return Type.struct("Hologram.JS.NativeValue", [
-      [Type.atom("type"), Type.atom(jsType)],
-      [Type.atom("value"), boxedValue],
-    ]);
-  }
-
-  static nil() {
-    return Type.atom("nil");
-  }
-
   static maybeNormalizeNumberTerms(term1, term2) {
     const type =
       Type.isFloat(term1) || Type.isFloat(term2) ? "float" : "integer";
@@ -465,6 +454,17 @@ export default class Type {
     }
 
     return [type, value1, value2];
+  }
+
+  static nativeValueStruct(jsType, boxedValue) {
+    return Type.struct("Hologram.JS.NativeValue", [
+      [Type.atom("type"), Type.atom(jsType)],
+      [Type.atom("value"), boxedValue],
+    ]);
+  }
+
+  static nil() {
+    return Type.atom("nil");
   }
 
   static pid(node, segments, origin = "server") {
