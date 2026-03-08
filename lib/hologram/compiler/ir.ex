@@ -322,7 +322,7 @@ defmodule Hologram.Compiler.IR do
 
     defstruct [:module, :function, :args]
 
-    @type t :: %__MODULE__{module: IR.t(), function: IR.t(), args: list(IR.t())}
+    @type t :: %__MODULE__{module: IR.t(), function: atom, args: list(IR.t())}
   end
 
   defmodule StringType do
