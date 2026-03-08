@@ -3,6 +3,7 @@
 import {box} from "../../js_interop.mjs";
 
 import Bitstring from "../../bitstring.mjs";
+import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Type from "../../type.mjs";
 
@@ -17,8 +18,8 @@ function resolveBinding(term, callerModule) {
     return moduleProxy.__jsBindings__.get(name) ?? globalThis[name];
   }
 
-  if (term.type === "native") {
-    return term.value;
+  if (Type.isNativeValueStruct(term)) {
+    return unboxNativeValue(term);
   }
 
   return unbox(term, callerModule);
@@ -65,24 +66,46 @@ function unbox(term, callerModule) {
     case "list":
       return term.data.map((item) => unbox(item, callerModule));
 
-    case "map": {
-      const obj = {};
-
-      for (const [_encodedKey, [key, value]] of Object.entries(term.data)) {
-        obj[unbox(key, callerModule)] = unbox(value, callerModule);
+    case "map":
+      if (Type.isNativeValueStruct(term)) {
+        return unboxNativeValue(term);
       }
 
-      return obj;
-    }
+      {
+        const obj = {};
 
-    case "native":
-      return term.value;
+        for (const [_encodedKey, [key, value]] of Object.entries(term.data)) {
+          obj[unbox(key, callerModule)] = unbox(value, callerModule);
+        }
+
+        return obj;
+      }
 
     case "tuple":
       return term.data.map((item) => unbox(item, callerModule));
 
     default:
       return term;
+  }
+}
+
+function unboxNativeValue(term) {
+  const typeKey = Type.encodeMapKey(Type.atom("type"));
+  const jsType = term.data[typeKey][1].value;
+
+  const valueKey = Type.encodeMapKey(Type.atom("value"));
+  const boxedValue = term.data[valueKey][1];
+
+  switch (jsType) {
+    case "bigint":
+      return boxedValue.value;
+
+    case "function":
+    case "object":
+      return ERTS.nativeObjectRegistry.get(boxedValue);
+
+    case "undefined":
+      return undefined;
   }
 }
 

@@ -26,11 +26,11 @@ describe("box()", () => {
       assert.deepStrictEqual(box(null), Type.atom("nil"));
     });
 
-    it("undefined -> native", () => {
-      assert.deepStrictEqual(box(undefined), {
-        type: "native",
-        value: undefined,
-      });
+    it("undefined -> Hologram.JS.NativeValue struct with nil value", () => {
+      const result = box(undefined);
+      const expected = Type.nativeValueStruct("undefined", Type.nil());
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
@@ -45,8 +45,11 @@ describe("box()", () => {
   });
 
   describe("number", () => {
-    it("bigint -> native", () => {
-      assert.deepStrictEqual(box(42n), {type: "native", value: 42n});
+    it("bigint -> Hologram.JS.NativeValue struct with integer value", () => {
+      const result = box(42n);
+      const expected = Type.nativeValueStruct("bigint", Type.integer(42));
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("integer number -> integer", () => {
@@ -171,20 +174,36 @@ describe("box()", () => {
     });
   });
 
-  describe("native", () => {
-    it("function -> native", () => {
+  describe("native object", () => {
+    it("function -> Hologram.JS.NativeValue struct", () => {
       const fn = () => 42;
       const result = box(fn);
 
-      assert.deepStrictEqual(result, {type: "native", value: fn});
+      const valueKey = Type.encodeMapKey(Type.atom("value"));
+      const ref = result.data[valueKey][1];
+
+      assert.isTrue(Type.isReference(ref));
+      assert.strictEqual(ERTS.nativeObjectRegistry.get(ref), fn);
+
+      const expected = Type.nativeValueStruct("function", ref);
+
+      assert.deepStrictEqual(result, expected);
     });
 
-    it("class instance -> native", () => {
+    it("class instance -> Hologram.JS.NativeValue struct", () => {
       class MyClass {}
       const instance = new MyClass();
       const result = box(instance);
 
-      assert.deepStrictEqual(result, {type: "native", value: instance});
+      const valueKey = Type.encodeMapKey(Type.atom("value"));
+      const ref = result.data[valueKey][1];
+
+      assert.isTrue(Type.isReference(ref));
+      assert.strictEqual(ERTS.nativeObjectRegistry.get(ref), instance);
+
+      const expected = Type.nativeValueStruct("object", ref);
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 });
@@ -237,13 +256,14 @@ describe("resolveBinding()", () => {
     assert.strictEqual(result, globalThis.__testObj__);
   });
 
-  it("unwraps native receiver directly", () => {
-    const obj = {a: 1};
-    const nativeReceiver = {type: "native", value: obj};
+  it("unboxes Hologram.JS.NativeValue struct from registry", () => {
+    class MyClass {}
+    const instance = new MyClass();
+    const nativeStruct = box(instance);
 
-    const result = resolveBinding(nativeReceiver, Type.alias("Unused"));
+    const result = resolveBinding(nativeStruct, Type.alias("Unused"));
 
-    assert.strictEqual(result, obj);
+    assert.strictEqual(result, instance);
   });
 
   it("unboxes other receiver types", () => {
@@ -492,15 +512,6 @@ describe("unbox()", () => {
     });
   });
 
-  describe("native", () => {
-    it("native -> unwrapped value", () => {
-      const obj = {a: 1};
-      const term = {type: "native", value: obj};
-
-      assert.strictEqual(unbox(term, callerModule), obj);
-    });
-  });
-
   describe("tuple", () => {
     it("tuple -> array", () => {
       const term = Type.tuple([Type.integer(1), Type.bitstring("two")]);
@@ -522,11 +533,19 @@ describe("unbox()", () => {
     });
   });
 
+  it("Hologram.JS.NativeValue struct -> native object", () => {
+    class MyClass {}
+    const instance = new MyClass();
+    const nativeStruct = box(instance);
+
+    assert.strictEqual(unbox(nativeStruct, callerModule), instance);
+  });
+
   describe("default", () => {
     it("unknown type -> pass through", () => {
-      const ref = Type.reference("nonode@nohost", 0, [1, 2, 3]);
+      const pid = Type.pid("nonode@nohost", [0, 0, 1]);
 
-      assert.deepStrictEqual(unbox(ref, callerModule), ref);
+      assert.deepStrictEqual(unbox(pid, callerModule), pid);
     });
   });
 });
@@ -589,13 +608,21 @@ describe("Elixir_Hologram_JS", () => {
       document.body.appendChild(container);
 
       const result = call(
-        {type: "native", value: document},
+        box(document),
         Type.atom("getElementById"),
         Type.list([Type.bitstring("test-bind-target")]),
         Type.alias("CallTestModule"),
       );
 
-      assert.deepStrictEqual(result, {type: "native", value: container});
+      const valueKey = Type.encodeMapKey(Type.atom("value"));
+      const ref = result.data[valueKey][1];
+
+      assert.isTrue(Type.isReference(ref));
+      assert.strictEqual(ERTS.nativeObjectRegistry.get(ref), container);
+
+      const expected = Type.nativeValueStruct("object", ref);
+
+      assert.deepStrictEqual(result, expected);
 
       container.remove();
     });
@@ -770,7 +797,7 @@ describe("Elixir_Hologram_JS", () => {
       });
 
       dispatchEvent(
-        {type: "native", value: target},
+        box(target),
         Type.atom("CustomEvent"),
         Type.bitstring("chart:update"),
         Type.map(),
@@ -798,7 +825,7 @@ describe("Elixir_Hologram_JS", () => {
       ]);
 
       dispatchEvent(
-        {type: "native", value: target},
+        box(target),
         Type.atom("CustomEvent"),
         Type.bitstring("chart:update"),
         opts,
@@ -819,7 +846,7 @@ describe("Elixir_Hologram_JS", () => {
       const opts = Type.map([[Type.atom("bubbles"), Type.atom("true")]]);
 
       dispatchEvent(
-        {type: "native", value: target},
+        box(target),
         Type.atom("MouseEvent"),
         Type.bitstring("click"),
         opts,
@@ -852,7 +879,7 @@ describe("Elixir_Hologram_JS", () => {
       const target = document.createElement("div");
 
       const result = dispatchEvent(
-        {type: "native", value: target},
+        box(target),
         Type.atom("CustomEvent"),
         Type.bitstring("test:event"),
         Type.map(),
@@ -872,7 +899,7 @@ describe("Elixir_Hologram_JS", () => {
       const opts = Type.map([[Type.atom("cancelable"), Type.atom("true")]]);
 
       const result = dispatchEvent(
-        {type: "native", value: target},
+        box(target),
         Type.atom("CustomEvent"),
         Type.bitstring("test:cancel"),
         opts,
@@ -935,7 +962,7 @@ describe("Elixir_Hologram_JS", () => {
       assert.deepStrictEqual(result, Type.integer(3));
     });
 
-    it("returns native undefined for undefined properties", () => {
+    it("returns NativeValue struct for undefined properties", () => {
       class Config {}
 
       Interpreter.defineManuallyPortedFunction(
@@ -955,7 +982,9 @@ describe("Elixir_Hologram_JS", () => {
         Type.alias("GetTestModule"),
       );
 
-      assert.deepStrictEqual(result, {type: "native", value: undefined});
+      const expected = Type.nativeValueStruct("undefined", Type.nil());
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
@@ -984,7 +1013,7 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("Calc", Calculator);
 
       const result = instanceofFn(
-        {type: "native", value: instance},
+        box(instance),
         Type.atom("Calc"),
         Type.alias("InstanceofTestModule"),
       );
@@ -1011,7 +1040,7 @@ describe("Elixir_Hologram_JS", () => {
       moduleProxy.__jsBindings__.set("Calc", Calculator);
 
       const result = instanceofFn(
-        {type: "native", value: instance},
+        box(instance),
         Type.atom("Calc"),
         Type.alias("InstanceofTestModule"),
       );
@@ -1051,9 +1080,18 @@ describe("Elixir_Hologram_JS", () => {
         Type.alias("NewTestModule"),
       );
 
-      assert.strictEqual(result.type, "native");
-      assert.isTrue(result.value instanceof Calculator);
-      assert.strictEqual(result.value.initial, 10);
+      const valueKey = Type.encodeMapKey(Type.atom("value"));
+      const ref = result.data[valueKey][1];
+
+      assert.isTrue(Type.isReference(ref));
+
+      const jsInstance = ERTS.nativeObjectRegistry.get(ref);
+      assert.instanceOf(jsInstance, Calculator);
+      assert.strictEqual(jsInstance.initial, 10);
+
+      const expected = Type.nativeValueStruct("object", ref);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("resolves atom args to bindings", () => {
@@ -1087,9 +1125,18 @@ describe("Elixir_Hologram_JS", () => {
         Type.alias("NewTestModule"),
       );
 
-      assert.strictEqual(result.type, "native");
-      assert.isTrue(result.value instanceof Widget);
-      assert.strictEqual(result.value.opts, DefaultOpts);
+      const valueKey = Type.encodeMapKey(Type.atom("value"));
+      const ref = result.data[valueKey][1];
+
+      assert.isTrue(Type.isReference(ref));
+
+      const jsInstance = ERTS.nativeObjectRegistry.get(ref);
+      assert.instanceOf(jsInstance, Widget);
+      assert.strictEqual(jsInstance.opts, DefaultOpts);
+
+      const expected = Type.nativeValueStruct("object", ref);
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
@@ -1280,35 +1327,34 @@ describe("Elixir_Hologram_JS", () => {
       });
     });
 
-    describe("native values", () => {
-      it("native bigint -> bigint", () => {
-        const result = typeofFn(
-          {type: "native", value: 42n},
-          Type.alias("TypeofTestModule"),
-        );
+    describe("native values (via NativeValue struct)", () => {
+      it("bigint -> bigint", () => {
+        const result = typeofFn(box(42n), Type.alias("TypeofTestModule"));
 
         assert.deepStrictEqual(result, Type.bitstring("bigint"));
       });
 
-      it("native object -> object", () => {
+      it("undefined -> undefined", () => {
+        const result = typeofFn(box(undefined), Type.alias("TypeofTestModule"));
+
+        assert.deepStrictEqual(result, Type.bitstring("undefined"));
+      });
+
+      it("object -> object", () => {
         class MyClass {}
         const instance = new MyClass();
 
-        const result = typeofFn(
-          {type: "native", value: instance},
-          Type.alias("TypeofTestModule"),
-        );
+        const result = typeofFn(box(instance), Type.alias("TypeofTestModule"));
 
         assert.deepStrictEqual(result, Type.bitstring("object"));
       });
 
-      it("native undefined -> undefined", () => {
-        const result = typeofFn(
-          {type: "native", value: undefined},
-          Type.alias("TypeofTestModule"),
-        );
+      it("function -> function", () => {
+        const fn = () => 42;
 
-        assert.deepStrictEqual(result, Type.bitstring("undefined"));
+        const result = typeofFn(box(fn), Type.alias("TypeofTestModule"));
+
+        assert.deepStrictEqual(result, Type.bitstring("function"));
       });
     });
   });
