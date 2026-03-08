@@ -542,7 +542,7 @@ describe("unbox()", () => {
       assert.strictEqual(result, nativeBigInt);
     });
 
-    it("function -> native function", () => {
+    it("function -> function", () => {
       const nativeFunction = () => 42;
       const boxedValue = box(nativeFunction);
       const result = unbox(boxedValue, callerModule);
@@ -550,7 +550,7 @@ describe("unbox()", () => {
       assert.strictEqual(result, nativeFunction);
     });
 
-    it("object -> native object", () => {
+    it("object -> object", () => {
       class MyClass {}
       const nativeObject = new MyClass();
       const boxedValue = box(nativeObject);
