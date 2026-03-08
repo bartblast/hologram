@@ -259,9 +259,9 @@ describe("resolveBinding()", () => {
   it("unboxes Hologram.JS.NativeValue struct from registry", () => {
     class MyClass {}
     const instance = new MyClass();
-    const nativeStruct = box(instance);
+    const boxedValue = box(instance);
 
-    const result = resolveBinding(nativeStruct, Type.alias("Unused"));
+    const result = resolveBinding(boxedValue, Type.alias("Unused"));
 
     assert.strictEqual(result, instance);
   });
@@ -533,12 +533,39 @@ describe("unbox()", () => {
     });
   });
 
-  it("Hologram.JS.NativeValue struct -> native object", () => {
-    class MyClass {}
-    const instance = new MyClass();
-    const nativeStruct = box(instance);
+  describe("Hologram.JS.NativeValue struct", () => {
+    it("bigint -> bigint", () => {
+      const nativeBigInt = 42n;
+      const boxedValue = box(nativeBigInt);
+      const result = unbox(boxedValue, callerModule);
 
-    assert.strictEqual(unbox(nativeStruct, callerModule), instance);
+      assert.strictEqual(result, nativeBigInt);
+    });
+
+    it("function -> native function", () => {
+      const nativeFunction = () => 42;
+      const boxedValue = box(nativeFunction);
+      const result = unbox(boxedValue, callerModule);
+
+      assert.strictEqual(result, nativeFunction);
+    });
+
+    it("object -> native object", () => {
+      class MyClass {}
+      const nativeObject = new MyClass();
+      const boxedValue = box(nativeObject);
+      const result = unbox(boxedValue, callerModule);
+
+      assert.strictEqual(result, nativeObject);
+    });
+
+    it("undefined -> undefined", () => {
+      const nativeUndefinedValue = undefined;
+      const boxedValue = box(nativeUndefinedValue);
+      const result = unbox(boxedValue, callerModule);
+
+      assert.strictEqual(result, nativeUndefinedValue);
+    });
   });
 
   describe("default", () => {
