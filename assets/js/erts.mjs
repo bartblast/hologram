@@ -30,7 +30,13 @@ export default class ERTS {
 
   static binaryPatternRegistry = BinaryPatternRegistry;
   static ets = {};
+
+  // TODO: add scoped lifecycle / GC for native object registry.
+  // Entries are never released because registered objects may be global (e.g. stored on window)
+  // and must survive page navigation.
   static nativeObjectRegistry = NativeObjectRegistry;
+
+  // Entries are released via takePromise() when Task.await/1 is called.
   static promiseRegistry = PromiseRegistry;
 
   // Sequence for anonymous function `uniq` field.
