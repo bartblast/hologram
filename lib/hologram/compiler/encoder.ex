@@ -838,9 +838,9 @@ defmodule Hologram.Compiler.Encoder do
     |> has_match_operator?()
   end
 
-  defp has_match_operator?(%_struct{} = ir) do
+  defp has_match_operator?(ir) when is_struct(ir) do
     ir
-    |> Map.from_struct()
+    |> Map.values()
     |> has_match_operator?()
   end
 

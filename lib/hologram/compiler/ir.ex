@@ -594,16 +594,15 @@ defmodule Hologram.Compiler.IR do
     Enum.any?(term, &has_call_to?(&1, module, mfas))
   end
 
-  def has_call_to?(term, module, mfas) when is_tuple(term) do
+  def has_call_to?(term, module, mfas) when is_map(term) do
     term
-    |> Tuple.to_list()
+    |> Map.values()
     |> has_call_to?(module, mfas)
   end
 
-  def has_call_to?(%_struct{} = term, module, mfas) do
+  def has_call_to?(term, module, mfas) when is_tuple(term) do
     term
-    |> Map.from_struct()
-    |> Map.values()
+    |> Tuple.to_list()
     |> has_call_to?(module, mfas)
   end
 

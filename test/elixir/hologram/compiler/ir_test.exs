@@ -506,6 +506,21 @@ defmodule Hologram.Compiler.IRTest do
       assert has_call_to?(ir, @module, @mfas)
     end
 
+    test "traverses plain maps" do
+      ir = %{
+        initial_value: %IR.AtomType{value: :ok},
+        clauses: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: Aaa.Bbb},
+            function: :my_fun,
+            args: [%IR.Variable{name: :x}]
+          }
+        ]
+      }
+
+      assert has_call_to?(ir, @module, @mfas)
+    end
+
     test "literal (catch-all)" do
       refute has_call_to?(%IR.AtomType{value: :expr}, @module, @mfas)
     end
