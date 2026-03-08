@@ -12,6 +12,29 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("ERTS", () => {
+  describe("registerNativeObject()", () => {
+    it("returns a reference", () => {
+      const obj = {a: 1};
+      const ref = ERTS.registerNativeObject(obj);
+
+      assert.isTrue(Type.isReference(ref));
+    });
+
+    it("stores the object in the NativeObjectRegistry", () => {
+      const obj = {a: 1};
+      const ref = ERTS.registerNativeObject(obj);
+
+      assert.strictEqual(ERTS.nativeObjectRegistry.get(ref), obj);
+    });
+
+    it("returns unique references for different objects", () => {
+      const ref1 = ERTS.registerNativeObject({a: 1});
+      const ref2 = ERTS.registerNativeObject({b: 2});
+
+      assert.isFalse(Interpreter.isEqual(ref1, ref2));
+    });
+  });
+
   describe("registerPromise()", () => {
     it("returns a Task struct with correct fields", () => {
       const promise = Promise.resolve(42);

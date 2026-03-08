@@ -1,6 +1,7 @@
 "use strict";
 
 import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
+import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PromiseRegistry from "./erts/promise_registry.mjs";
 import Sequence from "./common/sequence.mjs";
@@ -29,6 +30,7 @@ export default class ERTS {
 
   static binaryPatternRegistry = BinaryPatternRegistry;
   static ets = {};
+  static nativeObjectRegistry = NativeObjectRegistry;
   static promiseRegistry = PromiseRegistry;
 
   // Sequence for anonymous function `uniq` field.
@@ -45,6 +47,13 @@ export default class ERTS {
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+
+  static registerNativeObject(object) {
+    const ref = $.uniqueReference();
+    $.nativeObjectRegistry.put(ref, object);
+
+    return ref;
+  }
 
   // Each call creates a new Task with a unique ref, even for the same Promise.
   // This is intentional: multiple Task handles can independently await the same Promise.
