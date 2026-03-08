@@ -435,6 +435,13 @@ export default class Type {
     return {type: "match_placeholder"};
   }
 
+  static nativeValueStruct(jsType, boxedValue) {
+    return Type.struct("Hologram.JS.NativeValue", [
+      [Type.atom("type"), Type.atom(jsType)],
+      [Type.atom("value"), boxedValue],
+    ]);
+  }
+
   static nil() {
     return Type.atom("nil");
   }

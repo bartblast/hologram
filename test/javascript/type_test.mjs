@@ -1406,6 +1406,54 @@ describe("Type", () => {
     });
   });
 
+  describe("nativeValueStruct()", () => {
+    it("object type with reference value", () => {
+      const ref = ERTS.uniqueReference();
+      const result = Type.nativeValueStruct("object", ref);
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("object")],
+        [Type.atom("value"), ref],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("function type with reference value", () => {
+      const ref = ERTS.uniqueReference();
+      const result = Type.nativeValueStruct("function", ref);
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("function")],
+        [Type.atom("value"), ref],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("bigint type with integer value", () => {
+      const result = Type.nativeValueStruct("bigint", Type.integer(42));
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("bigint")],
+        [Type.atom("value"), Type.integer(42)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("undefined type with nil value", () => {
+      const result = Type.nativeValueStruct("undefined", Type.nil());
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("undefined")],
+        [Type.atom("value"), Type.nil()],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   it("nil()", () => {
     assert.deepStrictEqual(Type.nil(), Type.atom("nil"));
   });
