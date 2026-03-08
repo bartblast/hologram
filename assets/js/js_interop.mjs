@@ -12,8 +12,7 @@ export default class JsInterop {
 
     switch (typeof value) {
       case "bigint":
-      case "undefined":
-        return {type: "native", value: value};
+        return Type.nativeValueStruct("bigint", Type.integer(value));
 
       case "boolean":
         return Type.boolean(value);
@@ -25,6 +24,9 @@ export default class JsInterop {
 
       case "string":
         return Type.bitstring(value);
+
+      case "undefined":
+        return Type.nativeValueStruct("undefined", Type.nil());
     }
 
     if (Array.isArray(value)) {
@@ -46,7 +48,7 @@ export default class JsInterop {
       );
     }
 
-    return {type: "native", value: value};
+    return $.#boxOpaqueNativeValue(value);
   }
 
   // Like box() but uses atom keys for plain objects (matching Elixir action param conventions).
@@ -70,6 +72,12 @@ export default class JsInterop {
     }
 
     return $.box(value);
+  }
+
+  static #boxOpaqueNativeValue(value) {
+    const ref = ERTS.registerNativeObject(value);
+
+    return Type.nativeValueStruct(typeof value, ref);
   }
 }
 

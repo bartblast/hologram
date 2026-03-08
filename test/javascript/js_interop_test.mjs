@@ -5,6 +5,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import ERTS from "../../assets/js/erts.mjs";
 import JsInterop from "../../assets/js/js_interop.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -20,9 +21,9 @@ describe("JsInterop", () => {
         assert.deepStrictEqual(result, expected);
       });
 
-      it("undefined -> native", () => {
+      it("undefined -> Hologram.JS.NativeValue struct with nil value", () => {
         const result = JsInterop.boxActionParam(undefined);
-        const expected = {type: "native", value: undefined};
+        const expected = Type.nativeValueStruct("undefined", Type.nil());
 
         assert.deepStrictEqual(result, expected);
       });
@@ -41,9 +42,9 @@ describe("JsInterop", () => {
         assert.deepStrictEqual(result, expected);
       });
 
-      it("bigint -> native", () => {
+      it("bigint -> Hologram.JS.NativeValue struct with integer value", () => {
         const result = JsInterop.boxActionParam(42n);
-        const expected = {type: "native", value: 42n};
+        const expected = Type.nativeValueStruct("bigint", Type.integer(42));
 
         assert.deepStrictEqual(result, expected);
       });
@@ -118,21 +119,33 @@ describe("JsInterop", () => {
         assert.deepStrictEqual(result, expected);
       });
 
-      it("function -> native", () => {
+      it("function -> Hologram.JS.NativeValue struct", () => {
         const fn = () => 42;
-
         const result = JsInterop.boxActionParam(fn);
-        const expected = {type: "native", value: fn};
+
+        const valueKey = Type.encodeMapKey(Type.atom("value"));
+        const ref = result.data[valueKey][1];
+
+        assert.isTrue(Type.isReference(ref));
+        assert.strictEqual(ERTS.nativeObjectRegistry.get(ref), fn);
+
+        const expected = Type.nativeValueStruct("function", ref);
 
         assert.deepStrictEqual(result, expected);
       });
 
-      it("class instance -> native", () => {
+      it("class instance -> Hologram.JS.NativeValue struct", () => {
         class MyClass {}
         const instance = new MyClass();
-
         const result = JsInterop.boxActionParam(instance);
-        const expected = {type: "native", value: instance};
+
+        const valueKey = Type.encodeMapKey(Type.atom("value"));
+        const ref = result.data[valueKey][1];
+
+        assert.isTrue(Type.isReference(ref));
+        assert.strictEqual(ERTS.nativeObjectRegistry.get(ref), instance);
+
+        const expected = Type.nativeValueStruct("object", ref);
 
         assert.deepStrictEqual(result, expected);
       });
