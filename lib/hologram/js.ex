@@ -1,4 +1,13 @@
 defmodule Hologram.JS do
+  defmodule NativeValue do
+    defstruct type: nil, value: nil
+
+    @type t :: %__MODULE__{
+            type: :bigint | :function | :object | :undefined,
+            value: any
+          }
+  end
+
   defmacro __using__(_opts) do
     quote do
       import Hologram.JS, only: [js_import: 1, js_import: 2, sigil_JS: 2]
