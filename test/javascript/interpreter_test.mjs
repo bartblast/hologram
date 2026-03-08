@@ -7105,12 +7105,16 @@ describe("Interpreter", () => {
 
     it("merges bindings when module proxy already exists", () => {
       Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun", 0, "public", []);
+      Interpreter.registerJsBindings({"Aaa.Bbb": {existing_alias: $1}});
 
-      Interpreter.registerJsBindings({"Aaa.Bbb": {my_alias: $1}});
+      Interpreter.registerJsBindings({"Aaa.Bbb": {new_alias: $2}});
 
       assert.deepStrictEqual(
         globalThis.Elixir_Aaa_Bbb.__jsBindings__,
-        new Map([["my_alias", $1]]),
+        new Map([
+          ["existing_alias", $1],
+          ["new_alias", $2],
+        ]),
       );
 
       assert.isDefined(globalThis.Elixir_Aaa_Bbb["my_fun/0"]);
