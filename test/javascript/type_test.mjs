@@ -1070,6 +1070,34 @@ describe("Type", () => {
     });
   });
 
+  describe("isNativeValueStruct()", () => {
+    it("returns true for a NativeValue struct", () => {
+      const term = Type.nativeValueStruct("object", ERTS.uniqueReference());
+
+      assert.isTrue(Type.isNativeValueStruct(term));
+    });
+
+    it("returns false for a different struct", () => {
+      const term = Type.struct("Range", [
+        [Type.atom("first"), Type.integer(1)],
+        [Type.atom("last"), Type.integer(10)],
+        [Type.atom("step"), Type.integer(1)],
+      ]);
+
+      assert.isFalse(Type.isNativeValueStruct(term));
+    });
+
+    it("returns false for a plain map", () => {
+      const term = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      assert.isFalse(Type.isNativeValueStruct(term));
+    });
+
+    it("returns false for a non-map term", () => {
+      assert.isFalse(Type.isNativeValueStruct(Type.atom("test")));
+    });
+  });
+
   describe("isNil()", () => {
     it("returns true for boxed atom with 'nil' value", () => {
       const arg = Type.nil();

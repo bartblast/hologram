@@ -354,6 +354,10 @@ export default class Type {
     return term.type === "match_placeholder";
   }
 
+  static isNativeValueStruct(term) {
+    return Type.isStruct(term, "Hologram.JS.NativeValue");
+  }
+
   static isNil(term) {
     return term.type === "atom" && term.value === "nil";
   }
