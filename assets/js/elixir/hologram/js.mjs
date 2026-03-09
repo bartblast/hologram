@@ -83,7 +83,12 @@ function unbox(term, callerModule) {
           const jsKey =
             key.type === "atom" ? key.value : unbox(key, callerModule);
 
-          obj[jsKey] = unbox(value, callerModule);
+          Object.defineProperty(obj, jsKey, {
+            value: unbox(value, callerModule),
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          });
         }
 
         return obj;

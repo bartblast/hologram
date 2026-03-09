@@ -593,6 +593,23 @@ describe("unbox()", () => {
 
       assert.deepStrictEqual(unbox(term, callerModule), {a: {b: 1}});
     });
+
+    it("handles __proto__ key as a data property", () => {
+      const term = Type.map([
+        [Type.bitstring("__proto__"), Type.bitstring("not a prototype")],
+        [Type.bitstring("a"), Type.integer(1)],
+      ]);
+
+      const result = unbox(term, callerModule);
+
+      assert.strictEqual(
+        Object.getOwnPropertyDescriptor(result, "__proto__").value,
+        "not a prototype",
+      );
+
+      assert.strictEqual(result.a, 1);
+      assert.isNotNull(Object.getPrototypeOf(result));
+    });
   });
 
   describe("tuple", () => {
