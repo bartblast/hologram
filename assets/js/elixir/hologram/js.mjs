@@ -47,12 +47,13 @@ function unbox(term, callerModule) {
       {
         const name = term.value;
         const moduleProxy = Interpreter.moduleProxy(callerModule);
-        const binding = moduleProxy.__jsBindings__.get(name);
 
-        if (binding !== undefined) return binding;
+        if (moduleProxy.__jsBindings__.has(name)) {
+          return moduleProxy.__jsBindings__.get(name);
+        }
       }
 
-      return globalThis[term.value] ?? term.value;
+      return term.value in globalThis ? globalThis[term.value] : term.value;
 
     case "bitstring":
       return Bitstring.toText(term);

@@ -425,10 +425,48 @@ describe("unbox()", () => {
       assert.strictEqual(unbox(Type.atom("MyChart"), callerModule), Chart);
     });
 
+    it("atom preserves binding whose value is undefined", () => {
+      const moduleProxy = Interpreter.moduleProxy(callerModule);
+      moduleProxy.__jsBindings__.set("Undef", undefined);
+
+      const result = unbox(Type.atom("Undef"), callerModule);
+
+      assert.strictEqual(result, undefined);
+    });
+
+    it("atom preserves binding whose value is null", () => {
+      const moduleProxy = Interpreter.moduleProxy(callerModule);
+      moduleProxy.__jsBindings__.set("Nul", null);
+
+      const result = unbox(Type.atom("Nul"), callerModule);
+
+      assert.strictEqual(result, null);
+    });
+
     it("atom resolves to globalThis property when not in bindings", () => {
       const result = unbox(Type.atom("Math"), callerModule);
 
       assert.strictEqual(result, Math);
+    });
+
+    it("atom preserves globalThis property whose value is null", () => {
+      globalThis.__testNull__ = null;
+
+      const result = unbox(Type.atom("__testNull__"), callerModule);
+
+      assert.strictEqual(result, null);
+
+      delete globalThis.__testNull__;
+    });
+
+    it("atom preserves globalThis property whose value is undefined", () => {
+      globalThis.__testUndef__ = undefined;
+
+      const result = unbox(Type.atom("__testUndef__"), callerModule);
+
+      assert.strictEqual(result, undefined);
+
+      delete globalThis.__testUndef__;
     });
 
     it("atom falls back to string when not in bindings or globalThis", () => {
