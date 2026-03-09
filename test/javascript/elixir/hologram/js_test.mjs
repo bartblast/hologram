@@ -642,6 +642,14 @@ describe("unbox()", () => {
       assert.strictEqual(result, nativeObject);
     });
 
+    it("symbol -> symbol", () => {
+      const nativeSymbol = Symbol("test");
+      const boxedValue = box(nativeSymbol);
+      const result = unbox(boxedValue, callerModule);
+
+      assert.strictEqual(result, nativeSymbol);
+    });
+
     it("undefined -> undefined", () => {
       const nativeUndefinedValue = undefined;
       const boxedValue = box(nativeUndefinedValue);

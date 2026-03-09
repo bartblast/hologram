@@ -110,6 +110,7 @@ function unboxNativeValue(term) {
 
     case "function":
     case "object":
+    case "symbol":
       return ERTS.nativeObjectRegistry.get(boxedValue);
 
     case "undefined":
