@@ -48,7 +48,7 @@ function unbox(term, callerModule) {
         if (binding !== undefined) return binding;
       }
 
-      return term.value;
+      return globalThis[term.value] ?? term.value;
 
     case "bitstring":
       return Bitstring.toText(term);
@@ -75,7 +75,10 @@ function unbox(term, callerModule) {
         const obj = {};
 
         for (const [_encodedKey, [key, value]] of Object.entries(term.data)) {
-          obj[unbox(key, callerModule)] = unbox(value, callerModule);
+          const jsKey =
+            key.type === "atom" ? key.value : unbox(key, callerModule);
+
+          obj[jsKey] = unbox(value, callerModule);
         }
 
         return obj;

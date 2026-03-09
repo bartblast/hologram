@@ -385,11 +385,16 @@ describe("unbox()", () => {
       assert.strictEqual(unbox(Type.atom("MyChart"), callerModule), Chart);
     });
 
-    it("atom falls back to string when not in bindings", () => {
-      assert.strictEqual(
-        unbox(Type.atom("nonexistent"), callerModule),
-        "nonexistent",
-      );
+    it("atom resolves to globalThis property when not in bindings", () => {
+      const result = unbox(Type.atom("Math"), callerModule);
+
+      assert.strictEqual(result, Math);
+    });
+
+    it("atom falls back to string when not in bindings or globalThis", () => {
+      const result = unbox(Type.atom("nonexistent"), callerModule);
+
+      assert.strictEqual(result, "nonexistent");
     });
   });
 
