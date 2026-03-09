@@ -15,7 +15,11 @@ function resolveBinding(term, callerModule) {
     const name = term.value;
     const moduleProxy = Interpreter.moduleProxy(callerModule);
 
-    return moduleProxy.__jsBindings__.get(name) ?? globalThis[name];
+    if (moduleProxy.__jsBindings__.has(name)) {
+      return moduleProxy.__jsBindings__.get(name);
+    }
+
+    return globalThis[name];
   }
 
   if (Type.isNativeValueStruct(term)) {

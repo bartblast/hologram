@@ -256,6 +256,46 @@ describe("resolveBinding()", () => {
     assert.strictEqual(result, globalThis.__testObj__);
   });
 
+  it("preserves binding whose value is undefined", () => {
+    Interpreter.defineManuallyPortedFunction(
+      "TestModule1",
+      "dummy/0",
+      "public",
+      () => {},
+    );
+
+    const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule1"));
+    moduleProxy.__jsBindings__.set("Foo", undefined);
+
+    globalThis.Foo = {shouldNotReach: true};
+
+    const result = resolveBinding(Type.atom("Foo"), Type.alias("TestModule1"));
+
+    assert.strictEqual(result, undefined);
+
+    delete globalThis.Foo;
+  });
+
+  it("preserves binding whose value is null", () => {
+    Interpreter.defineManuallyPortedFunction(
+      "TestModule1",
+      "dummy/0",
+      "public",
+      () => {},
+    );
+
+    const moduleProxy = Interpreter.moduleProxy(Type.alias("TestModule1"));
+    moduleProxy.__jsBindings__.set("Bar", null);
+
+    globalThis.Bar = {shouldNotReach: true};
+
+    const result = resolveBinding(Type.atom("Bar"), Type.alias("TestModule1"));
+
+    assert.strictEqual(result, null);
+
+    delete globalThis.Bar;
+  });
+
   it("unboxes Hologram.JS.NativeValue struct from registry", () => {
     class MyClass {}
     const instance = new MyClass();
