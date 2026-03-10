@@ -2,7 +2,7 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @version "0.7.1"
+  @version "0.8.0"
 
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
