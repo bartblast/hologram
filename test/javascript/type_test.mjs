@@ -8,6 +8,7 @@ import {
 
 import ERTS from "../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -1069,6 +1070,34 @@ describe("Type", () => {
     });
   });
 
+  describe("isNativeValueStruct()", () => {
+    it("returns true for a NativeValue struct", () => {
+      const term = Type.nativeValueStruct("object", ERTS.uniqueReference());
+
+      assert.isTrue(Type.isNativeValueStruct(term));
+    });
+
+    it("returns false for a different struct", () => {
+      const term = Type.struct("Range", [
+        [Type.atom("first"), Type.integer(1)],
+        [Type.atom("last"), Type.integer(10)],
+        [Type.atom("step"), Type.integer(1)],
+      ]);
+
+      assert.isFalse(Type.isNativeValueStruct(term));
+    });
+
+    it("returns false for a plain map", () => {
+      const term = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      assert.isFalse(Type.isNativeValueStruct(term));
+    });
+
+    it("returns false for a non-map term", () => {
+      assert.isFalse(Type.isNativeValueStruct(Type.atom("test")));
+    });
+  });
+
   describe("isNil()", () => {
     it("returns true for boxed atom with 'nil' value", () => {
       const arg = Type.nil();
@@ -1205,22 +1234,44 @@ describe("Type", () => {
   });
 
   describe("isStruct()", () => {
+    const struct = Type.struct("Aaa.Bbb", [[Type.atom("a"), Type.integer(1)]]);
+
     it("not a map", () => {
-      assert.isFalse(Type.isStruct(Type.integer(123)));
+      const result = Type.isStruct(Type.integer(123));
+
+      assert.isFalse(result);
     });
 
     it("a map that is not a struct", () => {
-      assert.isFalse(
-        Type.isStruct(Type.map([[Type.atom("a"), Type.integer(1)]])),
+      const result = Type.isStruct(
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
       );
+
+      assert.isFalse(result);
     });
 
     it("a struct", () => {
-      assert.isTrue(
-        Type.isStruct(
-          Type.struct("Aaa.Bbb", [[Type.atom("a"), Type.integer(1)]]),
-        ),
-      );
+      const result = Type.isStruct(struct);
+
+      assert.isTrue(result);
+    });
+
+    it("a struct with matching module", () => {
+      const result = Type.isStruct(struct, "Aaa.Bbb");
+
+      assert.isTrue(result);
+    });
+
+    it("a struct with non-matching module", () => {
+      const result = Type.isStruct(struct, "Ccc.Ddd");
+
+      assert.isFalse(result);
+    });
+
+    it("not a struct with module specified", () => {
+      const result = Type.isStruct(Type.integer(123), "Aaa.Bbb");
+
+      assert.isFalse(result);
     });
   });
 
@@ -1383,10 +1434,6 @@ describe("Type", () => {
     });
   });
 
-  it("nil()", () => {
-    assert.deepStrictEqual(Type.nil(), Type.atom("nil"));
-  });
-
   describe("maybeNormalizeNumberTerms()", () => {
     it("left is integer, right is integer", () => {
       const term1 = Type.integer(1);
@@ -1423,6 +1470,58 @@ describe("Type", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+  });
+
+  describe("nativeValueStruct()", () => {
+    it("object type with reference value", () => {
+      const ref = ERTS.uniqueReference();
+      const result = Type.nativeValueStruct("object", ref);
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("object")],
+        [Type.atom("value"), ref],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("function type with reference value", () => {
+      const ref = ERTS.uniqueReference();
+      const result = Type.nativeValueStruct("function", ref);
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("function")],
+        [Type.atom("value"), ref],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("bigint type with integer value", () => {
+      const result = Type.nativeValueStruct("bigint", Type.integer(42));
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("bigint")],
+        [Type.atom("value"), Type.integer(42)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("undefined type with nil value", () => {
+      const result = Type.nativeValueStruct("undefined", Type.nil());
+
+      const expected = Type.struct("Hologram.JS.NativeValue", [
+        [Type.atom("type"), Type.atom("undefined")],
+        [Type.atom("value"), Type.nil()],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  it("nil()", () => {
+    assert.deepStrictEqual(Type.nil(), Type.atom("nil"));
   });
 
   it("pid()", () => {
@@ -1504,6 +1603,48 @@ describe("Type", () => {
     const expected = {type: "map", data: expectedData};
 
     assert.deepStrictEqual(result, expected);
+  });
+
+  describe("taskStruct()", () => {
+    const mfa = Type.tuple([
+      Type.alias("MyModule"),
+      Type.atom("my_fun"),
+      Type.integer(1),
+    ]);
+
+    const owner = Type.pid("client", [0, 0, 1], "client");
+    const ref = Type.reference(NodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+    it("without pid (defaults to nil)", () => {
+      const result = Type.taskStruct(mfa, owner, ref);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Task")],
+          [Type.atom("mfa"), mfa],
+          [Type.atom("owner"), owner],
+          [Type.atom("pid"), Type.nil()],
+          [Type.atom("ref"), ref],
+        ]),
+      );
+    });
+
+    it("with pid", () => {
+      const pid = Type.pid("client", [0, 0, 2], "client");
+      const result = Type.taskStruct(mfa, owner, ref, pid);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Task")],
+          [Type.atom("mfa"), mfa],
+          [Type.atom("owner"), owner],
+          [Type.atom("pid"), pid],
+          [Type.atom("ref"), ref],
+        ]),
+      );
+    });
   });
 
   describe("tuple()", () => {

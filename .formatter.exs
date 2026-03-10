@@ -3,6 +3,10 @@ exported_locals_without_parens = [
   prop: 2,
   prop: 3,
 
+  # Hologram.JS
+  js_import: 1,
+  js_import: 2,
+
   # Hologram.Page
   layout: 1,
   layout: 2,

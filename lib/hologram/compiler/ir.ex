@@ -322,7 +322,7 @@ defmodule Hologram.Compiler.IR do
 
     defstruct [:module, :function, :args]
 
-    @type t :: %__MODULE__{module: IR.t(), function: IR.t(), args: list(IR.t())}
+    @type t :: %__MODULE__{module: IR.t(), function: atom, args: list(IR.t())}
   end
 
   defmodule StringType do
@@ -563,6 +563,50 @@ defmodule Hologram.Compiler.IR do
   def for_term!(term) do
     Transformer.transform(term, %Context{})
   end
+
+  @doc """
+  Walks the IR tree checking whether any function call matches the given set of MFAs.
+  Stops at nested `AnonymousFunctionType` nodes (they are independent scopes).
+  """
+  @spec has_call_to?(any, module, MapSet.t()) :: boolean
+  def has_call_to?(term, module, mfas)
+
+  def has_call_to?(%IR.AnonymousFunctionType{}, _module, _mfas), do: false
+
+  def has_call_to?(%IR.LocalFunctionCall{function: function, args: args}, module, mfas) do
+    MapSet.member?(mfas, {module, function, length(args)}) || has_call_to?(args, module, mfas)
+  end
+
+  def has_call_to?(
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: call_module},
+          function: function,
+          args: args
+        },
+        module,
+        mfas
+      ) do
+    MapSet.member?(mfas, {call_module, function, length(args)}) ||
+      has_call_to?(args, module, mfas)
+  end
+
+  def has_call_to?(term, module, mfas) when is_list(term) do
+    Enum.any?(term, &has_call_to?(&1, module, mfas))
+  end
+
+  def has_call_to?(term, module, mfas) when is_map(term) do
+    term
+    |> Map.values()
+    |> has_call_to?(module, mfas)
+  end
+
+  def has_call_to?(term, module, mfas) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> has_call_to?(module, mfas)
+  end
+
+  def has_call_to?(_term, _module, _mfas), do: false
 
   defp build_function_capture_ir(function_capture, module, function) do
     function_capture

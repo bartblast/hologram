@@ -1,14 +1,197 @@
 defmodule Hologram.JSTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.JS
 
-  test "exec/1" do
-    code = "console.log('Hello, world!');"
-    assert exec(code) == code
+  alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.JS.Module1
+  alias Hologram.Test.Fixtures.JS.Module2
+  alias Hologram.Test.Fixtures.JS.Module3
+  alias Hologram.Test.Fixtures.JS.Module4
+  alias Hologram.Test.Fixtures.JS.Module6
+
+  describe "js_import/1" do
+    test "imports default export with :as binding" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DefaultExportShorthand do
+          use Hologram.JS
+
+          js_import from: "chart.js", as: :Chart
+        end
+        """)
+
+      assert module.__js_imports__() == [
+               %{export: "default", from: "chart.js", as: "Chart"}
+             ]
+    end
+
+    test "raises when :from option is missing" do
+      expected_error_msg =
+        "the :from option is required when using js_import/1"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DefaultExportNoFrom do
+          use Hologram.JS
+
+          js_import as: :Chart
+        end
+        """)
+      end
+    end
+
+    test "raises when :as option is missing" do
+      expected_error_msg =
+        "the :as option is required when using js_import/1"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DefaultExportNoAs do
+          use Hologram.JS
+
+          js_import from: "chart.js"
+        end
+        """)
+      end
+    end
   end
 
-  test "sigil_JS/2" do
-    assert Code.eval_string("~JS\"console.log('Hello, world!');\"", [], __ENV__) ==
-             {"console.log('Hello, world!');", []}
+  describe "js_import/2" do
+    test "no imports" do
+      assert Module2.__js_imports__() == []
+    end
+
+    test "single import without alias" do
+      assert Module3.__js_imports__() == [
+               %{export: "Chart", from: "chart.js", as: "Chart"}
+             ]
+    end
+
+    test "single import with alias" do
+      assert Module4.__js_imports__() == [
+               %{export: "Chart", from: "chart.js", as: "MyChart"}
+             ]
+    end
+
+    test "multiple imports from same source" do
+      assert Module1.__js_imports__() == [
+               %{export: "Chart", from: "chart.js", as: "MyChart"},
+               %{export: "helpers", from: "chart.js", as: "helpers"}
+             ]
+    end
+
+    test "multiple imports from different sources" do
+      assert Module6.__js_imports__() == [
+               %{export: "Chart", from: "chart.js", as: "Chart"},
+               %{export: "helpers", from: "chart.js", as: "helpers"},
+               %{export: "formatDate", from: "utils.js", as: "myFormatDate"}
+             ]
+    end
+
+    test "resolves ./ relative path to caller file directory" do
+      root_dir = Reflection.root_dir()
+      caller_file = Path.join([root_dir, "lib", "my_app", "pages", "my_page.ex"])
+      resolved_path = Path.join([root_dir, "lib", "my_app", "pages", "utils.js"])
+
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string(
+          """
+          defmodule Hologram.Test.Fixtures.JS.RelativeDotSlash do
+            use Hologram.JS
+
+            js_import :foo, from: "./utils.js", as: :my_foo
+          end
+          """,
+          [],
+          file: caller_file
+        )
+
+      assert module.__js_imports__() == [
+               %{export: "foo", from: resolved_path, as: "my_foo"}
+             ]
+    end
+
+    test "resolves ../ relative path to caller file directory" do
+      root_dir = Reflection.root_dir()
+      caller_file = Path.join([root_dir, "lib", "my_app", "pages", "my_page.ex"])
+      resolved_path = Path.join([root_dir, "lib", "my_app", "vendor", "utils.js"])
+
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string(
+          """
+          defmodule Hologram.Test.Fixtures.JS.RelativeDotDotSlash do
+            use Hologram.JS
+
+            js_import :foo, from: "../vendor/utils.js", as: :my_foo
+          end
+          """,
+          [],
+          file: caller_file
+        )
+
+      assert module.__js_imports__() == [
+               %{export: "foo", from: resolved_path, as: "my_foo"}
+             ]
+    end
+
+    test "keeps absolute path as-is" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.AbsolutePath do
+          use Hologram.JS
+
+          js_import :foo, from: "/absolute/path/utils.js", as: :my_foo
+        end
+        """)
+
+      assert module.__js_imports__() == [
+               %{export: "foo", from: "/absolute/path/utils.js", as: "my_foo"}
+             ]
+    end
+
+    test "keeps npm package specifier as-is" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.NpmPackage do
+          use Hologram.JS
+
+          js_import :Chart, from: "chart.js", as: :MyChart
+        end
+        """)
+
+      assert module.__js_imports__() == [
+               %{export: "Chart", from: "chart.js", as: "MyChart"}
+             ]
+    end
+
+    test "raises when :from option is missing" do
+      expected_error_msg =
+        "the :from option is required when using js_import/2"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.NamedExportNoFrom do
+          use Hologram.JS
+
+          js_import :Chart, as: :MyChart
+        end
+        """)
+      end
+    end
+
+    test "raises on duplicate binding name" do
+      expected_error_msg =
+        ~s'duplicate JS binding name "MyChart" in Hologram.Test.Fixtures.JS.DuplicateBindingName'
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.JS.DuplicateBindingName do
+          use Hologram.JS
+
+          js_import :Chart, from: "chart.js", as: :MyChart
+          js_import :Other, from: "other.js", as: :MyChart
+        end
+        """)
+      end
+    end
   end
 end

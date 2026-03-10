@@ -16,7 +16,7 @@ defmodule HologramFeatureTests.Helpers do
     wait_for_js_error(session)
   rescue
     Wallaby.JSError ->
-      script = "return window?.hologram?.['lastBoxedError'];"
+      script = "return globalThis.Hologram?.['lastBoxedError'];"
 
       Browser.execute_script(session, script, [], fn result ->
         assert result["module"] == inspect(expected_module),
@@ -391,7 +391,7 @@ defmodule HologramFeatureTests.Helpers do
       end
     end
 
-    script = "return window?.hologram?.['mountedPage'];"
+    script = "return globalThis.Hologram?.['mountedPage'];"
 
     Browser.execute_script(session, script, [], callback)
   end
@@ -417,7 +417,7 @@ defmodule HologramFeatureTests.Helpers do
       end
     end
 
-    script = "return window?.hologram?.['connected?'];"
+    script = "return globalThis.Hologram?.['connected?'];"
 
     Browser.execute_script(session, script, [], callback)
   end

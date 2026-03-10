@@ -11,7 +11,15 @@ defmodule Hologram.CompilerTest do
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
+  alias Hologram.Test.Fixtures.Compiler.Module12
+  alias Hologram.Test.Fixtures.Compiler.Module13
+  alias Hologram.Test.Fixtures.Compiler.Module14
+  alias Hologram.Test.Fixtures.Compiler.Module15
+  alias Hologram.Test.Fixtures.Compiler.Module17
+  alias Hologram.Test.Fixtures.Compiler.Module19
   alias Hologram.Test.Fixtures.Compiler.Module2
+  alias Hologram.Test.Fixtures.Compiler.Module21
+  alias Hologram.Test.Fixtures.Compiler.Module23
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
@@ -51,7 +59,104 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
-  describe "build_page_js/3" do
+  describe "aggregate_js_imports/1" do
+    test "empty MFAs list" do
+      assert aggregate_js_imports([]) == %{imports: [], bindings: %{}}
+    end
+
+    test "filters out Erlang modules" do
+      mfas = [{:erlang, :+, 2}, {:maps, :get, 2}]
+
+      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+    end
+
+    test "no modules have JS imports" do
+      mfas = [{Enum, :map, 2}, {Kernel, :+, 2}]
+
+      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+    end
+
+    test "skips modules that use Hologram.JS but have no imports" do
+      mfas = [{Module13, :func, 0}]
+
+      assert aggregate_js_imports(mfas) == %{imports: [], bindings: %{}}
+    end
+
+    test "single module with imports" do
+      mfas = [{Module12, :func, 0}, {Enum, :map, 2}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"},
+                 %{from: "chart.js", export: "helpers", alias: "$2"}
+               ],
+               bindings: %{
+                 Module12 => %{
+                   "MyChart" => "$1",
+                   "helpers" => "$2"
+                 }
+               }
+             }
+    end
+
+    test "multiple modules with imports from different sources" do
+      mfas = [{Module12, :func, 0}, {Module17, :func, 0}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"},
+                 %{from: "chart.js", export: "helpers", alias: "$2"},
+                 %{from: "utils.js", export: "formatDate", alias: "$3"}
+               ],
+               bindings: %{
+                 Module12 => %{
+                   "MyChart" => "$1",
+                   "helpers" => "$2"
+                 },
+                 Module17 => %{
+                   "myFormatDate" => "$3"
+                 }
+               }
+             }
+    end
+
+    test "deduplicates modules when multiple MFAs reference the same module" do
+      mfas = [{Module12, :func_a, 0}, {Module12, :func_b, 1}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"},
+                 %{from: "chart.js", export: "helpers", alias: "$2"}
+               ],
+               bindings: %{
+                 Module12 => %{
+                   "MyChart" => "$1",
+                   "helpers" => "$2"
+                 }
+               }
+             }
+    end
+
+    test "deduplicates imports when multiple modules import the same export" do
+      mfas = [{Module14, :func, 0}, {Module15, :func, 0}]
+
+      assert aggregate_js_imports(mfas) == %{
+               imports: [
+                 %{from: "chart.js", export: "Chart", alias: "$1"}
+               ],
+               bindings: %{
+                 Module14 => %{
+                   "Chart" => "$1"
+                 },
+                 Module15 => %{
+                   "MyChart" => "$1"
+                 }
+               }
+             }
+    end
+  end
+
+  describe "build_page_js/5" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
@@ -62,9 +167,9 @@ defmodule Hologram.CompilerTest do
     end
 
     test "has both Erlang and Elixir function defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module9, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module9, call_graph, ir_plt, MapSet.new(), @js_dir)
 
-      js_fragment_1 = ~s/globalThis.hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
@@ -74,15 +179,70 @@ defmodule Hologram.CompilerTest do
     end
 
     test "has only Elixir defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
+      result = build_page_js(Module11, call_graph, ir_plt, MapSet.new(), @js_dir)
 
-      js_fragment_1 = ~s/globalThis.hologram.pageReachableFunctionDefs/
+      js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
 
       assert String.contains?(result, js_fragment_1)
       assert String.contains?(result, js_fragment_2)
       refute String.contains?(result, js_fragment_3)
+    end
+
+    test "no JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module11, call_graph, ir_plt, MapSet.new(), @js_dir)
+
+      refute String.contains?(result, "import {")
+      refute String.contains?(result, "registerJsBindings")
+    end
+
+    test "single JS import", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module19, call_graph, ir_plt, MapSet.new(), @js_dir)
+      js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 1
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_path}";')
+
+      assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}});'
+             )
+    end
+
+    test "multiple JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module21, call_graph, ir_plt, MapSet.new(), @js_dir)
+      js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 2
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_path}";')
+      assert String.contains?(result, ~s'import { export_1b as $2 } from "#{js_fixture_path}";')
+
+      assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module20": {"alias_1a": $1, "alias_1b": $2}});'
+             )
+    end
+
+    test "multiple modules with JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module23, call_graph, ir_plt, MapSet.new(), @js_dir)
+      js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
+      js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
+
+      assert length(Regex.scan(~r/import \{/, result)) == 2
+      assert String.contains?(result, ~s'import { export_1a as $1 } from "#{js_fixture_1_path}";')
+      assert String.contains?(result, ~s'import { export_2 as $2 } from "#{js_fixture_2_path}";')
+
+      assert length(Regex.scan(~r/registerJsBindings/, result)) == 1
+
+      assert String.contains?(
+               result,
+               ~s'Interpreter.registerJsBindings({"Hologram.Test.Fixtures.Compiler.Module18": {"alias_1a": $1}, "Hologram.Test.Fixtures.Compiler.Module22": {"alias_2": $2}});'
+             )
     end
   end
 
@@ -164,8 +324,8 @@ defmodule Hologram.CompilerTest do
     assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
   end
 
-  test "build_runtime_js/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-    js = build_runtime_js(runtime_mfas, ir_plt, @js_dir)
+  test "build_runtime_js/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+    js = build_runtime_js(runtime_mfas, ir_plt, MapSet.new(), @js_dir)
 
     assert String.contains?(
              js,
@@ -186,10 +346,12 @@ defmodule Hologram.CompilerTest do
   end
 
   test "bundle/2" do
+    node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
 
     opts = [
-      esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      node_modules_path: node_modules_path,
       static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
     ]
@@ -280,11 +442,14 @@ defmodule Hologram.CompilerTest do
 
   describe "bundle/4" do
     test "valid entry file" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_valid_entry_file"])
 
       opts = [
-        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
@@ -331,11 +496,14 @@ defmodule Hologram.CompilerTest do
     end
 
     test "invalid entry file" do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_invalid_entry_file"])
 
       opts = [
-        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
@@ -356,11 +524,14 @@ defmodule Hologram.CompilerTest do
     end
 
     test "raises when the generated bundle exceeds the specified :max_bundle_size (and does not copy the bundle to the static dir in such case) " do
+      node_modules_path = Path.join([@root_dir, "assets", "node_modules"])
+
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
 
       opts = [
-        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+        node_modules_path: node_modules_path,
         static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
@@ -387,7 +558,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "create_page_entry_files/4", %{
+  test "create_page_entry_files/5", %{
     call_graph: call_graph,
     ir_plt: ir_plt,
     runtime_mfas: runtime_mfas
@@ -406,7 +577,14 @@ defmodule Hologram.CompilerTest do
       |> CallGraph.clone()
       |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
-    result = create_page_entry_files(page_modules, call_graph_without_runtime_mfas, ir_plt, opts)
+    result =
+      create_page_entry_files(
+        page_modules,
+        call_graph_without_runtime_mfas,
+        ir_plt,
+        MapSet.new(),
+        opts
+      )
 
     assert Enum.count(result) == Enum.count(page_modules)
 
@@ -422,15 +600,15 @@ defmodule Hologram.CompilerTest do
     end)
   end
 
-  test "create_runtime_entry_file/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
+  test "create_runtime_entry_file/4", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     opts = [
       js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_3"])
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_runtime_entry_file_4"])
     ]
 
     clean_dir(opts[:tmp_dir])
 
-    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, opts)
+    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, MapSet.new(), opts)
 
     assert entry_file_path == Path.join(opts[:tmp_dir], "runtime.entry.js")
 

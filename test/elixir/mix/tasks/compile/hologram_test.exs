@@ -209,6 +209,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       esbuild_bin_path: Path.join([test_node_modules_path, ".bin", "esbuild"]),
       formatter_bin_path: Path.join([test_node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(@lib_assets_dir, "js"),
+      node_modules_path: test_node_modules_path,
       static_dir: @static_dir,
       tmp_dir: @tmp_dir
     ]

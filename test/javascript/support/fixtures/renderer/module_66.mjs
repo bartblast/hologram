@@ -48,7 +48,7 @@ export function defineModule66Fixture() {
         params: (_context) => [],
         guards: [],
         body: (context) => {
-          globalThis.hologram.return = Type.anonymousFunction(
+          globalThis.Hologram.return = Type.anonymousFunction(
             1,
             [
               {
@@ -92,7 +92,7 @@ export function defineModule66Fixture() {
             context,
           );
           Interpreter.updateVarsToMatchedValues(context);
-          return globalThis.hologram.return;
+          return globalThis.Hologram.return;
         },
       },
     ],

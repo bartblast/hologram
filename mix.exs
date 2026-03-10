@@ -11,7 +11,7 @@ defmodule Hologram.MixProject do
     [
       eslint:
         "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** scripts/** test/javascript/** --no-error-on-unmatched-pattern",
-      f: ["format", "format.js", "cmd cd test/features && mix format"],
+      f: ["format", "format.js", "cmd cd test/features && mix format && mix format.js"],
       "format.js":
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
       "format.js.check":
@@ -19,7 +19,8 @@ defmodule Hologram.MixProject do
       setup: [
         "deps.get",
         "cmd --cd assets npm install",
-        "cmd --cd test/features mix deps.get"
+        "cmd --cd test/features mix deps.get",
+        "cmd --cd test/features/assets npm install"
       ],
       t: ["test", "test.js"],
       "test.js": [&test_js/1]

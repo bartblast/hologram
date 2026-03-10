@@ -1,16 +1,329 @@
 defmodule Hologram.JS do
-  @moduledoc false
+  defmodule NativeValue do
+    defstruct type: nil, value: nil
+
+    @type t :: %__MODULE__{
+            type: :bigint | :function | :object | :undefined,
+            value: any
+          }
+  end
+
+  defmacro __using__(_opts) do
+    quote do
+      import Hologram.JS, only: [js_import: 1, js_import: 2, sigil_JS: 2]
+
+      alias Hologram.JS
+
+      @before_compile Hologram.JS
+
+      Module.register_attribute(__MODULE__, :__js_imports__, accumulate: true)
+    end
+  end
+
+  defmacro __before_compile__(env) do
+    env.module
+    |> Module.get_attribute(:__js_imports__)
+    |> Enum.frequencies_by(& &1.as)
+    |> Enum.each(fn {name, count} ->
+      if count > 1 do
+        raise Hologram.CompileError,
+          message: "duplicate JS binding name \"#{name}\" in #{inspect(env.module)}"
+      end
+    end)
+
+    quote do
+      @doc """
+      Returns the list of JS imports declared with js_import/2 in the module.
+      """
+      @spec __js_imports__() :: list(map)
+      def __js_imports__, do: Enum.reverse(@__js_imports__)
+    end
+  end
 
   @doc """
-  Executes JavaScript code.
-  Server-side implementation is just a dummy. The actual implementation is on the client-side.
+  Calls a function from the current scope (imported binding or global).
   """
-  @spec exec(String.t()) :: String.t()
-  def exec(code), do: code
+  defmacro call(function, args) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.call(nil, unquote(function), unquote(args), unquote(module))
+    end
+  end
+
+  @doc """
+  Calls a method on a JS receiver.
+  """
+  defmacro call(receiver, method, args) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.call(unquote(receiver), unquote(method), unquote(args), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec call(any(), atom(), list(), module()) :: any()
+  def call(_receiver, _method, _args, _caller_module), do: __server_pass_through__()
+
+  @doc """
+  Deletes a property from a JS receiver.
+  """
+  defmacro delete(receiver, property) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.delete(unquote(receiver), unquote(property), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec delete(any(), atom(), module()) :: any()
+  def delete(receiver, _property, _caller_module), do: receiver
+
+  @doc """
+  Dispatches a JavaScript event on a target element.
+  """
+  defmacro dispatch_event(target, name) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        :CustomEvent,
+        unquote(name),
+        %{},
+        unquote(module)
+      )
+    end
+  end
+
+  defmacro dispatch_event(target, name, opts) when is_list(opts) do
+    module = __CALLER__.module
+    opts_map = {:%{}, [], opts}
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        :CustomEvent,
+        unquote(name),
+        unquote(opts_map),
+        unquote(module)
+      )
+    end
+  end
+
+  defmacro dispatch_event(target, type, name) when is_atom(type) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        unquote(type),
+        unquote(name),
+        %{},
+        unquote(module)
+      )
+    end
+  end
+
+  defmacro dispatch_event(target, type, name, opts) do
+    module = __CALLER__.module
+    opts_map = {:%{}, [], opts}
+
+    quote do
+      Hologram.JS.dispatch_event(
+        unquote(target),
+        unquote(type),
+        unquote(name),
+        unquote(opts_map),
+        unquote(module)
+      )
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec dispatch_event(any(), atom(), String.t(), map(), module()) :: boolean()
+  def dispatch_event(_target, _type, _name, _opts, _caller_module), do: __server_pass_through__()
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc """
+  Evaluates a JavaScript expression and returns the result.
+  """
+  @spec eval(String.t()) :: any()
+  def eval(_expression), do: __server_pass_through__()
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc """
+  Executes JavaScript code.
+  """
+  @spec exec(String.t()) :: any()
+  def exec(_code), do: __server_pass_through__()
+
+  @doc """
+  Gets a property from a JS receiver.
+  """
+  defmacro get(receiver, property) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.get(unquote(receiver), unquote(property), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec get(any(), atom(), module()) :: any()
+  def get(_receiver, _property, _caller_module), do: __server_pass_through__()
+
+  @doc """
+  Checks if a value is an instance of a JS class.
+  """
+  defmacro instanceof(value, class) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.instanceof(unquote(value), unquote(class), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec instanceof(any(), any(), module()) :: boolean()
+  def instanceof(_value, _class, _caller_module), do: __server_pass_through__()
+
+  @doc """
+  Imports the default JS export and binds it to a name that can be used as a receiver
+  in other JS functions. The :as option is required.
+
+  ## Examples
+
+      js_import from: "chart.js", as: :Chart
+  """
+  defmacro js_import(opts) when is_list(opts) do
+    unless Keyword.has_key?(opts, :from) do
+      raise Hologram.CompileError,
+        message: "the :from option is required when using js_import/1"
+    end
+
+    unless Keyword.has_key?(opts, :as) do
+      raise Hologram.CompileError,
+        message: "the :as option is required when using js_import/1"
+    end
+
+    quote do
+      js_import(:default, unquote(opts))
+    end
+  end
+
+  @doc """
+  Imports a named JS export and binds it to a name that can be used as a receiver
+  in other JS functions.
+
+  ## Examples
+
+      js_import :Chart, from: "chart.js"
+      js_import :Chart, from: "chart.js", as: :MyChart
+  """
+  defmacro js_import(export, opts) do
+    unless Keyword.has_key?(opts, :from) do
+      raise Hologram.CompileError,
+        message: "the :from option is required when using js_import/2"
+    end
+
+    from = Keyword.fetch!(opts, :from)
+    as = Keyword.get(opts, :as, export)
+
+    resolved_from =
+      if is_binary(from) and relative_specifier?(from) do
+        __CALLER__.file
+        |> Path.dirname()
+        |> Path.join(from)
+        |> Path.expand()
+      else
+        from
+      end
+
+    quote do
+      @__js_imports__ %{
+        export: Atom.to_string(unquote(export)),
+        from: unquote(resolved_from),
+        as: Atom.to_string(unquote(as))
+      }
+    end
+  end
+
+  @doc """
+  Instantiates a JS class.
+  """
+  defmacro new(class, args) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.new(unquote(class), unquote(args), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec new(any(), list(), module()) :: any()
+  def new(_class, _args, _caller_module), do: __server_pass_through__()
+
+  @doc """
+  Sets a property on a JS receiver.
+  """
+  defmacro set(receiver, property, value) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.set(
+        unquote(receiver),
+        unquote(property),
+        unquote(value),
+        unquote(module)
+      )
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec set(any(), atom(), any(), module()) :: any()
+  def set(receiver, _property, _value, _caller_module), do: receiver
 
   @doc """
   Provides a convenient syntax for executing JavaScript code using the ~JS sigil.
   """
-  @spec sigil_JS(String.t(), []) :: String.t()
+  @spec sigil_JS(String.t(), []) :: :ok
   def sigil_JS(code, []), do: exec(code)
+
+  @doc """
+  Returns the JavaScript type of a value.
+  """
+  defmacro typeof(value) do
+    module = __CALLER__.module
+
+    quote do
+      Hologram.JS.typeof(unquote(value), unquote(module))
+    end
+  end
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc false
+  @spec typeof(any(), module()) :: any()
+  def typeof(_value, _caller_module), do: __server_pass_through__()
+
+  defp relative_specifier?(path) do
+    String.starts_with?(path, "./") or String.starts_with?(path, "../")
+  end
+
+  # Returns :ok at runtime, but the use of Application.get_env/3 makes the return type
+  # opaque to the Elixir type checker. This prevents false positive type warnings when
+  # end users compare JS interop results with specific values (e.g. in case/cond expressions).
+  # On the client side, these functions are replaced by actual JavaScript implementations.
+  defp __server_pass_through__ do
+    Application.get_env(:hologram, :__server_pass_through__, :ok)
+  end
 end

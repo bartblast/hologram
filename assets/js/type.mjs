@@ -354,6 +354,10 @@ export default class Type {
     return term.type === "match_placeholder";
   }
 
+  static isNativeValueStruct(term) {
+    return Type.isStruct(term, "Hologram.JS.NativeValue");
+  }
+
   static isNil(term) {
     return term.type === "atom" && term.value === "nil";
   }
@@ -374,26 +378,27 @@ export default class Type {
     return Type.isList(term) && term.isProper === true;
   }
 
-  // Deps: [:maps.get/3]
   static isRange(term) {
-    return (
-      Type.isMap(term) &&
-      Interpreter.isEqual(
-        Erlang_Maps["get/3"](Type.atom("__struct__"), term, Type.nil()),
-        Type.alias("Range"),
-      )
-    );
+    return Type.isStruct(term, "Range");
   }
 
   static isReference(term) {
     return term.type === "reference";
   }
 
-  // Deps: [:maps.is_key/2]
-  static isStruct(term) {
-    return (
-      Type.isMap(term) &&
-      Type.isTrue(Erlang_Maps["is_key/2"](Type.atom("__struct__"), term))
+  // Deps: [:maps.get/3, :maps.is_key/2]
+  static isStruct(term, module = null) {
+    if (!Type.isMap(term)) return false;
+
+    if (module === null) {
+      return Type.isTrue(
+        Erlang_Maps["is_key/2"](Type.atom("__struct__"), term),
+      );
+    }
+
+    return Interpreter.isEqual(
+      Erlang_Maps["get/3"](Type.atom("__struct__"), term, Type.nil()),
+      Type.alias(module),
     );
   }
 
@@ -434,10 +439,6 @@ export default class Type {
     return {type: "match_placeholder"};
   }
 
-  static nil() {
-    return Type.atom("nil");
-  }
-
   static maybeNormalizeNumberTerms(term1, term2) {
     const type =
       Type.isFloat(term1) || Type.isFloat(term2) ? "float" : "integer";
@@ -457,6 +458,17 @@ export default class Type {
     }
 
     return [type, value1, value2];
+  }
+
+  static nativeValueStruct(jsType, boxedValue) {
+    return Type.struct("Hologram.JS.NativeValue", [
+      [Type.atom("type"), Type.atom(jsType)],
+      [Type.atom("value"), boxedValue],
+    ]);
+  }
+
+  static nil() {
+    return Type.atom("nil");
   }
 
   static pid(node, segments, origin = "server") {
@@ -493,6 +505,15 @@ export default class Type {
     const value = Type.alias(aliasStr);
 
     return Type.map(data.concat([[key, value]]));
+  }
+
+  static taskStruct(mfa, owner, ref, pid = Type.nil()) {
+    return Type.struct("Task", [
+      [Type.atom("mfa"), mfa],
+      [Type.atom("owner"), owner],
+      [Type.atom("pid"), pid],
+      [Type.atom("ref"), ref],
+    ]);
   }
 
   static tuple(data = []) {

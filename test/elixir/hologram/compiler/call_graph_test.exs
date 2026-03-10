@@ -710,6 +710,61 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "list_async_mfas/1" do
+    test "returns empty set when Task.await/1 is not in the graph" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {MyModule, :helper, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new()
+    end
+
+    test "returns MFAs that directly call Task.await/1" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {Task, :await, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{MyModule, :action, 3}, {Task, :await, 1}])
+    end
+
+    test "returns MFAs that transitively call Task.await/1" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {MyModule, :fetch_data, 1})
+        |> add_edge({MyModule, :fetch_data, 1}, {Task, :await, 1})
+        |> list_async_mfas()
+
+      assert result ==
+               MapSet.new([
+                 {MyModule, :action, 3},
+                 {MyModule, :fetch_data, 1},
+                 {Task, :await, 1}
+               ])
+    end
+
+    test "excludes MFAs that do not reach Task.await/1" do
+      result =
+        start()
+        |> add_edge({MyModule, :action, 3}, {Task, :await, 1})
+        |> add_edge({OtherModule, :action, 3}, {OtherModule, :sync_helper, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{MyModule, :action, 3}, {Task, :await, 1}])
+    end
+
+    test "excludes module vertices (non-MFA)" do
+      result =
+        start()
+        |> add_edge(MyModule, {MyModule, :action, 3})
+        |> add_edge({MyModule, :action, 3}, {Task, :await, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{MyModule, :action, 3}, {Task, :await, 1}])
+    end
+  end
+
   test "list_page_entry_mfas/1" do
     assert list_page_entry_mfas(Module19) == [
              {Module19, :__layout_module__, 0},

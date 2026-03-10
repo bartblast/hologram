@@ -3,7 +3,11 @@ defmodule HologramFeatureTests.MixProject do
 
   defp aliases do
     [
-      f: "format"
+      f: ["format", "format.js"],
+      "format.js":
+        "cmd ../../assets/node_modules/.bin/prettier 'assets/js/**' --config '../../assets/.prettierrc.json' --write",
+      "format.js.check":
+        "cmd ../../assets/node_modules/.bin/prettier 'assets/js/**' --check --config '../../assets/.prettierrc.json' --no-error-on-unmatched-pattern"
     ]
   end
 
@@ -20,7 +24,7 @@ defmodule HologramFeatureTests.MixProject do
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "2f10361e9861537b938de5b311eae17f72d0fde5"},
+       ref: "30d2dae793b686d933f0f912682e4c5d2a508b33"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},

@@ -60,6 +60,252 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("asyncCase()", () => {
+    it("returns a Promise", () => {
+      const condition = Type.integer(1);
+
+      const clauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: async (_context) => Type.atom("ok"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = Interpreter.asyncCase(condition, clauses, context);
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("evaluates condition function with await", async () => {
+      const condition = async (_context) => Type.integer(1);
+
+      const clauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: async (_context) => Type.atom("matched"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncCase(condition, clauses, context);
+
+      assert.deepStrictEqual(result, Type.atom("matched"));
+    });
+
+    it("awaits clause body result", async () => {
+      const condition = Type.integer(1);
+
+      const clauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: async (_context) => {
+            return new Promise((resolve) =>
+              setTimeout(() => resolve(Type.atom("delayed")), 1),
+            );
+          },
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncCase(condition, clauses, context);
+
+      assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+  });
+
+  describe("asyncComprehension()", () => {
+    let context, prevIntoFun, prevToListFun;
+
+    beforeEach(() => {
+      context = contextFixture({
+        vars: {a: Type.integer(1), b: Type.integer(2)},
+      });
+
+      prevIntoFun = globalThis.Elixir_Enum["into/2"];
+
+      globalThis.Elixir_Enum["into/2"] = (enumerable, _collectable) => {
+        return enumerable;
+      };
+
+      prevToListFun = globalThis.Elixir_Enum["to_list/1"];
+
+      globalThis.Elixir_Enum["to_list/1"] = (enumerable) => {
+        return enumerable;
+      };
+    });
+
+    afterEach(() => {
+      globalThis.Elixir_Enum["into/2"] = prevIntoFun;
+      globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
+    });
+
+    it("returns a Promise", () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1)]),
+      };
+
+      const result = Interpreter.asyncComprehension(
+        [generator],
+        [],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("awaits generator body", async () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        [],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("awaits filters", async () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) =>
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const filter = async (context) => {
+        // keep only values > 1
+        return Erlang[">/2"](context.vars.x, Type.integer(1));
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        [filter],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      const expected = Type.list([Type.integer(2), Type.integer(3)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("awaits mapper", async () => {
+      const generator = {
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        [],
+        Type.list(),
+        false,
+        async (context) => {
+          return new Promise((resolve) =>
+            setTimeout(() => resolve(context.vars.x), 1),
+          );
+        },
+        context,
+      );
+
+      const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("asyncCond()", () => {
+    it("returns a Promise", () => {
+      const clauses = [
+        {
+          condition: async (_context) => Type.atom("true"),
+          body: async (_context) => Type.atom("ok"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = Interpreter.asyncCond(clauses, context);
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("awaits clause body result", async () => {
+      const clauses = [
+        {
+          condition: async (_context) => Type.atom("true"),
+          body: async (_context) => {
+            return new Promise((resolve) =>
+              setTimeout(() => resolve(Type.atom("delayed")), 1),
+            );
+          },
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncCond(clauses, context);
+
+      assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+  });
+
+  describe("asyncTry()", () => {
+    it("returns a Promise", () => {
+      const body = async (_context) => Type.atom("ok");
+      const context = contextFixture();
+      const result = Interpreter.asyncTry(body, [], [], [], null, context);
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("awaits body result", async () => {
+      const body = async (_context) => {
+        return new Promise((resolve) =>
+          setTimeout(() => resolve(Type.atom("delayed")), 1),
+        );
+      };
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+  });
+
   it("buildArgumentErrorMsg()", () => {
     const result = Interpreter.buildArgumentErrorMsg(2, "my message");
 
@@ -1503,6 +1749,36 @@ describe("Interpreter", () => {
 
       // cleanup
       delete globalThis.Elixir_Ddd;
+    });
+
+    it("registers a sync function", () => {
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_sync", 0, "public", [
+        {
+          params: (_context) => [],
+          guards: [],
+          body: (_context) => Type.atom("sync_result"),
+        },
+      ]);
+
+      const result = globalThis.Elixir_Aaa_Bbb["my_sync/0"]();
+
+      assert.deepStrictEqual(result, Type.atom("sync_result"));
+    });
+
+    it("returns a Promise when body closure is async", async () => {
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_async", 0, "public", [
+        {
+          params: (_context) => [],
+          guards: [],
+          body: async (_context) => Type.atom("async_result"),
+        },
+      ]);
+
+      const result = globalThis.Elixir_Aaa_Bbb["my_async/0"]();
+      assert.instanceOf(result, Promise);
+
+      const resolved = await result;
+      assert.deepStrictEqual(resolved, Type.atom("async_result"));
     });
 
     it("errors raised inside function body are not caught", () => {
@@ -6415,6 +6691,11 @@ describe("Interpreter", () => {
           new Set(),
         );
 
+        assert.deepStrictEqual(
+          globalThis.Elixir_MyModuleExName.__jsBindings__,
+          new Map(),
+        );
+
         assert.equal(
           globalThis.Elixir_MyModuleExName.__jsName__,
           "Elixir_MyModuleExName",
@@ -6483,6 +6764,11 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(
           globalThis.Erlang_My_Module.__exports__,
           new Set(),
+        );
+
+        assert.deepStrictEqual(
+          globalThis.Erlang_My_Module.__jsBindings__,
+          new Map(),
         );
 
         assert.equal(
@@ -6769,6 +7055,70 @@ describe("Interpreter", () => {
       "UndefinedFunctionError",
       "my_message",
     );
+  });
+
+  describe("registerJsBindings()", () => {
+    const $1 = {name: "import_1"};
+    const $2 = {name: "import_2"};
+
+    beforeEach(() => {
+      delete globalThis.Elixir_Aaa_Bbb;
+      delete globalThis.Elixir_Ccc_Ddd;
+    });
+
+    it("initializes module proxy if not yet initialized", () => {
+      Interpreter.registerJsBindings({"Aaa.Bbb": {my_alias: $1}});
+
+      assert.isDefined(globalThis.Elixir_Aaa_Bbb);
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__exModule__,
+        Type.alias("Aaa.Bbb"),
+      );
+    });
+
+    it("sets bindings on module proxy", () => {
+      Interpreter.registerJsBindings({"Aaa.Bbb": {my_alias: $1}});
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__jsBindings__,
+        new Map([["my_alias", $1]]),
+      );
+    });
+
+    it("registers bindings for multiple modules", () => {
+      Interpreter.registerJsBindings({
+        "Aaa.Bbb": {alias_1: $1},
+        "Ccc.Ddd": {alias_2: $2},
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__jsBindings__,
+        new Map([["alias_1", $1]]),
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Ccc_Ddd.__jsBindings__,
+        new Map([["alias_2", $2]]),
+      );
+    });
+
+    it("merges bindings when module proxy already exists", () => {
+      Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun", 0, "public", []);
+      Interpreter.registerJsBindings({"Aaa.Bbb": {existing_alias: $1}});
+
+      Interpreter.registerJsBindings({"Aaa.Bbb": {new_alias: $2}});
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_Aaa_Bbb.__jsBindings__,
+        new Map([
+          ["existing_alias", $1],
+          ["new_alias", $2],
+        ]),
+      );
+
+      assert.isDefined(globalThis.Elixir_Aaa_Bbb["my_fun/0"]);
+    });
   });
 
   describe("resolveErrorMessage()", () => {

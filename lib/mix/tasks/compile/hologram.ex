@@ -72,6 +72,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Biome is almost x20 faster than Prettier in Hologram benchmarks
       formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(assets_dir, "js"),
+      node_modules_path: node_modules_path,
       static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
@@ -110,6 +111,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
 
+    # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
+    async_mfas = CallGraph.list_async_mfas(call_graph)
+
     call_graph_for_runtime =
       call_graph
       |> CallGraph.clone()
@@ -120,7 +124,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
 
-    runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
+    runtime_entry_file_path =
+      Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
 
     page_modules = Reflection.list_pages()
 
@@ -130,7 +135,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     page_entry_files_info =
       page_modules
-      |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, opts)
+      |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, async_mfas, opts)
       |> Enum.map(fn {entry_name, entry_file_path} ->
         {entry_name, entry_file_path, "page"}
       end)

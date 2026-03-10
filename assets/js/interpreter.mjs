@@ -206,6 +206,7 @@ export default class Interpreter {
     return moduleProxy[functionArityStr](...args.data);
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncCase().
   // case() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/case_test.exs
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
@@ -222,6 +223,27 @@ export default class Interpreter {
 
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           return clause.body(contextClone);
+        }
+      }
+    }
+
+    Interpreter.raiseCaseClauseError(condition);
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update case().
+  static async asyncCase(condition, clauses, context) {
+    if (typeof condition === "function") {
+      condition = await condition(context);
+    }
+
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          return await clause.body(contextClone);
         }
       }
     }
@@ -269,6 +291,7 @@ export default class Interpreter {
     }
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncComprehension().
   // Deps: [Enum.into/2, Enum.to_list/1]
   static comprehension(
     generators,
@@ -322,6 +345,72 @@ export default class Interpreter {
     return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update comprehension().
+  // Deps: [Enum.into/2, Enum.to_list/1]
+  static async asyncComprehension(
+    generators,
+    filters,
+    collectable,
+    unique,
+    mapper,
+    context,
+  ) {
+    const generatorsCount = generators.length;
+    const sets = [];
+
+    for (const generator of generators) {
+      sets.push(Elixir_Enum["to_list/1"](await generator.body(context)).data);
+    }
+
+    let items = [];
+
+    for (const combination of Utils.cartesianProduct(sets)) {
+      const contextClone = Interpreter.cloneContext(context);
+      let skip = false;
+
+      for (let i = 0; i < generatorsCount; ++i) {
+        if (
+          Interpreter.isMatched(
+            generators[i].match,
+            combination[i],
+            contextClone,
+          )
+        ) {
+          Interpreter.updateVarsToMatchedValues(contextClone);
+
+          if (Interpreter.#evaluateGuards(generators[i].guards, contextClone)) {
+            continue;
+          }
+        }
+
+        skip = true;
+        break;
+      }
+
+      if (skip) continue;
+
+      let filtered = false;
+
+      for (const filter of filters) {
+        if (Type.isFalsy(await filter(contextClone))) {
+          filtered = true;
+          break;
+        }
+      }
+
+      if (filtered) continue;
+
+      items.push(await mapper(contextClone));
+    }
+
+    if (unique) {
+      items = uniqWith(items, Interpreter.isStrictlyEqual);
+    }
+
+    return Elixir_Enum["into/2"](Type.list(items), collectable);
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncCond().
   // cond() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/cond_test.exs
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
@@ -332,6 +421,20 @@ export default class Interpreter {
       if (Type.isTruthy(clause.condition(contextClone))) {
         Interpreter.updateVarsToMatchedValues(contextClone);
         return clause.body(contextClone);
+      }
+    }
+
+    Interpreter.#raiseCondClauseError();
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update cond().
+  static async asyncCond(clauses, context) {
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Type.isTruthy(await clause.condition(contextClone))) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+        return await clause.body(contextClone);
       }
     }
 
@@ -357,49 +460,13 @@ export default class Interpreter {
 
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
 
-    globalThis[moduleJsName][`${functionName}/${arity}`] = function () {
-      let startTime;
-
-      if (globalThis.hologram.isProfilingEnabled) {
-        startTime = performance.now();
-      }
-
-      const mfa = `${moduleExName}.${functionName}/${arity}`;
-
-      // TODO: remove on release
-      // Interpreter.#logFunctionCall(mfa, arguments);
-
-      const args = Type.list([...arguments]);
-
-      for (const clause of clauses) {
-        const context = Interpreter.buildContext({module: moduleExName});
-        const pattern = Type.list(clause.params(context));
-
-        if (Interpreter.isMatched(pattern, args, context)) {
-          Interpreter.updateVarsToMatchedValues(context);
-
-          if (Interpreter.#evaluateGuards(clause.guards, context)) {
-            const result = clause.body(context);
-
-            // TODO: remove on release
-            // Interpreter.#logFunctionResult(mfa, result);
-
-            if (globalThis.hologram.isProfilingEnabled) {
-              console.log(
-                `Hologram: function ${mfa} executed in`,
-                PerformanceTimer.diff(startTime),
-              );
-            }
-
-            return result;
-          }
-        }
-      }
-
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+    globalThis[moduleJsName][`${functionName}/${arity}`] =
+      Interpreter.#buildElixirFunction(
+        moduleExName,
+        functionName,
+        arity,
+        clauses,
       );
-    };
 
     if (visibility === "public") {
       globalThis[moduleJsName].__exports__.add(`${functionName}/${arity}`);
@@ -745,6 +812,7 @@ export default class Interpreter {
           : Type.alias(moduleExName);
 
       moduleProxy.__exports__ = new Set();
+      moduleProxy.__jsBindings__ = new Map();
       moduleProxy.__jsName__ = moduleJsName;
     }
   }
@@ -863,6 +931,19 @@ export default class Interpreter {
     Interpreter.raiseError("UndefinedFunctionError", message);
   }
 
+  static registerJsBindings(bindingsMap) {
+    for (const [moduleExName, bindings] of Object.entries(bindingsMap)) {
+      const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
+      Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
+
+      const jsBindings = globalThis[moduleJsName].__jsBindings__;
+
+      for (const [alias, value] of Object.entries(bindings)) {
+        jsBindings.set(alias, value);
+      }
+    }
+  }
+
   // TODO: consider when porting Elixir error handling
   static resolveErrorMessage(struct) {
     const messageEntry = struct.data["atom(message)"];
@@ -874,6 +955,7 @@ export default class Interpreter {
     return $.inspect(struct);
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncTry().
   static try(
     body,
     rescueClauses,
@@ -887,6 +969,50 @@ export default class Interpreter {
     try {
       const contextClone = Interpreter.cloneContext(context);
       result = body(contextClone);
+      // TODO: finish
+      // eslint-disable-next-line no-useless-catch
+    } catch (error) {
+      throw error;
+
+      // TODO: handle errors
+      // eslint-disable-next-line no-unreachable
+      result =
+        Interpreter.#evaluateRescueClauses(rescueClauses, error, context) ||
+        Interpreter.#evaluateCatchClauses(catchClauses, error, context);
+    } finally {
+      // TODO: handle after block
+      if (afterBlock) {
+        // eslint-disable-next-line no-unsafe-finally
+        throw new HologramInterpreterError(
+          '"try" expression after block is not yet implemented in Hologram',
+        );
+      }
+    }
+
+    if (elseClauses.length === 0) {
+      return result;
+    } else {
+      // TODO: handle else clauses
+      throw new HologramInterpreterError(
+        '"try" expression else clauses are not yet implemented in Hologram',
+      );
+    }
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update try().
+  static async asyncTry(
+    body,
+    rescueClauses,
+    catchClauses,
+    elseClauses,
+    afterBlock,
+    context,
+  ) {
+    let result;
+
+    try {
+      const contextClone = Interpreter.cloneContext(context);
+      result = await body(contextClone);
       // TODO: finish
       // eslint-disable-next-line no-useless-catch
     } catch (error) {
@@ -1031,6 +1157,52 @@ export default class Interpreter {
     );
   }
 
+  static #buildElixirFunction(moduleExName, functionName, arity, clauses) {
+    return function () {
+      let startTime;
+
+      if (globalThis.Hologram.isProfilingEnabled) {
+        startTime = performance.now();
+      }
+
+      const mfa = `${moduleExName}.${functionName}/${arity}`;
+
+      // TODO: remove on release
+      // Interpreter.#logFunctionCall(mfa, arguments);
+
+      const args = Type.list([...arguments]);
+
+      for (const clause of clauses) {
+        const context = Interpreter.buildContext({module: moduleExName});
+        const pattern = Type.list(clause.params(context));
+
+        if (Interpreter.isMatched(pattern, args, context)) {
+          Interpreter.updateVarsToMatchedValues(context);
+
+          if (Interpreter.#evaluateGuards(clause.guards, context)) {
+            const result = clause.body(context);
+
+            // TODO: remove on release
+            // Interpreter.#logFunctionResult(mfa, result);
+
+            if (globalThis.Hologram.isProfilingEnabled) {
+              console.log(
+                `Hologram: function ${mfa} executed in`,
+                PerformanceTimer.diff(startTime),
+              );
+            }
+
+            return result;
+          }
+        }
+      }
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+      );
+    };
+  }
+
   static #comparePids(pid1, pid2) {
     for (let i = 2; i >= 0; --i) {
       if (pid1.segments[i] === pid2.segments[i]) {
@@ -1062,6 +1234,7 @@ export default class Interpreter {
     return 0;
   }
 
+  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
@@ -1088,6 +1261,7 @@ export default class Interpreter {
     return false;
   }
 
+  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
   static #evaluateRescueClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);

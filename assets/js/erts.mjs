@@ -1,9 +1,20 @@
 "use strict";
 
 import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
+import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
+import PromiseRegistry from "./erts/promise_registry.mjs";
 import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
+import Utils from "./utils.mjs";
+
+const REF_KEY = Type.encodeMapKey(Type.atom("ref"));
+
+const TASK_MFA = Type.tuple([
+  Type.alias("Hologram.JS"),
+  Type.atom("call"),
+  Type.integer(3),
+]);
 
 export default class ERTS {
   // The PID of the init process (#PID<0.0.0>), which is the first process started
@@ -20,6 +31,14 @@ export default class ERTS {
   static binaryPatternRegistry = BinaryPatternRegistry;
   static ets = {};
 
+  // TODO: add scoped lifecycle / GC for native object registry.
+  // Entries are never released because registered objects may be global (e.g. stored on window)
+  // and must survive page navigation.
+  static nativeObjectRegistry = NativeObjectRegistry;
+
+  // Entries are released via takePromise() when Task.await/1 is called.
+  static promiseRegistry = PromiseRegistry;
+
   // Sequence for anonymous function `uniq` field.
   // Used to derive fun_info/1 fields: index, new_index, uniq, new_uniq.
   // In Erlang, index/new_index are per-module indices, and uniq/new_uniq are
@@ -34,6 +53,47 @@ export default class ERTS {
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+
+  static registerNativeObject(object) {
+    const ref = $.uniqueReference();
+    $.nativeObjectRegistry.put(ref, object);
+
+    return ref;
+  }
+
+  // Each call creates a new Task with a unique ref, even for the same Promise.
+  // This is intentional: multiple Task handles can independently await the same Promise.
+  static registerPromise(promise) {
+    const ref = $.uniqueReference();
+    $.promiseRegistry.put(ref, promise);
+
+    return Type.taskStruct(TASK_MFA, $.INIT_PID, ref);
+  }
+
+  static takePromise(taskStruct) {
+    const ref = taskStruct.data[REF_KEY][1];
+    const promise = $.promiseRegistry.get(ref);
+
+    if (promise !== null) {
+      $.promiseRegistry.delete(ref);
+    }
+
+    return promise;
+  }
+
+  static uniqueReference() {
+    const node = $.nodeTable.CLIENT_NODE;
+    const creation = 0;
+
+    // TODO: implement ID words similarly to how it's done in Erlang
+    const idWords = [
+      Utils.randomUint32(),
+      Utils.randomUint32(),
+      $.referenceSequence.next(),
+    ];
+
+    return Type.reference(node, creation, idWords);
+  }
 }
 
 const $ = ERTS;

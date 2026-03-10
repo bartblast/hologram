@@ -175,7 +175,16 @@ defmodule Hologram.Compiler.CallGraph do
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
+    {Hologram.JS, :call, 4},
+    {Hologram.JS, :delete, 3},
+    {Hologram.JS, :dispatch_event, 5},
+    {Hologram.JS, :eval, 1},
     {Hologram.JS, :exec, 1},
+    {Hologram.JS, :get, 3},
+    {Hologram.JS, :instanceof, 3},
+    {Hologram.JS, :new, 3},
+    {Hologram.JS, :set, 4},
+    {Hologram.JS, :typeof, 2},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},
@@ -189,6 +198,7 @@ defmodule Hologram.Compiler.CallGraph do
     {String, :trim, 1},
     {String, :upcase, 1},
     {String, :upcase, 2},
+    {Task, :await, 1},
     {URI, :encode, 2}
   ]
 
@@ -492,6 +502,25 @@ defmodule Hologram.Compiler.CallGraph do
   @spec has_vertex?(t, vertex) :: boolean
   def has_vertex?(%{pid: pid}, vertex) do
     Agent.get(pid, &Digraph.has_vertex?(&1, vertex), :infinity)
+  end
+
+  @doc """
+  Returns a MapSet of MFAs that transitively call `Task.await/1`.
+
+  Must be called on the original call graph before `remove_manually_ported_mfas/1`
+  strips the `Task.await/1` vertex.
+  """
+  @spec list_async_mfas(t) :: MapSet.t(mfa)
+  def list_async_mfas(call_graph) do
+    graph = get_graph(call_graph)
+
+    graph
+    |> Digraph.reaching([{Task, :await, 1}])
+    # Excludes bare module atom vertices, keeping only MFA tuples.
+    # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
+    # the result is only used for MapSet.member? lookups against already-included MFAs.
+    |> Enum.filter(&is_tuple/1)
+    |> MapSet.new()
   end
 
   @doc """

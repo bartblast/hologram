@@ -248,7 +248,7 @@ function defineElixirStringCharsModule() {
 }
 
 export function defineGlobalErlangAndElixirModules() {
-  globalThis.hologram ??= {};
+  globalThis.Hologram ??= {};
 
   defineGlobalModule("Erlang", Erlang);
   defineGlobalModule("Erlang_Binary", Erlang_Binary);
@@ -355,6 +355,7 @@ export function registerWebApis() {
 
   globalThis.window = window;
   globalThis.console = window.console;
+  globalThis.document = window.document;
   globalThis.DOMParser = window.DOMParser;
 
   globalThis.fetch =

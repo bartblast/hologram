@@ -402,6 +402,7 @@ describe("Connection", () => {
 
     describe("reload message", () => {
       it("handles reload message", () => {
+        const originalDocument = globalThis.document;
         const reloadSpy = sinon.spy();
 
         globalThis.document = {
@@ -414,6 +415,8 @@ describe("Connection", () => {
         Connection.handleMessage(event);
 
         sinon.assert.calledOnce(reloadSpy);
+
+        globalThis.document = originalDocument;
       });
     });
 

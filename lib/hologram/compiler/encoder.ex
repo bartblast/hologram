@@ -65,7 +65,9 @@ defmodule Hologram.Compiler.Encoder do
           Context.t()
         ) :: String.t()
   def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
-    clauses_js = encode_as_array(clauses, context)
+    async? = MapSet.member?(context.async_mfas, {context.module, function, arity})
+    clause_context = %{context | async?: async?}
+    clauses_js = encode_as_array(clauses, clause_context)
 
     ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
   end
@@ -118,8 +120,9 @@ defmodule Hologram.Compiler.Encoder do
   def encode_ir(%IR.AnonymousFunctionCall{function: function, args: args}, context) do
     function_js = encode_ir(function, context)
     args_js = encode_as_array(args, context)
+    call = "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
 
-    "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
+    if context.async?, do: "(await #{call})", else: call
   end
 
   def encode_ir(
@@ -131,7 +134,10 @@ defmodule Hologram.Compiler.Encoder do
         },
         context
       ) do
-    clauses_js = encode_as_array(clauses, context)
+    async? = has_async_call?(clauses, context)
+    clause_context = %{context | async?: async?}
+    clauses_js = encode_as_array(clauses, clause_context)
+
     "Type.anonymousFunction(#{arity}, #{clauses_js}, context)"
   end
 
@@ -155,7 +161,9 @@ defmodule Hologram.Compiler.Encoder do
 
     captured_module_js = encode_as_string(captured_module_str, true)
 
-    clauses_js = encode_as_array(clauses, context)
+    async? = has_async_call?(clauses, context)
+    clause_context = %{context | async?: async?}
+    clauses_js = encode_as_array(clauses, clause_context)
 
     "Type.functionCapture(#{captured_module_js}, #{captured_function_js}, #{arity}, #{clauses_js}, context)"
   end
@@ -194,6 +202,10 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.bitstring([", "])")
   end
 
+  def encode_ir(%IR.Block{} = block, %{async?: true} = context) do
+    "(await (#{encode_closure(block, context)})(context))"
+  end
+
   def encode_ir(%IR.Block{} = block, context) do
     "(#{encode_closure(block, context)})(context)"
   end
@@ -207,12 +219,19 @@ defmodule Hologram.Compiler.Encoder do
 
     clauses_js = encode_as_array(clauses, context)
 
-    "Interpreter.case(#{condition_js}, #{clauses_js}, context)"
+    if context.async? do
+      "(await Interpreter.asyncCase(#{condition_js}, #{clauses_js}, context))"
+    else
+      "Interpreter.case(#{condition_js}, #{clauses_js}, context)"
+    end
   end
 
   def encode_ir(%IR.Clause{} = clause, context) do
     match = encode_ir(clause.match, %{context | pattern?: true})
-    guards = encode_as_array(clause.guards, context, &encode_closure/2)
+
+    # Guards are never async — Elixir guards are restricted to a safe subset of functions.
+    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+
     body = encode_closure(clause.body, context)
 
     "{match: #{match}, guards: #{guards}, body: #{body}}"
@@ -225,7 +244,11 @@ defmodule Hologram.Compiler.Encoder do
     unique = comprehension.unique.value
     mapper = encode_closure(comprehension.mapper, context)
 
-    "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context)"
+    if context.async? do
+      "(await Interpreter.asyncComprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context))"
+    else
+      "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context)"
+    end
   end
 
   def encode_ir(%IR.ComprehensionFilter{expression: expr}, context) do
@@ -234,7 +257,12 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(%IR.Cond{clauses: clauses_ir}, context) do
     clauses_js = encode_as_array(clauses_ir, context)
-    "Interpreter.cond(#{clauses_js}, context)"
+
+    if context.async? do
+      "(await Interpreter.asyncCond(#{clauses_js}, context))"
+    else
+      "Interpreter.cond(#{clauses_js}, context)"
+    end
   end
 
   def encode_ir(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
@@ -267,7 +295,9 @@ defmodule Hologram.Compiler.Encoder do
     params_array = encode_as_array(clause.params, %{context | pattern?: true})
     params_closure = "(context) => #{params_array}"
 
-    guards = encode_as_array(clause.guards, context, &encode_closure/2)
+    # Guards are never async — Elixir guards are restricted to a safe subset of functions.
+    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+
     body = encode_closure(clause.body, context)
 
     "{params: #{params_closure}, guards: #{guards}, body: #{body}}"
@@ -404,7 +434,11 @@ defmodule Hologram.Compiler.Encoder do
     body_js = encode_closure(ir.body, context)
     rescue_clauses_js = encode_as_array(ir.rescue_clauses, context)
 
-    "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, context)"
+    if context.async? do
+      "(await Interpreter.asyncTry(#{body_js}, #{rescue_clauses_js}, [], [], null, context))"
+    else
+      "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, context)"
+    end
   end
 
   def encode_ir(%IR.TryRescueClause{} = ir, context) do
@@ -564,9 +598,9 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_block_expr(expr_js, true, true) do
     StringUtils.normalize_newlines("""
 
-    globalThis.hologram.return = #{expr_js};
+    globalThis.Hologram.return = #{expr_js};
     Interpreter.updateVarsToMatchedValues(context);
-    return globalThis.hologram.return;\
+    return globalThis.Hologram.return;\
     """)
   end
 
@@ -590,8 +624,16 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_closure(nil, _context), do: "null"
 
+  defp encode_closure(%IR.Block{} = ir, %{async?: true} = context) do
+    "async (context) => #{encode_block_body(ir, context)}"
+  end
+
   defp encode_closure(%IR.Block{} = ir, context) do
     "(context) => #{encode_block_body(ir, context)}"
+  end
+
+  defp encode_closure(ir, %{async?: true} = context) do
+    "async (context) => #{encode_ir(ir, context)}"
   end
 
   defp encode_closure(ir, context) do
@@ -603,7 +645,13 @@ defmodule Hologram.Compiler.Encoder do
     function_js = encode_ir(function, context)
     args_js = encode_ir(args, context)
 
-    "Interpreter.callNamedFunction(#{module_js}, #{function_js}, #{args_js}, context)"
+    call = "Interpreter.callNamedFunction(#{module_js}, #{function_js}, #{args_js}, context)"
+
+    if context.async? do
+      "(await #{call})"
+    else
+      call
+    end
   end
 
   defp encode_identifier(type, value, segments, context) do
@@ -645,7 +693,13 @@ defmodule Hologram.Compiler.Encoder do
     arity = Enum.count(args)
     args_js = Enum.map_join(args, ", ", &encode_ir(&1, context))
 
-    "#{class}[\"#{function}/#{arity}\"](#{args_js})"
+    call = "#{class}[\"#{function}/#{arity}\"](#{args_js})"
+
+    if MapSet.member?(context.async_mfas, {module.value, function, arity}) do
+      "(await #{call})"
+    else
+      call
+    end
   end
 
   defp encode_named_function_call(module_ir, function, args, context) do
@@ -765,6 +819,11 @@ defmodule Hologram.Compiler.Encoder do
 
   defp escape_non_printable_and_special_chars(""), do: ""
 
+  defp has_async_call?(clauses, context) do
+    MapSet.size(context.async_mfas) > 0 and
+      IR.has_call_to?(clauses, context.module, context.async_mfas)
+  end
+
   defp has_match_operator?(ir)
 
   defp has_match_operator?(%IR.MatchOperator{}), do: true
@@ -779,9 +838,9 @@ defmodule Hologram.Compiler.Encoder do
     |> has_match_operator?()
   end
 
-  defp has_match_operator?(%_struct{} = ir) do
+  defp has_match_operator?(ir) when is_struct(ir) do
     ir
-    |> Map.from_struct()
+    |> Map.values()
     |> has_match_operator?()
   end
 

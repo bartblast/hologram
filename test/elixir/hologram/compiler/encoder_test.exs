@@ -11,18 +11,29 @@ defmodule Hologram.Compiler.EncoderTest do
 
   @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
-  test "anonymous function call" do
-    # my_fun.(1, 2)
-    ir = %IR.AnonymousFunctionCall{
-      function: %IR.Variable{name: :my_fun},
-      args: [
-        %IR.IntegerType{value: 1},
-        %IR.IntegerType{value: 2}
-      ]
-    }
+  describe "anonymous function call" do
+    setup do
+      # my_fun.(1, 2)
+      ir = %IR.AnonymousFunctionCall{
+        function: %IR.Variable{name: :my_fun},
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
 
-    assert encode_ir(ir) ==
-             "Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)])"
+      [ir: ir]
+    end
+
+    test "sync", %{ir: ir} do
+      assert encode_ir(ir) ==
+               "Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)])"
+    end
+
+    test "async", %{ir: ir} do
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "(await Interpreter.callAnonymousFunction(context.vars.my_fun, [Type.integer(1n), Type.integer(2n)]))"
+    end
   end
 
   describe "anonymous function type" do
@@ -169,6 +180,298 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir) == expected
+    end
+
+    test "async parent, sync body — body stays sync" do
+      # fn x -> :expr end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :expr}]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "async parent, body with async remote call — body becomes async" do
+      # fn x -> Aaa.Bbb.some_async(x) end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Aaa.Bbb},
+                  function: :some_async,
+                  args: [%IR.Variable{name: :x}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "async parent, body with async local call — body becomes async" do
+      # fn x -> some_async(x) end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.LocalFunctionCall{
+                  function: :some_async,
+                  args: [%IR.Variable{name: :x}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "sync parent, body with async call — body becomes async" do
+      # fn x -> Aaa.Bbb.some_async(x) end
+      # Parent function is not async, but async_mfas is non-empty.
+      # The anon fn must independently detect its own async calls.
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Aaa.Bbb},
+                  function: :some_async,
+                  args: [%IR.Variable{name: :x}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: false,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.x));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "function capture variant stays sync when no async calls" do
+      # credo:disable-for-lines:27 Credo.Check.Design.DuplicatedCode
+      # &Calendar.ISO.parse_date/2  (inside async context, but body has no async calls)
+      ir = %IR.AnonymousFunctionType{
+        arity: 2,
+        captured_module: Calendar.ISO,
+        captured_function: :parse_date,
+        clauses: [
+          %IR.FunctionClause{
+            params: [
+              %IR.Variable{name: :"$1"},
+              %IR.Variable{name: :"$2"}
+            ],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Calendar.ISO},
+                  function: :parse_date,
+                  args: [
+                    %IR.Variable{name: :"$1"},
+                    %IR.Variable{name: :"$2"}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.functionCapture("Calendar.ISO", "parse_date", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+        return Elixir_Calendar_ISO["parse_date/2"](context.vars["$1"], context.vars["$2"]);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "function capture variant becomes async when body has async call" do
+      # &Calendar.ISO.some_async/1
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: Calendar.ISO,
+        captured_function: :some_async,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :"$1"}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Calendar.ISO},
+                  function: :some_async,
+                  args: [%IR.Variable{name: :"$1"}]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Calendar.ISO, :some_async, 1}]),
+        module: Calendar.ISO
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.functionCapture("Calendar.ISO", "some_async", 1, [{params: (context) => [Type.variablePattern("$1")], guards: [], body: async (context) => {
+        return (await Elixir_Calendar_ISO["some_async/1"](context.vars["$1"]));
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
+    end
+
+    test "nested: async call in inner does not make outer async" do
+      # fn x -> fn y -> Aaa.Bbb.some_async(y) end end
+      ir = %IR.AnonymousFunctionType{
+        arity: 1,
+        captured_module: nil,
+        captured_function: nil,
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :x}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.AnonymousFunctionType{
+                  arity: 1,
+                  captured_module: nil,
+                  captured_function: nil,
+                  clauses: [
+                    %IR.FunctionClause{
+                      params: [%IR.Variable{name: :y}],
+                      guards: [],
+                      body: %IR.Block{
+                        expressions: [
+                          %IR.RemoteFunctionCall{
+                            module: %IR.AtomType{value: Aaa.Bbb},
+                            function: :some_async,
+                            args: [%IR.Variable{name: :y}]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      context = %Context{
+        async?: true,
+        async_mfas: MapSet.new([{Aaa.Bbb, :some_async, 1}]),
+        module: Aaa.Bbb
+      }
+
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("y")], guards: [], body: async (context) => {
+        return (await Elixir_Aaa_Bbb["some_async/1"](context.vars.y));
+        }}], context);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir, context) == expected
     end
   end
 
@@ -429,9 +732,9 @@ defmodule Hologram.Compiler.EncoderTest do
       expected =
         normalize_newlines("""
         ((context) => {
-        globalThis.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
+        globalThis.Hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
         Interpreter.updateVarsToMatchedValues(context);
-        return globalThis.hologram.return;
+        return globalThis.Hologram.return;
         })(context)\
         """)
 
@@ -556,6 +859,25 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "async" do
+      ir = %IR.Block{
+        expressions: [
+          %IR.IntegerType{value: 1},
+          %IR.IntegerType{value: 2}
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        (await (async (context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        })(context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   describe "case" do
@@ -644,6 +966,30 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "async" do
+      ir = %IR.Case{
+        condition: %IR.Variable{name: :my_var},
+        clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.Variable{name: :x}]
+            }
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncCase(context.vars.my_var, [{match: Type.variablePattern("x"), guards: [], body: async (context) => {
+        return context.vars.x;
+        }}], context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   describe "clause" do
@@ -694,94 +1040,133 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) ==
                "{match: Type.variablePattern(\"x\"), guards: [(context) => context.vars.y, (context) => context.vars.z], body: (context) => {\nreturn Type.integer(1n);\n}}"
     end
+
+    test "async — guards stay sync, body becomes async" do
+      ir = %IR.Clause{
+        match: %IR.Variable{name: :x},
+        guards: [%IR.Variable{name: :y}],
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "{match: Type.variablePattern(\"x\"), guards: [(context) => context.vars.y], body: async (context) => {\nreturn Type.integer(1n);\n}}"
+    end
   end
 
-  test "comprehension" do
-    # for x when x < 3 <- [1, 2],
-    #     y when y < 5 <- [3, 4],
-    #     is_integer(x),
-    #     is_integer(y),
-    #     into: %{},
-    #     uniq: true,
-    #     do: {x, y}
-    #
-    # for x when :erlang.<(x, 3) <- [1, 2],
-    #     y when :erlang.<(y, 5) <- [3, 4],
-    #     :erlang.is_integer(x),
-    #     :erlang.is_integer(y),
-    #     into: %{},
-    #     uniq: true,
-    #     do: {x, y}
+  describe "comprehension" do
+    test "sync" do
+      # for x when x < 3 <- [1, 2],
+      #     y when y < 5 <- [3, 4],
+      #     is_integer(x),
+      #     is_integer(y),
+      #     into: %{},
+      #     uniq: true,
+      #     do: {x, y}
+      #
+      # for x when :erlang.<(x, 3) <- [1, 2],
+      #     y when :erlang.<(y, 5) <- [3, 4],
+      #     :erlang.is_integer(x),
+      #     :erlang.is_integer(y),
+      #     into: %{},
+      #     uniq: true,
+      #     do: {x, y}
 
-    ir = %IR.Comprehension{
-      generators: [
-        %IR.Clause{
-          match: %IR.Variable{name: :x},
-          guards: [
-            %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: :erlang},
-              function: :<,
-              args: [
-                %IR.Variable{name: :x},
-                %IR.IntegerType{value: 3}
+      ir = %IR.Comprehension{
+        generators: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :<,
+                args: [
+                  %IR.Variable{name: :x},
+                  %IR.IntegerType{value: 3}
+                ]
+              }
+            ],
+            body: %IR.ListType{
+              data: [
+                %IR.IntegerType{value: 1},
+                %IR.IntegerType{value: 2}
               ]
             }
-          ],
-          body: %IR.ListType{
-            data: [
-              %IR.IntegerType{value: 1},
-              %IR.IntegerType{value: 2}
-            ]
-          }
-        },
-        %IR.Clause{
-          match: %IR.Variable{name: :y},
-          guards: [
-            %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: :erlang},
-              function: :<,
-              args: [
-                %IR.Variable{name: :y},
-                %IR.IntegerType{value: 5}
+          },
+          %IR.Clause{
+            match: %IR.Variable{name: :y},
+            guards: [
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :<,
+                args: [
+                  %IR.Variable{name: :y},
+                  %IR.IntegerType{value: 5}
+                ]
+              }
+            ],
+            body: %IR.ListType{
+              data: [
+                %IR.IntegerType{value: 3},
+                %IR.IntegerType{value: 4}
               ]
             }
-          ],
-          body: %IR.ListType{
-            data: [
-              %IR.IntegerType{value: 3},
-              %IR.IntegerType{value: 4}
-            ]
           }
+        ],
+        filters: [
+          %IR.ComprehensionFilter{
+            expression: %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :is_integer,
+              args: [%IR.Variable{name: :x}]
+            }
+          },
+          %IR.ComprehensionFilter{
+            expression: %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :is_integer,
+              args: [%IR.Variable{name: :y}]
+            }
+          }
+        ],
+        collectable: %IR.MapType{data: []},
+        unique: %IR.AtomType{value: true},
+        mapper: %IR.TupleType{
+          data: [
+            %IR.Variable{name: :x},
+            %IR.Variable{name: :y}
+          ]
         }
-      ],
-      filters: [
-        %IR.ComprehensionFilter{
-          expression: %IR.RemoteFunctionCall{
-            module: %IR.AtomType{value: :erlang},
-            function: :is_integer,
-            args: [%IR.Variable{name: :x}]
-          }
-        },
-        %IR.ComprehensionFilter{
-          expression: %IR.RemoteFunctionCall{
-            module: %IR.AtomType{value: :erlang},
-            function: :is_integer,
-            args: [%IR.Variable{name: :y}]
-          }
-        }
-      ],
-      collectable: %IR.MapType{data: []},
-      unique: %IR.AtomType{value: true},
-      mapper: %IR.TupleType{
-        data: [
-          %IR.Variable{name: :x},
-          %IR.Variable{name: :y}
-        ]
       }
-    }
 
-    assert encode_ir(ir) ==
-             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guards: [(context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guards: [(context) => Erlang[\"</2\"](context.vars.y, Type.integer(5n))], body: (context) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(context) => Erlang[\"is_integer/1\"](context.vars.x), (context) => Erlang[\"is_integer/1\"](context.vars.y)], Type.map([]), true, (context) => Type.tuple([context.vars.x, context.vars.y]), context)"
+      assert encode_ir(ir) ==
+               "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guards: [(context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guards: [(context) => Erlang[\"</2\"](context.vars.y, Type.integer(5n))], body: (context) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(context) => Erlang[\"is_integer/1\"](context.vars.x), (context) => Erlang[\"is_integer/1\"](context.vars.y)], Type.map([]), true, (context) => Type.tuple([context.vars.x, context.vars.y]), context)"
+    end
+
+    test "async" do
+      ir = %IR.Comprehension{
+        generators: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.ListType{
+              data: [
+                %IR.IntegerType{value: 1},
+                %IR.IntegerType{value: 2}
+              ]
+            }
+          }
+        ],
+        filters: [],
+        collectable: %IR.ListType{data: []},
+        unique: %IR.AtomType{value: false},
+        mapper: %IR.Variable{name: :x}
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "(await Interpreter.asyncComprehension([{match: Type.variablePattern(\"x\"), guards: [], body: async (context) => Type.list([Type.integer(1n), Type.integer(2n)])}], [], Type.list([]), false, async (context) => context.vars.x, context))"
+    end
   end
 
   test "comprehension filter" do
@@ -827,55 +1212,79 @@ defmodule Hologram.Compiler.EncoderTest do
              "{match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guards: [(context) => Elixir_MyModule[\"my_guard/2\"](context.vars.a, Type.integer(2n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}"
   end
 
-  test "cond" do
-    clause_1 = %IR.CondClause{
-      condition: %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: :erlang},
-        function: :<,
-        args: [
-          %IR.Variable{name: :x},
-          %IR.IntegerType{value: 1}
-        ]
-      },
-      body: %IR.Block{
-        expressions: [
-          %IR.IntegerType{value: 1}
+  describe "cond" do
+    test "sync" do
+      clause_1 = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 1}
+          ]
+        },
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1}
+          ]
+        }
+      }
+
+      clause_2 = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 2}
+          ]
+        },
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 2}
+          ]
+        }
+      }
+
+      # cond do
+      #   :erlang.<(x, 1) -> 1
+      #   :erlang.<(x, 2) -> 2
+      # end
+      ir = %IR.Cond{clauses: [clause_1, clause_2]}
+
+      expected =
+        normalize_newlines("""
+        Interpreter.cond([{condition: (context) => Erlang["</2"](context.vars.x, Type.integer(1n)), body: (context) => {
+        return Type.integer(1n);
+        }}, {condition: (context) => Erlang["</2"](context.vars.x, Type.integer(2n)), body: (context) => {
+        return Type.integer(2n);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "async" do
+      ir = %IR.Cond{
+        clauses: [
+          %IR.CondClause{
+            condition: %IR.Variable{name: :x},
+            body: %IR.Block{
+              expressions: [%IR.IntegerType{value: 1}]
+            }
+          }
         ]
       }
-    }
 
-    clause_2 = %IR.CondClause{
-      condition: %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: :erlang},
-        function: :<,
-        args: [
-          %IR.Variable{name: :x},
-          %IR.IntegerType{value: 2}
-        ]
-      },
-      body: %IR.Block{
-        expressions: [
-          %IR.IntegerType{value: 2}
-        ]
-      }
-    }
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncCond([{condition: async (context) => context.vars.x, body: async (context) => {
+        return Type.integer(1n);
+        }}], context))\
+        """)
 
-    # cond do
-    #   :erlang.<(x, 1) -> 1
-    #   :erlang.<(x, 2) -> 2
-    # end
-    ir = %IR.Cond{clauses: [clause_1, clause_2]}
-
-    expected =
-      normalize_newlines("""
-      Interpreter.cond([{condition: (context) => Erlang["</2"](context.vars.x, Type.integer(1n)), body: (context) => {
-      return Type.integer(1n);
-      }}, {condition: (context) => Erlang["</2"](context.vars.x, Type.integer(2n)), body: (context) => {
-      return Type.integer(2n);
-      }}], context)\
-      """)
-
-    assert encode_ir(ir) == expected
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   test "cond clause" do
@@ -939,40 +1348,169 @@ defmodule Hologram.Compiler.EncoderTest do
              "Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\"))"
   end
 
-  test "encode_elixir_function/6" do
-    clauses = [
-      %IR.FunctionClause{
-        params: [%IR.IntegerType{value: 9}],
-        guards: [],
+  describe "encode_closure/2 (private, tested indirectly)" do
+    test "nil" do
+      ir = %IR.CondClause{
+        condition: nil,
+        body: nil
+      }
+
+      assert encode_ir(ir) == "{condition: null, body: null}"
+    end
+
+    test "non-block, sync" do
+      ir = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 3}
+          ]
+        },
         body: %IR.Block{
-          expressions: [%IR.AtomType{value: :expr_2}]
-        }
-      },
-      %IR.FunctionClause{
-        params: [%IR.Variable{name: :z}],
-        guards: [
-          %IR.RemoteFunctionCall{
-            module: %IR.AtomType{value: :erlang},
-            function: :is_float,
-            args: [%IR.Variable{name: :z}]
-          }
-        ],
-        body: %IR.Block{
-          expressions: [%IR.Variable{name: :z}]
+          expressions: [%IR.IntegerType{value: 1}]
         }
       }
-    ]
 
-    expected =
-      normalize_newlines("""
-      Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
-      return Type.atom("expr_2");
-      }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
-      return context.vars.z;
-      }}]);\
-      """)
+      expected =
+        normalize_newlines("""
+        {condition: (context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n)), body: (context) => {
+        return Type.integer(1n);
+        }}\
+        """)
 
-    assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, %Context{}) == expected
+      assert encode_ir(ir) == expected
+    end
+
+    test "non-block, async" do
+      ir = %IR.CondClause{
+        condition: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :<,
+          args: [
+            %IR.Variable{name: :x},
+            %IR.IntegerType{value: 3}
+          ]
+        },
+        body: %IR.Block{
+          expressions: [%IR.IntegerType{value: 1}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {condition: async (context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n)), body: async (context) => {
+        return Type.integer(1n);
+        }}\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+
+    test "block, sync" do
+      ir = %IR.CondClause{
+        condition: %IR.AtomType{value: true},
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1},
+            %IR.IntegerType{value: 2}
+          ]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {condition: (context) => Type.atom("true"), body: (context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "block, async" do
+      ir = %IR.CondClause{
+        condition: %IR.AtomType{value: true},
+        body: %IR.Block{
+          expressions: [
+            %IR.IntegerType{value: 1},
+            %IR.IntegerType{value: 2}
+          ]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {condition: async (context) => Type.atom("true"), body: async (context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        }}\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+  end
+
+  describe "encode_elixir_function/6" do
+    setup do
+      [
+        clauses: [
+          %IR.FunctionClause{
+            params: [%IR.IntegerType{value: 9}],
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :expr_2}]
+            }
+          },
+          %IR.FunctionClause{
+            params: [%IR.Variable{name: :z}],
+            guards: [
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :is_float,
+                args: [%IR.Variable{name: :z}]
+              }
+            ],
+            body: %IR.Block{
+              expressions: [%IR.Variable{name: :z}]
+            }
+          }
+        ]
+      ]
+    end
+
+    test "sync", %{clauses: clauses} do
+      context = %Context{module: Aaa.Bbb}
+
+      expected =
+        normalize_newlines("""
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
+        return Type.atom("expr_2");
+        }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
+        return context.vars.z;
+        }}]);\
+        """)
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
+    end
+
+    test "async", %{clauses: clauses} do
+      async_mfas = MapSet.new([{Aaa.Bbb, :fun_2, 1}])
+      context = %Context{module: Aaa.Bbb, async_mfas: async_mfas}
+
+      expected =
+        normalize_newlines("""
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: async (context) => {
+        return Type.atom("expr_2");
+        }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: async (context) => {
+        return context.vars.z;
+        }}]);\
+        """)
+
+      assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, context) == expected
+    end
   end
 
   describe "encode_erlang_function/4" do
@@ -1128,6 +1666,31 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir) == expected
+    end
+
+    test "async — guards stay sync, body becomes async" do
+      ir = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_integer,
+            args: [%IR.Variable{name: :x}]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.Variable{name: :x}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x")], guards: [(context) => Erlang["is_integer/1"](context.vars.x)], body: async (context) => {
+        return context.vars.x;
+        }}\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
     end
   end
 
@@ -1752,6 +2315,69 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) ==
                ~s'Erlang["orelse/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
     end
+
+    test "async - wraps call with await when target MFA is in async_mfas" do
+      # Aaa.Bbb.my_fun(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :my_fun,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      async_mfas = MapSet.new([{Aaa.Bbb, :my_fun, 2}])
+      context = %Context{async_mfas: async_mfas}
+
+      assert encode_ir(ir, context) ==
+               "(await Elixir_Aaa_Bbb[\"my_fun/2\"](Type.integer(1n), Type.integer(2n)))"
+    end
+
+    test "async - no await when target MFA is not in async_mfas" do
+      # Aaa.Bbb.my_fun(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        function: :my_fun,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      async_mfas = MapSet.new([{Aaa.Bbb, :other_fun, 2}])
+      context = %Context{async_mfas: async_mfas}
+
+      assert encode_ir(ir, context) ==
+               "Elixir_Aaa_Bbb[\"my_fun/2\"](Type.integer(1n), Type.integer(2n))"
+    end
+
+    test "async - dynamic named function call" do
+      # x.my_fun!(1, 2)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.Variable{name: :x},
+        function: :my_fun!,
+        args: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               ~s'(await Interpreter.callNamedFunction(context.vars.x, Type.atom("my_fun!"), Type.list([Type.integer(1n), Type.integer(2n)]), context))'
+    end
+
+    test "async - :erlang.apply/3 call" do
+      # :erlang.apply(MyModule, :my_fun, [1, 2])
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.AtomType{value: MyModule},
+          %IR.AtomType{value: :my_fun},
+          %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.IntegerType{value: 2}
+            ]
+          }
+        ]
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               ~s'(await Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), Type.atom("my_fun"), Type.list([Type.integer(1n), Type.integer(2n)]), context))'
+    end
   end
 
   describe "string type" do
@@ -2074,6 +2700,27 @@ defmodule Hologram.Compiler.EncoderTest do
         """)
 
       assert encode_ir(ir) == expected
+    end
+
+    test "async" do
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: nil
+      }
+
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncTry(async (context) => {
+        return Type.atom("ok");
+        }, [], [], [], null, context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
     end
   end
 

@@ -307,6 +307,15 @@ jobs:
           timeout_minutes: 3
           max_attempts: 10
 
+      # Step: Download feature tests app JavaScript dependencies.
+      - name: Download feature tests app JavaScript deps
+        uses: nick-fields/retry@v3
+        with:
+          command: cd test/features/assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
       # Step: Compile the feature tests app project treating any warnings as errors.
       - name: Check feature tests app project compiles without warnings
         run: mix compile --all-warnings --warnings-as-errors

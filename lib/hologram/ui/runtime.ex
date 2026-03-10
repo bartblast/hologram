@@ -12,16 +12,21 @@ defmodule Hologram.UI.Runtime do
     ~HOLO"""
     {%if @initial_page? && !@page_mounted?}
       <script>
-        globalThis.hologram ??= \{\};
-        globalThis.hologram.csrfToken = "{@csrf_token}";
-        globalThis.hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER
+        globalThis.Hologram ??= \{\};
+        globalThis.Hologram._pendingJsInteropActions = [];
+        globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
+        globalThis.Hologram.csrfToken = "{@csrf_token}";
+
+        globalThis.Hologram.dispatchAction = function(actionName, target, params) \{
+          globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
+        \}
       </script>
     {/if}
 
     {%if !@page_mounted?}
       <script>
         {%raw}
-          globalThis.hologram.pageMountData = (deps) => {
+          globalThis.Hologram.pageMountData = (deps) => {
             const Type = deps.Type;
             
             return {

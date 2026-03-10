@@ -488,12 +488,12 @@ describe("Client", () => {
 
       hologramScheduleActionStub = sinon.stub(Hologram, "scheduleAction");
 
-      globalThis.hologram = {csrfToken: "test-csrf-token-123"};
+      globalThis.Hologram = {csrfToken: "test-csrf-token-123"};
     });
 
     afterEach(() => {
       sinon.restore();
-      delete globalThis.hologram;
+      delete globalThis.Hologram;
     });
 
     it("calls fetch with correct URL, options, and payload including CSRF token", async () => {

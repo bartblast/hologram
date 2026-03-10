@@ -52,14 +52,14 @@ describe("GlobalRegistry", () => {
     it("root key hasn't been set", () => {
       GlobalRegistry.set("my_key", "my_value");
 
-      assert.equal(globalThis.hologram.my_key, "my_value");
+      assert.equal(globalThis.Hologram.my_key, "my_value");
     });
 
     it("root key has already been set", () => {
       GlobalRegistry.set("my_key", "my_value_1");
       GlobalRegistry.set("my_key", "my_value_2");
 
-      assert.equal(globalThis.hologram.my_key, "my_value_2");
+      assert.equal(globalThis.Hologram.my_key, "my_value_2");
     });
   });
 });

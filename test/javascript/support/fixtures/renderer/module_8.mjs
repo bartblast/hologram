@@ -30,7 +30,7 @@ export function defineModule8Fixture() {
         params: (_context) => [],
         guards: [],
         body: (context) => {
-          globalThis.hologram.return = Type.anonymousFunction(
+          globalThis.Hologram.return = Type.anonymousFunction(
             1,
             [
               {
@@ -59,7 +59,7 @@ export function defineModule8Fixture() {
             context,
           );
           Interpreter.updateVarsToMatchedValues(context);
-          return globalThis.hologram.return;
+          return globalThis.Hologram.return;
         },
       },
     ],

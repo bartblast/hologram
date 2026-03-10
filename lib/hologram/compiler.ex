@@ -3,6 +3,7 @@ defmodule Hologram.Compiler do
 
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.MapUtils
+  alias Hologram.Commons.PathUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
   alias Hologram.Commons.TaskUtils
@@ -12,6 +13,59 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
+
+  @doc """
+  Aggregates JS imports from all Elixir modules referenced by the given MFAs.
+  Returns a map with:
+  - `:imports` — unique imports with generated `$1`, `$2`, ... aliases for JS import statements
+  - `:bindings` — per-module map of user alias to generated alias for `__bindings__` on module proxies
+  """
+  @spec aggregate_js_imports(list(mfa)) :: %{
+          imports: list(%{from: String.t(), export: String.t(), alias: String.t()}),
+          bindings: %{module => %{String.t() => String.t()}}
+        }
+  def aggregate_js_imports(mfas) do
+    modules_with_imports =
+      mfas
+      |> filter_elixir_mfas()
+      |> Enum.map(fn {module, _function, _arity} -> module end)
+      |> Enum.uniq()
+      |> Enum.filter(
+        &(Reflection.has_function?(&1, :__js_imports__, 0) and &1.__js_imports__() != [])
+      )
+
+    unique_imports =
+      modules_with_imports
+      |> Enum.flat_map(fn module ->
+        Enum.map(module.__js_imports__(), fn %{from: from, export: export} ->
+          {from, export}
+        end)
+      end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    alias_map =
+      unique_imports
+      |> Enum.with_index(1)
+      |> Map.new(fn {{from, export}, index} -> {{from, export}, "$#{index}"} end)
+
+    imports =
+      Enum.map(unique_imports, fn {from, export} ->
+        %{from: from, export: export, alias: alias_map[{from, export}]}
+      end)
+
+    bindings =
+      Map.new(modules_with_imports, fn module ->
+        module_bindings =
+          Map.new(module.__js_imports__(), fn %{as: as, from: from, export: export} ->
+            {as, alias_map[{from, export}]}
+          end)
+
+        {module, module_bindings}
+      end)
+
+    %{imports: imports, bindings: bindings}
+  end
 
   @doc """
   Builds the call graph of all modules in the project.
@@ -114,9 +168,24 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_page_js_4/README.md
   """
-  @spec build_page_js(module, CallGraph.t(), PLT.t(), T.file_path()) :: String.t()
-  def build_page_js(page_module, call_graph, ir_plt, js_dir) do
+  @spec build_page_js(module, CallGraph.t(), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
+  def build_page_js(page_module, call_graph, ir_plt, async_mfas, js_dir) do
     mfas = CallGraph.list_page_mfas(call_graph, page_module)
+
+    %{imports: imports, bindings: bindings} = aggregate_js_imports(mfas)
+
+    import_statements =
+      imports
+      |> Enum.map_join("\n", fn %{from: from, export: export, alias: alias} ->
+        ~s'import { #{export} as #{alias} } from "#{from}";'
+      end)
+      |> render_block()
+
+    js_bindings_registration_call =
+      bindings
+      |> render_js_bindings_registration_call()
+      |> render_block()
+
     erlang_js_dir = Path.join(js_dir, "erlang")
 
     erlang_function_defs =
@@ -126,17 +195,17 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       mfas
-      |> render_elixir_function_defs(ir_plt)
+      |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
     """
     "use strict";
 
-    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";    
+    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";#{import_statements}
 
     const startTime = performance.now();
 
-    globalThis.hologram.pageReachableFunctionDefs = (deps) => {
+    globalThis.Hologram.pageReachableFunctionDefs = (deps) => {
       const {
         Bitstring,
         ERTS,
@@ -146,10 +215,10 @@ defmodule Hologram.Compiler do
         MemoryStorage,
         Type,
         Utils,
-      } = deps;#{erlang_function_defs}#{elixir_function_defs}
+      } = deps;#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
     }
 
-    globalThis.hologram.pageScriptLoaded = true;
+    globalThis.Hologram.pageScriptLoaded = true;
     document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
 
     console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));\
@@ -159,8 +228,8 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), T.file_path()) :: String.t()
-  def build_runtime_js(runtime_mfas, ir_plt, js_dir) do
+  @spec build_runtime_js(list(mfa), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, async_mfas, js_dir) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
@@ -168,7 +237,7 @@ defmodule Hologram.Compiler do
 
     elixir_function_defs =
       runtime_mfas
-      |> render_elixir_function_defs(ir_plt)
+      |> render_elixir_function_defs(ir_plt, async_mfas)
       |> render_block()
 
     """
@@ -189,7 +258,7 @@ defmodule Hologram.Compiler do
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
-    if (globalThis.hologram.pageScriptLoaded) {
+    if (globalThis.Hologram.pageScriptLoaded) {
       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
     }
 
@@ -234,8 +303,21 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
+    project_node_modules_path = Path.join([Reflection.root_dir(), "assets", "node_modules"])
+
+    node_path =
+      Enum.join(
+        [opts[:node_modules_path], project_node_modules_path],
+        PathUtils.env_path_separator()
+      )
+
+    esbuild_opts = [
+      env: [{"NODE_PATH", node_path}],
+      parallelism: true
+    ]
+
     {_exit_msg, exit_status} =
-      SystemUtils.cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
+      SystemUtils.cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, esbuild_opts)
 
     if exit_status != 0 do
       raise RuntimeError,
@@ -282,16 +364,16 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_page_entry_files_4/README.md
   """
-  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), T.opts()) ::
+  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
           list({module, T.file_path()})
-  def create_page_entry_files(page_modules, call_graph, ir_plt, opts) do
+  def create_page_entry_files(page_modules, call_graph, ir_plt, async_mfas, opts) do
     page_modules
     |> TaskUtils.async_many(fn page_module ->
       entry_name = Reflection.module_name(page_module)
 
       entry_file_path =
         page_module
-        |> build_page_js(call_graph, ir_plt, opts[:js_dir])
+        |> build_page_js(call_graph, ir_plt, async_mfas, opts[:js_dir])
         |> create_entry_file(entry_name, opts[:tmp_dir])
 
       {page_module, entry_file_path}
@@ -304,10 +386,10 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file_3/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), T.opts()) :: T.file_path()
-  def create_runtime_entry_file(runtime_mfas, ir_plt, opts) do
+  @spec create_runtime_entry_file(list(mfa), PLT.t(), MapSet.t(mfa), T.opts()) :: T.file_path()
+  def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts) do
     runtime_mfas
-    |> build_runtime_js(ir_plt, opts[:js_dir])
+    |> build_runtime_js(ir_plt, async_mfas, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
@@ -656,7 +738,7 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp render_elixir_function_defs(mfas, ir_plt) do
+  defp render_elixir_function_defs(mfas, ir_plt, async_mfas) do
     mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
@@ -665,7 +747,7 @@ defmodule Hologram.Compiler do
       ir_plt
       |> PLT.get!(module)
       |> prune_module_def(module_mfas)
-      |> Encoder.encode_ir(%Context{module: module})
+      |> Encoder.encode_ir(%Context{module: module, async_mfas: async_mfas})
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
@@ -679,5 +761,25 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  defp render_js_bindings_registration_call(bindings) when bindings == %{}, do: ""
+
+  defp render_js_bindings_registration_call(bindings) do
+    modules_arg =
+      bindings
+      |> Enum.sort()
+      |> Enum.map_join(", ", fn {module, module_bindings} ->
+        module_name = Reflection.module_name(module)
+
+        entries =
+          module_bindings
+          |> Enum.sort()
+          |> Enum.map_join(", ", fn {as, alias} -> ~s'"#{as}": #{alias}' end)
+
+        ~s'"#{module_name}": {#{entries}}'
+      end)
+
+    ~s'Interpreter.registerJsBindings({#{modules_arg}});'
   end
 end
