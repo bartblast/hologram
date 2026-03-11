@@ -46,7 +46,6 @@ Website: https://hologram.page
 * Daniel Calancea, [@D4no0](https://github.com/D4no0)
 * [@pasila](https://github.com/pasila)
 * Jonatan Männchen, [@maennchen](https://github.com/maennchen)
-* Douglas Manzelmann, [@douglasmanzelmann](https://github.com/douglasmanzelmann)
 * James Harton, [@jimsynz](https://github.com/jimsynz)
 * Ian Asaff, [@montague](https://github.com/montague)
 * Max, [@Makesesama](https://github.com/Makesesama)
