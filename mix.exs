@@ -88,6 +88,7 @@ defmodule Hologram.MixProject do
       links: %{
         "Website" => "https://hologram.page",
         "Forum" => "https://elixirforum.com/hologram",
+        "Discord" => "https://discord.gg/huJWNuqt8J",
         "Slack" => "https://elixir-lang.slack.com/channels/hologram",
         "Newsletter" => "https://hologram.page/newsletter",
         "Courses" => "https://hologram.page/courses",
