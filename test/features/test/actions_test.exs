@@ -207,9 +207,9 @@ defmodule HologramFeatureTests.ActionsTest do
     feature "page init/3 action executes exactly once", %{session: session} do
       session
       |> visit(Page16)
-      |> assert_text(css("#page_result"), "{:page_action_16a, 1}")
-      |> click(button("Run Action 16b"))
-      |> assert_text(css("#page_result"), "{:page_action_16b, 1}")
+      |> assert_text(css("#page_result"), "{:page_16_action_a, 1}")
+      |> click(button("Run Action B"))
+      |> assert_text(css("#page_result"), "{:page_16_action_b, 1}")
     end
 
     feature "component init/3, target not specified", %{session: session} do
