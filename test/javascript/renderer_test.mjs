@@ -5741,5 +5741,32 @@ describe("Renderer", () => {
         cid,
       );
     });
+
+    it("clears next_action from the component struct in the registry after queueing", () => {
+      const cid = Type.bitstring("my_component");
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      const struct = ComponentRegistry.getComponentStruct(cid);
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("next_action"), struct),
+        Type.nil(),
+      );
+    });
   });
 });

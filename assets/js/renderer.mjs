@@ -477,6 +477,14 @@ export default class Renderer {
     );
 
     if (!Type.isNil(nextAction)) {
+      const clearedComponentStruct = Erlang_Maps["put/3"](
+        Type.atom("next_action"),
+        Type.nil(),
+        componentStruct,
+      );
+
+      ComponentRegistry.putComponentStruct(cid, clearedComponentStruct);
+
       let actionWithTarget = nextAction;
 
       const existingTarget = Erlang_Maps["get/3"](
