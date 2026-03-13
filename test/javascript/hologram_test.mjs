@@ -789,63 +789,41 @@ describe("Hologram", () => {
       target: Type.bitstring("my_target_6"),
     });
 
-    const componentStruct1 = Type.componentStruct({
-      nextAction: action1,
-    });
-
-    const componentStruct2 = Type.componentStruct({
-      nextAction: action2,
-    });
-
-    const componentStruct3 = Type.componentStruct({
-      nextAction: action3,
-    });
-
-    const componentStruct4 = Type.componentStruct({
-      nextAction: Type.nil(),
-    });
-
-    const componentStruct5 = Type.componentStruct({
-      nextAction: Type.nil(),
-    });
-
-    const componentStruct6 = Type.componentStruct({
-      nextAction: action6,
-    });
-
-    const entry1 = Type.map([
-      [Type.atom("module"), Type.alias("Module1")],
-      [Type.atom("struct"), componentStruct1],
-    ]);
-
-    const entry2 = Type.map([
-      [Type.atom("module"), Type.alias("Module2")],
-      [Type.atom("struct"), componentStruct2],
-    ]);
-
-    const entry3 = Type.map([
-      [Type.atom("module"), Type.alias("Module3")],
-      [Type.atom("struct"), componentStruct3],
-    ]);
-
-    const entry4 = Type.map([
-      [Type.atom("module"), Type.alias("Module4")],
-      [Type.atom("struct"), componentStruct4],
-    ]);
-
-    const entry5 = Type.map([
-      [Type.atom("module"), Type.alias("Module5")],
-      [Type.atom("struct"), componentStruct5],
-    ]);
-
-    const entry6 = Type.map([
-      [Type.atom("module"), Type.alias("Module6")],
-      [Type.atom("struct"), componentStruct6],
-    ]);
+    let entry1, entry2, entry3, entry4, entry5, entry6;
 
     beforeEach(() => {
       ComponentRegistry.clear();
       InitActionQueue.dequeueAll();
+
+      entry1 = Type.map([
+        [Type.atom("module"), Type.alias("Module1")],
+        [Type.atom("struct"), Type.componentStruct({nextAction: action1})],
+      ]);
+
+      entry2 = Type.map([
+        [Type.atom("module"), Type.alias("Module2")],
+        [Type.atom("struct"), Type.componentStruct({nextAction: action2})],
+      ]);
+
+      entry3 = Type.map([
+        [Type.atom("module"), Type.alias("Module3")],
+        [Type.atom("struct"), Type.componentStruct({nextAction: action3})],
+      ]);
+
+      entry4 = Type.map([
+        [Type.atom("module"), Type.alias("Module4")],
+        [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+      ]);
+
+      entry5 = Type.map([
+        [Type.atom("module"), Type.alias("Module5")],
+        [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+      ]);
+
+      entry6 = Type.map([
+        [Type.atom("module"), Type.alias("Module6")],
+        [Type.atom("struct"), Type.componentStruct({nextAction: action6})],
+      ]);
     });
 
     it("queues actions from all components that have next_action set", () => {
@@ -940,6 +918,28 @@ describe("Hologram", () => {
       assert.deepStrictEqual(queuedActions[0], action2);
       assert.deepStrictEqual(queuedActions[1], action6);
       assert.deepStrictEqual(queuedActions[2], action1);
+    });
+
+    it("clears next_action from the component struct in the registry after queueing", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid1, entry1],
+        [cid3, entry3],
+      ]);
+
+      Hologram.queueActionsFromServerInits();
+
+      const struct1 = ComponentRegistry.getComponentStruct(cid1);
+      const struct3 = ComponentRegistry.getComponentStruct(cid3);
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("next_action"), struct1),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("next_action"), struct3),
+        Type.nil(),
+      );
     });
   });
 

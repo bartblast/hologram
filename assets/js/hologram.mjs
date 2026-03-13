@@ -283,6 +283,8 @@ export default class Hologram {
       );
 
       if (!Type.isNil(nextAction)) {
+        ComponentRegistry.clearNextAction(cid);
+
         let actionWithTarget = nextAction;
 
         if (

@@ -477,6 +477,8 @@ export default class Renderer {
     );
 
     if (!Type.isNil(nextAction)) {
+      ComponentRegistry.clearNextAction(cid);
+
       let actionWithTarget = nextAction;
 
       const existingTarget = Erlang_Maps["get/3"](
