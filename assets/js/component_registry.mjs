@@ -9,17 +9,11 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = Type.map();
   }
 
-  // Deps: [:maps.put/3]
+  // Optimized (mutates next_action field in-place)
   static clearNextAction(cid) {
-    const componentStruct = ComponentRegistry.getComponentStruct(cid);
-
-    const clearedComponentStruct = Erlang_Maps["put/3"](
-      Type.atom("next_action"),
-      Type.nil(),
-      componentStruct,
-    );
-
-    ComponentRegistry.putComponentStruct(cid, clearedComponentStruct);
+    const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];
+    const componentStruct = entry.data["atom(struct)"][1];
+    componentStruct.data["atom(next_action)"][1] = Type.nil();
   }
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
@@ -77,14 +71,14 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = entries;
   }
 
-  // Optimized (mutates entries/struct field)
+  // Optimized (mutates entries/struct field in-place)
   static putComponentStruct(cid, componentStruct) {
     ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1].data[
       "atom(struct)"
     ][1] = componentStruct;
   }
 
-  // Optimized (mutates entries field)
+  // Optimized (mutates entries field in-place)
   static putEntry(cid, entry) {
     ComponentRegistry.entries.data[Type.encodeMapKey(cid)] = [cid, entry];
   }
