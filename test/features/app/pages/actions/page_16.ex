@@ -20,7 +20,7 @@ defmodule HologramFeatureTests.Actions.Page16 do
       Page result: <strong id="page_result"><code>{inspect(@result)}</code></strong>
     </p>
     <p>
-      <button $click="page_16_action_b">Run Action B</button>
+      <button $click="page_16_action_b">Run Page 16 Action B</button>
     </p>
     """
   end

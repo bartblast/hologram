@@ -209,7 +209,7 @@ defmodule HologramFeatureTests.ActionsTest do
       session
       |> visit(Page16)
       |> assert_text(css("#page_result"), "{:page_16_action_a, 1}")
-      |> click(button("Run Action B"))
+      |> click(button("Run Page 16 Action B"))
       |> assert_text(css("#page_result"), "{:page_16_action_b, 1}")
     end
 
