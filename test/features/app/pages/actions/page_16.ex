@@ -26,9 +26,11 @@ defmodule HologramFeatureTests.Actions.Page16 do
   end
 
   def action(:page_16_action_a, _params, component) do
+    new_execution_count = component.state.execution_count + 1
+
     put_state(component,
-      execution_count: component.state.execution_count + 1,
-      result: {:page_16_action_a, component.state.execution_count}
+      execution_count: new_execution_count,
+      result: {:page_16_action_a, new_execution_count}
     )
   end
 

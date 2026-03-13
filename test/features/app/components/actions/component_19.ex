@@ -11,9 +11,11 @@ defmodule HologramFeatureTests.Components.Actions.Component19 do
   end
 
   def action(:component_19_action_a, _params, component) do
+    new_execution_count = component.state.execution_count + 1
+
     put_state(component,
-      execution_count: component.state.execution_count + 1,
-      result: {:component_19_action_a, component.state.execution_count + 1}
+      execution_count: new_execution_count,
+      result: {:component_19_action_a, new_execution_count}
     )
   end
 
