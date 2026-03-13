@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page13
   alias HologramFeatureTests.Actions.Page14
   alias HologramFeatureTests.Actions.Page15
+  alias HologramFeatureTests.Actions.Page16
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
@@ -201,6 +202,14 @@ defmodule HologramFeatureTests.ActionsTest do
         css("#component_1_result"),
         ~s'{:component_1_action_result, %{queued_from: :page}}'
       )
+    end
+
+    feature "page init/3 action executes exactly once", %{session: session} do
+      session
+      |> visit(Page16)
+      |> assert_text(css("#page_result"), "{:page_action_16a, 1}")
+      |> click(button("Run Action 16b"))
+      |> assert_text(css("#page_result"), "{:page_action_16b, 1}")
     end
 
     feature "component init/3, target not specified", %{session: session} do
