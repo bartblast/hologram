@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page15
   alias HologramFeatureTests.Actions.Page16
   alias HologramFeatureTests.Actions.Page17
+  alias HologramFeatureTests.Actions.Page18
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
@@ -275,6 +276,16 @@ defmodule HologramFeatureTests.ActionsTest do
         css("#page_result"),
         ~s'{:page_action_result, %{queued_from: :component_10}}'
       )
+    end
+
+    feature "component init/2 action executes exactly once", %{session: session} do
+      session
+      |> visit(Page18)
+      |> assert_text("Component20 is hidden")
+      |> click(button("Show component"))
+      |> assert_text(css("#component_20_result"), "{:component_20_action_a, 1}")
+      |> click(button("Run Component 20 Action B"))
+      |> assert_text(css("#component_20_result"), "{:component_20_action_b, 1}")
     end
 
     # The order of execution is based on queued order (not on CIDs in ascending alphabetical order as for init/3)
