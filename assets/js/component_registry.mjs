@@ -9,6 +9,19 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = Type.map();
   }
 
+  // Deps: [:maps.put/3]
+  static clearNextAction(cid) {
+    const componentStruct = ComponentRegistry.getComponentStruct(cid);
+
+    const clearedComponentStruct = Erlang_Maps["put/3"](
+      Type.atom("next_action"),
+      Type.nil(),
+      componentStruct,
+    );
+
+    ComponentRegistry.putComponentStruct(cid, clearedComponentStruct);
+  }
+
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
   // Deps: [:maps.get/2]
   static getComponentEmittedContext(cid) {

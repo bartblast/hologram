@@ -283,13 +283,7 @@ export default class Hologram {
       );
 
       if (!Type.isNil(nextAction)) {
-        const clearedComponentStruct = Erlang_Maps["put/3"](
-          Type.atom("next_action"),
-          Type.nil(),
-          componentStruct,
-        );
-
-        ComponentRegistry.putComponentStruct(cid, clearedComponentStruct);
+        ComponentRegistry.clearNextAction(cid);
 
         let actionWithTarget = nextAction;
 
