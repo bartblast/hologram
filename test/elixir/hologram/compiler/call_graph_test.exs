@@ -465,6 +465,131 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "match operator ir, module alias on left side does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.MatchOperator{
+        left: %IR.AtomType{value: Module5},
+        right: %IR.AtomType{value: Module6}
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module6}
+             ]
+    end
+
+    test "match operator ir, module alias on right side creates edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.AtomType{value: Module5}
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module5}
+             ]
+    end
+
+    test "match operator ir, nested, module on innermost right creates edge", %{
+      empty_call_graph: call_graph
+    } do
+      # x = y = Module5
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.MatchOperator{
+          left: %IR.Variable{name: :y},
+          right: %IR.AtomType{value: Module5}
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module5}
+             ]
+    end
+
+    test "match operator ir, nested, module on inner left does not create edge",
+         %{
+           empty_call_graph: call_graph
+         } do
+      # x = Module5 = y
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.MatchOperator{
+          left: %IR.AtomType{value: Module5},
+          right: %IR.Variable{name: :y}
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "match operator ir, in pattern context, module on right does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      # In a function param like: x = Module5
+      ir = %IR.MatchOperator{
+        left: %IR.Variable{name: :x},
+        right: %IR.AtomType{value: Module5}
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}, pattern?: true})
+
+      assert result == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "match operator ir, in pattern context, module on left does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      # In a function param like: Module5 = x
+      ir = %IR.MatchOperator{
+        left: %IR.AtomType{value: Module5},
+        right: %IR.Variable{name: :x}
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}, pattern?: true})
+
+      assert result == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
     test "module definition ir, regular module", %{empty_call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
         module: %IR.AtomType{value: Module1},

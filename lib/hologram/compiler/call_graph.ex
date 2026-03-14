@@ -380,6 +380,12 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(args, context)
   end
 
+  def build(call_graph, %IR.MatchOperator{left: left, right: right}, context) do
+    call_graph
+    |> build(left, %{context | pattern?: true})
+    |> build(right, context)
+  end
+
   def build(
         call_graph,
         %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
