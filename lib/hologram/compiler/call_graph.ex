@@ -623,6 +623,7 @@ defmodule Hologram.Compiler.CallGraph do
     graph = get_graph(call_graph)
 
     graph
+    |> remove_server_only_mfas()
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
@@ -1045,6 +1046,18 @@ defmodule Hologram.Compiler.CallGraph do
     end
 
     call_graph
+  end
+
+  defp remove_server_only_mfas(graph) do
+    server_only_vertices =
+      graph
+      |> Digraph.vertices()
+      |> Enum.filter(fn
+        {module, :init, 3} -> Reflection.templatable?(module)
+        _fallback -> false
+      end)
+
+    Digraph.remove_vertices(graph, server_only_vertices)
   end
 
   defp remove_module_vertices(call_graph, module) do

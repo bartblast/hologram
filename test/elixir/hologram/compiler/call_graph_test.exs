@@ -1272,12 +1272,27 @@ defmodule Hologram.Compiler.CallGraphTest do
                {Module15, :__props__, 0},
                {Module15, :action, 3},
                {Module15, :init, 2},
-               {Module15, :init, 3},
                {Module15, :template, 0},
                {Module16, :my_fun_16a, 2},
                {Kernel, :inspect, 1},
                {:erlang, :hd, 1}
              ]
+    end
+
+    test "excludes init/3 for templatable modules" do
+      module_14_ir = IR.for_module(Module14)
+      module_15_ir = IR.for_module(Module15)
+
+      result =
+        start()
+        |> build(module_14_ir, %Context{})
+        |> build(module_15_ir, %Context{})
+        |> list_page_mfas(Module14)
+
+      refute {Module14, :init, 3} in result
+      refute {Module15, :init, 3} in result
+
+      assert {Module15, :init, 2} in result
     end
 
     test "excludes Hex MFAs" do
