@@ -273,11 +273,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
+               Module1,
                Module5,
                {Module1, :my_fun, 1}
              ]
 
       assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :my_fun, 1}},
                {{Module1, :my_fun, 1}, Module5}
              ]
     end
@@ -303,11 +305,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
+               Module1,
                Module6,
                {Module1, :my_fun, 1}
              ]
 
       assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :my_fun, 1}},
                {{Module1, :my_fun, 1}, Module6}
              ]
     end
@@ -335,11 +339,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
+               Module1,
                Module6,
                {Module1, :my_fun, 2}
              ]
 
       assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :my_fun, 2}},
                {{Module1, :my_fun, 2}, Module6}
              ]
     end
@@ -366,12 +372,14 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
+               Module1,
                Module6,
                Module7,
                {Module1, :my_fun, 2}
              ]
 
       assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :my_fun, 2}},
                {{Module1, :my_fun, 2}, Module6},
                {{Module1, :my_fun, 2}, Module7}
              ]
@@ -397,8 +405,64 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [{Module1, :my_fun, 2}]
-      assert sorted_edges(call_graph) == []
+      assert sorted_vertices(call_graph) == [Module1, {Module1, :my_fun, 2}]
+      assert sorted_edges(call_graph) == [{Module1, {Module1, :my_fun, 2}}]
+    end
+
+    test "function definition ir, module atom as call argument makes module functions reachable",
+         %{empty_call_graph: call_graph} do
+      # Module5 has a function my_fun/1.
+      # Module1.caller/0 passes Module5 as a call argument.
+      # Module5.my_fun/1 should be reachable from Module1.caller/0
+      # through: {Module1, :caller, 0} -> Module5 -> {Module5, :my_fun, 1}
+      module_5_ir = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: Module5},
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              name: :my_fun,
+              arity: 1,
+              visibility: :public,
+              clause: %IR.FunctionClause{
+                params: [%IR.Variable{name: :x}],
+                guards: [],
+                body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+              }
+            }
+          ]
+        }
+      }
+
+      module_1_ir = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: Module1},
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              name: :caller,
+              arity: 0,
+              visibility: :public,
+              clause: %IR.FunctionClause{
+                params: [],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [
+                    %IR.AtomType{value: Module5}
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+
+      call_graph
+      |> build(module_5_ir, %Context{})
+      |> build(module_1_ir, %Context{})
+
+      graph = get_graph(call_graph)
+      reachable = reachable_mfas(graph, [{Module1, :caller, 0}])
+
+      assert {Module5, :my_fun, 1} in reachable
     end
 
     test "list", %{empty_call_graph: call_graph} do
@@ -1204,9 +1268,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                {Module14, :__route__, 0},
                {Module14, :action, 3},
                {Module14, :template, 0},
+               {Module15, :__is_hologram_component__, 0},
                {Module15, :__props__, 0},
                {Module15, :action, 3},
                {Module15, :init, 2},
+               {Module15, :init, 3},
                {Module15, :template, 0},
                {Module16, :my_fun_16a, 2},
                {Kernel, :inspect, 1},
@@ -1501,6 +1567,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     |> add_vertex(:module_4)
 
     assert module_vertices(call_graph, Module13) == [
+             Module13,
              {Module13, :fun_b, 2},
              {Module13, :fun_d, 4},
              {Module13, :fun_e, 2}
@@ -1590,6 +1657,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       patch(call_graph, ir_plt, diff)
 
       assert sorted_vertices(call_graph) == [
+               Module10,
                Module9,
                {Module10, :my_fun_3, 0},
                {Module10, :my_fun_4, 0},
@@ -1604,6 +1672,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
+               {Module10, {Module10, :my_fun_3, 0}},
+               {Module10, {Module10, :my_fun_4, 0}},
+               {Module9, {Module9, :my_fun_1, 0}},
+               {Module9, {Module9, :my_fun_2, 0}},
                {{Module10, :my_fun_3, 0}, {Module10, :my_fun_4, 0}},
                {{Module9, :my_fun_1, 0}, {Module9, :my_fun_2, 0}},
                {{:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0}},

@@ -364,7 +364,7 @@ defmodule Hologram.Compiler.CallGraph do
     fun_def_vertex = {from_vertex, name, arity}
 
     call_graph
-    |> add_vertex(fun_def_vertex)
+    |> add_edge(from_vertex, fun_def_vertex)
     |> build(clause, %{context | from_vertex: fun_def_vertex})
   end
 
