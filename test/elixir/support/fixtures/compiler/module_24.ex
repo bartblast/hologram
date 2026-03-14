@@ -12,8 +12,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Module24 do
     """
   end
 
-  def action(:action_24a, _params, component) do
-    result = :erlang.bnot(component)
+  def action(:action_24a, params, component) do
+    result = :erlang.bnot(params.value)
     put_state(component, :result, result)
   end
 end
