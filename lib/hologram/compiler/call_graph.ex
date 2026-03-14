@@ -1048,6 +1048,10 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  defp remove_module_vertices(call_graph, module) do
+    remove_vertices(call_graph, module_vertices(call_graph, module))
+  end
+
   defp remove_server_only_mfas(graph) do
     server_only_vertices =
       graph
@@ -1058,9 +1062,5 @@ defmodule Hologram.Compiler.CallGraph do
       end)
 
     Digraph.remove_vertices(graph, server_only_vertices)
-  end
-
-  defp remove_module_vertices(call_graph, module) do
-    remove_vertices(call_graph, module_vertices(call_graph, module))
   end
 end
