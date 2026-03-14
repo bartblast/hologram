@@ -585,49 +585,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists the entry MFAs {module, function, arity} for a given page module.
-
-  This function returns a list of MFAs that are considered entry points for a page,
-  including functions from both the page module and its associated layout module.
-
-  ## Parameters
-
-    * `page_module` - The module of the page for which to list entry MFAs.
-
-  ## Returns
-
-  A list of MFAs (tuples of {module, function, arity}) that serve as entry points
-  for the given page module and its layout.
-  """
-  @spec list_page_entry_mfas(module) :: [mfa]
-  def list_page_entry_mfas(page_module) do
-    layout_module = page_module.__layout_module__()
-
-    [
-      {page_module, :__layout_module__, 0},
-      {page_module, :__layout_props__, 0},
-      {page_module, :__params__, 0},
-      {page_module, :__route__, 0},
-      {page_module, :action, 3},
-      {page_module, :template, 0},
-      {layout_module, :__props__, 0},
-      {layout_module, :action, 3},
-      {layout_module, :template, 0}
-    ]
-  end
-
-  @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
   """
   @spec list_page_mfas(t, module) :: [mfa]
   def list_page_mfas(call_graph, page_module) do
-    entry_mfas = list_page_entry_mfas(page_module)
     graph = get_graph(call_graph)
 
     graph
     |> remove_server_only_mfas()
     |> remove_other_page_mfas(page_module)
-    |> sorted_reachable_mfas(entry_mfas)
+    |> sorted_reachable_mfas([page_module])
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
