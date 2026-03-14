@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.CallGraph.Context
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -90,7 +91,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   describe "build/3" do
     test "atom type ir, which is not an alias", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
-      result = build(call_graph, ir, :vertex_1)
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -102,7 +103,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Aaa.Bbb}
-      result = build(call_graph, ir, :vertex_1)
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -114,7 +115,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
-      result = build(call_graph, ir, :vertex_1)
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -124,7 +125,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is an alias of a page module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
-      result = build(call_graph, ir, :vertex_1)
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -134,7 +135,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
-      result = build(call_graph, ir, :vertex_1)
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -144,7 +145,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
-      result = build(call_graph, ir, :vertex_1)
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -169,7 +170,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      result = build(call_graph, ir, Module1)
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
 
       assert result == call_graph
 
@@ -203,7 +204,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      result = build(call_graph, ir, Module1)
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
 
       assert result == call_graph
 
@@ -213,7 +214,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "list", %{empty_call_graph: call_graph} do
       list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
-      result = build(call_graph, list, :vertex_1)
+      result = build(call_graph, list, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -235,7 +236,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
 
       assert result == call_graph
 
@@ -261,7 +262,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         %IR.AtomType{value: Module6} => %IR.AtomType{value: Module7}
       }
 
-      result = build(call_graph, map, :vertex_1)
+      result = build(call_graph, map, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -286,7 +287,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      result = build(call_graph, ir)
+      result = build(call_graph, ir, %Context{})
 
       assert result == call_graph
 
@@ -306,7 +307,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       module_2_ir = IR.for_module(Module2)
-      result = build(call_graph, module_2_ir)
+      result = build(call_graph, module_2_ir, %Context{})
 
       assert result == call_graph
 
@@ -321,7 +322,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       module_4_ir = IR.for_module(Module4)
-      result = build(call_graph, module_4_ir)
+      result = build(call_graph, module_4_ir, %Context{})
 
       assert result == call_graph
 
@@ -340,7 +341,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       module_25_ir = IR.for_module(Module25)
-      result = build(call_graph, module_25_ir)
+      result = build(call_graph, module_25_ir, %Context{})
 
       assert result == call_graph
 
@@ -355,7 +356,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       module_21_ir = IR.for_module(Module21)
-      result = build(call_graph, module_21_ir)
+      result = build(call_graph, module_21_ir, %Context{})
 
       assert result == call_graph
 
@@ -372,7 +373,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       string_chars_ir = IR.for_module(String.Chars)
-      result = build(call_graph, string_chars_ir)
+      result = build(call_graph, string_chars_ir, %Context{})
 
       assert result == call_graph
 
@@ -405,7 +406,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
 
       assert result == call_graph
 
@@ -436,7 +437,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
 
       assert result == call_graph
 
@@ -472,7 +473,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
 
       assert result == call_graph
 
@@ -506,7 +507,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
 
       assert result == call_graph
 
@@ -540,7 +541,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
 
       assert result == call_graph
 
@@ -572,7 +573,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
 
       assert result == call_graph
 
@@ -588,7 +589,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "tuple", %{empty_call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
-      result = build(call_graph, tuple, :vertex_1)
+      result = build(call_graph, tuple, %Context{from_vertex: :vertex_1})
 
       assert result == call_graph
 
@@ -797,9 +798,9 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       result =
         start()
-        |> build(module_14_ir)
-        |> build(module_15_ir)
-        |> build(module_16_ir)
+        |> build(module_14_ir, %Context{})
+        |> build(module_15_ir, %Context{})
+        |> build(module_16_ir, %Context{})
         |> list_page_mfas(Module14)
 
       assert result == [
@@ -826,7 +827,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       call_graph =
         start()
-        |> build(module_17_ir)
+        |> build(module_17_ir, %Context{})
         |> add_edge({Module17, :action, 3}, {Hex, :start, 2})
         |> add_edge({Module17, :action, 3}, {Hex, :version, 0})
 
@@ -843,7 +844,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       call_graph =
         start()
-        |> build(module_17_ir)
+        |> build(module_17_ir, %Context{})
         |> add_edge({Module17, :action, 3}, {Hex.API, :request, 4})
         |> add_edge({Module17, :action, 3}, {Hex.Registry.Server, :versions, 2})
 
@@ -860,7 +861,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       result =
         start()
-        |> build(module_17_ir)
+        |> build(module_17_ir, %Context{})
         |> list_page_mfas(Module17)
 
       assert {Module18, :my_fun_18, 2} in result
@@ -1104,7 +1105,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     call_graph
     |> add_vertex({:module_1, :fun_a, 1})
     |> add_vertex({:module_3, :fun_b, 2})
-    |> build(ir)
+    |> build(ir, %Context{})
     |> add_vertex(:module_4)
 
     assert module_vertices(call_graph, Module13) == [
@@ -1126,8 +1127,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       call_graph_2 =
         start()
-        |> build(module_9_ir)
-        |> build(module_10_ir)
+        |> build(module_9_ir, %Context{})
+        |> build(module_10_ir, %Context{})
 
       diff = %{
         added_modules: [Module10, Module9],

@@ -5,9 +5,22 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.CallGraph.Context
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
+
+  defmodule Context do
+    @moduledoc false
+
+    @type t :: %__MODULE__{
+            from_vertex: module | mfa | nil,
+            pattern?: bool
+          }
+
+    defstruct from_vertex: nil,
+              pattern?: false
+  end
 
   defstruct pid: nil
 
@@ -303,10 +316,9 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Builds a call graph from IR.
   """
-  @spec build(t, IR.t(), vertex | nil) :: t
-  def build(call_graph, ir, from_vertex \\ nil)
+  @spec build(t, IR.t(), Context.t()) :: t
 
-  def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
+  def build(call_graph, %IR.AtomType{value: value}, %Context{from_vertex: from_vertex}) do
     if Reflection.alias?(value) do
       add_edge(call_graph, from_vertex, value)
     end
@@ -317,38 +329,38 @@ defmodule Hologram.Compiler.CallGraph do
   def build(
         call_graph,
         %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
-        from_vertex
+        %Context{from_vertex: from_vertex} = context
       ) do
     fun_def_vertex = {from_vertex, name, arity}
 
     call_graph
     |> add_vertex(fun_def_vertex)
-    |> build(clause, fun_def_vertex)
+    |> build(clause, %{context | from_vertex: fun_def_vertex})
   end
 
   def build(
         call_graph,
         %IR.LocalFunctionCall{function: function, args: args},
-        {module, _function, _arity} = from_vertex
+        %Context{from_vertex: {module, _function, _arity}} = context
       ) do
     to_vertex = {module, function, Enum.count(args)}
 
     call_graph
-    |> add_edge(from_vertex, to_vertex)
-    |> build(args, from_vertex)
+    |> add_edge(context.from_vertex, to_vertex)
+    |> build(args, context)
   end
 
   def build(
         call_graph,
         %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
-        _from_vertex
+        context
       ) do
     call_graph
     |> maybe_add_templatable_call_graph_edges(module)
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
-    |> build(body, module)
+    |> build(body, %{context | from_vertex: module})
   end
 
   # :erlang.apply/3 is not added to the call graph because the encoder
@@ -364,12 +376,12 @@ defmodule Hologram.Compiler.CallGraph do
             %IR.ListType{data: args}
           ]
         },
-        from_vertex
+        context
       ) do
     to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, from_vertex, to_vertex)
+    add_edge(call_graph, context.from_vertex, to_vertex)
 
-    build(call_graph, args, from_vertex)
+    build(call_graph, args, context)
   end
 
   # :erlang.apply/3 is not added to the call graph because the encoder
@@ -381,12 +393,12 @@ defmodule Hologram.Compiler.CallGraph do
           function: :apply,
           args: [module, function, %IR.ListType{data: args}]
         },
-        from_vertex
+        context
       ) do
     call_graph
-    |> build(module, from_vertex)
-    |> build(function, from_vertex)
-    |> build(args, from_vertex)
+    |> build(module, context)
+    |> build(function, context)
+    |> build(args, context)
   end
 
   def build(
@@ -396,40 +408,39 @@ defmodule Hologram.Compiler.CallGraph do
           function: function,
           args: args
         },
-        from_vertex
+        context
       ) do
     to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, from_vertex, to_vertex)
+    add_edge(call_graph, context.from_vertex, to_vertex)
 
-    build(call_graph, args, from_vertex)
+    build(call_graph, args, context)
   end
 
-  def build(call_graph, list, from_vertex) when is_list(list) do
-    Enum.each(list, &build(call_graph, &1, from_vertex))
+  def build(call_graph, list, context) when is_list(list) do
+    Enum.each(list, &build(call_graph, &1, context))
     call_graph
   end
 
-  def build(call_graph, map, from_vertex) when is_map(map) do
+  def build(call_graph, map, context) when is_map(map) do
     map
     |> Map.to_list()
     |> Enum.each(fn {key, value} ->
-      call_graph
-      |> build(key, from_vertex)
-      |> build(value, from_vertex)
+      build(call_graph, key, context)
+      build(call_graph, value, context)
     end)
 
     call_graph
   end
 
-  def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
+  def build(call_graph, tuple, context) when is_tuple(tuple) do
     tuple
     |> Tuple.to_list()
-    |> Enum.each(&build(call_graph, &1, from_vertex))
+    |> Enum.each(&build(call_graph, &1, context))
 
     call_graph
   end
 
-  def build(call_graph, _ir, _from_vertex), do: call_graph
+  def build(call_graph, _ir, _context), do: call_graph
 
   @doc """
   Builds a call graph from a module definition IR located in the given IR PLT.
@@ -437,7 +448,7 @@ defmodule Hologram.Compiler.CallGraph do
   @spec build_for_module(t, PLT.t(), module) :: t
   def build_for_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
-    build(call_graph, module_def)
+    build(call_graph, module_def, %Context{})
   end
 
   @doc """

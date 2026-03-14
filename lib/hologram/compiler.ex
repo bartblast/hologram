@@ -86,7 +86,9 @@ defmodule Hologram.Compiler do
 
     ir_plt
     |> PLT.get_all()
-    |> TaskUtils.async_many(fn {_module, ir} -> CallGraph.build(call_graph, ir) end)
+    |> TaskUtils.async_many(fn {_module, ir} ->
+      CallGraph.build(call_graph, ir, %CallGraph.Context{})
+    end)
     |> Task.await_many(:infinity)
 
     call_graph
