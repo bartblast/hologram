@@ -624,6 +624,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     graph
     |> remove_server_only_mfas()
+    |> remove_other_page_mfas(page_module)
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
@@ -1033,6 +1034,27 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
+  end
+
+  defp remove_other_page_mfas(graph, page_module) do
+    other_page_modules =
+      Reflection.list_pages()
+      |> Enum.reject(&(&1 == page_module))
+      |> MapSet.new()
+
+    other_page_vertices =
+      graph
+      |> Digraph.vertices()
+      |> Enum.filter(fn
+        {module, fun, arity} ->
+          MapSet.member?(other_page_modules, module) &&
+            {fun, arity} not in [{:__params__, 0}, {:__route__, 0}]
+
+        _fallback ->
+          false
+      end)
+
+    Digraph.remove_vertices(graph, other_page_vertices)
   end
 
   defp remove_server_only_mfas(graph) do

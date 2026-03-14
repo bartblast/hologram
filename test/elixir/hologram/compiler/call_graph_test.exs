@@ -1276,6 +1276,35 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "excludes other page module functions except __params__/0 and __route__/0" do
+      module_14_ir = IR.for_module(Module14)
+      module_17_ir = IR.for_module(Module17)
+
+      call_graph =
+        start()
+        |> build(module_14_ir, %Context{})
+        |> build(module_17_ir, %Context{})
+        |> add_edge({Module14, :action, 3}, Module17)
+
+      result = list_page_mfas(call_graph, Module14)
+
+      # Current page functions are kept
+      assert {Module14, :action, 3} in result
+      assert {Module14, :template, 0} in result
+
+      # Other page's __params__/0 and __route__/0 are kept
+      assert {Module17, :__params__, 0} in result
+      assert {Module17, :__route__, 0} in result
+
+      # Other page's remaining functions are removed
+      refute {Module17, :action, 3} in result
+      refute {Module17, :template, 0} in result
+      refute {Module17, :struct_1, 0} in result
+
+      # Non-page module functions are kept
+      assert {Module16, :my_fun_16a, 2} in result
+    end
+
     test "excludes init/3 for templatable modules" do
       module_14_ir = IR.for_module(Module14)
       module_15_ir = IR.for_module(Module15)
