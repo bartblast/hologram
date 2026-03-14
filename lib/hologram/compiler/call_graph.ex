@@ -452,6 +452,18 @@ defmodule Hologram.Compiler.CallGraph do
     build(call_graph, args, context)
   end
 
+  def build(
+        call_graph,
+        %IR.TryCatchClause{kind: kind, value: value, guards: guards, body: body},
+        context
+      ) do
+    call_graph
+    |> build(kind, context)
+    |> build(value, %{context | pattern?: true})
+    |> build(guards, %{context | guard?: true})
+    |> build(body, context)
+  end
+
   def build(call_graph, list, context) when is_list(list) do
     Enum.each(list, &build(call_graph, &1, context))
     call_graph

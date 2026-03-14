@@ -901,6 +901,84 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "try catch clause ir, module alias in body creates edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :error},
+        value: %IR.Variable{name: :e},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: Module5}]
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module5}
+             ]
+    end
+
+    test "try catch clause ir, module alias in guards does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :error},
+        value: %IR.Variable{name: :e},
+        guards: [%IR.AtomType{value: Module5}],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: Module6}]
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module6}
+             ]
+    end
+
+    test "try catch clause ir, module alias in value does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :error},
+        value: %IR.AtomType{value: Module5},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: Module6}]
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module6}
+             ]
+    end
+
     test "tuple", %{empty_call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
       result = build(call_graph, tuple, %Context{from_vertex: :vertex_1})
