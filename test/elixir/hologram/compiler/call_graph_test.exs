@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module35
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module36
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -696,23 +697,21 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module2, {Module2, :__route__, 0})
     end
 
-    test "module definition ir, component module adds component-specific edges", %{
+    test "module definition ir, component module has edges to its functions", %{
       empty_call_graph: call_graph
     } do
-      module_4_ir = IR.for_module(Module4)
-      result = build(call_graph, module_4_ir, %Context{})
+      module_38_ir = IR.for_module(Module38)
+      result = build(call_graph, module_38_ir, %Context{})
 
       assert result == call_graph
 
-      assert has_vertex?(call_graph, {Module4, :__props__, 0})
-      assert has_vertex?(call_graph, {Module4, :action, 3})
-      assert has_vertex?(call_graph, {Module4, :init, 2})
-      assert has_vertex?(call_graph, {Module4, :template, 0})
+      assert has_vertex?(call_graph, {Module38, :action, 3})
+      assert has_vertex?(call_graph, {Module38, :init, 2})
+      assert has_vertex?(call_graph, {Module38, :template, 0})
 
-      assert has_edge?(call_graph, Module4, {Module4, :__props__, 0})
-      assert has_edge?(call_graph, Module4, {Module4, :action, 3})
-      assert has_edge?(call_graph, Module4, {Module4, :init, 2})
-      assert has_edge?(call_graph, Module4, {Module4, :template, 0})
+      assert has_edge?(call_graph, Module38, {Module38, :action, 3})
+      assert has_edge?(call_graph, Module38, {Module38, :init, 2})
+      assert has_edge?(call_graph, Module38, {Module38, :template, 0})
     end
 
     test "module definition ir, struct module adds struct-specific edges", %{
@@ -1270,8 +1269,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                {Module14, :template, 0},
                {Module15, :__is_hologram_component__, 0},
                {Module15, :__props__, 0},
-               {Module15, :action, 3},
-               {Module15, :init, 2},
                {Module15, :template, 0},
                {Module16, :my_fun_16a, 2},
                {Kernel, :inspect, 1},
@@ -1291,8 +1288,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute {Module14, :init, 3} in result
       refute {Module15, :init, 3} in result
-
-      assert {Module15, :init, 2} in result
     end
 
     test "excludes Hex MFAs" do

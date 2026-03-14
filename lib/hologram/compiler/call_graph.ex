@@ -924,19 +924,6 @@ defmodule Hologram.Compiler.CallGraph do
     Digraph.add_edges(graph, @erlang_mfa_edges)
   end
 
-  # TODO: think how to avoid this
-  # A component module can be passed as a prop to another component, allowing dynamic usage.
-  # In such cases, when this scenario is identified, it becomes necessary
-  # to include the entire component on the client side.
-  # This is because we lack precise information about which specific component functions will be used.
-  defp add_component_call_graph_edges(call_graph, module) do
-    call_graph
-    |> add_edge(module, {module, :__props__, 0})
-    |> add_edge(module, {module, :action, 3})
-    |> add_edge(module, {module, :init, 2})
-    |> add_edge(module, {module, :template, 0})
-  end
-
   # __props__/0 and __route__/0 functions are needed to build page link href (e.g. in Hologram.UI.Link component).
   defp add_page_call_graph_edges(call_graph, module) do
     call_graph
@@ -1039,10 +1026,6 @@ defmodule Hologram.Compiler.CallGraph do
   defp maybe_add_templatable_call_graph_edges(call_graph, module) do
     if Reflection.page?(module) do
       add_page_call_graph_edges(call_graph, module)
-    end
-
-    if Reflection.component?(module) do
-      add_component_call_graph_edges(call_graph, module)
     end
 
     call_graph
