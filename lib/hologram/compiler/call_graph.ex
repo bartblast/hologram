@@ -31,6 +31,9 @@ defmodule Hologram.Compiler.CallGraph do
   @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
 
+  # Page functions needed by other pages for link building (e.g. in Hologram.UI.Link component).
+  @cross_page_funs [{:__params__, 0}, {:__route__, 0}]
+
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
     {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
@@ -392,7 +395,6 @@ defmodule Hologram.Compiler.CallGraph do
         context
       ) do
     call_graph
-    |> maybe_add_templatable_call_graph_edges(module)
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
@@ -925,13 +927,6 @@ defmodule Hologram.Compiler.CallGraph do
     Digraph.add_edges(graph, @erlang_mfa_edges)
   end
 
-  # __props__/0 and __route__/0 functions are needed to build page link href (e.g. in Hologram.UI.Link component).
-  defp add_page_call_graph_edges(call_graph, module) do
-    call_graph
-    |> add_edge(module, {module, :__params__, 0})
-    |> add_edge(module, {module, :__route__, 0})
-  end
-
   defp add_protocol_call_graph_edges(call_graph, module) do
     funs = module.__protocol__(:functions)
     impls = Reflection.list_protocol_implementations(module)
@@ -1024,14 +1019,6 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
-  defp maybe_add_templatable_call_graph_edges(call_graph, module) do
-    if Reflection.page?(module) do
-      add_page_call_graph_edges(call_graph, module)
-    end
-
-    call_graph
-  end
-
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
   end
@@ -1048,7 +1035,7 @@ defmodule Hologram.Compiler.CallGraph do
       |> Enum.filter(fn
         {module, fun, arity} ->
           MapSet.member?(other_page_modules, module) &&
-            {fun, arity} not in [{:__params__, 0}, {:__route__, 0}]
+            {fun, arity} not in @cross_page_funs
 
         _fallback ->
           false

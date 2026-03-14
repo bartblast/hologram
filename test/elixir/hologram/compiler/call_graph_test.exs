@@ -682,7 +682,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir, page module adds page-specific edges", %{
+    test "module definition ir, page module has edges to its functions", %{
       empty_call_graph: call_graph
     } do
       module_2_ir = IR.for_module(Module2)
@@ -1076,16 +1076,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert sorted_vertices(call_graph) == [
              Module11,
              Module5,
-             Module6,
-             {Module11, :__params__, 0},
-             {Module11, :__route__, 0}
+             Module6
            ]
 
     assert sorted_edges(call_graph) == [
              {Module11, Module5},
-             {Module11, Module6},
-             {Module11, {Module11, :__params__, 0}},
-             {Module11, {Module11, :__route__, 0}}
+             {Module11, Module6}
            ]
   end
 
