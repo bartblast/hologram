@@ -336,6 +336,17 @@ defmodule Hologram.Compiler.CallGraph do
 
   def build(
         call_graph,
+        %IR.Clause{match: match, guards: guards, body: body},
+        context
+      ) do
+    call_graph
+    |> build(match, %{context | pattern?: true})
+    |> build(guards, %{context | guard?: true})
+    |> build(body, %{context | pattern?: false})
+  end
+
+  def build(
+        call_graph,
         %IR.FunctionClause{params: params, guards: guards, body: body},
         context
       ) do

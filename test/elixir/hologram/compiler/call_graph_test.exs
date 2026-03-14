@@ -177,6 +177,141 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == []
     end
 
+    test "clause ir, module alias in match does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.Clause{
+        match: %IR.AtomType{value: Module5},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: Module6}]
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module6}
+             ]
+    end
+
+    test "clause ir, module alias in body creates edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.Clause{
+        match: %IR.Variable{name: :x},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: Module5}]
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module5}
+             ]
+    end
+
+    test "clause ir, module alias in guards does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.Clause{
+        match: %IR.Variable{name: :x},
+        guards: [%IR.AtomType{value: Module5}],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: Module6}]
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module6}
+             ]
+    end
+
+    test "function clause ir, module alias in body creates edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :my_fun,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [%IR.AtomType{value: Module5}]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module5,
+               {Module1, :my_fun, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, Module5}
+             ]
+    end
+
+    test "function clause ir, module alias in guards does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :my_fun,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}],
+          guards: [%IR.AtomType{value: Module5}],
+          body: %IR.Block{
+            expressions: [%IR.AtomType{value: Module6}]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, Module6}
+             ]
+    end
+
     test "function clause ir, module alias in params does not create edge", %{
       empty_call_graph: call_graph
     } do
