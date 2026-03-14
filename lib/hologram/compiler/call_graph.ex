@@ -15,10 +15,12 @@ defmodule Hologram.Compiler.CallGraph do
 
     @type t :: %__MODULE__{
             from_vertex: module | mfa | nil,
+            guard?: bool,
             pattern?: bool
           }
 
     defstruct from_vertex: nil,
+              guard?: false,
               pattern?: false
   end
 
@@ -318,12 +320,29 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec build(t, IR.t(), Context.t()) :: t
 
-  def build(call_graph, %IR.AtomType{value: value}, %Context{from_vertex: from_vertex}) do
+  def build(call_graph, %IR.AtomType{value: value}, %Context{
+        from_vertex: from_vertex,
+        guard?: false,
+        pattern?: false
+      }) do
     if Reflection.alias?(value) do
       add_edge(call_graph, from_vertex, value)
     end
 
     call_graph
+  end
+
+  def build(call_graph, %IR.AtomType{}, _context), do: call_graph
+
+  def build(
+        call_graph,
+        %IR.FunctionClause{params: params, guards: guards, body: body},
+        context
+      ) do
+    call_graph
+    |> build(params, %{context | pattern?: true})
+    |> build(guards, %{context | guard?: true})
+    |> build(body, %{context | pattern?: false})
   end
 
   def build(

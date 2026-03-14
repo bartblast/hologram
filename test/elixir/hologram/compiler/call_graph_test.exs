@@ -153,6 +153,62 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{:vertex_1, Module4}]
     end
 
+    test "atom type ir, alias in guard context does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1, guard?: true})
+
+      assert result == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type ir, alias in pattern context does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1, pattern?: true})
+
+      assert result == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "function clause ir, module alias in params does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :my_fun,
+        arity: 2,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.AtomType{value: Module5}, %IR.Variable{name: :y}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.AtomType{value: Module6}
+            ]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 2}, Module6}
+             ]
+    end
+
     test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
@@ -175,14 +231,12 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
-               Module5,
                Module6,
                Module7,
                {Module1, :my_fun, 2}
              ]
 
       assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module5},
                {{Module1, :my_fun, 2}, Module6},
                {{Module1, :my_fun, 2}, Module7}
              ]
