@@ -494,6 +494,24 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  # For __struct__ key in map data, create targeted edges to __struct__/0 and __struct__/1
+  # instead of to the module vertex, to avoid pulling in the module's entire function tree.
+  def build(call_graph, {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: module}}, %Context{
+        from_vertex: from_vertex,
+        guard?: false,
+        pattern?: false
+      }) do
+    if Reflection.alias?(module) do
+      call_graph
+      |> add_edge(from_vertex, {module, :__struct__, 0})
+      |> add_edge(from_vertex, {module, :__struct__, 1})
+    else
+      call_graph
+    end
+  end
+
+  def build(call_graph, {%IR.AtomType{value: :__struct__}, _value}, _context), do: call_graph
+
   def build(call_graph, tuple, context) when is_tuple(tuple) do
     tuple
     |> Tuple.to_list()

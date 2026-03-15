@@ -552,6 +552,71 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "map type ir, __struct__ key value creates edges to __struct__ functions instead of module vertex",
+         %{empty_call_graph: call_graph} do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
+          {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
+        ]
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Module6,
+               {Module1, :my_fun, 1},
+               {Module5, :__struct__, 0},
+               {Module5, :__struct__, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, Module6},
+               {{Module1, :my_fun, 1}, {Module5, :__struct__, 0}},
+               {{Module1, :my_fun, 1}, {Module5, :__struct__, 1}}
+             ]
+    end
+
+    test "map type ir, __struct__ key value in pattern context does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
+          {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
+        ]
+      }
+
+      result =
+        build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}, pattern?: true})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == []
+      assert sorted_edges(call_graph) == []
+    end
+
+    test "map type ir, __struct__ key value in guard context does not create edge", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
+          {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
+        ]
+      }
+
+      result =
+        build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}, guard?: true})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == []
+      assert sorted_edges(call_graph) == []
+    end
+
     test "match operator ir, module alias on left side does not create edge", %{
       empty_call_graph: call_graph
     } do
