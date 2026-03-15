@@ -1,5 +1,7 @@
 "use strict";
 
+import Bitstring from "../bitstring.mjs";
+import Erlang from "../erlang/erlang.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -38,6 +40,17 @@ const Elixir_IO = {
     console.log(output + "\n");
 
     return term;
+  },
+
+  // TODO: provide a more complete implementation.
+  // Simplified temporary implementation - just prints the message to the console.
+  // The second argument (stacktrace options) is ignored on the client side.
+  // Deps: [:erlang.iolist_to_binary/1]
+  "warn/2": (message, _stacktraceOrOpts) => {
+    const binary = Erlang["iolist_to_binary/1"](message);
+    console.warn(Bitstring.toText(binary));
+
+    return Type.atom("ok");
   },
 };
 

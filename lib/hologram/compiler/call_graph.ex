@@ -207,6 +207,7 @@ defmodule Hologram.Compiler.CallGraph do
     {IO, :inspect, 1},
     {IO, :inspect, 2},
     {IO, :inspect, 3},
+    {IO, :warn, 2},
     {Kernel, :inspect, 1},
     {Kernel, :inspect, 2},
     {String, :contains?, 2},
@@ -264,6 +265,9 @@ defmodule Hologram.Compiler.CallGraph do
     ],
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
+    ],
+    manually_ported_io_module: [
+      {:erlang, :iolist_to_binary, 1}
     ],
     operation_class: [
       {:maps, :from_list, 1},
