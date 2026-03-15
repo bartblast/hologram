@@ -483,6 +483,20 @@ export default class Hologram {
     );
 
     Interpreter.defineManuallyPortedFunction(
+      "IO",
+      "warn/1",
+      "public",
+      ManuallyPortedElixirIO["warn/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "IO",
+      "warn/2",
+      "public",
+      ManuallyPortedElixirIO["warn/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Kernel",
       "inspect/1",
       "public",

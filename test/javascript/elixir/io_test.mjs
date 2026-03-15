@@ -130,6 +130,29 @@ describe("Elixir_IO", () => {
     });
   });
 
+  describe("warn/1", () => {
+    let consoleWarnStub;
+
+    beforeEach(() => {
+      consoleWarnStub = sinon
+        .stub(console, "warn")
+        .callsFake((_msg) => undefined);
+    });
+
+    afterEach(() => {
+      console.warn.restore();
+    });
+
+    const warn = Elixir_IO["warn/1"];
+
+    it("delegates to warn/2", () => {
+      const result = warn(Type.bitstring("my warning"));
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "my warning");
+    });
+  });
+
   describe("warn/2", () => {
     let consoleWarnStub;
 

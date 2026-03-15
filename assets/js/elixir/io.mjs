@@ -42,6 +42,11 @@ const Elixir_IO = {
     return term;
   },
 
+  // Deps: [IO.warn/2]
+  "warn/1": (message) => {
+    return Elixir_IO["warn/2"](message, Type.list());
+  },
+
   // TODO: provide a more complete implementation.
   // Simplified temporary implementation - just prints the message to the console.
   // The second argument (stacktrace options) is ignored on the client side.
