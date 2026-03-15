@@ -209,6 +209,7 @@ defmodule Hologram.Compiler.CallGraph do
     {IO, :inspect, 3},
     {IO, :warn, 1},
     {IO, :warn, 2},
+    {IO, :warn_once, 3},
     {Kernel, :inspect, 1},
     {Kernel, :inspect, 2},
     {String, :contains?, 2},

@@ -57,6 +57,16 @@ const Elixir_IO = {
 
     return Type.atom("ok");
   },
+
+  // TODO: provide a more complete implementation.
+  // Simplified temporary implementation - evaluates the message function and delegates to warn/2.
+  // Deps: [IO.warn/2]
+  "warn_once/3": (_key, messageFun, _stacktraceDropLevels) => {
+    return Elixir_IO["warn/2"](
+      Interpreter.callAnonymousFunction(messageFun, []),
+      Type.list(),
+    );
+  },
 };
 
 export default Elixir_IO;

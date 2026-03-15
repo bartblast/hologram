@@ -96,4 +96,15 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
       assert output =~ "hello world"
     end
   end
+
+  describe "warn_once/3" do
+    test "evaluates message function and warns" do
+      output =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          assert IO.warn_once(:my_key, fn -> "my warning" end, 0) == :ok
+        end)
+
+      assert output =~ "my warning"
+    end
+  end
 end

@@ -188,4 +188,43 @@ describe("Elixir_IO", () => {
       sinon.assert.calledOnceWithExactly(consoleWarnStub, "hello world");
     });
   });
+
+  describe("warn_once/3", () => {
+    let consoleWarnStub;
+
+    beforeEach(() => {
+      consoleWarnStub = sinon
+        .stub(console, "warn")
+        .callsFake((_msg) => undefined);
+    });
+
+    afterEach(() => {
+      console.warn.restore();
+    });
+
+    const warn_once = Elixir_IO["warn_once/3"];
+
+    it("evaluates message function and warns", () => {
+      const messageFun = Type.anonymousFunction(
+        0,
+        [
+          {
+            params: () => [],
+            guards: [],
+            body: () => Type.bitstring("my warning"),
+          },
+        ],
+        {},
+      );
+
+      const result = warn_once(
+        Type.atom("my_key"),
+        messageFun,
+        Type.integer(0),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "my warning");
+    });
+  });
 });
