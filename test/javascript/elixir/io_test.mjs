@@ -145,11 +145,24 @@ describe("Elixir_IO", () => {
 
     const warn = Elixir_IO["warn/1"];
 
-    it("delegates to warn/2", () => {
+    it("handles string message", () => {
       const result = warn(Type.bitstring("my warning"));
 
       assert.deepStrictEqual(result, Type.atom("ok"));
       sinon.assert.calledOnceWithExactly(consoleWarnStub, "my warning");
+    });
+
+    it("handles iodata message", () => {
+      const message = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring(" "),
+        Type.bitstring("world"),
+      ]);
+
+      const result = warn(message);
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "hello world");
     });
   });
 

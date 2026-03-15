@@ -67,13 +67,22 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
   end
 
   describe "warn/1" do
-    test "delegates to warn/2" do
+    test "handles string message" do
       output =
         ExUnit.CaptureIO.capture_io(:stderr, fn ->
           assert IO.warn("my warning") == :ok
         end)
 
       assert output =~ "my warning"
+    end
+
+    test "handles iodata message" do
+      output =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          assert IO.warn(["hello", " ", "world"]) == :ok
+        end)
+
+      assert output =~ "hello world"
     end
   end
 
