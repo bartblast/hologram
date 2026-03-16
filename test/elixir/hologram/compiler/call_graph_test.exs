@@ -432,6 +432,30 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{Module1, {Module1, :__impl__, 1}}]
     end
 
+    test "function definition ir, __protocol__/1 skips clause body traversal", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :__protocol__,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.AtomType{value: :functions}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [%IR.AtomType{value: Module5}]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, {Module1, :__protocol__, 1}]
+      assert sorted_edges(call_graph) == [{Module1, {Module1, :__protocol__, 1}}]
+    end
+
     test "function definition ir, module atom as call argument makes module functions reachable",
          %{empty_call_graph: call_graph} do
       # Module5 has a function my_fun/1.
