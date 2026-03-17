@@ -42,6 +42,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -2171,5 +2172,67 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_3 in result
     assert :vertex_4 in result
     assert :vertex_5 in result
+  end
+
+  # Consistency tests verifying that Elixir stdlib IR patterns assumed by call graph
+  # build/3 special cases still hold. If these fail after an Elixir upgrade,
+  # the corresponding special cases in CallGraph.build/3 need updating.
+  describe "Elixir stdlib IR pattern assumptions" do
+    defp find_fun_defs(ir_plt, module, name, arity) do
+      %IR.ModuleDefinition{body: %IR.Block{expressions: expressions}} =
+        PLT.get!(ir_plt, module)
+
+      Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
+    end
+
+    test "__impl__/1 :for clause has the target module atom in body", %{ir_plt: ir_plt} do
+      [for_clause, _protocol_clause] =
+        find_fun_defs(
+          ir_plt,
+          Protocol1.Integer,
+          :__impl__,
+          1
+        )
+
+      assert for_clause == %IR.FunctionDefinition{
+               name: :__impl__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :for}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Integer}]
+                 }
+               }
+             }
+    end
+
+    test "__impl__/1 :protocol clause has the protocol module atom in body", %{ir_plt: ir_plt} do
+      [_for_clause, protocol_clause] =
+        find_fun_defs(
+          ir_plt,
+          Protocol1.Integer,
+          :__impl__,
+          1
+        )
+
+      assert protocol_clause == %IR.FunctionDefinition{
+               name: :__impl__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :protocol}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{
+                       value: Protocol1
+                     }
+                   ]
+                 }
+               }
+             }
+    end
   end
 end
