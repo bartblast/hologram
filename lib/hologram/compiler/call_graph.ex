@@ -518,6 +518,30 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(args, context)
   end
 
+  # Skip the :protocol key value in Protocol.UndefinedError.exception/1 args.
+  # This is expanded from: raise Protocol.UndefinedError, protocol: SomeProtocol, value: data
+  # The protocol module atom is just metadata identifying the protocol in the error message,
+  # not a real dependency. Without this, raising Protocol.UndefinedError in protocol
+  # implementation fallback clauses would pull in the protocol module's entire function tree.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Protocol.UndefinedError},
+          function: :exception,
+          args: [%IR.ListType{data: data}]
+        },
+        context
+      ) do
+    add_edge(call_graph, context.from_vertex, {Protocol.UndefinedError, :exception, 1})
+
+    Enum.each(data, fn
+      {%IR.AtomType{value: :protocol}, _module} -> :skip
+      entry -> build(call_graph, entry, context)
+    end)
+
+    call_graph
+  end
+
   def build(
         call_graph,
         %IR.RemoteFunctionCall{

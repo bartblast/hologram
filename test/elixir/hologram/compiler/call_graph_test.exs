@@ -1147,6 +1147,37 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "remote function call ir, Protocol.UndefinedError.exception/1 skips :protocol key value",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Protocol.UndefinedError},
+        function: :exception,
+        args: [
+          %IR.ListType{
+            data: [
+              {%IR.AtomType{value: :protocol}, %IR.AtomType{value: Module5}},
+              {%IR.AtomType{value: :value}, %IR.AtomType{value: :some_value}}
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun, 1},
+               {Protocol.UndefinedError, :exception, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, {Protocol.UndefinedError, :exception, 1}}
+             ]
+    end
+
     test "try catch clause ir, module alias in body creates edge", %{
       empty_call_graph: call_graph
     } do
