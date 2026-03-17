@@ -190,6 +190,7 @@ defmodule Hologram.Compiler.CallGraph do
   # * the function must access the Hologram client runtime
   # * the function has only a client-side implementation
   @manually_ported_elixir_mfas [
+    {Application, :get_env, 3},
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},

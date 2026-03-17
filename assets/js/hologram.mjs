@@ -34,6 +34,7 @@ import SelectEvent from "./events/select_event.mjs";
 import SubmitEvent from "./events/submit_event.mjs";
 import TransitionEvent from "./events/transition_event.mjs";
 
+import ManuallyPortedElixirApplication from "./elixir/application.mjs";
 import ManuallyPortedElixirCldrLocale from "./elixir/cldr/locale.mjs";
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
@@ -363,6 +364,13 @@ export default class Hologram {
   }
 
   static #defineManuallyPortedFunctions() {
+    Interpreter.defineManuallyPortedFunction(
+      "Application",
+      "get_env/3",
+      "public",
+      ManuallyPortedElixirApplication["get_env/3"],
+    );
+
     Interpreter.defineManuallyPortedFunction(
       "Cldr.Locale",
       "language_data/0",
