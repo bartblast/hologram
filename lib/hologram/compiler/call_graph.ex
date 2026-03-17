@@ -224,6 +224,15 @@ defmodule Hologram.Compiler.CallGraph do
     {URI, :encode, 2}
   ]
 
+  # MFAs whose call graph edges are lost due to skipped body traversals but are still
+  # needed at runtime. Body traversals are skipped for protocol-generated functions
+  # (impl_for!/1, __impl__/1, __protocol__/1) because their bodies contain module atoms
+  # that are metadata, not real dependencies, and would pull in the entire function tree
+  # of referenced modules.
+  @mfas_lost_to_skipped_traversals [
+    {Protocol.UndefinedError, :exception, 1}
+  ]
+
   @mfas_used_by_all_pages_and_components [
     # Used by __params__/0 and __props__/0 functions injected into page and component modules respectively.
     {Enum, :reverse, 1},
@@ -664,16 +673,19 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists entry runtime MFAs, which include MFAs used by the client runtime JS classes
-  and client MFAs used by all pages and components.
+  Lists entry runtime MFAs, which include MFAs used by the client runtime JS classes,
+  client MFAs used by all pages and components, and MFAs lost to skipped call graph traversals.
   The returned MFAs are sorted.
   """
   @spec list_runtime_entry_mfas :: [mfa]
   def list_runtime_entry_mfas do
     @mfas_used_by_client_runtime
-    |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
-      mfas ++ acc
-    end)
+    |> Enum.reduce(
+      @mfas_used_by_all_pages_and_components ++ @mfas_lost_to_skipped_traversals,
+      fn {_key, mfas}, acc ->
+        mfas ++ acc
+      end
+    )
     |> Enum.uniq()
     |> Enum.sort()
   end
