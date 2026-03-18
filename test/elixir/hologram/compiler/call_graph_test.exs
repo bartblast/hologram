@@ -1159,8 +1159,12 @@ defmodule Hologram.Compiler.CallGraphTest do
         args: [
           %IR.ListType{
             data: [
-              {%IR.AtomType{value: :protocol}, %IR.AtomType{value: Module5}},
-              {%IR.AtomType{value: :value}, %IR.AtomType{value: :some_value}}
+              %IR.TupleType{
+                data: [%IR.AtomType{value: :protocol}, %IR.AtomType{value: Module5}]
+              },
+              %IR.TupleType{
+                data: [%IR.AtomType{value: :value}, %IR.AtomType{value: :some_value}]
+              }
             ]
           }
         ]

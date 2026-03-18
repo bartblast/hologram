@@ -526,7 +526,7 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, context.from_vertex, {Protocol.UndefinedError, :exception, 1})
 
     Enum.each(data, fn
-      {%IR.AtomType{value: :protocol}, _module} -> :skip
+      %IR.TupleType{data: [%IR.AtomType{value: :protocol}, _module]} -> :skip
       entry -> build(call_graph, entry, context)
     end)
 
