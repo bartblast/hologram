@@ -658,6 +658,21 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(body, context)
   end
 
+  # Rescue clause exception modules are used for pattern matching against exception types,
+  # not as module dependencies. Without this, rescuing UndefinedFunctionError (as Access.get/3
+  # and Access.fetch/2 do) would pull in the entire UndefinedFunctionError function tree
+  # (blame/2, hint/4, exports_for/1, etc.).
+  def build(
+        call_graph,
+        %IR.TryRescueClause{variable: variable, modules: modules, body: body},
+        context
+      ) do
+    call_graph
+    |> build(variable, %{context | pattern?: true})
+    |> build(modules, %{context | pattern?: true})
+    |> build(body, context)
+  end
+
   def build(call_graph, list, context) when is_list(list) do
     Enum.each(list, &build(call_graph, &1, context))
     call_graph
