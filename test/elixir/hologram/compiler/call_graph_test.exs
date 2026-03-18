@@ -2489,5 +2489,71 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert impl_module == Module.concat(Protocol1, Struct1)
     end
+
+    # Original source:
+    #   defimpl Enumerable, for: Function do
+    #     def reduce(function, _acc, _fun) do
+    #       raise Protocol.UndefinedError,
+    #         protocol: Enumerable, value: function,
+    #         description: "only anonymous functions of arity 2 are enumerable"
+    #     end
+    #   end
+    #
+    # Expanded (fallback clause):
+    #   def reduce(function, _acc, _fun) do
+    #     :erlang.error(Protocol.UndefinedError.exception(
+    #       protocol: Enumerable, value: function, description: "..."))
+    #   end
+    test "protocol implementation fallback clause has protocol module atom in Protocol.UndefinedError.exception/1 call",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Enumerable.Function, :reduce, 3)
+
+      # The fallback clause (without the is_function/2 guard)
+      fallback_clause =
+        Enum.find(fun_defs, fn
+          %IR.FunctionDefinition{
+            clause: %IR.FunctionClause{guards: []}
+          } ->
+            true
+
+          _other ->
+            false
+        end)
+
+      assert %IR.FunctionDefinition{
+               name: :reduce,
+               arity: 3,
+               clause: %IR.FunctionClause{
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :error,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: Protocol.UndefinedError},
+                           function: :exception,
+                           args: [
+                             %IR.ListType{
+                               data: [
+                                 %IR.TupleType{
+                                   data: [
+                                     %IR.AtomType{value: :protocol},
+                                     %IR.AtomType{value: Enumerable}
+                                   ]
+                                 }
+                                 | _other_keyword_pairs
+                               ]
+                             }
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fallback_clause
+    end
   end
 end
