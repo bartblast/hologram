@@ -410,6 +410,216 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{Module1, {Module1, :my_fun, 2}}]
     end
 
+    test "function definition ir, Enumerable impl count/1 skips clause body traversal", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :count,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.MatchPlaceholder{}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error},
+                  %IR.AtomType{value: Enumerable.Function}
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      result =
+        build(call_graph, ir, %Context{
+          from_vertex: Enumerable.Function,
+          protocol_impl: Enumerable
+        })
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Enumerable.Function,
+               {Enumerable.Function, :count, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Enumerable.Function, {Enumerable.Function, :count, 1}}
+             ]
+    end
+
+    test "function definition ir, Enumerable impl member?/2 skips clause body traversal", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :member?,
+        arity: 2,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.MatchPlaceholder{}, %IR.MatchPlaceholder{}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error},
+                  %IR.AtomType{value: Enumerable.Function}
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      result =
+        build(call_graph, ir, %Context{
+          from_vertex: Enumerable.Function,
+          protocol_impl: Enumerable
+        })
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Enumerable.Function,
+               {Enumerable.Function, :member?, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Enumerable.Function, {Enumerable.Function, :member?, 2}}
+             ]
+    end
+
+    test "function definition ir, Enumerable impl slice/1 skips clause body traversal", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :slice,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.MatchPlaceholder{}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error},
+                  %IR.AtomType{value: Enumerable.Function}
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      result =
+        build(call_graph, ir, %Context{
+          from_vertex: Enumerable.Function,
+          protocol_impl: Enumerable
+        })
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               Enumerable.Function,
+               {Enumerable.Function, :slice, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Enumerable.Function, {Enumerable.Function, :slice, 1}}
+             ]
+    end
+
+    test "function definition ir, non-Enumerable module count/1 traverses clause body normally",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.FunctionDefinition{
+        name: :count,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :data}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [%IR.AtomType{value: Module5}]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, Module5, {Module1, :count, 1}]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :count, 1}},
+               {{Module1, :count, 1}, Module5}
+             ]
+    end
+
+    test "function definition ir, non-Enumerable module member?/2 traverses clause body normally",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.FunctionDefinition{
+        name: :member?,
+        arity: 2,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :data}, %IR.Variable{name: :value}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [%IR.AtomType{value: Module5}]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, Module5, {Module1, :member?, 2}]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :member?, 2}},
+               {{Module1, :member?, 2}, Module5}
+             ]
+    end
+
+    test "function definition ir, non-Enumerable module slice/1 traverses clause body normally",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.FunctionDefinition{
+        name: :slice,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :data}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [%IR.AtomType{value: Module5}]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [Module1, Module5, {Module1, :slice, 1}]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :slice, 1}},
+               {{Module1, :slice, 1}, Module5}
+             ]
+    end
+
     test "function definition ir, __impl__/1 skips clause body traversal", %{
       empty_call_graph: call_graph
     } do
@@ -2488,6 +2698,93 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = struct_1_clause
 
       assert impl_module == Module.concat(Protocol1, Struct1)
+    end
+
+    # Original source:
+    #   defimpl Enumerable, for: Function do
+    #     def count(_function), do: {:error, __MODULE__}
+    #   end
+    #
+    # Expanded:
+    #   def count(_function), do: {:error, Enumerable.Function}
+    test "Enumerable impl count/1 body has {:error, __MODULE__} with implementation module atom",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Enumerable.Function, :count, 1)
+
+      assert %IR.FunctionDefinition{
+               name: :count,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :error},
+                         %IR.AtomType{value: Enumerable.Function}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
+    end
+
+    # Original source:
+    #   defimpl Enumerable, for: Function do
+    #     def member?(_function, _value), do: {:error, __MODULE__}
+    #   end
+    #
+    # Expanded:
+    #   def member?(_function, _value), do: {:error, Enumerable.Function}
+    test "Enumerable impl member?/2 body has {:error, __MODULE__} with implementation module atom",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Enumerable.Function, :member?, 2)
+
+      assert %IR.FunctionDefinition{
+               name: :member?,
+               arity: 2,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :error},
+                         %IR.AtomType{value: Enumerable.Function}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
+    end
+
+    # Original source:
+    #   defimpl Enumerable, for: Function do
+    #     def slice(_function), do: {:error, __MODULE__}
+    #   end
+    #
+    # Expanded:
+    #   def slice(_function), do: {:error, Enumerable.Function}
+    test "Enumerable impl slice/1 body has {:error, __MODULE__} with implementation module atom",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Enumerable.Function, :slice, 1)
+
+      assert %IR.FunctionDefinition{
+               name: :slice,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :error},
+                         %IR.AtomType{value: Enumerable.Function}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
     end
 
     # Original source:

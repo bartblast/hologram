@@ -16,12 +16,14 @@ defmodule Hologram.Compiler.CallGraph do
     @type t :: %__MODULE__{
             from_vertex: module | mfa | nil,
             guard?: bool,
-            pattern?: bool
+            pattern?: bool,
+            protocol_impl: module | nil
           }
 
     defstruct from_vertex: nil,
               guard?: false,
-              pattern?: false
+              pattern?: false,
+              protocol_impl: nil
   end
 
   defstruct pid: nil
@@ -429,6 +431,30 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, from_vertex, {from_vertex, :struct_impl_for, 1})
   end
 
+  # Skip traversing count/1, member?/2, and slice/1 clause bodies in Enumerable protocol
+  # implementations. The Enumerable protocol convention requires these functions to return
+  # {:error, __MODULE__} when deferring to the default implementation. The __MODULE__ atom
+  # creates a module vertex edge that pulls in all sibling functions (including reduce/3
+  # which can cascade heavily). The actual protocol dispatch is already handled by
+  # add_protocol_call_graph_edges/2.
+  def build(
+        call_graph,
+        %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
+        %Context{from_vertex: from_vertex} = context
+      )
+      when (name == :count and arity == 1) or
+             (name == :member? and arity == 2) or
+             (name == :slice and arity == 1) do
+    fun_def_vertex = {from_vertex, name, arity}
+    call_graph = add_edge(call_graph, from_vertex, fun_def_vertex)
+
+    if context.protocol_impl == Enumerable do
+      call_graph
+    else
+      build(call_graph, clause, %{context | from_vertex: fun_def_vertex})
+    end
+  end
+
   def build(
         call_graph,
         %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
@@ -464,11 +490,17 @@ defmodule Hologram.Compiler.CallGraph do
         %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
         context
       ) do
+    new_context = %{
+      context
+      | from_vertex: module,
+        protocol_impl: Reflection.protocol_impl(module)
+    }
+
     call_graph
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
-    |> build(body, %{context | from_vertex: module})
+    |> build(body, new_context)
   end
 
   # :erlang.apply/3 is not added to the call graph because the encoder
