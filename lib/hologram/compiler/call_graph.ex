@@ -10,18 +10,32 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  defmodule Context.Modifiers do
+    @moduledoc false
+
+    @type t :: %__MODULE__{
+            suppress_edges_to_module_vertices?: bool
+          }
+
+    defstruct suppress_edges_to_module_vertices?: false
+  end
+
   defmodule Context do
     @moduledoc false
+
+    alias Hologram.Compiler.CallGraph.Context.Modifiers
 
     @type t :: %__MODULE__{
             from_vertex: module | mfa | nil,
             guard?: bool,
+            modifiers: Modifiers.t(),
             pattern?: bool,
             protocol_impl: module | nil
           }
 
     defstruct from_vertex: nil,
               guard?: false,
+              modifiers: %Modifiers{},
               pattern?: false,
               protocol_impl: nil
   end
@@ -335,7 +349,8 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, %IR.AtomType{value: value}, %Context{
         from_vertex: from_vertex,
         guard?: false,
-        pattern?: false
+        pattern?: false,
+        modifiers: %{suppress_edges_to_module_vertices?: false}
       }) do
     if Reflection.alias?(value) do
       add_edge(call_graph, from_vertex, value)
@@ -561,6 +576,35 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
     |> build(reason, context)
     |> build(args, context)
+  end
+
+  # Skip module atoms in the first argument (deduplication key) of IO.warn_once/3.
+  # The key is typically a tuple like {ModuleName, some_value} used to track
+  # whether a warning has already been printed. The module atom in the key is
+  # a namespace identifier, not a real dependency. Without this, any module
+  # calling IO.warn_once with its own name as a key would pull in its entire
+  # function tree via the module vertex.
+  # Non-atom elements in the key are still traversed to capture any function call edges.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: IO},
+          function: :warn_once,
+          args: [key, message, stacktrace_depth]
+        },
+        context
+      ) do
+    add_edge(call_graph, context.from_vertex, {IO, :warn_once, 3})
+
+    key_arg_context = %{
+      context
+      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
+    }
+
+    call_graph
+    |> build(key, key_arg_context)
+    |> build(message, context)
+    |> build(stacktrace_depth, context)
   end
 
   # Skip the :protocol key value in Protocol.UndefinedError.exception/1 args.

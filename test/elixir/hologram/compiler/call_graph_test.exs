@@ -179,6 +179,21 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == []
     end
 
+    test "atom type ir, alias with suppress_edges_to_module_vertices? modifier does not create edge",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.AtomType{value: Module1}
+
+      modifiers = %Context.Modifiers{suppress_edges_to_module_vertices?: true}
+      result = build(call_graph, ir, %Context{from_vertex: :vertex_1, modifiers: modifiers})
+
+      assert result == call_graph
+
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
     test "clause ir, module alias in match does not create edge", %{
       empty_call_graph: call_graph
     } do
@@ -1403,6 +1418,51 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [
                {{Module1, :my_fun, 1}, {Enum.EmptyError, :exception, 1}},
                {{Module1, :my_fun, 1}, {:erlang, :error, 3}}
+             ]
+    end
+
+    test "remote function call ir, IO.warn_once/3 skips first argument (deduplication key)", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: IO},
+        function: :warn_once,
+        args: [
+          %IR.TupleType{
+            data: [
+              %IR.AtomType{value: Module5},
+              %IR.AtomType{value: :some_key}
+            ]
+          },
+          %IR.AnonymousFunctionType{
+            arity: 0,
+            captured_function: nil,
+            captured_module: nil,
+            clauses: [
+              %IR.FunctionClause{
+                params: [],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [%IR.StringType{value: "some warning"}]
+                }
+              }
+            ]
+          },
+          %IR.IntegerType{value: 4}
+        ]
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun, 1},
+               {IO, :warn_once, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, {IO, :warn_once, 3}}
              ]
     end
 
@@ -2745,6 +2805,44 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = struct_1_clause
 
       assert impl_module == Module.concat(Protocol1, Struct1)
+    end
+
+    # Original source (System.warn/2):
+    #   defp warn(unit, replacement_unit) do
+    #     IO.warn_once({System, unit}, fn -> "deprecated time unit: ..." end, 4)
+    #   end
+    #
+    # The first argument {System, unit} contains the System module atom as a
+    # namespace identifier for the deduplication key, not as a dependency.
+    test "IO.warn_once/3 first argument contains module atom as deduplication key",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, System, :warn, 2)
+
+      assert %IR.FunctionDefinition{
+               name: :warn,
+               arity: 2,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: IO},
+                       function: :warn_once,
+                       args: [
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: System},
+                             _value
+                           ]
+                         },
+                         _message,
+                         _stacktrace_depth
+                       ]
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = clause
     end
 
     # Original source (Module39):
