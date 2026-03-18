@@ -2350,5 +2350,69 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = integer_clause
     end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded:
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       nil -> :erlang.error(Protocol.UndefinedError.exception(
+    #                protocol: Protocol1, value: data, description: ""))
+    #       x -> x
+    #     end
+    #   end
+    test "impl_for!/1 body has the protocol module atom in Protocol.UndefinedError.exception/1 call",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
+
+      assert %IR.FunctionDefinition{
+               name: :impl_for!,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: _condition,
+                       clauses: [
+                         %IR.Clause{
+                           body: %IR.Block{
+                             expressions: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.AtomType{value: :erlang},
+                                 function: :error,
+                                 args: [
+                                   %IR.RemoteFunctionCall{
+                                     module: %IR.AtomType{value: Protocol.UndefinedError},
+                                     function: :exception,
+                                     args: [
+                                       %IR.ListType{
+                                         data: [
+                                           %IR.TupleType{
+                                             data: [
+                                               %IR.AtomType{value: :protocol},
+                                               %IR.AtomType{value: Protocol1}
+                                             ]
+                                           }
+                                           | _other_keyword_pairs
+                                         ]
+                                       }
+                                     ]
+                                   }
+                                 ]
+                               }
+                             ]
+                           }
+                         }
+                         | _other_clauses
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
+    end
   end
 end
