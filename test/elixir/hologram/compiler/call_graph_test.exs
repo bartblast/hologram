@@ -2308,5 +2308,47 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              }
     end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (one clause per type, e.g. for Integer):
+    #   def impl_for(x) when is_integer(x), do: Protocol1.Integer
+    test "impl_for/1 type-dispatch clauses have implementation module atoms in body",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :impl_for, 1)
+
+      integer_clause =
+        Enum.find(fun_defs, fn
+          %IR.FunctionDefinition{
+            clause: %IR.FunctionClause{
+              guards: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: :erlang},
+                  function: :is_integer
+                }
+              ]
+            }
+          } ->
+            true
+
+          _fallback ->
+            false
+        end)
+
+      assert %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: Protocol1.Integer}
+                   ]
+                 }
+               }
+             } = integer_clause
+    end
   end
 end
