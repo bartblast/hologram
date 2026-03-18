@@ -43,6 +43,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -2413,6 +2414,46 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              } = clause
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (one clause per struct, e.g. for Struct1):
+    #   defp struct_impl_for(Struct1), do: Protocol1.Struct1
+    test "struct_impl_for/1 clauses have struct and implementation module atoms",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :struct_impl_for, 1)
+
+      struct_1_clause =
+        Enum.find(fun_defs, fn
+          %IR.FunctionDefinition{
+            clause: %IR.FunctionClause{
+              params: [%IR.AtomType{value: Struct1}]
+            }
+          } ->
+            true
+
+          _other ->
+            false
+        end)
+
+      assert %IR.FunctionDefinition{
+               name: :struct_impl_for,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: Struct1}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: impl_module}
+                   ]
+                 }
+               }
+             } = struct_1_clause
+
+      assert impl_module == Module.concat(Protocol1, Struct1)
     end
   end
 end
