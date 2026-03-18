@@ -474,6 +474,16 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the protocol module that the given module implements, or nil if it's not a protocol implementation.
+  """
+  @spec protocol_impl(module) :: module | nil
+  def protocol_impl(module) do
+    if function_exported?(module, :__impl__, 1) do
+      module.__impl__(:protocol)
+    end
+  end
+
+  @doc """
   Returns the release priv dir path.
   """
   @spec release_priv_dir() :: String.t()

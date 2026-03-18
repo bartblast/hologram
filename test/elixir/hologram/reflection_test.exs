@@ -420,6 +420,16 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "protocol_impl/1" do
+    test "module that implements a protocol" do
+      assert protocol_impl(Enumerable.Function) == Enumerable
+    end
+
+    test "module that does not implement a protocol" do
+      assert protocol_impl(Calendar.ISO) == nil
+    end
+  end
+
   test "root_dir/0" do
     assert root_dir() == File.cwd!()
   end
