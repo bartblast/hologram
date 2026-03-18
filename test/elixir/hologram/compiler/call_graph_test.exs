@@ -36,6 +36,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module36
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module39
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -1356,6 +1357,52 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_edges(call_graph) == [
                {{Module1, :my_fun_1, 4}, Calendar.ISO}
+             ]
+    end
+
+    test "remote function call ir, :erlang.error/3 skips third argument (error options)", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :error,
+        args: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: Enum.EmptyError},
+            function: :exception,
+            args: [%IR.ListType{data: []}]
+          },
+          %IR.AtomType{value: :none},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{
+                data: [
+                  %IR.AtomType{value: :error_info},
+                  %IR.MapType{
+                    data: [
+                      {%IR.AtomType{value: :module}, %IR.AtomType{value: Exception}}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Enum.EmptyError, :exception, 1},
+               {Module1, :my_fun, 1},
+               {:erlang, :error, 3}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, {Enum.EmptyError, :exception, 1}},
+               {{Module1, :my_fun, 1}, {:erlang, :error, 3}}
              ]
     end
 
@@ -2698,6 +2745,55 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = struct_1_clause
 
       assert impl_module == Module.concat(Protocol1, Struct1)
+    end
+
+    # Original source (Module39):
+    #   def my_fun do
+    #     raise ArgumentError, "test"
+    #   end
+    #
+    # Expanded (by Elixir compiler, not the raise macro):
+    #   def my_fun do
+    #     :erlang.error(ArgumentError.exception("test"), :none,
+    #       [error_info: %{module: Exception}])
+    #   end
+    test "raise compiles to :erlang.error/3 with error_info: %{module: Exception}",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Module39, :my_fun, 0)
+
+      assert %IR.FunctionDefinition{
+               name: :my_fun,
+               arity: 0,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :error,
+                       args: [
+                         _reason,
+                         _args,
+                         %IR.ListType{
+                           data: [
+                             %IR.TupleType{
+                               data: [
+                                 %IR.AtomType{value: :error_info},
+                                 %IR.MapType{
+                                   data: [
+                                     {%IR.AtomType{value: :module},
+                                      %IR.AtomType{value: Exception}}
+                                   ]
+                                 }
+                               ]
+                             }
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
     end
 
     # Original source:
