@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module39
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -1372,6 +1373,64 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_edges(call_graph) == [
                {{Module1, :my_fun_1, 4}, Calendar.ISO}
+             ]
+    end
+
+    test "remote function call ir, Kernel.struct!/2 with literal module creates targeted __struct__ edges",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Kernel},
+        function: :struct!,
+        args: [
+          %IR.AtomType{value: Module5},
+          %IR.Variable{name: :args}
+        ]
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun, 1},
+               {Module5, :__struct__, 0},
+               {Module5, :__struct__, 1},
+               {Kernel, :struct!, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, {Module5, :__struct__, 0}},
+               {{Module1, :my_fun, 1}, {Module5, :__struct__, 1}},
+               {{Module1, :my_fun, 1}, {Kernel, :struct!, 2}}
+             ]
+    end
+
+    test "remote function call ir, Kernel.struct!/2 with variable module traverses normally",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Kernel},
+        function: :struct!,
+        args: [
+          %IR.Variable{name: :module},
+          %IR.Variable{name: :args}
+        ]
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
+
+      assert result == call_graph
+
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun, 1},
+               {Kernel, :struct!, 2}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, {Kernel, :struct!, 2}}
              ]
     end
 
@@ -2855,6 +2914,58 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = struct_1_clause
 
       assert impl_module == Module.concat(Protocol1, Struct1)
+    end
+
+    # Original source (Module41):
+    #   defexception message: "test error"
+    #
+    # Generated exception/1:
+    #   def exception(args) when is_list(args) do
+    #     Kernel.struct!(Module41, args)
+    #   end
+    #
+    # The module atom is passed as the first argument to Kernel.struct!/2, which only
+    # uses it to call __struct__/0 and __struct__/1.
+    test "defexception exception/1 calls Kernel.struct!/2 with literal module atom",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Module41, :exception, 1)
+
+      struct_clause =
+        Enum.find(fun_defs, fn
+          %IR.FunctionDefinition{
+            clause: %IR.FunctionClause{
+              body: %IR.Block{
+                expressions: [
+                  %IR.RemoteFunctionCall{
+                    module: %IR.AtomType{value: Kernel},
+                    function: :struct!
+                  }
+                ]
+              }
+            }
+          } ->
+            true
+
+          _other ->
+            false
+        end)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: Kernel},
+                       function: :struct!,
+                       args: [
+                         %IR.AtomType{value: Module41},
+                         _fields
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = struct_clause
     end
 
     # Original source (System.warn/2):

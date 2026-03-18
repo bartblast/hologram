@@ -607,6 +607,28 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(stacktrace_depth, context)
   end
 
+  # For Kernel.struct!/2 with a literal module atom as the first argument, create targeted
+  # edges to {module, :__struct__, 0} and {module, :__struct__, 1} instead of the module
+  # vertex. Kernel.struct!/2 only uses the module to call __struct__/0 and __struct__/1.
+  # This is the same approach as the __struct__ key-in-map special case. Without this,
+  # every defexception module's exception/1 function (which calls Kernel.struct!(__MODULE__,
+  # args)) would pull in the module's entire function tree.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Kernel},
+          function: :struct!,
+          args: [%IR.AtomType{value: module}, fields]
+        },
+        context
+      ) do
+    call_graph
+    |> add_edge(context.from_vertex, {Kernel, :struct!, 2})
+    |> add_edge(context.from_vertex, {module, :__struct__, 0})
+    |> add_edge(context.from_vertex, {module, :__struct__, 1})
+    |> build(fields, context)
+  end
+
   # Skip the :protocol key value in Protocol.UndefinedError.exception/1 args.
   # This is expanded from: raise Protocol.UndefinedError, protocol: SomeProtocol, value: data
   # The protocol module atom is just metadata identifying the protocol in the error message,
