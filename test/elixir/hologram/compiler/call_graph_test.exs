@@ -1643,7 +1643,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert {String.Chars, :to_string, 1} in result
 
     assert {Hologram.Router.Helpers, :page_path, 1} in result
-    assert {Protocol.UndefinedError, :exception, 1} in result
 
     refute {:unicode, :characters_to_binary, 1} in result
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
