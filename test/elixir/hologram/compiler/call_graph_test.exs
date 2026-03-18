@@ -2883,7 +2883,12 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = clause
     end
 
-    # Original source:
+    # Protocol implementation fallback clauses that raise Protocol.UndefinedError contain
+    # the protocol module atom in the exception keyword list. This pattern is not specific to
+    # Enumerable - it appears in any protocol impl with a guarded clause and a fallback,
+    # e.g. String.Chars.BitString.to_string/1, List.Chars.BitString.to_charlist/1.
+    #
+    # Original source (Enumerable.Function.reduce/3 as a concrete example):
     #   defimpl Enumerable, for: Function do
     #     def reduce(function, _acc, _fun) do
     #       raise Protocol.UndefinedError,
