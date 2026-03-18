@@ -2185,6 +2185,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
     end
 
+    # Original source:
+    #   defimpl Protocol1, for: Integer do
+    #     def my_fun(_data), do: :ok
+    #   end
+    #
+    # Expanded:
+    #   def __impl__(:for), do: Integer
     test "__impl__/1 :for clause has the target module atom in body", %{ir_plt: ir_plt} do
       [for_clause, _protocol_clause] =
         find_fun_defs(
@@ -2208,6 +2215,13 @@ defmodule Hologram.Compiler.CallGraphTest do
              }
     end
 
+    # Original source:
+    #   defimpl Protocol1, for: Integer do
+    #     def my_fun(_data), do: :ok
+    #   end
+    #
+    # Expanded:
+    #   def __impl__(:protocol), do: Protocol1
     test "__impl__/1 :protocol clause has the protocol module atom in body", %{ir_plt: ir_plt} do
       [_for_clause, protocol_clause] =
         find_fun_defs(
@@ -2230,6 +2244,66 @@ defmodule Hologram.Compiler.CallGraphTest do
                        value: Protocol1
                      }
                    ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation):
+    #   def __protocol__(:impls), do: {:consolidated, [Integer, ...]}
+    test "__protocol__/1 :impls clause has implementation module atoms in body",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :__protocol__, 1)
+      impls_clause = Enum.at(fun_defs, 3)
+
+      assert %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :impls}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :consolidated},
+                         %IR.ListType{data: impls}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = impls_clause
+
+      impl_modules = Enum.map(impls, fn %IR.AtomType{value: v} -> v end)
+
+      assert Integer in impl_modules
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded:
+    #   def __protocol__(:module), do: Protocol1
+    test "__protocol__/1 :module clause has the protocol module atom in body",
+         %{ir_plt: ir_plt} do
+      [module_clause | _rest] = find_fun_defs(ir_plt, Protocol1, :__protocol__, 1)
+
+      assert module_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :module}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Protocol1}]
                  }
                }
              }
