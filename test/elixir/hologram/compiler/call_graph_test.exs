@@ -40,6 +40,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module42
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module43
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module44
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module45
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module46
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module47
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -2071,18 +2075,34 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Module16, :command, 3} in result
     end
 
-    test "excludes init/3 for templatable modules" do
-      module_14_ir = IR.for_module(Module14)
-      module_15_ir = IR.for_module(Module15)
+    test "excludes init/3 for templatable modules (page and component)" do
+      module_44_ir = IR.for_module(Module44)
+      module_45_ir = IR.for_module(Module45)
 
       result =
         start()
-        |> build(module_14_ir, %Context{})
-        |> build(module_15_ir, %Context{})
-        |> list_page_mfas(Module14)
+        |> build(module_44_ir, %Context{})
+        |> build(module_45_ir, %Context{})
+        |> list_page_mfas(Module44)
 
-      refute {Module14, :init, 3} in result
-      refute {Module15, :init, 3} in result
+      # Page init/3 is excluded
+      refute {Module44, :init, 3} in result
+
+      # Component init/3 is excluded
+      refute {Module45, :init, 3} in result
+    end
+
+    test "keeps init/3 for non-templatable modules" do
+      module_46_ir = IR.for_module(Module46)
+      module_47_ir = IR.for_module(Module47)
+
+      result =
+        start()
+        |> build(module_46_ir, %Context{})
+        |> build(module_47_ir, %Context{})
+        |> list_page_mfas(Module47)
+
+      assert {Module46, :init, 3} in result
     end
 
     test "excludes Hex MFAs" do

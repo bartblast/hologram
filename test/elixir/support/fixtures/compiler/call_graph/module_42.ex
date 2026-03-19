@@ -12,6 +12,10 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module42 do
     """
   end
 
+  def action(:action_42a, _params, component) do
+    component
+  end
+
   def command(:command_42a, _params, server) do
     server
   end
