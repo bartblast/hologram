@@ -193,7 +193,7 @@ defmodule Hologram.Compiler.Digraph do
       visited = MapSet.new(existing_vertices)
 
       queue
-      |> bfs_reachable(visited, outgoing_edges)
+      |> bfs_reachable(visited, outgoing_edges, [])
       |> MapSet.to_list()
     end
   end
@@ -203,9 +203,16 @@ defmodule Hologram.Compiler.Digraph do
   Uses breadth-first search traversing incoming edges.
   If none of the target vertices exist in the graph, returns an empty list.
   Non-existent target vertices are ignored.
+
+  ## Options
+
+    * `:skip_module_vertices` - when `true`, module vertices (atoms) are added to the
+      result but their incoming edges are not traversed. This prevents module atom
+      references from propagating through module-to-function-definition edges.
+      Defaults to `false`.
   """
-  @spec reaching(t, [vertex]) :: [vertex]
-  def reaching(graph, target_vertices) do
+  @spec reaching(t, [vertex], keyword) :: [vertex]
+  def reaching(graph, target_vertices, opts \\ []) do
     %Digraph{vertices: vertices, incoming_edges: incoming_edges} = graph
 
     existing_vertices = Enum.filter(target_vertices, &Map.has_key?(vertices, &1))
@@ -218,7 +225,7 @@ defmodule Hologram.Compiler.Digraph do
       visited = MapSet.new(existing_vertices)
 
       queue
-      |> bfs_reachable(visited, incoming_edges)
+      |> bfs_reachable(visited, incoming_edges, opts)
       |> MapSet.to_list()
     end
   end
@@ -442,29 +449,33 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   # BFS traversal for reachable vertices
-  # credo:disable-for-lines:27 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:31 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
-  defp bfs_reachable(queue, visited, outgoing_edges) do
+  defp bfs_reachable(queue, visited, edges, opts) do
     case :queue.out(queue) do
       {{:value, current}, rest_queue} ->
-        # Get neighbors of current vertex
-        neighbors = Map.get(outgoing_edges, current, %{})
+        if opts[:skip_module_vertices] && is_atom(current) do
+          bfs_reachable(rest_queue, visited, edges, opts)
+        else
+          # Get neighbors of current vertex
+          neighbors = Map.get(edges, current, %{})
 
-        # Add unvisited neighbors to queue and visited set
-        {new_queue, new_visited} =
-          Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
-                                                           {acc_queue, acc_visited} ->
-            if MapSet.member?(acc_visited, neighbor) do
-              {acc_queue, acc_visited}
-            else
-              {
-                :queue.in(neighbor, acc_queue),
-                MapSet.put(acc_visited, neighbor)
-              }
-            end
-          end)
+          # Add unvisited neighbors to queue and visited set
+          {new_queue, new_visited} =
+            Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
+                                                             {acc_queue, acc_visited} ->
+              if MapSet.member?(acc_visited, neighbor) do
+                {acc_queue, acc_visited}
+              else
+                {
+                  :queue.in(neighbor, acc_queue),
+                  MapSet.put(acc_visited, neighbor)
+                }
+              end
+            end)
 
-        bfs_reachable(new_queue, new_visited, outgoing_edges)
+          bfs_reachable(new_queue, new_visited, edges, opts)
+        end
 
       {:empty, _queue} ->
         visited

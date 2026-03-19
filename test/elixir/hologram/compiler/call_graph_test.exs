@@ -1970,6 +1970,17 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == MapSet.new([{MyModule, :action, 3}, {Task, :await, 1}])
     end
+
+    test "does not mark MFAs as async when they only reach Task.await/1 through a module vertex" do
+      result =
+        start()
+        |> add_edge({MyModule, :my_fun, 1}, OtherModule)
+        |> add_edge(OtherModule, {OtherModule, :fetch_data, 1})
+        |> add_edge({OtherModule, :fetch_data, 1}, {Task, :await, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{OtherModule, :fetch_data, 1}, {Task, :await, 1}])
+    end
   end
 
   describe "list_page_mfas/2" do

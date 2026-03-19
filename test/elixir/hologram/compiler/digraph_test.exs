@@ -807,6 +807,20 @@ defmodule Hologram.Compiler.DigraphTest do
 
       assert result == []
     end
+
+    test "skips traversal of module (atom) vertices when skip_module_vertices is true" do
+      # {MyModule, :fun_a, 0} -> SomeModule -> {SomeModule, :fun_b, 1} -> {Target, :fun, 0}
+      # {MyModule, :fun_a, 0} should NOT be in the result because SomeModule's incoming edges
+      # are not traversed
+      result =
+        new()
+        |> add_edge({MyModule, :fun_a, 0}, SomeModule)
+        |> add_edge(SomeModule, {SomeModule, :fun_b, 1})
+        |> add_edge({SomeModule, :fun_b, 1}, {Target, :fun, 0})
+        |> reaching([{Target, :fun, 0}], skip_module_vertices: true)
+
+      assert Enum.sort(result) == [SomeModule, {SomeModule, :fun_b, 1}, {Target, :fun, 0}]
+    end
   end
 
   describe "remove_vertex/2" do
