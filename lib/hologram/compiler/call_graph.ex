@@ -1291,6 +1291,7 @@ defmodule Hologram.Compiler.CallGraph do
       graph
       |> Digraph.vertices()
       |> Enum.filter(fn
+        {module, :command, 3} -> Reflection.templatable?(module)
         {module, :init, 3} -> Reflection.templatable?(module)
         _fallback -> false
       end)

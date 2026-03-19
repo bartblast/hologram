@@ -38,6 +38,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module39
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module42
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module43
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -2035,6 +2037,38 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       # Non-page module functions are kept
       assert {Module16, :my_fun_16a, 2} in result
+    end
+
+    test "excludes command/3 for templatable modules (page and component)" do
+      module_42_ir = IR.for_module(Module42)
+      module_43_ir = IR.for_module(Module43)
+
+      result =
+        start()
+        |> build(module_42_ir, %Context{})
+        |> build(module_43_ir, %Context{})
+        |> list_page_mfas(Module42)
+
+      # Page command/3 is excluded
+      refute {Module42, :command, 3} in result
+
+      # Component command/3 is excluded
+      refute {Module43, :command, 3} in result
+    end
+
+    test "keeps command/3 for non-templatable modules" do
+      module_42_ir = IR.for_module(Module42)
+      module_43_ir = IR.for_module(Module43)
+
+      call_graph =
+        start()
+        |> build(module_42_ir, %Context{})
+        |> build(module_43_ir, %Context{})
+        |> add_edge({Module42, :action, 3}, {Module16, :command, 3})
+
+      result = list_page_mfas(call_graph, Module42)
+
+      assert {Module16, :command, 3} in result
     end
 
     test "excludes init/3 for templatable modules" do
