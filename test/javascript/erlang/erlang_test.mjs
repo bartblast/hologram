@@ -6265,6 +6265,31 @@ describe("Erlang", () => {
       );
     });
 
+    it("accepts nested cons-built iodata used by date formatting", () => {
+      const zeroPad = Type.improperList([
+        Type.bitstring("0"),
+        Type.bitstring("1"),
+      ]);
+
+      const result = list_to_binary(
+        Type.improperList([
+          Type.bitstring("2022"),
+          Type.improperList([
+            Type.integer(45),
+            Type.improperList([
+              zeroPad,
+              Type.improperList([Type.integer(45), zeroPad]),
+            ]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Bitstring.fromBytes([50, 48, 50, 50, 45, 48, 49, 45, 48, 49]),
+      );
+    });
+
     it("list with empty sublists", () => {
       const result = list_to_binary(
         Type.list([Type.list(), Type.list(), Type.list()]),

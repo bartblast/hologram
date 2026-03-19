@@ -1615,6 +1615,8 @@ const Erlang = {
 
         if (Type.isBinary(tail)) {
           chunks.push(tail);
+        } else if (Type.isList(tail)) {
+          collect(tail);
         } else {
           Interpreter.raiseArgumentError(
             Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
