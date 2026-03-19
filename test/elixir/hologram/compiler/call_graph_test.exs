@@ -37,14 +37,14 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module39
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41Error
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module42
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module43
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module44
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module45
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module46
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module47
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
@@ -3144,22 +3144,22 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = struct_1_clause
 
-      assert impl_module == Module.concat(Protocol1, Struct1)
+      assert impl_module == Module.safe_concat(Protocol1, Struct1)
     end
 
-    # Original source (Module41):
+    # Original source (Module41Error):
     #   defexception message: "test error"
     #
     # Generated exception/1:
     #   def exception(args) when is_list(args) do
-    #     Kernel.struct!(Module41, args)
+    #     Kernel.struct!(Module41Error, args)
     #   end
     #
     # The module atom is passed as the first argument to Kernel.struct!/2, which only
     # uses it to call __struct__/0 and __struct__/1.
     test "defexception exception/1 calls Kernel.struct!/2 with literal module atom",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Module41, :exception, 1)
+      fun_defs = find_fun_defs(ir_plt, Module41Error, :exception, 1)
 
       struct_clause =
         Enum.find(fun_defs, fn
@@ -3189,7 +3189,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                        module: %IR.AtomType{value: Kernel},
                        function: :struct!,
                        args: [
-                         %IR.AtomType{value: Module41},
+                         %IR.AtomType{value: Module41Error},
                          _fields
                        ]
                      }

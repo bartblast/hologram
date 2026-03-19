@@ -1,4 +1,4 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module41 do
+defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module41Error do
   defexception message: "test error"
 end
