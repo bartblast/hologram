@@ -428,6 +428,49 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{Module1, {Module1, :my_fun, 2}}]
     end
 
+    test "function definition ir, __struct__/0 suppresses module vertex edges from body", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :__struct__,
+        arity: 0,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.MapType{
+                data: [
+                  {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
+                  {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      # Module5 and Module6 should NOT appear as module vertices.
+      # {Module5, :__struct__, 0/1} are MFA edges from the __struct__ key-in-map special case.
+      assert sorted_vertices(call_graph) == [
+               Module1,
+               {Module1, :__struct__, 0},
+               {Module5, :__struct__, 0},
+               {Module5, :__struct__, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :__struct__, 0}},
+               {{Module1, :__struct__, 0}, {Module5, :__struct__, 0}},
+               {{Module1, :__struct__, 0}, {Module5, :__struct__, 1}}
+             ]
+    end
+
     test "function definition ir, __struct__/1 suppresses module vertex edges from body", %{
       empty_call_graph: call_graph
     } do
@@ -2828,6 +2871,37 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              ] = fun_defs
+    end
+
+    # Original source (Struct2):
+    #   defstruct field_1: nil, field_2: Module1
+    #
+    # Generated __struct__/0:
+    #   def __struct__(), do: %{__struct__: Struct2, field_1: nil, field_2: Module1}
+    #
+    # The default struct map contains module atoms (Module1) as field default values,
+    # not as dependencies.
+    test "__struct__/0 body has a map with module atom as field default value",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0)
+
+      assert %IR.FunctionDefinition{
+               name: :__struct__,
+               arity: 0,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct2}},
+                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}},
+                         {%IR.AtomType{value: :field_2}, %IR.AtomType{value: Module1}}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
     end
 
     # Original source (Struct2):
