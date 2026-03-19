@@ -2,7 +2,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module47 do
   use Hologram.Page
 
-  alias Module46
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module46
 
   route "/hologram-test-fixtures-compiler-callgraph-module47"
 
