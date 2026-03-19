@@ -2779,13 +2779,21 @@ defmodule Hologram.Compiler.CallGraphTest do
     #
     # Expanded:
     #   def __impl__(:for), do: Integer
+    #
+    # Note: Elixir < 1.16 generates an additional :target clause alongside :for and :protocol.
+    # Using Enum.find instead of pattern matching on list length for cross-version compatibility.
     test "__impl__/1 :for clause has the target module atom in body", %{ir_plt: ir_plt} do
-      [for_clause, _protocol_clause] =
-        find_fun_defs(
-          ir_plt,
-          Protocol1.Integer,
-          :__impl__,
-          1
+      fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
+
+      for_clause =
+        Enum.find(
+          fun_defs,
+          &match?(
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{params: [%IR.AtomType{value: :for}]}
+            },
+            &1
+          )
         )
 
       assert for_clause == %IR.FunctionDefinition{
@@ -2809,13 +2817,21 @@ defmodule Hologram.Compiler.CallGraphTest do
     #
     # Expanded:
     #   def __impl__(:protocol), do: Protocol1
+    #
+    # Note: Elixir < 1.16 generates an additional :target clause alongside :for and :protocol.
+    # Using Enum.find instead of pattern matching on list length for cross-version compatibility.
     test "__impl__/1 :protocol clause has the protocol module atom in body", %{ir_plt: ir_plt} do
-      [_for_clause, protocol_clause] =
-        find_fun_defs(
-          ir_plt,
-          Protocol1.Integer,
-          :__impl__,
-          1
+      fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
+
+      protocol_clause =
+        Enum.find(
+          fun_defs,
+          &match?(
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{params: [%IR.AtomType{value: :protocol}]}
+            },
+            &1
+          )
         )
 
       assert protocol_clause == %IR.FunctionDefinition{
@@ -3157,6 +3173,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     #
     # The module atom is passed as the first argument to Kernel.struct!/2, which only
     # uses it to call __struct__/0 and __struct__/1.
+    #
+    # Note: On Elixir < 1.16, defexception generates different IR without Kernel.struct!/2.
+    # The special case simply won't fire on those versions (safe - missed optimization only).
     test "defexception exception/1 calls Kernel.struct!/2 with literal module atom",
          %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Module41Error, :exception, 1)
@@ -3181,22 +3200,26 @@ defmodule Hologram.Compiler.CallGraphTest do
             false
         end)
 
-      assert %IR.FunctionDefinition{
-               clause: %IR.FunctionClause{
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: Kernel},
-                       function: :struct!,
-                       args: [
-                         %IR.AtomType{value: Module41Error},
-                         _fields
-                       ]
-                     }
-                   ]
+      if Version.match?(System.version(), ">= 1.16.0") do
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: Kernel},
+                         function: :struct!,
+                         args: [
+                           %IR.AtomType{value: Module41Error},
+                           _fields
+                         ]
+                       }
+                     ]
+                   }
                  }
-               }
-             } = struct_clause
+               } = struct_clause
+      else
+        assert is_nil(struct_clause)
+      end
     end
 
     # Original source (System.warn/2):
