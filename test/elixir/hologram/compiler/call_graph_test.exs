@@ -46,6 +46,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct2
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -425,6 +426,65 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert sorted_vertices(call_graph) == [Module1, {Module1, :my_fun, 2}]
       assert sorted_edges(call_graph) == [{Module1, {Module1, :my_fun, 2}}]
+    end
+
+    test "function definition ir, __struct__/1 suppresses module vertex edges from body", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :__struct__,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :kv}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: Enum},
+                function: :reduce,
+                args: [
+                  %IR.Variable{name: :kv},
+                  %IR.TupleType{
+                    data: [
+                      %IR.MapType{
+                        data: [
+                          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
+                          {%IR.AtomType{value: :calendar}, %IR.AtomType{value: Module6}}
+                        ]
+                      },
+                      %IR.ListType{data: []}
+                    ]
+                  },
+                  %IR.AtomType{value: :some_fun}
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      # Module5 and Module6 should NOT appear as module vertices.
+      # {Module5, :__struct__, 0/1} are MFA edges from the __struct__ key-in-map special case,
+      # not module vertex edges - they don't cascade.
+      assert sorted_vertices(call_graph) == [
+               Module1,
+               {Enum, :reduce, 3},
+               {Module1, :__struct__, 1},
+               {Module5, :__struct__, 0},
+               {Module5, :__struct__, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :__struct__, 1}},
+               {{Module1, :__struct__, 1}, {Enum, :reduce, 3}},
+               {{Module1, :__struct__, 1}, {Module5, :__struct__, 0}},
+               {{Module1, :__struct__, 1}, {Module5, :__struct__, 1}}
+             ]
     end
 
     test "function definition ir, Enumerable impl count/1 skips clause body traversal", %{
@@ -2768,6 +2828,49 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              ] = fun_defs
+    end
+
+    # Original source (Struct2):
+    #   defstruct field_1: nil, field_2: Module1
+    #
+    # Generated __struct__/1:
+    #   def __struct__(kv) do
+    #     Enum.reduce(kv,
+    #       %{__struct__: Struct2, field_1: nil, field_2: Module1},
+    #       fn {key, val}, map -> Map.merge(map, %{key => val}) end)
+    #   end
+    #
+    # The default struct map contains module atoms (Module1) as field default values,
+    # not as dependencies.
+    test "__struct__/1 body has Enum.reduce/3 with default struct map containing module atoms",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 1)
+
+      assert %IR.FunctionDefinition{
+               name: :__struct__,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: Enum},
+                       function: :reduce,
+                       args: [
+                         _kv,
+                         %IR.MapType{
+                           data: [
+                             {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct2}},
+                             {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}},
+                             {%IR.AtomType{value: :field_2}, %IR.AtomType{value: Module1}}
+                           ]
+                         },
+                         _reducer_fn
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
     end
 
     # Original source:
