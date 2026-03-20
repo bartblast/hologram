@@ -443,7 +443,15 @@ defmodule Hologram.Compiler do
       |> Enum.map(&(String.length(&1) + 1))
       |> Enum.sum()
 
-    base_length = String.length(opts[:formatter_bin_path]) + args_length
+    # On Windows, cmd_cross_platform wraps the call as: cmd /c <path>.cmd <args>
+    # Account for "cmd" + " " + "/c" + " " (6 chars) and ".cmd" extension (4 chars).
+    windows_overhead =
+      case :os.type() do
+        {:win32, _name} -> 10
+        _other -> 0
+      end
+
+    base_length = String.length(opts[:formatter_bin_path]) + args_length + windows_overhead
 
     batches = batch_file_paths(file_paths, base_length)
 
