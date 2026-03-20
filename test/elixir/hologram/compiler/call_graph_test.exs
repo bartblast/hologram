@@ -860,7 +860,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{Module1, {Module1, :__protocol__, 1}}]
     end
 
-    test "function definition ir, struct_impl_for/1 skips clause body traversal", %{
+    test "function definition ir, struct_impl_for/1 suppresses module vertex edges from body", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.FunctionDefinition{
@@ -3261,39 +3261,42 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     def my_fun(data)
     #   end
     #
-    # Expanded (one clause per struct, e.g. for Struct1):
+    # Expanded (after consolidation, one clause per struct + catch-all):
     #   defp struct_impl_for(Struct1), do: Protocol1.Struct1
+    #   defp struct_impl_for(_), do: nil
     test "struct_impl_for/1 clauses have struct and implementation module atoms",
          %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Protocol1, :struct_impl_for, 1)
 
-      struct_1_clause =
-        Enum.find(fun_defs, fn
-          %IR.FunctionDefinition{
-            clause: %IR.FunctionClause{
-              params: [%IR.AtomType{value: Struct1}]
-            }
-          } ->
-            true
+      assert [struct_1_clause, catch_all_clause] = fun_defs
 
-          _other ->
-            false
-        end)
-
-      assert %IR.FunctionDefinition{
+      assert struct_1_clause == %IR.FunctionDefinition{
                name: :struct_impl_for,
                arity: 1,
+               visibility: :private,
                clause: %IR.FunctionClause{
                  params: [%IR.AtomType{value: Struct1}],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
-                     %IR.AtomType{value: impl_module}
+                     %IR.AtomType{value: Module.safe_concat(Protocol1, Struct1)}
                    ]
                  }
                }
-             } = struct_1_clause
+             }
 
-      assert impl_module == Module.safe_concat(Protocol1, Struct1)
+      assert catch_all_clause == %IR.FunctionDefinition{
+               name: :struct_impl_for,
+               arity: 1,
+               visibility: :private,
+               clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: nil}]
+                 }
+               }
+             }
     end
 
     # Original source (Module41Error):
