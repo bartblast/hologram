@@ -1798,7 +1798,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "remote function call ir, Protocol.UndefinedError.exception/1 skips :protocol key value",
+    test "remote function call ir, Protocol.UndefinedError.exception/1 suppresses module vertex edges in :protocol key value",
          %{
            empty_call_graph: call_graph
          } do

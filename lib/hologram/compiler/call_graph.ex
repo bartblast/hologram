@@ -749,11 +749,14 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(fields, context)
   end
 
-  # Skip the :protocol key value in Protocol.UndefinedError.exception/1 args.
-  # This is expanded from: raise Protocol.UndefinedError, protocol: SomeProtocol, value: data
+  # Suppress module vertex edges in the :protocol key value of
+  # Protocol.UndefinedError.exception/1 args. This is expanded from:
+  # raise Protocol.UndefinedError, protocol: SomeProtocol, value: data
   # The protocol module atom is just metadata identifying the protocol in the error message,
   # not a real dependency. Without this, raising Protocol.UndefinedError in protocol
   # implementation fallback clauses would pull in the protocol module's entire function tree.
+  # MFA edges are not affected. Other keyword entries (e.g. :value, :description) are
+  # traversed normally.
   def build(
         call_graph,
         %IR.RemoteFunctionCall{
@@ -765,9 +768,17 @@ defmodule Hologram.Compiler.CallGraph do
       ) do
     add_edge(call_graph, context.from_vertex, {Protocol.UndefinedError, :exception, 1})
 
+    suppressed_context = %{
+      context
+      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
+    }
+
     Enum.each(data, fn
-      %IR.TupleType{data: [%IR.AtomType{value: :protocol}, _module]} -> :skip
-      entry -> build(call_graph, entry, context)
+      %IR.TupleType{data: [%IR.AtomType{value: :protocol}, module]} ->
+        build(call_graph, module, suppressed_context)
+
+      entry ->
+        build(call_graph, entry, context)
     end)
 
     call_graph
