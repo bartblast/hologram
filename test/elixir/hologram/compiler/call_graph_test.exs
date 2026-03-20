@@ -4034,6 +4034,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #
     # Original source (Enumerable.Function.reduce/3 as a concrete example):
     #   defimpl Enumerable, for: Function do
+    #     def reduce(function, acc, fun) when is_function(function, 2), do: function.(acc, fun)
     #     def reduce(function, _acc, _fun) do
     #       raise Protocol.UndefinedError,
     #         protocol: Enumerable, value: function,
@@ -4041,31 +4042,63 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     end
     #   end
     #
-    # Expanded (fallback clause):
-    #   def reduce(function, _acc, _fun) do
+    # Expanded:
+    #   def reduce(function, acc, fun) when is_function(function, 2), do: function.(acc, fun)
+    #   def reduce(function, _, _) do
     #     :erlang.error(Protocol.UndefinedError.exception(
-    #       protocol: Enumerable, value: function, description: "..."))
+    #       protocol: Enumerable, value: function,
+    #       description: "only anonymous functions of arity 2 are enumerable"))
     #   end
     test "protocol implementation fallback clause has protocol module atom in Protocol.UndefinedError.exception/1 call",
          %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Enumerable.Function, :reduce, 3)
 
-      # The fallback clause (without the is_function/2 guard)
-      fallback_clause =
-        Enum.find(fun_defs, fn
-          %IR.FunctionDefinition{
-            clause: %IR.FunctionClause{guards: []}
-          } ->
-            true
+      assert [guarded_clause, fallback_clause] = fun_defs
 
-          _other ->
-            false
-        end)
-
-      assert %IR.FunctionDefinition{
+      assert guarded_clause == %IR.FunctionDefinition{
                name: :reduce,
                arity: 3,
+               visibility: :public,
                clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :function, version: 0},
+                   %IR.Variable{name: :acc, version: 1},
+                   %IR.Variable{name: :fun, version: 2}
+                 ],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_function,
+                     args: [
+                       %IR.Variable{name: :function, version: 0},
+                       %IR.IntegerType{value: 2}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AnonymousFunctionCall{
+                       function: %IR.Variable{name: :function, version: 0},
+                       args: [
+                         %IR.Variable{name: :acc, version: 1},
+                         %IR.Variable{name: :fun, version: 2}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+
+      assert fallback_clause == %IR.FunctionDefinition{
+               name: :reduce,
+               arity: 3,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :function, version: 0},
+                   %IR.MatchPlaceholder{},
+                   %IR.MatchPlaceholder{}
+                 ],
                  guards: [],
                  body: %IR.Block{
                    expressions: [
@@ -4084,8 +4117,21 @@ defmodule Hologram.Compiler.CallGraphTest do
                                      %IR.AtomType{value: :protocol},
                                      %IR.AtomType{value: Enumerable}
                                    ]
+                                 },
+                                 %IR.TupleType{
+                                   data: [
+                                     %IR.AtomType{value: :value},
+                                     %IR.Variable{name: :function, version: 0}
+                                   ]
+                                 },
+                                 %IR.TupleType{
+                                   data: [
+                                     %IR.AtomType{value: :description},
+                                     %IR.StringType{
+                                       value: "only anonymous functions of arity 2 are enumerable"
+                                     }
+                                   ]
                                  }
-                                 | _other_keyword_pairs
                                ]
                              }
                            ]
@@ -4095,7 +4141,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                    ]
                  }
                }
-             } = fallback_clause
+             }
     end
   end
 end
