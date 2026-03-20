@@ -836,7 +836,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, __protocol__/1 skips clause body traversal", %{
+    test "function definition ir, __protocol__/1 suppresses module vertex edges from body", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.FunctionDefinition{
@@ -2887,45 +2887,15 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   end
     #
     # Expanded (after consolidation):
-    #   def __protocol__(:impls), do: {:consolidated, [Integer, ...]}
-    test "__protocol__/1 :impls clause has implementation module atoms in body",
+    #   def __protocol__(:module), do: Protocol1
+    #   def __protocol__(:functions), do: [my_fun: 1]
+    #   def __protocol__(:consolidated?), do: true
+    #   def __protocol__(:impls), do: {:consolidated, [Struct1, Integer]}
+    test "__protocol__/1 clauses have module atoms in body (protocol module and implementations)",
          %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Protocol1, :__protocol__, 1)
-      impls_clause = Enum.at(fun_defs, 3)
 
-      assert %IR.FunctionDefinition{
-               name: :__protocol__,
-               arity: 1,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :impls}],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :consolidated},
-                         %IR.ListType{data: impls}
-                       ]
-                     }
-                   ]
-                 }
-               }
-             } = impls_clause
-
-      impl_modules = Enum.map(impls, fn %IR.AtomType{value: v} -> v end)
-
-      assert Integer in impl_modules
-    end
-
-    # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
-    #   end
-    #
-    # Expanded:
-    #   def __protocol__(:module), do: Protocol1
-    test "__protocol__/1 :module clause has the protocol module atom in body",
-         %{ir_plt: ir_plt} do
-      [module_clause | _rest] = find_fun_defs(ir_plt, Protocol1, :__protocol__, 1)
+      assert [module_clause, functions_clause, consolidated_clause, impls_clause] = fun_defs
 
       assert module_clause == %IR.FunctionDefinition{
                name: :__protocol__,
@@ -2936,6 +2906,68 @@ defmodule Hologram.Compiler.CallGraphTest do
                  guards: [],
                  body: %IR.Block{
                    expressions: [%IR.AtomType{value: Protocol1}]
+                 }
+               }
+             }
+
+      assert functions_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :functions}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.ListType{
+                       data: [
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: :my_fun},
+                             %IR.IntegerType{value: 1}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+
+      assert consolidated_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :consolidated?}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: true}]
+                 }
+               }
+             }
+
+      assert impls_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :impls}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :consolidated},
+                         %IR.ListType{
+                           data: [
+                             %IR.AtomType{value: Struct1},
+                             %IR.AtomType{value: Integer}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
                  }
                }
              }
