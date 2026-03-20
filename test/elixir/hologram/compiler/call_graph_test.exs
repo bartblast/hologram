@@ -770,9 +770,10 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{Module1, {Module1, :__impl__, 1}}]
     end
 
-    test "function definition ir, impl_for/1 skips clause body traversal", %{
-      empty_call_graph: call_graph
-    } do
+    test "function definition ir, impl_for/1 skips clause body traversal but adds edge to struct_impl_for/1",
+         %{
+           empty_call_graph: call_graph
+         } do
       ir = %IR.FunctionDefinition{
         name: :impl_for,
         arity: 1,
@@ -790,8 +791,16 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [Module1, {Module1, :impl_for, 1}]
-      assert sorted_edges(call_graph) == [{Module1, {Module1, :impl_for, 1}}]
+      assert sorted_vertices(call_graph) == [
+               Module1,
+               {Module1, :impl_for, 1},
+               {Module1, :struct_impl_for, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :impl_for, 1}},
+               {{Module1, :impl_for, 1}, {Module1, :struct_impl_for, 1}}
+             ]
     end
 
     test "function definition ir, impl_for!/1 skips clause body traversal but adds edge to impl_for/1",
@@ -3077,6 +3086,45 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              } = integer_clause
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (struct dispatch clause):
+    #   def impl_for(%{__struct__: x}) when is_atom(x), do: struct_impl_for(x)
+    test "impl_for/1 struct dispatch clause calls struct_impl_for/1 via LocalFunctionCall",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :impl_for, 1)
+
+      struct_clause =
+        Enum.find(fun_defs, fn def_ir ->
+          def_ir.clause |> inspect() |> String.contains?("struct_impl_for")
+        end)
+
+      assert %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.Variable{}}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :struct_impl_for,
+                       args: [_struct_module]
+                     }
+                   ]
+                 }
+               }
+             } = struct_clause
     end
 
     # Original source:
