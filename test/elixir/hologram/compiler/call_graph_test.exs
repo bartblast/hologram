@@ -2955,7 +2955,20 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
       else
-        assert [for_clause, protocol_clause, target_clause] = fun_defs
+        assert [target_clause, for_clause, protocol_clause] = fun_defs
+
+        assert target_clause == %IR.FunctionDefinition{
+                 name: :__impl__,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.AtomType{value: :target}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Protocol1.Integer}]
+                   }
+                 }
+               }
 
         assert for_clause == %IR.FunctionDefinition{
                  name: :__impl__,
@@ -2979,19 +2992,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                    guards: [],
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: Protocol1}]
-                   }
-                 }
-               }
-
-        assert target_clause == %IR.FunctionDefinition{
-                 name: :__impl__,
-                 arity: 1,
-                 visibility: :public,
-                 clause: %IR.FunctionClause{
-                   params: [%IR.AtomType{value: :target}],
-                   guards: [],
-                   body: %IR.Block{
-                     expressions: [%IR.AtomType{value: Protocol1.Integer}]
                    }
                  }
                }
@@ -3322,7 +3322,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     def my_fun(data)
     #   end
     #
-    # Expanded:
+    # Expanded (Elixir >= 1.18):
     #   def impl_for!(data) do
     #     case impl_for(data) do
     #       x when x == false or x == nil ->
@@ -3331,9 +3331,58 @@ defmodule Hologram.Compiler.CallGraphTest do
     #       x -> x
     #     end
     #   end
+    #
+    # Expanded (Elixir < 1.18):
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data))
+    #       x -> x
+    #     end
+    #   end
     test "impl_for!/1 body calls impl_for/1 and has protocol module atom in error path",
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
+
+      exception_keyword_data =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :description},
+                %IR.StringType{value: ""}
+              ]
+            }
+          ]
+        else
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            }
+          ]
+        end
 
       assert clause == %IR.FunctionDefinition{
                name: :impl_for!,
@@ -3386,28 +3435,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                                      module: %IR.AtomType{value: Protocol.UndefinedError},
                                      function: :exception,
                                      args: [
-                                       %IR.ListType{
-                                         data: [
-                                           %IR.TupleType{
-                                             data: [
-                                               %IR.AtomType{value: :protocol},
-                                               %IR.AtomType{value: Protocol1}
-                                             ]
-                                           },
-                                           %IR.TupleType{
-                                             data: [
-                                               %IR.AtomType{value: :value},
-                                               %IR.Variable{name: :data, version: 0}
-                                             ]
-                                           },
-                                           %IR.TupleType{
-                                             data: [
-                                               %IR.AtomType{value: :description},
-                                               %IR.StringType{value: ""}
-                                             ]
-                                           }
-                                         ]
-                                       }
+                                       %IR.ListType{data: exception_keyword_data}
                                      ]
                                    }
                                  ]
@@ -3476,11 +3504,11 @@ defmodule Hologram.Compiler.CallGraphTest do
     # Original source (Module41Error):
     #   defexception message: "test error"
     #
-    # Generated exception/1 (Elixir >= 1.16):
+    # Generated exception/1 (Elixir >= 1.18):
     #   def exception(msg) when is_binary(msg), do: exception(message: msg)
     #   def exception(args) when is_list(args), do: Kernel.struct!(Module41Error, args)
     #
-    # Generated exception/1 (Elixir < 1.16):
+    # Generated exception/1 (Elixir < 1.18):
     #   def exception(msg) when is_binary(msg), do: exception(message: msg)
     #   def exception(args) when is_list(args) do
     #     struct = __struct__()
@@ -3500,7 +3528,7 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Module41Error, :exception, 1)
 
-      if Version.match?(System.version(), ">= 1.16.0") do
+      if Version.match?(System.version(), ">= 1.18.0") do
         assert [msg_clause, args_clause] = fun_defs
 
         assert msg_clause == %IR.FunctionDefinition{
@@ -3566,7 +3594,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
       else
-        # Elixir < 1.16: Kernel.struct!/2 is called with a variable (not a literal module
+        # Elixir < 1.18: Kernel.struct!/2 is called with a variable (not a literal module
         # atom) - so the Kernel.struct!/2 special case in CallGraph.build/3 won't fire
         # (safe - missed optimization only).
         assert [msg_clause, args_clause] = fun_defs
@@ -3789,6 +3817,8 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     # Original source (System.warn/2):
+    #
+    # Elixir >= 1.17:
     #   defp warn(unit, replacement_unit) do
     #     IO.warn_once({System, unit}, fn ->
     #       "deprecated time unit: " <> inspect(unit) <>
@@ -3798,11 +3828,67 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     replacement_unit
     #   end
     #
+    # Elixir < 1.17:
+    #   defp warn(unit, replacement_unit) do
+    #     IO.warn_once({System, unit},
+    #       "deprecated time unit: " <> inspect(unit) <>
+    #         ". A time unit should be " <>
+    #         ":second, :millisecond, :microsecond, :nanosecond, or a positive integer",
+    #       _ = 4)
+    #     replacement_unit
+    #   end
+    #
     # The first argument {System, unit} contains the System module atom as a
     # namespace identifier for the deduplication key, not as a dependency.
     test "IO.warn_once/3 first argument contains module atom as deduplication key",
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, System, :warn, 2)
+
+      message_bitstring = %IR.BitstringType{
+        segments: [
+          %IR.BitstringSegment{
+            value: %IR.StringType{value: "deprecated time unit: "},
+            modifiers: [type: :binary]
+          },
+          %IR.BitstringSegment{
+            value: %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: Kernel},
+              function: :inspect,
+              args: [%IR.Variable{name: :unit, version: 0}]
+            },
+            modifiers: [type: :binary]
+          },
+          %IR.BitstringSegment{
+            value: %IR.StringType{value: ". A time unit should be "},
+            modifiers: [type: :binary]
+          },
+          %IR.BitstringSegment{
+            value: %IR.StringType{
+              value: ":second, :millisecond, :microsecond, :nanosecond, or a positive integer"
+            },
+            modifiers: [type: :binary]
+          }
+        ]
+      }
+
+      # Elixir >= 1.17 wraps the message in an anonymous function; < 1.17 passes it directly.
+      message_arg =
+        if Version.match?(System.version(), ">= 1.17.0") do
+          %IR.AnonymousFunctionType{
+            arity: 0,
+            captured_function: nil,
+            captured_module: nil,
+            clauses: [
+              %IR.FunctionClause{
+                params: [],
+                guards: [],
+                body: %IR.Block{expressions: [message_bitstring]}
+              }
+            ]
+          }
+        else
+          message_bitstring
+        end
 
       assert clause == %IR.FunctionDefinition{
                name: :warn,
@@ -3826,52 +3912,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                              %IR.Variable{name: :unit, version: 0}
                            ]
                          },
-                         %IR.AnonymousFunctionType{
-                           arity: 0,
-                           captured_function: nil,
-                           captured_module: nil,
-                           clauses: [
-                             %IR.FunctionClause{
-                               params: [],
-                               guards: [],
-                               body: %IR.Block{
-                                 expressions: [
-                                   %IR.BitstringType{
-                                     segments: [
-                                       %IR.BitstringSegment{
-                                         value: %IR.StringType{
-                                           value: "deprecated time unit: "
-                                         },
-                                         modifiers: [type: :binary]
-                                       },
-                                       %IR.BitstringSegment{
-                                         value: %IR.RemoteFunctionCall{
-                                           module: %IR.AtomType{value: Kernel},
-                                           function: :inspect,
-                                           args: [%IR.Variable{name: :unit, version: 0}]
-                                         },
-                                         modifiers: [type: :binary]
-                                       },
-                                       %IR.BitstringSegment{
-                                         value: %IR.StringType{
-                                           value: ". A time unit should be "
-                                         },
-                                         modifiers: [type: :binary]
-                                       },
-                                       %IR.BitstringSegment{
-                                         value: %IR.StringType{
-                                           value:
-                                             ":second, :millisecond, :microsecond, :nanosecond, or a positive integer"
-                                         },
-                                         modifiers: [type: :binary]
-                                       }
-                                     ]
-                                   }
-                                 ]
-                               }
-                             }
-                           ]
-                         },
+                         message_arg,
                          %IR.MatchOperator{
                            left: %IR.MatchPlaceholder{},
                            right: %IR.IntegerType{value: 4}
