@@ -2889,40 +2889,88 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     def my_fun(_data), do: :ok
     #   end
     #
-    # Expanded:
+    # Expanded (Elixir >= 1.16):
     #   def __impl__(:for), do: Integer
     #   def __impl__(:protocol), do: Protocol1
+    #
+    # Expanded (Elixir < 1.16):
+    #   def __impl__(:for), do: Integer
+    #   def __impl__(:protocol), do: Protocol1
+    #   def __impl__(:target), do: Protocol1.Integer
     test "__impl__/1 clauses have target and protocol module atoms in body",
          %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
 
-      assert [for_clause, protocol_clause] = fun_defs
+      if Version.match?(System.version(), ">= 1.16.0") do
+        assert [for_clause, protocol_clause] = fun_defs
 
-      assert for_clause == %IR.FunctionDefinition{
-               name: :__impl__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :for}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: Integer}]
+        assert for_clause == %IR.FunctionDefinition{
+                 name: :__impl__,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.AtomType{value: :for}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Integer}]
+                   }
                  }
                }
-             }
 
-      assert protocol_clause == %IR.FunctionDefinition{
-               name: :__impl__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :protocol}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: Protocol1}]
+        assert protocol_clause == %IR.FunctionDefinition{
+                 name: :__impl__,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.AtomType{value: :protocol}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Protocol1}]
+                   }
                  }
                }
-             }
+      else
+        assert [for_clause, protocol_clause, target_clause] = fun_defs
+
+        assert for_clause == %IR.FunctionDefinition{
+                 name: :__impl__,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.AtomType{value: :for}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Integer}]
+                   }
+                 }
+               }
+
+        assert protocol_clause == %IR.FunctionDefinition{
+                 name: :__impl__,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.AtomType{value: :protocol}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Protocol1}]
+                   }
+                 }
+               }
+
+        assert target_clause == %IR.FunctionDefinition{
+                 name: :__impl__,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.AtomType{value: :target}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: Protocol1.Integer}]
+                   }
+                 }
+               }
+      end
     end
 
     # Original source:
