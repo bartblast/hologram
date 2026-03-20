@@ -698,6 +698,30 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(fields, context)
   end
 
+  # Suppress module vertex edges in Kernel.inspect/1 arguments. Module atoms passed to
+  # inspect are used for string formatting (e.g. in error messages), not as real dependencies.
+  # Without this, code like `inspect(MyModule)` in error paths would pull in MyModule's
+  # entire function tree.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Kernel},
+          function: :inspect,
+          args: args
+        },
+        context
+      ) do
+    to_vertex = {Kernel, :inspect, Enum.count(args)}
+    add_edge(call_graph, context.from_vertex, to_vertex)
+
+    new_context = %{
+      context
+      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
+    }
+
+    build(call_graph, args, new_context)
+  end
+
   # Skip the :protocol key value in Protocol.UndefinedError.exception/1 args.
   # This is expanded from: raise Protocol.UndefinedError, protocol: SomeProtocol, value: data
   # The protocol module atom is just metadata identifying the protocol in the error message,

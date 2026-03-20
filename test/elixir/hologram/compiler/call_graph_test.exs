@@ -1644,6 +1644,31 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "remote function call ir, Kernel.inspect/1 suppresses module vertex edges in arguments",
+         %{
+           empty_call_graph: call_graph
+         } do
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: Kernel},
+        function: :inspect,
+        args: [%IR.AtomType{value: Module5}]
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
+
+      assert result == call_graph
+
+      # Module5 atom is suppressed; only the MFA edge to Kernel.inspect/1 is created.
+      assert sorted_vertices(call_graph) == [
+               {Module1, :my_fun, 1},
+               {Kernel, :inspect, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {{Module1, :my_fun, 1}, {Kernel, :inspect, 1}}
+             ]
+    end
+
     test "remote function call ir, :erlang.error/3 skips third argument (error options)", %{
       empty_call_graph: call_graph
     } do
