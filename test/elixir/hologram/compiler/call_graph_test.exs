@@ -3886,52 +3886,49 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     # Original source (Module39):
-    #   def my_fun do
-    #     raise ArgumentError, "test"
-    #   end
+    #   raise ArgumentError
     #
-    # Expanded (by Elixir compiler, not the raise macro):
-    #   def my_fun do
-    #     :erlang.error(ArgumentError.exception("test"), :none,
-    #       [error_info: %{module: Exception}])
-    #   end
+    # Expanded:
+    #   :erlang.error(ArgumentError.exception([]), :none,
+    #     [error_info: %{module: Exception}])
     test "raise compiles to :erlang.error/3 with error_info: %{module: Exception}",
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Module39, :my_fun, 0)
 
-      assert %IR.FunctionDefinition{
-               name: :my_fun,
-               arity: 0,
-               clause: %IR.FunctionClause{
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: :erlang},
-                       function: :error,
-                       args: [
-                         _reason,
-                         _args,
-                         %IR.ListType{
+      %IR.FunctionDefinition{
+        clause: %IR.FunctionClause{
+          body: %IR.Block{
+            expressions: [raise_expr]
+          }
+        }
+      } = clause
+
+      assert raise_expr == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :erlang},
+               function: :error,
+               args: [
+                 %IR.RemoteFunctionCall{
+                   module: %IR.AtomType{value: ArgumentError},
+                   function: :exception,
+                   args: [%IR.ListType{data: []}]
+                 },
+                 %IR.AtomType{value: :none},
+                 %IR.ListType{
+                   data: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :error_info},
+                         %IR.MapType{
                            data: [
-                             %IR.TupleType{
-                               data: [
-                                 %IR.AtomType{value: :error_info},
-                                 %IR.MapType{
-                                   data: [
-                                     {%IR.AtomType{value: :module},
-                                      %IR.AtomType{value: Exception}}
-                                   ]
-                                 }
-                               ]
-                             }
+                             {%IR.AtomType{value: :module}, %IR.AtomType{value: Exception}}
                            ]
                          }
                        ]
                      }
                    ]
                  }
-               }
-             } = clause
+               ]
+             }
     end
 
     # Original source:
