@@ -794,9 +794,10 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{Module1, {Module1, :impl_for, 1}}]
     end
 
-    test "function definition ir, impl_for!/1 skips clause body traversal", %{
-      empty_call_graph: call_graph
-    } do
+    test "function definition ir, impl_for!/1 skips clause body traversal but adds edge to impl_for/1",
+         %{
+           empty_call_graph: call_graph
+         } do
       ir = %IR.FunctionDefinition{
         name: :impl_for!,
         arity: 1,
@@ -814,8 +815,16 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [Module1, {Module1, :impl_for!, 1}]
-      assert sorted_edges(call_graph) == [{Module1, {Module1, :impl_for!, 1}}]
+      assert sorted_vertices(call_graph) == [
+               Module1,
+               {Module1, :impl_for, 1},
+               {Module1, :impl_for!, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :impl_for!, 1}},
+               {{Module1, :impl_for!, 1}, {Module1, :impl_for, 1}}
+             ]
     end
 
     test "function definition ir, __protocol__/1 skips clause body traversal", %{
@@ -3127,6 +3136,39 @@ defmodule Hologram.Compiler.CallGraphTest do
                          }
                          | _other_clauses
                        ]
+                     }
+                   ]
+                 }
+               }
+             } = clause
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded:
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       ...
+    #     end
+    #   end
+    test "impl_for!/1 body calls impl_for/1 via LocalFunctionCall in case condition",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
+
+      assert %IR.FunctionDefinition{
+               name: :impl_for!,
+               arity: 1,
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.LocalFunctionCall{
+                         function: :impl_for,
+                         args: [_data]
+                       }
                      }
                    ]
                  }
