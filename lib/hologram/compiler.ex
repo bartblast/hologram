@@ -442,7 +442,13 @@ defmodule Hologram.Compiler do
 
     if exit_status != 0 do
       raise RuntimeError,
-        message: "Biome formatter failed (probably there were JavaScript syntax errors)"
+        message: """
+        Biome formatter failed (probably there were JavaScript syntax errors).
+        Formatter binary: #{opts[:formatter_bin_path]}
+        Exit status: #{exit_status}
+        Output: #{exit_msg}
+        Files: #{Enum.join(file_paths, ", ")}
+        """
     end
 
     exit_msg

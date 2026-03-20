@@ -696,11 +696,17 @@ defmodule Hologram.CompilerTest do
         formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
       ]
 
-      assert_raise RuntimeError,
-                   "Biome formatter failed (probably there were JavaScript syntax errors)",
-                   fn ->
-                     Compiler.format_files([file_path_1, file_path_2], opts)
-                   end
+      expected_message = ~r"""
+      Biome formatter failed \(probably there were JavaScript syntax errors\)\.
+      Formatter binary: .+biome
+      Exit status: [1-9]\d*
+      Output: .+
+      Files: .+file_1\.js, .+file_2\.js
+      """s
+
+      assert_raise RuntimeError, expected_message, fn ->
+        Compiler.format_files([file_path_1, file_path_2], opts)
+      end
 
       assert File.read!(file_path_1) == unformatted_invalid_js_code
       assert File.read!(file_path_2) == @formatted_valid_js_code
