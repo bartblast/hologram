@@ -1672,9 +1672,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "remote function call ir, :erlang.error/3 skips third argument (error options)", %{
-      empty_call_graph: call_graph
-    } do
+    test "remote function call ir, :erlang.error/3 suppresses module vertex edges in third argument (error options)",
+         %{
+           empty_call_graph: call_graph
+         } do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: :erlang},
         function: :error,

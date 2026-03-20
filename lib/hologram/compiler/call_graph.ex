@@ -643,26 +643,32 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(args, context)
   end
 
-  # Skip the third argument (error options) of :erlang.error/3.
+  # Suppress module vertex edges in the third argument (error options) of :erlang.error/3.
   # The Elixir compiler transforms `raise` into :erlang.error/3 with
   # error_info: %{module: Exception} as the third argument. This Exception
   # module atom is compiler-injected metadata for error formatting, not a
   # real dependency. Without this, every `raise` would pull in the Exception
-  # module's entire function tree (58 functions).
+  # module's entire function tree (58 functions). MFA edges are not affected.
   def build(
         call_graph,
         %IR.RemoteFunctionCall{
           module: %IR.AtomType{value: :erlang},
           function: :error,
-          args: [reason, args, _error_options]
+          args: [reason, args, error_options]
         },
         context
       ) do
     add_edge(call_graph, context.from_vertex, {:erlang, :error, 3})
 
+    suppressed_context = %{
+      context
+      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
+    }
+
     call_graph
     |> build(reason, context)
     |> build(args, context)
+    |> build(error_options, suppressed_context)
   end
 
   # Skip module atoms in the first argument (deduplication key) of IO.warn_once/3.
