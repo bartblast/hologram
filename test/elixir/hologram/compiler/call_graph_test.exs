@@ -613,6 +613,102 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "function definition ir, impl_for!/1 suppresses module vertex edges from body", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :impl_for!,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :data, version: 0}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.Case{
+                condition: %IR.LocalFunctionCall{
+                  function: :impl_for,
+                  args: [%IR.Variable{name: :data, version: 0}]
+                },
+                clauses: [
+                  %IR.Clause{
+                    match: %IR.Variable{name: :x, version: 1},
+                    guards: [
+                      %IR.RemoteFunctionCall{
+                        module: %IR.AtomType{value: :erlang},
+                        function: :"=:=",
+                        args: [
+                          %IR.Variable{name: :x, version: 1},
+                          %IR.AtomType{value: nil}
+                        ]
+                      }
+                    ],
+                    body: %IR.Block{
+                      expressions: [
+                        %IR.RemoteFunctionCall{
+                          module: %IR.AtomType{value: :erlang},
+                          function: :error,
+                          args: [
+                            %IR.RemoteFunctionCall{
+                              module: %IR.AtomType{value: Protocol.UndefinedError},
+                              function: :exception,
+                              args: [
+                                %IR.ListType{
+                                  data: [
+                                    %IR.TupleType{
+                                      data: [
+                                        %IR.AtomType{value: :protocol},
+                                        %IR.AtomType{value: Module5}
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  %IR.Clause{
+                    match: %IR.Variable{name: :x, version: 2},
+                    guards: [],
+                    body: %IR.Block{
+                      expressions: [%IR.Variable{name: :x, version: 2}]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      # Module5 (protocol module atom in error message) is suppressed; impl_for/1 local
+      # call, Protocol.UndefinedError.exception/1, and :erlang MFA edges are discovered
+      # through body traversal.
+      assert sorted_vertices(call_graph) == [
+               Module1,
+               {Module1, :impl_for, 1},
+               {Module1, :impl_for!, 1},
+               {Protocol.UndefinedError, :exception, 1},
+               {:erlang, :"=:=", 2},
+               {:erlang, :error, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :impl_for!, 1}},
+               {{Module1, :impl_for!, 1}, {Module1, :impl_for, 1}},
+               {{Module1, :impl_for!, 1}, {Protocol.UndefinedError, :exception, 1}},
+               {{Module1, :impl_for!, 1}, {:erlang, :"=:=", 2}},
+               {{Module1, :impl_for!, 1}, {:erlang, :error, 1}}
+             ]
+    end
+
     test "function definition ir, Enumerable impl count/1 skips clause body traversal", %{
       empty_call_graph: call_graph
     } do
@@ -820,102 +916,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [
                {Module1, {Module1, :slice, 1}},
                {{Module1, :slice, 1}, Module5}
-             ]
-    end
-
-    test "function definition ir, impl_for!/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :impl_for!,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :data, version: 0}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.Case{
-                condition: %IR.LocalFunctionCall{
-                  function: :impl_for,
-                  args: [%IR.Variable{name: :data, version: 0}]
-                },
-                clauses: [
-                  %IR.Clause{
-                    match: %IR.Variable{name: :x, version: 1},
-                    guards: [
-                      %IR.RemoteFunctionCall{
-                        module: %IR.AtomType{value: :erlang},
-                        function: :"=:=",
-                        args: [
-                          %IR.Variable{name: :x, version: 1},
-                          %IR.AtomType{value: nil}
-                        ]
-                      }
-                    ],
-                    body: %IR.Block{
-                      expressions: [
-                        %IR.RemoteFunctionCall{
-                          module: %IR.AtomType{value: :erlang},
-                          function: :error,
-                          args: [
-                            %IR.RemoteFunctionCall{
-                              module: %IR.AtomType{value: Protocol.UndefinedError},
-                              function: :exception,
-                              args: [
-                                %IR.ListType{
-                                  data: [
-                                    %IR.TupleType{
-                                      data: [
-                                        %IR.AtomType{value: :protocol},
-                                        %IR.AtomType{value: Module5}
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  },
-                  %IR.Clause{
-                    match: %IR.Variable{name: :x, version: 2},
-                    guards: [],
-                    body: %IR.Block{
-                      expressions: [%IR.Variable{name: :x, version: 2}]
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      # Module5 (protocol module atom in error message) is suppressed; impl_for/1 local
-      # call, Protocol.UndefinedError.exception/1, and :erlang MFA edges are discovered
-      # through body traversal.
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               {Module1, :impl_for, 1},
-               {Module1, :impl_for!, 1},
-               {Protocol.UndefinedError, :exception, 1},
-               {:erlang, :"=:=", 2},
-               {:erlang, :error, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :impl_for!, 1}},
-               {{Module1, :impl_for!, 1}, {Module1, :impl_for, 1}},
-               {{Module1, :impl_for!, 1}, {Protocol.UndefinedError, :exception, 1}},
-               {{Module1, :impl_for!, 1}, {:erlang, :"=:=", 2}},
-               {{Module1, :impl_for!, 1}, {:erlang, :error, 1}}
              ]
     end
 
@@ -3124,6 +3124,147 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     def my_fun(data)
     #   end
     #
+    # Expanded (Elixir >= 1.18):
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data, description: ""))
+    #       x -> x
+    #     end
+    #   end
+    #
+    # Expanded (Elixir < 1.18):
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data))
+    #       x -> x
+    #     end
+    #   end
+    test "impl_for!/1 body calls impl_for/1 and has protocol module atom in error path",
+         %{ir_plt: ir_plt} do
+      assert [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
+
+      exception_keyword_data =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :description},
+                %IR.StringType{value: ""}
+              ]
+            }
+          ]
+        else
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            }
+          ]
+        end
+
+      assert clause == %IR.FunctionDefinition{
+               name: :impl_for!,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :data, version: 0}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.LocalFunctionCall{
+                         function: :impl_for,
+                         args: [%IR.Variable{name: :data, version: 0}]
+                       },
+                       clauses: [
+                         %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 1},
+                           guards: [
+                             %IR.RemoteFunctionCall{
+                               module: %IR.AtomType{value: :erlang},
+                               function: :orelse,
+                               args: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: false}
+                                   ]
+                                 },
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: nil}
+                                   ]
+                                 }
+                               ]
+                             }
+                           ],
+                           body: %IR.Block{
+                             expressions: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.AtomType{value: :erlang},
+                                 function: :error,
+                                 args: [
+                                   %IR.RemoteFunctionCall{
+                                     module: %IR.AtomType{value: Protocol.UndefinedError},
+                                     function: :exception,
+                                     args: [
+                                       %IR.ListType{data: exception_keyword_data}
+                                     ]
+                                   }
+                                 ]
+                               }
+                             ]
+                           }
+                         },
+                         %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 2},
+                           guards: [],
+                           body: %IR.Block{
+                             expressions: [%IR.Variable{name: :x, version: 2}]
+                           }
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
     # Expanded (after consolidation):
     #   def __protocol__(:module), do: Protocol1
     #   def __protocol__(:functions), do: [my_fun: 1]
@@ -3283,147 +3424,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                                }
                              }
                            ]
-                         }
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
-    #   end
-    #
-    # Expanded (Elixir >= 1.18):
-    #   def impl_for!(data) do
-    #     case impl_for(data) do
-    #       x when x == false or x == nil ->
-    #         :erlang.error(Protocol.UndefinedError.exception(
-    #           protocol: Protocol1, value: data, description: ""))
-    #       x -> x
-    #     end
-    #   end
-    #
-    # Expanded (Elixir < 1.18):
-    #   def impl_for!(data) do
-    #     case impl_for(data) do
-    #       x when x == false or x == nil ->
-    #         :erlang.error(Protocol.UndefinedError.exception(
-    #           protocol: Protocol1, value: data))
-    #       x -> x
-    #     end
-    #   end
-    test "impl_for!/1 body calls impl_for/1 and has protocol module atom in error path",
-         %{ir_plt: ir_plt} do
-      [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
-
-      exception_keyword_data =
-        if Version.match?(System.version(), ">= 1.18.0") do
-          [
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :protocol},
-                %IR.AtomType{value: Protocol1}
-              ]
-            },
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :value},
-                %IR.Variable{name: :data, version: 0}
-              ]
-            },
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :description},
-                %IR.StringType{value: ""}
-              ]
-            }
-          ]
-        else
-          [
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :protocol},
-                %IR.AtomType{value: Protocol1}
-              ]
-            },
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :value},
-                %IR.Variable{name: :data, version: 0}
-              ]
-            }
-          ]
-        end
-
-      assert clause == %IR.FunctionDefinition{
-               name: :impl_for!,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.Variable{name: :data, version: 0}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.Case{
-                       condition: %IR.LocalFunctionCall{
-                         function: :impl_for,
-                         args: [%IR.Variable{name: :data, version: 0}]
-                       },
-                       clauses: [
-                         %IR.Clause{
-                           match: %IR.Variable{name: :x, version: 1},
-                           guards: [
-                             %IR.RemoteFunctionCall{
-                               module: %IR.AtomType{value: :erlang},
-                               function: :orelse,
-                               args: [
-                                 %IR.RemoteFunctionCall{
-                                   module: %IR.AtomType{value: :erlang},
-                                   function: :"=:=",
-                                   args: [
-                                     %IR.Variable{name: :x, version: 1},
-                                     %IR.AtomType{value: false}
-                                   ]
-                                 },
-                                 %IR.RemoteFunctionCall{
-                                   module: %IR.AtomType{value: :erlang},
-                                   function: :"=:=",
-                                   args: [
-                                     %IR.Variable{name: :x, version: 1},
-                                     %IR.AtomType{value: nil}
-                                   ]
-                                 }
-                               ]
-                             }
-                           ],
-                           body: %IR.Block{
-                             expressions: [
-                               %IR.RemoteFunctionCall{
-                                 module: %IR.AtomType{value: :erlang},
-                                 function: :error,
-                                 args: [
-                                   %IR.RemoteFunctionCall{
-                                     module: %IR.AtomType{value: Protocol.UndefinedError},
-                                     function: :exception,
-                                     args: [
-                                       %IR.ListType{data: exception_keyword_data}
-                                     ]
-                                   }
-                                 ]
-                               }
-                             ]
-                           }
-                         },
-                         %IR.Clause{
-                           match: %IR.Variable{name: :x, version: 2},
-                           guards: [],
-                           body: %IR.Block{
-                             expressions: [%IR.Variable{name: :x, version: 2}]
-                           }
                          }
                        ]
                      }
