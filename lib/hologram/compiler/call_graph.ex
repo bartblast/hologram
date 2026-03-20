@@ -689,13 +689,13 @@ defmodule Hologram.Compiler.CallGraph do
       ) do
     add_edge(call_graph, context.from_vertex, {IO, :warn_once, 3})
 
-    key_arg_context = %{
+    suppressed_context = %{
       context
       | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
     }
 
     call_graph
-    |> build(key, key_arg_context)
+    |> build(key, suppressed_context)
     |> build(message, context)
     |> build(stacktrace_depth, context)
   end
