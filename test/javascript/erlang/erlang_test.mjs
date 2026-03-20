@@ -6244,6 +6244,28 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, Bitstring.fromBytes([1, 2, 3]));
     });
 
+    it("nested improper list with list tail", () => {
+      const zeroPad = Type.improperList([
+        Type.bitstring("0"),
+        Type.bitstring("1"),
+      ]);
+
+      const iodata = Type.improperList([
+        Type.bitstring("2022"),
+        Type.improperList([
+          Type.integer(45),
+          Type.improperList([
+            zeroPad,
+            Type.improperList([Type.integer(45), zeroPad]),
+          ]),
+        ]),
+      ]);
+
+      const result = list_to_binary(iodata);
+
+      assertBoxedStrictEqual(result, Type.bitstring("2022-01-01"));
+    });
+
     it("mixed integers and binaries (iolist from doc example)", () => {
       const bin1 = Bitstring.fromBytes([1, 2, 3]);
       const bin2 = Bitstring.fromBytes([4, 5]);
@@ -6262,31 +6284,6 @@ describe("Erlang", () => {
       assert.deepStrictEqual(
         result,
         Bitstring.fromBytes([1, 2, 3, 1, 2, 3, 4, 5, 4, 6]),
-      );
-    });
-
-    it("accepts nested cons-built iodata used by date formatting", () => {
-      const zeroPad = Type.improperList([
-        Type.bitstring("0"),
-        Type.bitstring("1"),
-      ]);
-
-      const result = list_to_binary(
-        Type.improperList([
-          Type.bitstring("2022"),
-          Type.improperList([
-            Type.integer(45),
-            Type.improperList([
-              zeroPad,
-              Type.improperList([Type.integer(45), zeroPad]),
-            ]),
-          ]),
-        ]),
-      );
-
-      assert.deepStrictEqual(
-        result,
-        Bitstring.fromBytes([50, 48, 50, 50, 45, 48, 49, 45, 48, 49]),
       );
     });
 

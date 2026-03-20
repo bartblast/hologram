@@ -3854,6 +3854,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.list_to_binary([1 | <<2, 3>>]) == <<1, 2, 3>>
     end
 
+    test "nested improper list with list tail" do
+      zero_pad = [<<"0">> | <<"1">>]
+      iodata = [<<"2022">> | [45 | [zero_pad | [45 | zero_pad]]]]
+
+      assert :erlang.list_to_binary(iodata) == "2022-01-01"
+    end
+
     test "mixed integers and binaries (iolist from doc example)" do
       bin1 = <<1, 2, 3>>
       bin2 = <<4, 5>>
@@ -3861,13 +3868,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       assert :erlang.list_to_binary([bin1, 1, [2, 3, bin2], 4 | bin3]) ==
                <<1, 2, 3, 1, 2, 3, 4, 5, 4, 6>>
-    end
-
-    test "accepts nested cons-built iodata used by date formatting" do
-      zero_pad = [<<"0">> | <<"1">>]
-      iodata = [<<"2022">> | [45 | [zero_pad | [45 | zero_pad]]]]
-
-      assert :erlang.list_to_binary(iodata) == "2022-01-01"
     end
 
     test "list with empty sublists" do
