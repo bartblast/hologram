@@ -587,6 +587,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "function definition ir, impl_for/1 suppresses module vertex edges from body", %{
       empty_call_graph: call_graph
     } do
+      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
       ir = %IR.FunctionDefinition{
         name: :impl_for,
         arity: 1,
@@ -3277,6 +3278,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       if Version.match?(System.version(), ">= 1.18.0") do
         assert [msg_clause, args_clause] = fun_defs
 
+        # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
         assert msg_clause == %IR.FunctionDefinition{
                  name: :exception,
                  arity: 1,
@@ -3345,6 +3347,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         # (safe - missed optimization only).
         assert [msg_clause, args_clause] = fun_defs
 
+        # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
         assert msg_clause == %IR.FunctionDefinition{
                  name: :exception,
                  arity: 1,
@@ -3577,6 +3580,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert [struct_clause, integer_clause, catch_all_clause] = fun_defs
 
+      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
       assert struct_clause == %IR.FunctionDefinition{
                name: :impl_for,
                arity: 1,
