@@ -654,9 +654,18 @@ defmodule Hologram.CompilerTest do
     @unformatted_valid_js_code "const myVar  =  123"
     @formatted_valid_js_code "const myVar = 123;\n"
 
-    test "valid JS code" do
+    @opts [
+      assets_dir: @assets_dir,
+      formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
+    ]
+
+    test "0 file paths" do
+      assert Compiler.format_files([], @opts) == 0
+    end
+
+    test "single batch" do
       test_tmp_dir =
-        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_valid_input_files"])
+        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_single_batch"])
 
       clean_dir(test_tmp_dir)
 
@@ -666,16 +675,34 @@ defmodule Hologram.CompilerTest do
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
       File.write!(file_path_2, @unformatted_valid_js_code)
 
-      opts = [
-        assets_dir: @assets_dir,
-        formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
-      ]
-
-      assert Compiler.format_files([file_path_1, file_path_2], opts) =~
-               ~r"Formatted 2 files in [0-9]+[mµ]?s\. Fixed 2 files\.\n"u
+      assert Compiler.format_files([file_path_1, file_path_2], @opts) == 1
 
       assert File.read!(file_path_1) == @formatted_valid_js_code
       assert File.read!(file_path_2) == @formatted_valid_js_code
+    end
+
+    test "multiple batches" do
+      test_tmp_dir =
+        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_multiple_batches"])
+
+      clean_dir(test_tmp_dir)
+
+      # Create enough files so that total command line length exceeds the 8191 char limit.
+      file_paths =
+        for i <- 1..100 do
+          file_name = "module_#{String.pad_leading("#{i}", 3, "0")}.entry.js"
+          file_path = Path.join(test_tmp_dir, file_name)
+
+          File.write!(file_path, @unformatted_valid_js_code)
+
+          file_path
+        end
+
+      assert Compiler.format_files(file_paths, @opts) >= 2
+
+      Enum.each(file_paths, fn file_path ->
+        assert File.read!(file_path) == @formatted_valid_js_code
+      end)
     end
 
     test "invalid JS code" do
@@ -691,11 +718,6 @@ defmodule Hologram.CompilerTest do
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
       File.write!(file_path_2, @unformatted_valid_js_code)
 
-      opts = [
-        assets_dir: @assets_dir,
-        formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
-      ]
-
       expected_message = ~r"""
       Biome formatter failed \(probably there were JavaScript syntax errors\)\.
       Formatter binary: .+biome
@@ -705,7 +727,7 @@ defmodule Hologram.CompilerTest do
       """s
 
       assert_raise RuntimeError, expected_message, fn ->
-        Compiler.format_files([file_path_1, file_path_2], opts)
+        Compiler.format_files([file_path_1, file_path_2], @opts)
       end
 
       assert File.read!(file_path_1) == unformatted_invalid_js_code

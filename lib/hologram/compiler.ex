@@ -426,7 +426,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/format_files_2/README.md
   """
-  @spec format_files(list(T.file_path()), T.opts()) :: String.t()
+  @spec format_files(list(T.file_path()), T.opts()) :: non_neg_integer
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
     base_args = [
@@ -471,7 +471,7 @@ defmodule Hologram.Compiler do
       end
     end)
 
-    Enum.map_join(results, fn {exit_msg, _exit_status, _batch} -> exit_msg end)
+    length(batches)
   end
 
   @doc """
