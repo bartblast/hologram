@@ -3451,43 +3451,81 @@ defmodule Hologram.Compiler.CallGraphTest do
     # Original source (Module41Error):
     #   defexception message: "test error"
     #
-    # Generated exception/1:
+    # Generated exception/1 (Elixir >= 1.16):
+    #   def exception(msg) when is_binary(msg), do: exception(message: msg)
+    #   def exception(args) when is_list(args), do: Kernel.struct!(Module41Error, args)
+    #
+    # Generated exception/1 (Elixir < 1.16):
+    #   def exception(msg) when is_binary(msg), do: exception(message: msg)
     #   def exception(args) when is_list(args) do
-    #     Kernel.struct!(Module41Error, args)
+    #     struct = __struct__()
+    #     {valid, invalid} = Enum.split_with(args, fn {k, _} -> :maps.is_key(k, struct) end)
+    #     case invalid do
+    #       [] -> :ok
+    #       _ -> IO.warn("the following fields are unknown when raising " <>
+    #              inspect(Module41Error) <> ": " <> inspect(invalid) <> ". " <>
+    #              "Please make sure to only give known fields when raising " <>
+    #              "or redefine " <> inspect(Module41Error) <> ".exception/1 to " <>
+    #              "discard unknown fields. Future Elixir versions will raise on " <>
+    #              "unknown fields given to raise/2")
+    #     end
+    #     Kernel.struct!(struct, valid)
     #   end
-    #
-    # The module atom is passed as the first argument to Kernel.struct!/2, which only
-    # uses it to call __struct__/0 and __struct__/1.
-    #
-    # Note: On Elixir < 1.16, defexception generates different IR without Kernel.struct!/2.
-    # The special case simply won't fire on those versions (safe - missed optimization only).
     test "defexception exception/1 calls Kernel.struct!/2 with literal module atom",
          %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Module41Error, :exception, 1)
 
-      struct_clause =
-        Enum.find(fun_defs, fn
-          %IR.FunctionDefinition{
-            clause: %IR.FunctionClause{
-              body: %IR.Block{
-                expressions: [
-                  %IR.RemoteFunctionCall{
-                    module: %IR.AtomType{value: Kernel},
-                    function: :struct!
-                  }
-                ]
-              }
-            }
-          } ->
-            true
-
-          _other ->
-            false
-        end)
-
       if Version.match?(System.version(), ">= 1.16.0") do
-        assert %IR.FunctionDefinition{
+        assert [msg_clause, args_clause] = fun_defs
+
+        assert msg_clause == %IR.FunctionDefinition{
+                 name: :exception,
+                 arity: 1,
+                 visibility: :public,
                  clause: %IR.FunctionClause{
+                   params: [%IR.Variable{name: :msg, version: 0}],
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_binary,
+                       args: [%IR.Variable{name: :msg, version: 0}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.LocalFunctionCall{
+                         function: :exception,
+                         args: [
+                           %IR.ListType{
+                             data: [
+                               %IR.TupleType{
+                                 data: [
+                                   %IR.AtomType{value: :message},
+                                   %IR.Variable{name: :msg, version: 0}
+                                 ]
+                               }
+                             ]
+                           }
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               }
+
+        assert args_clause == %IR.FunctionDefinition{
+                 name: :exception,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.Variable{name: :args, version: 0}],
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_list,
+                       args: [%IR.Variable{name: :args, version: 0}]
+                     }
+                   ],
                    body: %IR.Block{
                      expressions: [
                        %IR.RemoteFunctionCall{
@@ -3495,15 +3533,233 @@ defmodule Hologram.Compiler.CallGraphTest do
                          function: :struct!,
                          args: [
                            %IR.AtomType{value: Module41Error},
-                           _fields
+                           %IR.Variable{name: :args, version: 0}
                          ]
                        }
                      ]
                    }
                  }
-               } = struct_clause
+               }
       else
-        assert is_nil(struct_clause)
+        # Elixir < 1.16: Kernel.struct!/2 is called with a variable (not a literal module
+        # atom) - so the Kernel.struct!/2 special case in CallGraph.build/3 won't fire
+        # (safe - missed optimization only).
+        assert [msg_clause, args_clause] = fun_defs
+
+        assert msg_clause == %IR.FunctionDefinition{
+                 name: :exception,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.Variable{name: :msg, version: 0}],
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_binary,
+                       args: [%IR.Variable{name: :msg, version: 0}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.LocalFunctionCall{
+                         function: :exception,
+                         args: [
+                           %IR.ListType{
+                             data: [
+                               %IR.TupleType{
+                                 data: [
+                                   %IR.AtomType{value: :message},
+                                   %IR.Variable{name: :msg, version: 0}
+                                 ]
+                               }
+                             ]
+                           }
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               }
+
+        assert args_clause == %IR.FunctionDefinition{
+                 name: :exception,
+                 arity: 1,
+                 visibility: :public,
+                 clause: %IR.FunctionClause{
+                   params: [%IR.Variable{name: :args, version: 0}],
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_list,
+                       args: [%IR.Variable{name: :args, version: 0}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.MatchOperator{
+                         left: %IR.Variable{name: :struct, version: 1},
+                         right: %IR.LocalFunctionCall{function: :__struct__, args: []}
+                       },
+                       %IR.MatchOperator{
+                         left: %IR.TupleType{
+                           data: [
+                             %IR.Variable{name: :valid, version: 3},
+                             %IR.Variable{name: :invalid, version: 4}
+                           ]
+                         },
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: Enum},
+                           function: :split_with,
+                           args: [
+                             %IR.Variable{name: :args, version: 0},
+                             %IR.AnonymousFunctionType{
+                               arity: 1,
+                               captured_function: nil,
+                               captured_module: nil,
+                               clauses: [
+                                 %IR.FunctionClause{
+                                   params: [
+                                     %IR.TupleType{
+                                       data: [
+                                         %IR.Variable{name: :k, version: 2},
+                                         %IR.MatchPlaceholder{}
+                                       ]
+                                     }
+                                   ],
+                                   guards: [],
+                                   body: %IR.Block{
+                                     expressions: [
+                                       %IR.RemoteFunctionCall{
+                                         module: %IR.AtomType{value: :maps},
+                                         function: :is_key,
+                                         args: [
+                                           %IR.Variable{name: :k, version: 2},
+                                           %IR.Variable{name: :struct, version: 1}
+                                         ]
+                                       }
+                                     ]
+                                   }
+                                 }
+                               ]
+                             }
+                           ]
+                         }
+                       },
+                       %IR.Case{
+                         condition: %IR.Variable{name: :invalid, version: 4},
+                         clauses: [
+                           %IR.Clause{
+                             match: %IR.ListType{data: []},
+                             guards: [],
+                             body: %IR.Block{
+                               expressions: [%IR.AtomType{value: :ok}]
+                             }
+                           },
+                           %IR.Clause{
+                             match: %IR.MatchPlaceholder{},
+                             guards: [],
+                             body: %IR.Block{
+                               expressions: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: IO},
+                                   function: :warn,
+                                   args: [
+                                     %IR.BitstringType{
+                                       segments: [
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{
+                                             value:
+                                               "the following fields are unknown when raising "
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.RemoteFunctionCall{
+                                             module: %IR.AtomType{value: Kernel},
+                                             function: :inspect,
+                                             args: [%IR.AtomType{value: Module41Error}]
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{value: ": "},
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.RemoteFunctionCall{
+                                             module: %IR.AtomType{value: Kernel},
+                                             function: :inspect,
+                                             args: [
+                                               %IR.Variable{name: :invalid, version: 4}
+                                             ]
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{value: ". "},
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{
+                                             value:
+                                               "Please make sure to only give known fields when raising "
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{
+                                             value: "or redefine "
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.RemoteFunctionCall{
+                                             module: %IR.AtomType{value: Kernel},
+                                             function: :inspect,
+                                             args: [%IR.AtomType{value: Module41Error}]
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{
+                                             value: ".exception/1 to "
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{
+                                             value:
+                                               "discard unknown fields. Future Elixir versions will raise on "
+                                           },
+                                           modifiers: [type: :binary]
+                                         },
+                                         %IR.BitstringSegment{
+                                           value: %IR.StringType{
+                                             value: "unknown fields given to raise/2"
+                                           },
+                                           modifiers: [type: :binary]
+                                         }
+                                       ]
+                                     }
+                                   ]
+                                 }
+                               ]
+                             }
+                           }
+                         ]
+                       },
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: Kernel},
+                         function: :struct!,
+                         args: [
+                           %IR.Variable{name: :struct, version: 1},
+                           %IR.Variable{name: :valid, version: 3}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               }
       end
     end
 
