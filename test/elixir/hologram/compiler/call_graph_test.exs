@@ -746,7 +746,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, __impl__/1 skips clause body traversal", %{
+    test "function definition ir, __impl__/1 suppresses module vertex edges from body", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.FunctionDefinition{
