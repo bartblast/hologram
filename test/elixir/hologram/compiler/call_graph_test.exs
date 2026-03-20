@@ -560,6 +560,59 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    test "function definition ir, impl_for/1 suppresses module vertex edges from body", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.FunctionDefinition{
+        name: :impl_for,
+        arity: 1,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [
+            %IR.MapType{
+              data: [
+                {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
+              ]
+            }
+          ],
+          guards: [
+            %IR.RemoteFunctionCall{
+              module: %IR.AtomType{value: :erlang},
+              function: :is_atom,
+              args: [%IR.Variable{name: :x, version: -1}]
+            }
+          ],
+          body: %IR.Block{
+            expressions: [
+              %IR.LocalFunctionCall{
+                function: :struct_impl_for,
+                args: [%IR.Variable{name: :x, version: -1}]
+              }
+            ]
+          }
+        }
+      }
+
+      result = build(call_graph, ir, %Context{from_vertex: Module1})
+
+      assert result == call_graph
+
+      # Module atoms are suppressed; struct_impl_for/1 local call and :erlang.is_atom/1
+      # guard call are discovered through body traversal (no explicit edges needed).
+      assert sorted_vertices(call_graph) == [
+               Module1,
+               {Module1, :impl_for, 1},
+               {Module1, :struct_impl_for, 1},
+               {:erlang, :is_atom, 1}
+             ]
+
+      assert sorted_edges(call_graph) == [
+               {Module1, {Module1, :impl_for, 1}},
+               {{Module1, :impl_for, 1}, {Module1, :struct_impl_for, 1}},
+               {{Module1, :impl_for, 1}, {:erlang, :is_atom, 1}}
+             ]
+    end
+
     test "function definition ir, Enumerable impl count/1 skips clause body traversal", %{
       empty_call_graph: call_graph
     } do
@@ -767,59 +820,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [
                {Module1, {Module1, :slice, 1}},
                {{Module1, :slice, 1}, Module5}
-             ]
-    end
-
-    test "function definition ir, impl_for/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :impl_for,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [
-            %IR.MapType{
-              data: [
-                {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
-              ]
-            }
-          ],
-          guards: [
-            %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: :erlang},
-              function: :is_atom,
-              args: [%IR.Variable{name: :x, version: -1}]
-            }
-          ],
-          body: %IR.Block{
-            expressions: [
-              %IR.LocalFunctionCall{
-                function: :struct_impl_for,
-                args: [%IR.Variable{name: :x, version: -1}]
-              }
-            ]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      # Module atoms are suppressed; struct_impl_for/1 local call and :erlang.is_atom/1
-      # guard call are discovered through body traversal (no explicit edges needed).
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               {Module1, :impl_for, 1},
-               {Module1, :struct_impl_for, 1},
-               {:erlang, :is_atom, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :impl_for, 1}},
-               {{Module1, :impl_for, 1}, {Module1, :struct_impl_for, 1}},
-               {{Module1, :impl_for, 1}, {:erlang, :is_atom, 1}}
              ]
     end
 
@@ -2928,10 +2928,10 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       {for_clause, protocol_clause} =
         if Version.match?(System.version(), ">= 1.16.0") do
-          [for_clause, protocol_clause] = fun_defs
+          assert [for_clause, protocol_clause] = fun_defs
           {for_clause, protocol_clause}
         else
-          [target_clause, for_clause, protocol_clause] = fun_defs
+          assert [target_clause, for_clause, protocol_clause] = fun_defs
 
           assert target_clause == %IR.FunctionDefinition{
                    name: :__impl__,
@@ -2985,7 +2985,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   def __struct__(), do: %{__struct__: Struct1, field_1: nil}
     test "__struct__/0 body has a map with __struct__ key containing the module atom",
          %{ir_plt: ir_plt} do
-      [clause] = find_fun_defs(ir_plt, Struct1, :__struct__, 0)
+      assert [clause] = find_fun_defs(ir_plt, Struct1, :__struct__, 0)
 
       assert clause == %IR.FunctionDefinition{
                name: :__struct__,
@@ -3015,7 +3015,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   def __struct__(), do: %{__struct__: Struct2, field_1: nil, field_2: Module1}
     test "__struct__/0 body map values include module atoms when given as field defaults",
          %{ir_plt: ir_plt} do
-      [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0)
+      asert([clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0))
 
       assert clause == %IR.FunctionDefinition{
                name: :__struct__,
@@ -3034,6 +3034,86 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation):
+    #   def impl_for(%{__struct__: x}) when is_atom(x), do: struct_impl_for(x)
+    #   def impl_for(x) when is_integer(x), do: Protocol1.Integer
+    #   def impl_for(_), do: nil
+    test "impl_for/1 clauses have module atoms in body and struct dispatch calls struct_impl_for/1",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :impl_for, 1)
+
+      assert [struct_clause, integer_clause, catch_all_clause] = fun_defs
+
+      assert struct_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
+                     ]
+                   }
+                 ],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_atom,
+                     args: [%IR.Variable{name: :x, version: -1}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :struct_impl_for,
+                       args: [%IR.Variable{name: :x, version: -1}]
+                     }
+                   ]
+                 }
+               }
+             }
+
+      assert integer_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :x, version: -1}],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :x, version: -1}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: Protocol1.Integer}
+                   ]
+                 }
+               }
+             }
+
+      assert catch_all_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: nil}]
                  }
                }
              }
@@ -3207,86 +3287,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                        ]
                      }
                    ]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
-    #   end
-    #
-    # Expanded (after consolidation):
-    #   def impl_for(%{__struct__: x}) when is_atom(x), do: struct_impl_for(x)
-    #   def impl_for(x) when is_integer(x), do: Protocol1.Integer
-    #   def impl_for(_), do: nil
-    test "impl_for/1 clauses have module atoms in body and struct dispatch calls struct_impl_for/1",
-         %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Protocol1, :impl_for, 1)
-
-      assert [struct_clause, integer_clause, catch_all_clause] = fun_defs
-
-      assert struct_clause == %IR.FunctionDefinition{
-               name: :impl_for,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [
-                   %IR.MapType{
-                     data: [
-                       {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
-                     ]
-                   }
-                 ],
-                 guards: [
-                   %IR.RemoteFunctionCall{
-                     module: %IR.AtomType{value: :erlang},
-                     function: :is_atom,
-                     args: [%IR.Variable{name: :x, version: -1}]
-                   }
-                 ],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.LocalFunctionCall{
-                       function: :struct_impl_for,
-                       args: [%IR.Variable{name: :x, version: -1}]
-                     }
-                   ]
-                 }
-               }
-             }
-
-      assert integer_clause == %IR.FunctionDefinition{
-               name: :impl_for,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.Variable{name: :x, version: -1}],
-                 guards: [
-                   %IR.RemoteFunctionCall{
-                     module: %IR.AtomType{value: :erlang},
-                     function: :is_integer,
-                     args: [%IR.Variable{name: :x, version: -1}]
-                   }
-                 ],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.AtomType{value: Protocol1.Integer}
-                   ]
-                 }
-               }
-             }
-
-      assert catch_all_clause == %IR.FunctionDefinition{
-               name: :impl_for,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.MatchPlaceholder{}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: nil}]
                  }
                }
              }
