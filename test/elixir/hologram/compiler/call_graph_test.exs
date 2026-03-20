@@ -3790,7 +3790,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     # Original source (System.warn/2):
     #   defp warn(unit, replacement_unit) do
-    #     IO.warn_once({System, unit}, fn -> "deprecated time unit: ..." end, 4)
+    #     IO.warn_once({System, unit}, fn ->
+    #       "deprecated time unit: " <> inspect(unit) <>
+    #         ". A time unit should be " <>
+    #         ":second, :millisecond, :microsecond, :nanosecond, or a positive integer"
+    #     end, _ = 4)
+    #     replacement_unit
     #   end
     #
     # The first argument {System, unit} contains the System module atom as a
@@ -3799,10 +3804,16 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, System, :warn, 2)
 
-      assert %IR.FunctionDefinition{
+      assert clause == %IR.FunctionDefinition{
                name: :warn,
                arity: 2,
+               visibility: :private,
                clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :unit, version: 0},
+                   %IR.Variable{name: :replacement_unit, version: 1}
+                 ],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.RemoteFunctionCall{
@@ -3812,18 +3823,66 @@ defmodule Hologram.Compiler.CallGraphTest do
                          %IR.TupleType{
                            data: [
                              %IR.AtomType{value: System},
-                             _value
+                             %IR.Variable{name: :unit, version: 0}
                            ]
                          },
-                         _message,
-                         _stacktrace_depth
+                         %IR.AnonymousFunctionType{
+                           arity: 0,
+                           captured_function: nil,
+                           captured_module: nil,
+                           clauses: [
+                             %IR.FunctionClause{
+                               params: [],
+                               guards: [],
+                               body: %IR.Block{
+                                 expressions: [
+                                   %IR.BitstringType{
+                                     segments: [
+                                       %IR.BitstringSegment{
+                                         value: %IR.StringType{
+                                           value: "deprecated time unit: "
+                                         },
+                                         modifiers: [type: :binary]
+                                       },
+                                       %IR.BitstringSegment{
+                                         value: %IR.RemoteFunctionCall{
+                                           module: %IR.AtomType{value: Kernel},
+                                           function: :inspect,
+                                           args: [%IR.Variable{name: :unit, version: 0}]
+                                         },
+                                         modifiers: [type: :binary]
+                                       },
+                                       %IR.BitstringSegment{
+                                         value: %IR.StringType{
+                                           value: ". A time unit should be "
+                                         },
+                                         modifiers: [type: :binary]
+                                       },
+                                       %IR.BitstringSegment{
+                                         value: %IR.StringType{
+                                           value:
+                                             ":second, :millisecond, :microsecond, :nanosecond, or a positive integer"
+                                         },
+                                         modifiers: [type: :binary]
+                                       }
+                                     ]
+                                   }
+                                 ]
+                               }
+                             }
+                           ]
+                         },
+                         %IR.MatchOperator{
+                           left: %IR.MatchPlaceholder{},
+                           right: %IR.IntegerType{value: 4}
+                         }
                        ]
-                     }
-                     | _rest
+                     },
+                     %IR.Variable{name: :replacement_unit, version: 1}
                    ]
                  }
                }
-             } = clause
+             }
     end
 
     # Original source (Module39):
