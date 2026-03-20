@@ -2891,22 +2891,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     #
     # Expanded:
     #   def __impl__(:for), do: Integer
-    #
-    # Note: Elixir < 1.16 generates an additional :target clause alongside :for and :protocol.
-    # Using Enum.find instead of pattern matching on list length for cross-version compatibility.
-    test "__impl__/1 :for clause has the target module atom in body", %{ir_plt: ir_plt} do
+    #   def __impl__(:protocol), do: Protocol1
+    test "__impl__/1 clauses have target and protocol module atoms in body",
+         %{ir_plt: ir_plt} do
       fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
 
-      for_clause =
-        Enum.find(
-          fun_defs,
-          &match?(
-            %IR.FunctionDefinition{
-              clause: %IR.FunctionClause{params: [%IR.AtomType{value: :for}]}
-            },
-            &1
-          )
-        )
+      assert [for_clause, protocol_clause] = fun_defs
 
       assert for_clause == %IR.FunctionDefinition{
                name: :__impl__,
@@ -2920,31 +2910,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              }
-    end
-
-    # Original source:
-    #   defimpl Protocol1, for: Integer do
-    #     def my_fun(_data), do: :ok
-    #   end
-    #
-    # Expanded:
-    #   def __impl__(:protocol), do: Protocol1
-    #
-    # Note: Elixir < 1.16 generates an additional :target clause alongside :for and :protocol.
-    # Using Enum.find instead of pattern matching on list length for cross-version compatibility.
-    test "__impl__/1 :protocol clause has the protocol module atom in body", %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
-
-      protocol_clause =
-        Enum.find(
-          fun_defs,
-          &match?(
-            %IR.FunctionDefinition{
-              clause: %IR.FunctionClause{params: [%IR.AtomType{value: :protocol}]}
-            },
-            &1
-          )
-        )
 
       assert protocol_clause == %IR.FunctionDefinition{
                name: :__impl__,
@@ -2954,11 +2919,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                  params: [%IR.AtomType{value: :protocol}],
                  guards: [],
                  body: %IR.Block{
-                   expressions: [
-                     %IR.AtomType{
-                       value: Protocol1
-                     }
-                   ]
+                   expressions: [%IR.AtomType{value: Protocol1}]
                  }
                }
              }
