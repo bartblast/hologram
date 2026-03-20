@@ -709,9 +709,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, Enumerable impl count/1 skips clause body traversal", %{
-      empty_call_graph: call_graph
-    } do
+    test "function definition ir, Enumerable impl count/1 suppresses module vertex edges from body",
+         %{
+           empty_call_graph: call_graph
+         } do
       ir = %IR.FunctionDefinition{
         name: :count,
         arity: 1,
@@ -750,9 +751,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, Enumerable impl member?/2 skips clause body traversal", %{
-      empty_call_graph: call_graph
-    } do
+    test "function definition ir, Enumerable impl member?/2 suppresses module vertex edges from body",
+         %{
+           empty_call_graph: call_graph
+         } do
       ir = %IR.FunctionDefinition{
         name: :member?,
         arity: 2,
@@ -791,9 +793,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, Enumerable impl slice/1 skips clause body traversal", %{
-      empty_call_graph: call_graph
-    } do
+    test "function definition ir, Enumerable impl slice/1 suppresses module vertex edges from body",
+         %{
+           empty_call_graph: call_graph
+         } do
       ir = %IR.FunctionDefinition{
         name: :slice,
         arity: 1,
@@ -3015,7 +3018,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   def __struct__(), do: %{__struct__: Struct2, field_1: nil, field_2: Module1}
     test "__struct__/0 body map values include module atoms when given as field defaults",
          %{ir_plt: ir_plt} do
-      asert([clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0))
+      assert [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0)
 
       assert clause == %IR.FunctionDefinition{
                name: :__struct__,

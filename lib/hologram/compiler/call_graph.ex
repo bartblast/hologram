@@ -526,12 +526,12 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(clause, new_context)
   end
 
-  # Skip traversing count/1, member?/2, and slice/1 clause bodies in Enumerable protocol
-  # implementations. The Enumerable protocol convention requires these functions to return
-  # {:error, __MODULE__} when deferring to the default implementation. The __MODULE__ atom
-  # creates a module vertex edge that pulls in all sibling functions (including reduce/3
-  # which can cascade heavily). The actual protocol dispatch is already handled by
-  # add_protocol_call_graph_edges/2.
+  # Suppress module vertex edges in count/1, member?/2, and slice/1 clause bodies in
+  # Enumerable protocol implementations. The Enumerable protocol convention requires these
+  # functions to return {:error, __MODULE__} when deferring to the default implementation.
+  # The __MODULE__ atom creates a module vertex edge that pulls in all sibling functions
+  # (including reduce/3 which can cascade heavily). MFA edges are not affected. The actual
+  # protocol dispatch is already handled by add_protocol_call_graph_edges/2.
   def build(
         call_graph,
         %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
@@ -543,11 +543,18 @@ defmodule Hologram.Compiler.CallGraph do
     fun_def_vertex = {from_vertex, name, arity}
     call_graph = add_edge(call_graph, from_vertex, fun_def_vertex)
 
-    if context.protocol_impl == Enumerable do
-      call_graph
-    else
-      build(call_graph, clause, %{context | from_vertex: fun_def_vertex})
-    end
+    new_context =
+      if context.protocol_impl == Enumerable do
+        %{
+          context
+          | from_vertex: fun_def_vertex,
+            modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
+        }
+      else
+        %{context | from_vertex: fun_def_vertex}
+      end
+
+    build(call_graph, clause, new_context)
   end
 
   def build(
