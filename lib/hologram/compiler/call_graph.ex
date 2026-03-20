@@ -344,7 +344,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Builds a call graph from IR.
   """
-  @spec build(t, IR.t(), Context.t()) :: t
+  @spec build(t, IR.t() | list, Context.t()) :: t
 
   def build(call_graph, %IR.AtomType{value: value}, %Context{
         from_vertex: from_vertex,
@@ -700,6 +700,33 @@ defmodule Hologram.Compiler.CallGraph do
     |> build(stacktrace_depth, context)
   end
 
+  # Suppress module vertex edges in Kernel.inspect/1,2 first argument. Module atoms passed
+  # to inspect are used for string formatting (e.g. in error messages), not as real
+  # dependencies. Without this, code like `inspect(MyModule)` in error paths would pull in
+  # MyModule's entire function tree. MFA edges are not affected. The second argument
+  # (options) is traversed normally.
+  def build(
+        call_graph,
+        %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: Kernel},
+          function: :inspect,
+          args: [term | opts]
+        },
+        context
+      ) do
+    to_vertex = {Kernel, :inspect, 1 + length(opts)}
+    add_edge(call_graph, context.from_vertex, to_vertex)
+
+    suppressed_context = %{
+      context
+      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
+    }
+
+    call_graph
+    |> build(term, suppressed_context)
+    |> build(opts, context)
+  end
+
   # For Kernel.struct!/2 with a literal module atom as the first argument, create targeted
   # edges to {module, :__struct__, 0} and {module, :__struct__, 1} instead of the module
   # vertex. Kernel.struct!/2 only uses the module to call __struct__/0 and __struct__/1.
@@ -720,30 +747,6 @@ defmodule Hologram.Compiler.CallGraph do
     |> add_edge(context.from_vertex, {module, :__struct__, 0})
     |> add_edge(context.from_vertex, {module, :__struct__, 1})
     |> build(fields, context)
-  end
-
-  # Suppress module vertex edges in Kernel.inspect/1 arguments. Module atoms passed to
-  # inspect are used for string formatting (e.g. in error messages), not as real dependencies.
-  # Without this, code like `inspect(MyModule)` in error paths would pull in MyModule's
-  # entire function tree.
-  def build(
-        call_graph,
-        %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: Kernel},
-          function: :inspect,
-          args: args
-        },
-        context
-      ) do
-    to_vertex = {Kernel, :inspect, Enum.count(args)}
-    add_edge(call_graph, context.from_vertex, to_vertex)
-
-    new_context = %{
-      context
-      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    build(call_graph, args, new_context)
   end
 
   # Skip the :protocol key value in Protocol.UndefinedError.exception/1 args.
