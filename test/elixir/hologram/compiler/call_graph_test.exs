@@ -3026,26 +3026,27 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   def __struct__(), do: %{__struct__: Struct1, field_1: nil}
     test "__struct__/0 body has a map with __struct__ key containing the module atom",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Struct1, :__struct__, 0)
+      [clause] = find_fun_defs(ir_plt, Struct1, :__struct__, 0)
 
-      assert [
-               %IR.FunctionDefinition{
-                 name: :__struct__,
-                 arity: 0,
-                 clause: %IR.FunctionClause{
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.MapType{
-                         data: [
-                           {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct1}}
-                           | _other_fields
-                         ]
-                       }
-                     ]
-                   }
+      assert clause == %IR.FunctionDefinition{
+               name: :__struct__,
+               arity: 0,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct1}},
+                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}}
+                       ]
+                     }
+                   ]
                  }
                }
-             ] = fun_defs
+             }
     end
 
     # Original source (Struct2):
