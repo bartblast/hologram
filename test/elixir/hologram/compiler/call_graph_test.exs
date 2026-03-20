@@ -3109,10 +3109,13 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0)
 
-      assert %IR.FunctionDefinition{
+      assert clause == %IR.FunctionDefinition{
                name: :__struct__,
                arity: 0,
+               visibility: :public,
                clause: %IR.FunctionClause{
+                 params: [],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.MapType{
@@ -3125,7 +3128,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                    ]
                  }
                }
-             } = clause
+             }
     end
 
     # Original source (Struct2):
@@ -3144,17 +3147,20 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 1)
 
-      assert %IR.FunctionDefinition{
+      assert clause == %IR.FunctionDefinition{
                name: :__struct__,
                arity: 1,
+               visibility: :public,
                clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :kv, version: 0}],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: Enum},
                        function: :reduce,
                        args: [
-                         _kv,
+                         %IR.Variable{name: :kv, version: 0},
                          %IR.MapType{
                            data: [
                              {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct2}},
@@ -3162,13 +3168,48 @@ defmodule Hologram.Compiler.CallGraphTest do
                              {%IR.AtomType{value: :field_2}, %IR.AtomType{value: Module1}}
                            ]
                          },
-                         _reducer_fn
+                         %IR.AnonymousFunctionType{
+                           arity: 2,
+                           captured_function: nil,
+                           captured_module: nil,
+                           clauses: [
+                             %IR.FunctionClause{
+                               params: [
+                                 %IR.TupleType{
+                                   data: [
+                                     %IR.Variable{name: :key, version: 1},
+                                     %IR.Variable{name: :val, version: 2}
+                                   ]
+                                 },
+                                 %IR.Variable{name: :map, version: 3}
+                               ],
+                               guards: [],
+                               body: %IR.Block{
+                                 expressions: [
+                                   %IR.RemoteFunctionCall{
+                                     module: %IR.AtomType{value: Map},
+                                     function: :merge,
+                                     args: [
+                                       %IR.Variable{name: :map, version: 3},
+                                       %IR.MapType{
+                                         data: [
+                                           {%IR.Variable{name: :key, version: 1},
+                                            %IR.Variable{name: :val, version: 2}}
+                                         ]
+                                       }
+                                     ]
+                                   }
+                                 ]
+                               }
+                             }
+                           ]
+                         }
                        ]
                      }
                    ]
                  }
                }
-             } = clause
+             }
     end
 
     # Original source:
