@@ -823,19 +823,73 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, impl_for!/1 skips clause body traversal but adds edge to impl_for/1",
-         %{
-           empty_call_graph: call_graph
-         } do
+    test "function definition ir, impl_for!/1 suppresses module vertex edges from body", %{
+      empty_call_graph: call_graph
+    } do
       ir = %IR.FunctionDefinition{
         name: :impl_for!,
         arity: 1,
         visibility: :public,
         clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :data}],
+          params: [%IR.Variable{name: :data, version: 0}],
           guards: [],
           body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
+            expressions: [
+              %IR.Case{
+                condition: %IR.LocalFunctionCall{
+                  function: :impl_for,
+                  args: [%IR.Variable{name: :data, version: 0}]
+                },
+                clauses: [
+                  %IR.Clause{
+                    match: %IR.Variable{name: :x, version: 1},
+                    guards: [
+                      %IR.RemoteFunctionCall{
+                        module: %IR.AtomType{value: :erlang},
+                        function: :"=:=",
+                        args: [
+                          %IR.Variable{name: :x, version: 1},
+                          %IR.AtomType{value: nil}
+                        ]
+                      }
+                    ],
+                    body: %IR.Block{
+                      expressions: [
+                        %IR.RemoteFunctionCall{
+                          module: %IR.AtomType{value: :erlang},
+                          function: :error,
+                          args: [
+                            %IR.RemoteFunctionCall{
+                              module: %IR.AtomType{value: Protocol.UndefinedError},
+                              function: :exception,
+                              args: [
+                                %IR.ListType{
+                                  data: [
+                                    %IR.TupleType{
+                                      data: [
+                                        %IR.AtomType{value: :protocol},
+                                        %IR.AtomType{value: Module5}
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  %IR.Clause{
+                    match: %IR.Variable{name: :x, version: 2},
+                    guards: [],
+                    body: %IR.Block{
+                      expressions: [%IR.Variable{name: :x, version: 2}]
+                    }
+                  }
+                ]
+              }
+            ]
           }
         }
       }
@@ -844,15 +898,24 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
+      # Module5 (protocol module atom in error message) is suppressed; impl_for/1 local
+      # call, Protocol.UndefinedError.exception/1, and :erlang MFA edges are discovered
+      # through body traversal.
       assert sorted_vertices(call_graph) == [
                Module1,
                {Module1, :impl_for, 1},
-               {Module1, :impl_for!, 1}
+               {Module1, :impl_for!, 1},
+               {Protocol.UndefinedError, :exception, 1},
+               {:erlang, :"=:=", 2},
+               {:erlang, :error, 1}
              ]
 
       assert sorted_edges(call_graph) == [
                {Module1, {Module1, :impl_for!, 1}},
-               {{Module1, :impl_for!, 1}, {Module1, :impl_for, 1}}
+               {{Module1, :impl_for!, 1}, {Module1, :impl_for, 1}},
+               {{Module1, :impl_for!, 1}, {Protocol.UndefinedError, :exception, 1}},
+               {{Module1, :impl_for!, 1}, {:erlang, :"=:=", 2}},
+               {{Module1, :impl_for!, 1}, {:erlang, :error, 1}}
              ]
     end
 
@@ -3186,25 +3249,57 @@ defmodule Hologram.Compiler.CallGraphTest do
     # Expanded:
     #   def impl_for!(data) do
     #     case impl_for(data) do
-    #       nil -> :erlang.error(Protocol.UndefinedError.exception(
-    #                protocol: Protocol1, value: data, description: ""))
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data, description: ""))
     #       x -> x
     #     end
     #   end
-    test "impl_for!/1 body has the protocol module atom in Protocol.UndefinedError.exception/1 call",
+    test "impl_for!/1 body calls impl_for/1 and has protocol module atom in error path",
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
 
-      assert %IR.FunctionDefinition{
+      assert clause == %IR.FunctionDefinition{
                name: :impl_for!,
                arity: 1,
+               visibility: :public,
                clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :data, version: 0}],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.Case{
-                       condition: _condition,
+                       condition: %IR.LocalFunctionCall{
+                         function: :impl_for,
+                         args: [%IR.Variable{name: :data, version: 0}]
+                       },
                        clauses: [
                          %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 1},
+                           guards: [
+                             %IR.RemoteFunctionCall{
+                               module: %IR.AtomType{value: :erlang},
+                               function: :orelse,
+                               args: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: false}
+                                   ]
+                                 },
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: nil}
+                                   ]
+                                 }
+                               ]
+                             }
+                           ],
                            body: %IR.Block{
                              expressions: [
                                %IR.RemoteFunctionCall{
@@ -3222,8 +3317,19 @@ defmodule Hologram.Compiler.CallGraphTest do
                                                %IR.AtomType{value: :protocol},
                                                %IR.AtomType{value: Protocol1}
                                              ]
+                                           },
+                                           %IR.TupleType{
+                                             data: [
+                                               %IR.AtomType{value: :value},
+                                               %IR.Variable{name: :data, version: 0}
+                                             ]
+                                           },
+                                           %IR.TupleType{
+                                             data: [
+                                               %IR.AtomType{value: :description},
+                                               %IR.StringType{value: ""}
+                                             ]
                                            }
-                                           | _other_keyword_pairs
                                          ]
                                        }
                                      ]
@@ -3232,47 +3338,20 @@ defmodule Hologram.Compiler.CallGraphTest do
                                }
                              ]
                            }
+                         },
+                         %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 2},
+                           guards: [],
+                           body: %IR.Block{
+                             expressions: [%IR.Variable{name: :x, version: 2}]
+                           }
                          }
-                         | _other_clauses
                        ]
                      }
                    ]
                  }
                }
-             } = clause
-    end
-
-    # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
-    #   end
-    #
-    # Expanded:
-    #   def impl_for!(data) do
-    #     case impl_for(data) do
-    #       ...
-    #     end
-    #   end
-    test "impl_for!/1 body calls impl_for/1 via LocalFunctionCall in case condition",
-         %{ir_plt: ir_plt} do
-      [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
-
-      assert %IR.FunctionDefinition{
-               name: :impl_for!,
-               arity: 1,
-               clause: %IR.FunctionClause{
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.Case{
-                       condition: %IR.LocalFunctionCall{
-                         function: :impl_for,
-                         args: [_data]
-                       }
-                     }
-                   ]
-                 }
-               }
-             } = clause
+             }
     end
 
     # Original source:
