@@ -2977,6 +2977,69 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     # Original source:
+    #   defmodule Struct1 do
+    #     defstruct [:field_1]
+    #   end
+    #
+    # Expanded:
+    #   def __struct__(), do: %{__struct__: Struct1, field_1: nil}
+    test "__struct__/0 body has a map with __struct__ key containing the module atom",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Struct1, :__struct__, 0)
+
+      assert clause == %IR.FunctionDefinition{
+               name: :__struct__,
+               arity: 0,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct1}},
+                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Original source (Struct2):
+    #   defstruct field_1: nil, field_2: Module1
+    #
+    # Generated __struct__/0:
+    #   def __struct__(), do: %{__struct__: Struct2, field_1: nil, field_2: Module1}
+    test "__struct__/0 body map values include module atoms when given as field defaults",
+         %{ir_plt: ir_plt} do
+      [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0)
+
+      assert clause == %IR.FunctionDefinition{
+               name: :__struct__,
+               arity: 0,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct2}},
+                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}},
+                         {%IR.AtomType{value: :field_2}, %IR.AtomType{value: Module1}}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
     #   defprotocol Protocol1 do
     #     def my_fun(data)
     #   end
@@ -3060,72 +3123,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                              %IR.AtomType{value: Integer}
                            ]
                          }
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defmodule Struct1 do
-    #     defstruct [:field_1]
-    #   end
-    #
-    # Expanded:
-    #   def __struct__(), do: %{__struct__: Struct1, field_1: nil}
-    test "__struct__/0 body has a map with __struct__ key containing the module atom",
-         %{ir_plt: ir_plt} do
-      [clause] = find_fun_defs(ir_plt, Struct1, :__struct__, 0)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :__struct__,
-               arity: 0,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.MapType{
-                       data: [
-                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct1}},
-                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}}
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source (Struct2):
-    #   defstruct field_1: nil, field_2: Module1
-    #
-    # Generated __struct__/0:
-    #   def __struct__(), do: %{__struct__: Struct2, field_1: nil, field_2: Module1}
-    #
-    # The default struct map contains module atoms (Module1) as field default values,
-    # not as dependencies.
-    test "__struct__/0 body has a map with module atom as field default value",
-         %{ir_plt: ir_plt} do
-      [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :__struct__,
-               arity: 0,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.MapType{
-                       data: [
-                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct2}},
-                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}},
-                         {%IR.AtomType{value: :field_2}, %IR.AtomType{value: Module1}}
                        ]
                      }
                    ]
