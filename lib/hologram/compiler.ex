@@ -438,9 +438,12 @@ defmodule Hologram.Compiler do
 
     cmd_opts = [cd: opts[:assets_dir], parallelism: true, stderr_to_stdout: true]
 
-    base_length =
-      String.length(opts[:formatter_bin_path]) +
-        Enum.sum(Enum.map(base_args, &(String.length(&1) + 1)))
+    args_length =
+      base_args
+      |> Enum.map(&(String.length(&1) + 1))
+      |> Enum.sum()
+
+    base_length = String.length(opts[:formatter_bin_path]) + args_length
 
     batches = batch_file_paths(file_paths, base_length)
 
