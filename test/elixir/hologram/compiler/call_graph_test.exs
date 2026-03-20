@@ -3942,10 +3942,13 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Enumerable.Function, :count, 1)
 
-      assert %IR.FunctionDefinition{
+      assert clause == %IR.FunctionDefinition{
                name: :count,
                arity: 1,
+               visibility: :public,
                clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.TupleType{
@@ -3957,7 +3960,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                    ]
                  }
                }
-             } = clause
+             }
     end
 
     # Original source:
@@ -3971,10 +3974,13 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Enumerable.Function, :member?, 2)
 
-      assert %IR.FunctionDefinition{
+      assert clause == %IR.FunctionDefinition{
                name: :member?,
                arity: 2,
+               visibility: :public,
                clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}, %IR.MatchPlaceholder{}],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.TupleType{
@@ -3986,7 +3992,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                    ]
                  }
                }
-             } = clause
+             }
     end
 
     # Original source:
@@ -4000,10 +4006,13 @@ defmodule Hologram.Compiler.CallGraphTest do
          %{ir_plt: ir_plt} do
       [clause] = find_fun_defs(ir_plt, Enumerable.Function, :slice, 1)
 
-      assert %IR.FunctionDefinition{
+      assert clause == %IR.FunctionDefinition{
                name: :slice,
                arity: 1,
+               visibility: :public,
                clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.TupleType{
@@ -4015,7 +4024,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                    ]
                  }
                }
-             } = clause
+             }
     end
 
     # Protocol implementation fallback clauses that raise Protocol.UndefinedError contain
