@@ -2060,6 +2060,110 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert %Digraph{} = get_graph(call_graph)
   end
 
+  describe "get_pruned_page_graph/2" do
+    test "returns a Digraph struct", %{empty_call_graph: empty_call_graph} do
+      module_14_ir = IR.for_module(Module14)
+
+      call_graph = build(empty_call_graph, module_14_ir, %Context{})
+      result = get_pruned_page_graph(call_graph, Module14)
+
+      assert %Digraph{} = result
+    end
+
+    test "removes command/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
+      # Page
+      module_42_ir = IR.for_module(Module42)
+
+      # Component
+      module_43_ir = IR.for_module(Module43)
+
+      call_graph =
+        empty_call_graph
+        |> build(module_42_ir, %Context{})
+        |> build(module_43_ir, %Context{})
+
+      graph = get_pruned_page_graph(call_graph, Module42)
+      vertices = Digraph.vertices(graph)
+
+      refute {Module42, :command, 3} in vertices
+      refute {Module43, :command, 3} in vertices
+    end
+
+    test "removes init/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
+      # Page
+      module_44_ir = IR.for_module(Module44)
+
+      # Component
+      module_45_ir = IR.for_module(Module45)
+
+      call_graph =
+        empty_call_graph
+        |> build(module_44_ir, %Context{})
+        |> build(module_45_ir, %Context{})
+
+      graph = get_pruned_page_graph(call_graph, Module44)
+      vertices = Digraph.vertices(graph)
+
+      refute {Module44, :init, 3} in vertices
+      refute {Module45, :init, 3} in vertices
+    end
+
+    test "removes other page functions except __params__/0 and __route__/0", %{
+      empty_call_graph: empty_call_graph
+    } do
+      module_14_ir = IR.for_module(Module14)
+      module_17_ir = IR.for_module(Module17)
+
+      call_graph =
+        empty_call_graph
+        |> build(module_14_ir, %Context{})
+        |> build(module_17_ir, %Context{})
+
+      graph = get_pruned_page_graph(call_graph, Module14)
+      vertices = Digraph.vertices(graph)
+
+      assert {Module14, :action, 3} in vertices
+      assert {Module14, :template, 0} in vertices
+
+      assert {Module17, :__params__, 0} in vertices
+      assert {Module17, :__route__, 0} in vertices
+
+      refute {Module17, :action, 3} in vertices
+      refute {Module17, :template, 0} in vertices
+    end
+
+    test "keeps command/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
+      module_42_ir = IR.for_module(Module42)
+      module_43_ir = IR.for_module(Module43)
+
+      call_graph =
+        empty_call_graph
+        |> build(module_42_ir, %Context{})
+        |> build(module_43_ir, %Context{})
+        |> add_edge({Module42, :action, 3}, {Module16, :command, 3})
+
+      graph = get_pruned_page_graph(call_graph, Module42)
+      vertices = Digraph.vertices(graph)
+
+      assert {Module16, :command, 3} in vertices
+    end
+
+    test "keeps init/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
+      module_46_ir = IR.for_module(Module46)
+      module_47_ir = IR.for_module(Module47)
+
+      call_graph =
+        empty_call_graph
+        |> build(module_46_ir, %Context{})
+        |> build(module_47_ir, %Context{})
+
+      graph = get_pruned_page_graph(call_graph, Module47)
+      vertices = Digraph.vertices(graph)
+
+      assert {Module46, :init, 3} in vertices
+    end
+  end
+
   describe "has_edge?/3" do
     test "has the given edge", %{empty_call_graph: call_graph} do
       add_edge(call_graph, :vertex_1, :vertex_2)
@@ -2190,95 +2294,23 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "excludes other page module functions except __params__/0 and __route__/0" do
-      module_14_ir = IR.for_module(Module14)
-      module_17_ir = IR.for_module(Module17)
-
-      call_graph =
-        start()
-        |> build(module_14_ir, %Context{})
-        |> build(module_17_ir, %Context{})
-        |> add_edge({Module14, :action, 3}, Module17)
-
-      result = list_page_mfas(call_graph, Module14)
-
-      # Current page functions are kept
-      assert {Module14, :action, 3} in result
-      assert {Module14, :template, 0} in result
-
-      # Other page's __params__/0 and __route__/0 are kept
-      assert {Module17, :__params__, 0} in result
-      assert {Module17, :__route__, 0} in result
-
-      # Other page's remaining functions are removed
-      refute {Module17, :action, 3} in result
-      refute {Module17, :template, 0} in result
-      refute {Module17, :struct_1, 0} in result
-
-      # Non-page module functions are kept
-      assert {Module16, :my_fun_16a, 2} in result
-    end
-
-    test "excludes command/3 for templatable modules (page and component)" do
+    test "excludes server-only and other-page MFAs" do
       module_42_ir = IR.for_module(Module42)
       module_43_ir = IR.for_module(Module43)
+      module_44_ir = IR.for_module(Module44)
 
       result =
         start()
         |> build(module_42_ir, %Context{})
         |> build(module_43_ir, %Context{})
+        |> build(module_44_ir, %Context{})
         |> list_page_mfas(Module42)
 
-      # Page command/3 is excluded
+      # Server-only MFA is excluded
       refute {Module42, :command, 3} in result
 
-      # Component command/3 is excluded
-      refute {Module43, :command, 3} in result
-    end
-
-    test "keeps command/3 for non-templatable modules" do
-      module_42_ir = IR.for_module(Module42)
-      module_43_ir = IR.for_module(Module43)
-
-      call_graph =
-        start()
-        |> build(module_42_ir, %Context{})
-        |> build(module_43_ir, %Context{})
-        |> add_edge({Module42, :action, 3}, {Module16, :command, 3})
-
-      result = list_page_mfas(call_graph, Module42)
-
-      assert {Module16, :command, 3} in result
-    end
-
-    test "excludes init/3 for templatable modules (page and component)" do
-      module_44_ir = IR.for_module(Module44)
-      module_45_ir = IR.for_module(Module45)
-
-      result =
-        start()
-        |> build(module_44_ir, %Context{})
-        |> build(module_45_ir, %Context{})
-        |> list_page_mfas(Module44)
-
-      # Page init/3 is excluded
-      refute {Module44, :init, 3} in result
-
-      # Component init/3 is excluded
-      refute {Module45, :init, 3} in result
-    end
-
-    test "keeps init/3 for non-templatable modules" do
-      module_46_ir = IR.for_module(Module46)
-      module_47_ir = IR.for_module(Module47)
-
-      result =
-        start()
-        |> build(module_46_ir, %Context{})
-        |> build(module_47_ir, %Context{})
-        |> list_page_mfas(Module47)
-
-      assert {Module46, :init, 3} in result
+      # Other page's MFA is excluded
+      refute {Module44, :action, 3} in result
     end
 
     test "excludes Hex MFAs" do

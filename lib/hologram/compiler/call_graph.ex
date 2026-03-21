@@ -928,6 +928,18 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the underlying digraph pruned to the given page, with server-only
+  and other-page MFAs removed.
+  """
+  @spec get_pruned_page_graph(t, module) :: Digraph.t()
+  def get_pruned_page_graph(call_graph, page_module) do
+    call_graph
+    |> get_graph()
+    |> remove_server_only_mfas()
+    |> remove_other_page_mfas(page_module)
+  end
+
+  @doc """
   Checks if an edge exists between two given vertices in the call graph.
   """
   @spec has_edge?(t, vertex, vertex) :: boolean
@@ -969,9 +981,8 @@ defmodule Hologram.Compiler.CallGraph do
   def list_page_mfas(call_graph, page_module) do
     graph = get_graph(call_graph)
 
-    graph
-    |> remove_server_only_mfas()
-    |> remove_other_page_mfas(page_module)
+    call_graph
+    |> get_pruned_page_graph(page_module)
     |> sorted_reachable_mfas([page_module])
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
