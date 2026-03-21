@@ -127,4 +127,6 @@ defmodule Hologram.Compiler.Normalizer do
   defp strip_non_tail_aliases([expr | rest]) do
     [expr | strip_non_tail_aliases(rest)]
   end
+
+  defp strip_non_tail_aliases([]), do: []
 end

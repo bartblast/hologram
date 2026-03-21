@@ -2450,6 +2450,15 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
+    test "empty block (e.g. empty function body)" do
+      # def my_fun do
+      # end
+      ast = {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
+    end
+
     test "strips single non-tail alias (import residue)" do
       # def foo do
       #   Kernel <- residue from `import Kernel, only: [...]` inside a function body
