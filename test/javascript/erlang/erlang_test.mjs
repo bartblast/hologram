@@ -5830,60 +5830,46 @@ describe("Erlang", () => {
       assert.deepStrictEqual(iolist_to_binary(binary), binary);
     });
 
-    it("converts valid iodata list to binary", () => {
-      const zeroPad = Type.improperList([
+    it("delegates valid list input to :erlang.list_to_binary/1", () => {
+      const fragment = Type.improperList([
         Type.bitstring("0"),
         Type.bitstring("1"),
       ]);
 
-      const result = iolist_to_binary(
+      const iodata = Type.improperList([
+        Type.bitstring("2022"),
         Type.improperList([
-          Type.bitstring("2022"),
+          Type.integer(45),
           Type.improperList([
-            Type.integer(45),
-            Type.improperList([
-              zeroPad,
-              Type.improperList([Type.integer(45), zeroPad]),
-            ]),
+            fragment,
+            Type.improperList([Type.integer(45), fragment]),
           ]),
         ]),
-      );
+      ]);
 
-      assert.deepStrictEqual(
-        result,
-        Bitstring.fromBytes([50, 48, 50, 50, 45, 48, 49, 45, 48, 49]),
-      );
+      const result = iolist_to_binary(iodata);
+
+      assertBoxedStrictEqual(result, Type.bitstring("2022-01-01"));
     });
 
     it("raises ArgumentError for non-list input", () => {
       assertBoxedError(
-        () =>
-          iolist_to_binary(
-            Type.bitstring([
-              Type.bitstringSegment(Type.integer(1), {
-                type: "integer",
-                size: Type.integer(3),
-              }),
-            ]),
-          ),
+        () => iolist_to_binary(Type.integer(123)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
       );
     });
 
-    it("remaps invalid iolist errors from list_to_binary/1", () => {
+    it("remaps invalid iolist errors from :erlang.list_to_binary/1", () => {
+      const nonBinary = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {
+          type: "integer",
+          size: Type.integer(3),
+        }),
+      ]);
+
       assertBoxedError(
-        () =>
-          iolist_to_binary(
-            Type.list([
-              Type.bitstring([
-                Type.bitstringSegment(Type.integer(1), {
-                  type: "integer",
-                  size: Type.integer(3),
-                }),
-              ]),
-            ]),
-          ),
+        () => iolist_to_binary(Type.list([nonBinary])),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
       );
@@ -6314,7 +6300,7 @@ describe("Erlang", () => {
     });
 
     it("nested improper list with list tail", () => {
-      const zeroPad = Type.improperList([
+      const fragment = Type.improperList([
         Type.bitstring("0"),
         Type.bitstring("1"),
       ]);
@@ -6324,8 +6310,8 @@ describe("Erlang", () => {
         Type.improperList([
           Type.integer(45),
           Type.improperList([
-            zeroPad,
-            Type.improperList([Type.integer(45), zeroPad]),
+            fragment,
+            Type.improperList([Type.integer(45), fragment]),
           ]),
         ]),
       ]);

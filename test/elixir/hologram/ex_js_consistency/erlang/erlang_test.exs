@@ -3567,12 +3567,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "iolist_to_binary/1" do
     test "returns a binary unchanged" do
-      assert :erlang.iolist_to_binary(<<1, 2, 3>>) == <<1, 2, 3>>
+      binary = <<1, 2, 3>>
+
+      assert :erlang.iolist_to_binary(binary) == binary
     end
 
-    test "delegates valid list input to list_to_binary/1" do
-      zero_pad = [<<"0">> | <<"1">>]
-      iodata = [<<"2022">> | [45 | [zero_pad | [45 | zero_pad]]]]
+    test "delegates valid list input to :erlang.list_to_binary/1" do
+      fragment = [<<"0">> | <<"1">>]
+      iodata = [<<"2022">> | [45 | [fragment | [45 | fragment]]]]
 
       assert :erlang.iolist_to_binary(iodata) == "2022-01-01"
     end
@@ -3580,10 +3582,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError for non-list input" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an iodata term"),
-                   {:erlang, :iolist_to_binary, [<<1::3>>]}
+                   {:erlang, :iolist_to_binary, [123]}
     end
 
-    test "remaps invalid iolist errors from list_to_binary/1" do
+    test "remaps invalid iolist errors from :erlang.list_to_binary/1" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an iodata term"),
                    {:erlang, :iolist_to_binary, [[<<1::3>>]]}
@@ -3880,8 +3882,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "nested improper list with list tail" do
-      zero_pad = [<<"0">> | <<"1">>]
-      iodata = [<<"2022">> | [45 | [zero_pad | [45 | zero_pad]]]]
+      fragment = [<<"0">> | <<"1">>]
+      iodata = [<<"2022">> | [45 | [fragment | [45 | fragment]]]]
 
       assert :erlang.list_to_binary(iodata) == "2022-01-01"
     end
