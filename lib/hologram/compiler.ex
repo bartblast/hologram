@@ -14,6 +14,11 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  # Windows cmd.exe has a command line length limit of 8191 characters.
+  # Use half of that to account for unpredictable quoting overhead added by Erlang's System.cmd.
+  # Batches run in parallel so there's no performance penalty from smaller batches.
+  @max_cmd_line_length 4_096
+
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs.
   Returns a map with:
@@ -86,7 +91,9 @@ defmodule Hologram.Compiler do
 
     ir_plt
     |> PLT.get_all()
-    |> TaskUtils.async_many(fn {_module, ir} -> CallGraph.build(call_graph, ir) end)
+    |> TaskUtils.async_many(fn {_module, ir} ->
+      CallGraph.build(call_graph, ir, %CallGraph.Context{})
+    end)
     |> Task.await_many(:infinity)
 
     call_graph
@@ -421,29 +428,55 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/format_files_2/README.md
   """
-  @spec format_files(list(T.file_path()), T.opts()) ::
-          {Collectable.t(), exit_status :: non_neg_integer()}
+  @spec format_files(list(T.file_path()), T.opts()) :: non_neg_integer
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
-    cmd_args = [
+    base_args = [
       "format",
       "--write",
       # Effectively disable the size check (1 GB)
       "--files-max-size=#{1024 * 1024 * 1024}"
-      | file_paths
     ]
 
     cmd_opts = [cd: opts[:assets_dir], parallelism: true, stderr_to_stdout: true]
 
-    {exit_msg, exit_status} =
-      SystemUtils.cmd_cross_platform(opts[:formatter_bin_path], cmd_args, cmd_opts)
+    args_length =
+      base_args
+      |> Enum.map(&(String.length(&1) + 1))
+      |> Enum.sum()
 
-    if exit_status != 0 do
-      raise RuntimeError,
-        message: "Biome formatter failed (probably there were JavaScript syntax errors)"
-    end
+    base_length = String.length(opts[:formatter_bin_path]) + args_length
 
-    exit_msg
+    batches = batch_file_paths(file_paths, base_length)
+
+    results =
+      batches
+      |> Enum.map(fn batch ->
+        Task.async(fn ->
+          cmd_args = base_args ++ batch
+
+          {exit_msg, exit_status} =
+            SystemUtils.cmd_cross_platform(opts[:formatter_bin_path], cmd_args, cmd_opts)
+
+          {exit_msg, exit_status, batch}
+        end)
+      end)
+      |> Task.await_many(:infinity)
+
+    Enum.each(results, fn {exit_msg, exit_status, batch} ->
+      if exit_status != 0 do
+        raise RuntimeError,
+          message: """
+          Biome formatter failed (probably there were JavaScript syntax errors).
+          Formatter binary: #{opts[:formatter_bin_path]}
+          Exit status: #{exit_status}
+          Output: #{exit_msg}
+          Files: #{Enum.join(batch, ", ")}
+          """
+      end
+    end)
+
+    length(batches)
   end
 
   @doc """
@@ -648,6 +681,26 @@ defmodule Hologram.Compiler do
             "page '#{module_name}' doesn't have a layout module specified (use the layout/1 macro to fix it)"
       end
     end)
+  end
+
+  defp batch_file_paths(file_paths, base_length) do
+    Enum.chunk_while(
+      file_paths,
+      {[], base_length},
+      fn path, {batch, length} ->
+        new_length = length + String.length(path) + 1
+
+        if batch != [] and new_length > @max_cmd_line_length do
+          {:cont, Enum.reverse(batch), {[path], base_length + String.length(path) + 1}}
+        else
+          {:cont, {[path | batch], new_length}}
+        end
+      end,
+      fn
+        {[], _length} -> {:cont, []}
+        {batch, _length} -> {:cont, Enum.reverse(batch), []}
+      end
+    )
   end
 
   defp create_entry_file(js, entry_name, tmp_dir) do
