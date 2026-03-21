@@ -2012,6 +2012,126 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph_clone) == get_graph(call_graph)
   end
 
+  describe "compute_cascades/3" do
+    # :module_1 (module vertex) - large cascade
+    # ├─ {:module_5, :fun_5a, 1} -> :module_1
+    # ├─ {:module_6, :fun_6a, 2} -> :module_1
+    # │  :module_1 -> {:module_7, :fun_7a, 1}
+    # │  :module_1 -> {:module_7, :fun_7b, 1}
+    # │  :module_1 -> {:module_8, :fun_8a, 2}
+    # │  :module_1 -> {:module_8, :fun_8b, 1}
+    # │  :module_1 -> {:module_9, :fun_9a, 1}
+    #
+    # :module_2 (module vertex) - medium cascade
+    # ├─ {:module_6, :fun_6b, 3} -> :module_2
+    # │  :module_2 -> {:module_10, :fun_10a, 1}
+    # │  :module_2 -> {:module_10, :fun_10b, 2}
+    # │  :module_2 -> {:module_11, :fun_11a, 1}
+    #
+    # :module_3 (module vertex) - small cascade, multiple incoming edges
+    # ├─ {:module_5, :fun_5b, 1} -> :module_3
+    # ├─ {:module_6, :fun_6a, 2} -> :module_3
+    # ├─ {:module_9, :fun_9a, 1} -> :module_3
+    # │  :module_3 -> {:module_11, :fun_11b, 1}
+    #
+    # :module_4 (module vertex) - leaf, no downstream MFAs
+    # ├─ {:module_8, :fun_8a, 2} -> :module_4
+
+    setup do
+      graph =
+        Digraph.new()
+        # Edges into :module_1
+        |> Digraph.add_edge({:module_5, :fun_5a, 1}, :module_1)
+        |> Digraph.add_edge({:module_6, :fun_6a, 2}, :module_1)
+        # :module_1 downstream MFAs
+        |> Digraph.add_edge(:module_1, {:module_7, :fun_7a, 1})
+        |> Digraph.add_edge(:module_1, {:module_7, :fun_7b, 1})
+        |> Digraph.add_edge(:module_1, {:module_8, :fun_8a, 2})
+        |> Digraph.add_edge(:module_1, {:module_8, :fun_8b, 1})
+        |> Digraph.add_edge(:module_1, {:module_9, :fun_9a, 1})
+        # Edges into :module_2
+        |> Digraph.add_edge({:module_6, :fun_6b, 3}, :module_2)
+        # :module_2 downstream MFAs
+        |> Digraph.add_edge(:module_2, {:module_10, :fun_10a, 1})
+        |> Digraph.add_edge(:module_2, {:module_10, :fun_10b, 2})
+        |> Digraph.add_edge(:module_2, {:module_11, :fun_11a, 1})
+        # Edges into :module_3
+        |> Digraph.add_edge({:module_5, :fun_5b, 1}, :module_3)
+        |> Digraph.add_edge({:module_6, :fun_6a, 2}, :module_3)
+        |> Digraph.add_edge({:module_9, :fun_9a, 1}, :module_3)
+        # :module_3 downstream MFAs
+        |> Digraph.add_edge(:module_3, {:module_11, :fun_11b, 1})
+        # Edges into :module_4
+        |> Digraph.add_edge({:module_8, :fun_8a, 2}, :module_4)
+
+      reachable =
+        MapSet.new([
+          :module_1,
+          :module_2,
+          :module_3,
+          :module_4,
+          {:module_5, :fun_5a, 1},
+          {:module_5, :fun_5b, 1},
+          {:module_6, :fun_6a, 2},
+          {:module_6, :fun_6b, 3},
+          {:module_7, :fun_7a, 1},
+          {:module_7, :fun_7b, 1},
+          {:module_8, :fun_8a, 2},
+          {:module_8, :fun_8b, 1},
+          {:module_9, :fun_9a, 1},
+          {:module_10, :fun_10a, 1},
+          {:module_10, :fun_10b, 2},
+          {:module_11, :fun_11a, 1},
+          {:module_11, :fun_11b, 1}
+        ])
+
+      module_vertices = MapSet.new([:module_1, :module_2, :module_3, :module_4])
+
+      [graph: graph, module_vertices: module_vertices, reachable: reachable]
+    end
+
+    test "returns cascades sorted by downstream MFA count descending", %{
+      graph: graph,
+      module_vertices: module_vertices,
+      reachable: reachable
+    } do
+      result = compute_cascades(graph, module_vertices, reachable)
+
+      assert result == [
+               {{:module_5, :fun_5a, 1}, :module_1, 6},
+               {{:module_6, :fun_6a, 2}, :module_1, 6},
+               {{:module_6, :fun_6b, 3}, :module_2, 3},
+               {{:module_5, :fun_5b, 1}, :module_3, 1},
+               {{:module_6, :fun_6a, 2}, :module_3, 1},
+               {{:module_9, :fun_9a, 1}, :module_3, 1},
+               {{:module_8, :fun_8a, 2}, :module_4, 0}
+             ]
+    end
+
+    test "filters out sources not in reachable set", %{
+      graph: graph,
+      module_vertices: module_vertices,
+      reachable: reachable
+    } do
+      restricted_reachable =
+        reachable
+        |> MapSet.delete({:module_6, :fun_6a, 2})
+        |> MapSet.delete({:module_9, :fun_9a, 1})
+
+      result = compute_cascades(graph, module_vertices, restricted_reachable)
+
+      sources = Enum.map(result, &elem(&1, 0))
+
+      refute {:module_6, :fun_6a, 2} in sources
+      refute {:module_9, :fun_9a, 1} in sources
+      assert {:module_5, :fun_5a, 1} in sources
+    end
+
+    test "returns empty list when no module vertices", %{graph: graph, reachable: reachable} do
+      assert compute_cascades(graph, MapSet.new(), reachable) == []
+    end
+  end
+
   test "dump/2", %{empty_call_graph: call_graph} do
     dump_dir =
       Path.join([

@@ -891,6 +891,32 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Computes cascade entries for module vertices in a call graph.
+
+  Returns a list of `{source, module, downstream_mfa_count}` tuples sorted by
+  downstream MFA count (biggest cascades first).
+  """
+  @spec compute_cascades(Digraph.t(), MapSet.t(), MapSet.t()) :: [
+          {vertex, vertex, non_neg_integer}
+        ]
+  def compute_cascades(graph, module_vertices, reachable) do
+    module_vertices
+    |> Enum.flat_map(fn module ->
+      downstream_mfa_count =
+        graph
+        |> Digraph.reachable([module])
+        |> Enum.count(&match?({_module, _function, _arity}, &1))
+
+      graph
+      |> Digraph.incoming_edges(module)
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.filter(&MapSet.member?(reachable, &1))
+      |> Enum.map(fn source -> {source, module, downstream_mfa_count} end)
+    end)
+    |> Enum.sort_by(fn {_source, _module, count} -> count end, :desc)
+  end
+
+  @doc """
   Serializes the call graph and writes it to a file.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/dump_2/README.md

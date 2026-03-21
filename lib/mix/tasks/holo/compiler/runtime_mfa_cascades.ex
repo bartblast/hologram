@@ -32,23 +32,7 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeMfaCascades do
       |> Enum.filter(&is_atom/1)
       |> MapSet.new()
 
-    # For each module vertex, find incoming edges from reachable MFAs
-    # and count downstream MFAs
-    cascades =
-      module_vertices
-      |> Enum.flat_map(fn module ->
-        downstream_mfa_count =
-          graph
-          |> Digraph.reachable([module])
-          |> Enum.count(&match?({_module, _function, _arity}, &1))
-
-        graph
-        |> Digraph.incoming_edges(module)
-        |> Enum.map(&elem(&1, 0))
-        |> Enum.filter(&MapSet.member?(reachable, &1))
-        |> Enum.map(fn source -> {source, module, downstream_mfa_count} end)
-      end)
-      |> Enum.sort_by(fn {_source, _module, count} -> count end, :desc)
+    cascades = CallGraph.compute_cascades(graph, module_vertices, reachable)
 
     # credo:disable-for-lines:5 Credo.Check.Refactor.IoPuts
     IO.puts("#{length(cascades)} edges to module vertices:\n")
