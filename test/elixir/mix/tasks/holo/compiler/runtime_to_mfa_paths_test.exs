@@ -6,7 +6,10 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPathsTest do
   alias Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths, as: Task
 
   test "run/1" do
-    output = capture_io(fn -> Task.run(["{URI, :default_port, 1}"]) end)
+    output =
+      fn -> Task.run(["{URI, :default_port, 1}"]) end
+      |> capture_io()
+      |> normalize_newlines()
 
     assert String.contains?(output, """
            {String.Chars, :to_string, 1} -> {URI, :default_port, 1}
