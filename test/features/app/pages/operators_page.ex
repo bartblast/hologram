@@ -211,7 +211,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:". (remote call)", _params, component) do
-    module = Enum
+    module = HologramFeatureTests.ModuleFixture3
     result = module.reverse([@integer_c, @integer_b, @integer_a])
 
     put_state(component, :result, result)
