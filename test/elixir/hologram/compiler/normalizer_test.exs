@@ -100,8 +100,8 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     test "clause with multiple expressions body" do
       # fn Aaa ->
-      #   Bbb
-      #   Ccc
+      #   :expr_1
+      #   :expr_2
       # end
       ast =
         {:fn, [line: 1],
@@ -109,7 +109,7 @@ defmodule Hologram.Compiler.NormalizerTest do
            {:->, [line: 1],
             [
               [Aaa],
-              {:__block__, [], [Bbb, Ccc]}
+              {:__block__, [], [:expr_1, :expr_2]}
             ]}
          ]}
 
@@ -121,8 +121,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                      [{:__aliases__, [alias: false], [:Aaa]}],
                      {:__block__, [],
                       [
-                        {:__aliases__, [alias: false], [:Bbb]},
-                        {:__aliases__, [alias: false], [:Ccc]}
+                        :expr_1,
+                        :expr_2
                       ]}
                    ]}
                 ]}
@@ -286,8 +286,8 @@ defmodule Hologram.Compiler.NormalizerTest do
     test "clause with multiple expressions body" do
       # case Aaa do
       #   Bbb ->
-      #     Ccc
-      #     Ddd
+      #     :expr_1
+      #     :expr_2
       # end
       ast =
         {:case, [line: 1],
@@ -300,8 +300,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                   [Bbb],
                   {:__block__, [],
                    [
-                     Ccc,
-                     Ddd
+                     :expr_1,
+                     :expr_2
                    ]}
                 ]}
              ]
@@ -319,8 +319,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                          [{:__aliases__, [alias: false], [:Bbb]}],
                          {:__block__, [],
                           [
-                            {:__aliases__, [alias: false], [:Ccc]},
-                            {:__aliases__, [alias: false], [:Ddd]}
+                            :expr_1,
+                            :expr_2
                           ]}
                        ]}
                     ]
@@ -470,8 +470,8 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     test "multiple expressions mapper" do
       # for x <- [1, 2] do
-      #   Aaa
-      #   Bbb
+      #   :expr_1
+      #   :expr_2
       # end
       ast =
         {:for, [line: 1],
@@ -482,7 +482,7 @@ defmodule Hologram.Compiler.NormalizerTest do
               [1, 2]
             ]},
            [
-             do: {:__block__, [], [Aaa, Bbb]}
+             do: {:__block__, [], [:expr_1, :expr_2]}
            ]
          ]}
 
@@ -501,8 +501,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                     do:
                       {:__block__, [],
                        [
-                         {:__aliases__, [alias: false], [:Aaa]},
-                         {:__aliases__, [alias: false], [:Bbb]}
+                         :expr_1,
+                         :expr_2
                        ]}
                   ]
                 ]}
@@ -981,8 +981,8 @@ defmodule Hologram.Compiler.NormalizerTest do
     test "reducer clause with multiple expressions body" do
       # for x <- [1, 2], reduce: Aaa do
       #   Bbb ->
-      #     Ccc
-      #     Ddd
+      #     :expr_1
+      #     :expr_2
       # end
       ast =
         {:for, [line: 1],
@@ -996,8 +996,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                   [Bbb],
                   {:__block__, [],
                    [
-                     Ccc,
-                     Ddd
+                     :expr_1,
+                     :expr_2
                    ]}
                 ]}
              ]
@@ -1019,8 +1019,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                               [{:__aliases__, [alias: false], [:Bbb]}],
                               {:__block__, [],
                                [
-                                 {:__aliases__, [alias: false], [:Ccc]},
-                                 {:__aliases__, [alias: false], [:Ddd]}
+                                 :expr_1,
+                                 :expr_2
                                ]}
                             ]}
                          ]
@@ -1091,8 +1091,8 @@ defmodule Hologram.Compiler.NormalizerTest do
     test "clause with multiple expressions body" do
       # cond do
       #   Aaa ->
-      #     Bbb
-      #     Ccc
+      #     :expr_1
+      #     :expr_2
       # end
       ast =
         {:cond, [line: 1],
@@ -1104,8 +1104,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                   [Aaa],
                   {:__block__, [],
                    [
-                     Bbb,
-                     Ccc
+                     :expr_1,
+                     :expr_2
                    ]}
                 ]}
              ]
@@ -1122,8 +1122,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                          [{:__aliases__, [alias: false], [:Aaa]}],
                          {:__block__, [],
                           [
-                            {:__aliases__, [alias: false], [:Bbb]},
-                            {:__aliases__, [alias: false], [:Ccc]}
+                            :expr_1,
+                            :expr_2
                           ]}
                        ]}
                     ]
@@ -1149,15 +1149,15 @@ defmodule Hologram.Compiler.NormalizerTest do
     test "multiple expressions body" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # def Aaa do
-      #   Bbb
-      #   Ccc
+      #   :expr_1
+      #   :expr_2
       # end
       ast =
         {:def, [line: 1],
          [
            Aaa,
            [
-             do: {:__block__, [], [Bbb, Ccc]}
+             do: {:__block__, [], [:expr_1, :expr_2]}
            ]
          ]}
 
@@ -1169,8 +1169,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                     do:
                       {:__block__, [],
                        [
-                         {:__aliases__, [alias: false], [:Bbb]},
-                         {:__aliases__, [alias: false], [:Ccc]}
+                         :expr_1,
+                         :expr_2
                        ]}
                   ]
                 ]}
@@ -1254,15 +1254,15 @@ defmodule Hologram.Compiler.NormalizerTest do
     test "multiple expressions body" do
       # (this code is invalid, and the AST is made by hand for testing purposes only)
       # defp Aaa do
-      #   Bbb
-      #   Ccc
+      #   :expr_1
+      #   :expr_2
       # end
       ast =
         {:defp, [line: 1],
          [
            Aaa,
            [
-             do: {:__block__, [], [Bbb, Ccc]}
+             do: {:__block__, [], [:expr_1, :expr_2]}
            ]
          ]}
 
@@ -1274,8 +1274,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                     do:
                       {:__block__, [],
                        [
-                         {:__aliases__, [alias: false], [:Bbb]},
-                         {:__aliases__, [alias: false], [:Ccc]}
+                         :expr_1,
+                         :expr_2
                        ]}
                   ]
                 ]}
@@ -1364,15 +1364,15 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     test "multiple expressions body" do
       # defmodule MyModule do
-      #   Aaa
-      #   Bbb
+      #   :expr_1
+      #   :expr_2
       # end
       ast =
         {:defmodule, [line: 1],
          [
            {:__aliases__, [line: 1], [:MyModule]},
            [
-             do: {:__block__, [], [Aaa, Bbb]}
+             do: {:__block__, [], [:expr_1, :expr_2]}
            ]
          ]}
 
@@ -1384,8 +1384,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                     do:
                       {:__block__, [],
                        [
-                         {:__aliases__, [alias: false], [:Aaa]},
-                         {:__aliases__, [alias: false], [:Bbb]}
+                         :expr_1,
+                         :expr_2
                        ]}
                   ]
                 ]}
@@ -1439,8 +1439,8 @@ defmodule Hologram.Compiler.NormalizerTest do
 
     test "multiple expressions try body" do
       # try do
-      #   Aaa
-      #   Bbb
+      #   :expr_1
+      #   :expr_2
       # after
       #   1
       # end
@@ -1448,7 +1448,7 @@ defmodule Hologram.Compiler.NormalizerTest do
         {:try, [line: 1],
          [
            [
-             do: {:__block__, [], [Aaa, Bbb]},
+             do: {:__block__, [], [:expr_1, :expr_2]},
              after: 1
            ]
          ]}
@@ -1460,8 +1460,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                     do:
                       {:__block__, [],
                        [
-                         {:__aliases__, [alias: false], [:Aaa]},
-                         {:__aliases__, [alias: false], [:Bbb]}
+                         :expr_1,
+                         :expr_2
                        ]},
                     after: {:__block__, [], [1]}
                   ]
@@ -1714,8 +1714,8 @@ defmodule Hologram.Compiler.NormalizerTest do
       #   Aaa
       # rescue
       #   Bbb ->
-      #     Ccc
-      #     Ddd
+      #     :expr_1
+      #     :expr_2
       # end
       ast =
         {:try, [line: 1],
@@ -1728,8 +1728,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                   [Bbb],
                   {:__block__, [],
                    [
-                     Ccc,
-                     Ddd
+                     :expr_1,
+                     :expr_2
                    ]}
                 ]}
              ]
@@ -1747,8 +1747,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                          [{:__aliases__, [alias: false], [:Bbb]}],
                          {:__block__, [],
                           [
-                            {:__aliases__, [alias: false], [:Ccc]},
-                            {:__aliases__, [alias: false], [:Ddd]}
+                            :expr_1,
+                            :expr_2
                           ]}
                        ]}
                     ]
@@ -1974,8 +1974,8 @@ defmodule Hologram.Compiler.NormalizerTest do
       #   1
       # catch
       #   Aaa ->
-      #     Bbb
-      #     Ccc
+      #     :expr_1
+      #     :expr_2
       # end
       ast =
         {:try, [line: 1],
@@ -1988,8 +1988,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                   [Aaa],
                   {:__block__, [],
                    [
-                     Bbb,
-                     Ccc
+                     :expr_1,
+                     :expr_2
                    ]}
                 ]}
              ]
@@ -2007,8 +2007,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                          [{:__aliases__, [alias: false], [:Aaa]}],
                          {:__block__, [],
                           [
-                            {:__aliases__, [alias: false], [:Bbb]},
-                            {:__aliases__, [alias: false], [:Ccc]}
+                            :expr_1,
+                            :expr_2
                           ]}
                        ]}
                     ]
@@ -2159,8 +2159,8 @@ defmodule Hologram.Compiler.NormalizerTest do
       #   1
       # else
       #   Aaa ->
-      #     Bbb
-      #     Ccc
+      #     :expr_1
+      #     :expr_2
       # end
       ast =
         {:try, [line: 1],
@@ -2173,8 +2173,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                   [Aaa],
                   {:__block__, [],
                    [
-                     Bbb,
-                     Ccc
+                     :expr_1,
+                     :expr_2
                    ]}
                 ]}
              ]
@@ -2192,8 +2192,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                          [{:__aliases__, [alias: false], [:Aaa]}],
                          {:__block__, [],
                           [
-                            {:__aliases__, [alias: false], [:Bbb]},
-                            {:__aliases__, [alias: false], [:Ccc]}
+                            :expr_1,
+                            :expr_2
                           ]}
                        ]}
                     ]
@@ -2337,15 +2337,15 @@ defmodule Hologram.Compiler.NormalizerTest do
       # try do
       #   1
       # after
-      #   Aaa
-      #   Bbb
+      #   :expr_1
+      #   :expr_2
       # end
       ast =
         {:try, [line: 1],
          [
            [
              do: 1,
-             after: {:__block__, [], [Aaa, Bbb]}
+             after: {:__block__, [], [:expr_1, :expr_2]}
            ]
          ]}
 
@@ -2357,8 +2357,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                     after:
                       {:__block__, [],
                        [
-                         {:__aliases__, [alias: false], [:Aaa]},
-                         {:__aliases__, [alias: false], [:Bbb]}
+                         :expr_1,
+                         :expr_2
                        ]}
                   ]
                 ]}
@@ -2396,8 +2396,8 @@ defmodule Hologram.Compiler.NormalizerTest do
   describe "block" do
     test "with empty meta" do
       # fn Aaa ->
-      #   Bbb
-      #   Ccc
+      #   :expr_1
+      #   :expr_2
       # end
       ast =
         {:fn, [line: 1],
@@ -2405,7 +2405,7 @@ defmodule Hologram.Compiler.NormalizerTest do
            {:->, [line: 1],
             [
               [Aaa],
-              {:__block__, [], [Bbb, Ccc]}
+              {:__block__, [], [:expr_1, :expr_2]}
             ]}
          ]}
 
@@ -2417,8 +2417,8 @@ defmodule Hologram.Compiler.NormalizerTest do
                      [{:__aliases__, [alias: false], [:Aaa]}],
                      {:__block__, [],
                       [
-                        {:__aliases__, [alias: false], [:Bbb]},
-                        {:__aliases__, [alias: false], [:Ccc]}
+                        :expr_1,
+                        :expr_2
                       ]}
                    ]}
                 ]}
@@ -2431,7 +2431,7 @@ defmodule Hologram.Compiler.NormalizerTest do
            {:->, [line: 1],
             [
               [Aaa],
-              {:__block__, [line: 123], [Bbb, Ccc]}
+              {:__block__, [line: 123], [:expr_1, :expr_2]}
             ]}
          ]}
 
@@ -2443,10 +2443,110 @@ defmodule Hologram.Compiler.NormalizerTest do
                      [{:__aliases__, [alias: false], [:Aaa]}],
                      {:__block__, [line: 123],
                       [
-                        {:__aliases__, [alias: false], [:Bbb]},
-                        {:__aliases__, [alias: false], [:Ccc]}
+                        :expr_1,
+                        :expr_2
                       ]}
                    ]}
+                ]}
+    end
+
+    test "strips single non-tail alias (import residue)" do
+      # def foo do
+      #   Kernel <- residue from `import Kernel, only: [...]` inside a function body
+      #   bar()
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:foo, [], []},
+           [do: {:__block__, [], [Kernel, {:bar, [line: 3], []}]}]
+         ]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:foo, [], []},
+                  [do: {:__block__, [], [{:bar, [line: 3], []}]}]
+                ]}
+    end
+
+    test "strips multiple non-tail aliases (multiple import residues)" do
+      # def foo do
+      #   Kernel
+      #   SomeModule
+      #   bar()
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:foo, [], []},
+           [do: {:__block__, [], [Kernel, SomeModule, {:bar, [line: 4], []}]}]
+         ]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:foo, [], []},
+                  [do: {:__block__, [], [{:bar, [line: 4], []}]}]
+                ]}
+    end
+
+    test "preserves tail alias in block" do
+      # def foo do
+      #   bar()
+      #   MyModule
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:foo, [], []},
+           [do: {:__block__, [], [{:bar, [line: 2], []}, MyModule]}]
+         ]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:foo, [], []},
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:bar, [line: 2], []},
+                         {:__aliases__, [alias: false], [:MyModule]}
+                       ]}
+                  ]
+                ]}
+    end
+
+    test "preserves single-expression block with alias" do
+      # def foo, do: MyModule
+      ast = {:def, [line: 1], [{:foo, [], []}, [do: MyModule]]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:foo, [], []},
+                  [do: {:__block__, [], [{:__aliases__, [alias: false], [:MyModule]}]}]
+                ]}
+    end
+
+    test "does not strip non-alias atoms from non-tail positions" do
+      # def foo do
+      #   :ok
+      #   bar()
+      # end
+      ast =
+        {:def, [line: 1],
+         [
+           {:foo, [], []},
+           [do: {:__block__, [], [:ok, {:bar, [line: 3], []}]}]
+         ]}
+
+      assert normalize(ast) ==
+               {:def, [line: 1],
+                [
+                  {:foo, [], []},
+                  [do: {:__block__, [], [:ok, {:bar, [line: 3], []}]}]
                 ]}
     end
   end

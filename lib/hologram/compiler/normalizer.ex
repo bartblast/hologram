@@ -76,7 +76,12 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   defp normalize_block({:__block__, meta, exprs}) do
-    {:__block__, meta, normalize(exprs)}
+    normalized =
+      exprs
+      |> normalize()
+      |> strip_non_tail_aliases()
+
+    {:__block__, meta, normalized}
   end
 
   defp normalize_block(expr) do
@@ -104,4 +109,22 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   defp normalize_try_opt(opt), do: normalize(opt)
+
+  # Strips bare alias expressions from non-tail positions of a block.
+  # The Elixir compiler stores function-body `import` statements as bare module atoms
+  # in the debug info AST (e.g. `import Kernel, only: [+: 2]` becomes a bare `Kernel` atom).
+  # After normalization these become `{:__aliases__, meta, segments}` tuples. They are dead code
+  # (their values are discarded) and must be removed to prevent the call graph from
+  # creating spurious module vertex edges.
+  defp strip_non_tail_aliases(exprs)
+
+  defp strip_non_tail_aliases([_expr] = exprs), do: exprs
+
+  defp strip_non_tail_aliases([{:__aliases__, _meta, _segments} | rest]) do
+    strip_non_tail_aliases(rest)
+  end
+
+  defp strip_non_tail_aliases([expr | rest]) do
+    [expr | strip_non_tail_aliases(rest)]
+  end
 end
