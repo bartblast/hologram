@@ -15,7 +15,9 @@ defmodule Hologram.Compiler do
   alias Hologram.Reflection
 
   # Windows cmd.exe has a command line length limit of 8191 characters.
-  @max_cmd_line_length 8_191
+  # Use half of that to account for unpredictable quoting overhead added by Erlang's System.cmd.
+  # Batches run in parallel so there's no performance penalty from smaller batches.
+  @max_cmd_line_length 4_096
 
   @doc """
   Aggregates JS imports from all Elixir modules referenced by the given MFAs.
@@ -443,15 +445,7 @@ defmodule Hologram.Compiler do
       |> Enum.map(&(String.length(&1) + 1))
       |> Enum.sum()
 
-    # On Windows, cmd_cross_platform wraps the call as: cmd /c <path>.cmd <args>
-    # Account for "cmd" + " " + "/c" + " " (6 chars) and ".cmd" extension (4 chars).
-    windows_overhead =
-      case :os.type() do
-        {:win32, _name} -> 10
-        _other -> 0
-      end
-
-    base_length = String.length(opts[:formatter_bin_path]) + args_length + windows_overhead
+    base_length = String.length(opts[:formatter_bin_path]) + args_length
 
     batches = batch_file_paths(file_paths, base_length)
 
