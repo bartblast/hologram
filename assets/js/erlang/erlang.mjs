@@ -1373,7 +1373,6 @@ const Erlang = {
   // End integer_to_list/2
   // Deps: []
 
-  // TODO: test
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {
     if (Type.isBinary(ioListOrBinary)) {
@@ -1386,24 +1385,14 @@ const Erlang = {
       );
     }
 
+    // :erlang.list_to_binary/1 raises ArgumentError "not an iolist term" on invalid input.
+    // Remap to "not an iodata term" to match OTP's iolist_to_binary/1 behavior.
     try {
       return Erlang["list_to_binary/1"](ioListOrBinary);
-    } catch (error) {
-      const listToBinaryError = Type.errorStruct(
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+    } catch {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
       );
-
-      if (
-        error instanceof HologramBoxedError &&
-        Interpreter.isStrictlyEqual(error.struct, listToBinaryError)
-      ) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
-        );
-      }
-
-      throw error;
     }
   },
   // End iolist_to_binary/1
