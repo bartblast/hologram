@@ -478,7 +478,7 @@ defmodule Hologram.Reflection do
   """
   @spec protocol_impl(module) :: module | nil
   def protocol_impl(module) do
-    if function_exported?(module, :__impl__, 1) do
+    if has_function?(module, :__impl__, 1) do
       module.__impl__(:protocol)
     end
   end
