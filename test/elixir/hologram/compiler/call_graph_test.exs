@@ -54,6 +54,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct2
 
+  alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
+
   @tmp_dir Reflection.tmp_dir()
 
   setup_all do
@@ -1388,13 +1390,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(
                call_graph,
                from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 1}
+               {StringCharsModule12, :__impl__, 1}
              )
 
       assert has_edge?(
                call_graph,
                from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
+               {StringCharsModule12, :to_string, 1}
              )
     end
 
@@ -2782,6 +2784,68 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == [
                {{:module_5, :fun_h, :arity_h}, :module_6}
              ]
+    end
+
+    test "adds protocol dispatch edges when an added module is a protocol implementation", %{
+      empty_call_graph: call_graph
+    } do
+      impl_module = StringCharsModule12
+      impl_ir = IR.for_module(impl_module)
+      from_vertex = {String.Chars, :to_string, 1}
+
+      # Simulate a previous build that had String.Chars but not Module12:
+      # manually add the protocol function vertex without the dispatch edge to Module12.
+      add_vertex(call_graph, from_vertex)
+
+      refute has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      refute has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+
+      # Now patch with Module12 (which has defimpl String.Chars) as an added module
+      ir_plt = PLT.put(PLT.start(), impl_module, impl_ir)
+
+      diff = %{
+        added_modules: [impl_module],
+        removed_modules: [],
+        edited_modules: []
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      assert has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+    end
+
+    test "adds protocol dispatch edges when an edited module is a protocol implementation", %{
+      empty_call_graph: call_graph
+    } do
+      impl_module = StringCharsModule12
+      impl_ir = IR.for_module(impl_module)
+      from_vertex = {String.Chars, :to_string, 1}
+
+      # Simulate a previous build: the protocol function vertex exists and the
+      # implementation module was already built (has its own internal edges).
+      call_graph
+      |> add_vertex(from_vertex)
+      |> build(impl_ir, %Context{})
+
+      # The impl's internal edges exist, but there are no dispatch edges
+      # from the protocol to the implementation.
+      assert has_vertex?(call_graph, {impl_module, :to_string, 1})
+      refute has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      refute has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+
+      ir_plt = PLT.put(PLT.start(), impl_module, impl_ir)
+
+      diff = %{
+        added_modules: [],
+        removed_modules: [],
+        edited_modules: [impl_module]
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      assert has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
     end
 
     test "updates modules", %{empty_call_graph: call_graph} do
