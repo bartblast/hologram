@@ -1314,20 +1314,6 @@ defmodule Hologram.Compiler.CallGraph do
     Digraph.add_edges(graph, @erlang_mfa_edges)
   end
 
-  # When modules that are protocol implementations are added or edited, the protocol
-  # module itself (e.g. Enumerable) is unchanged and not re-processed by patch. Its
-  # dispatch edges remain stale. This function re-runs add_protocol_call_graph_edges
-  # for each affected protocol so dispatch edges reflect the current set of implementations.
-  # Removed modules are excluded because add_protocol_call_graph_edges auto-creates vertices,
-  # which would re-introduce vertices that remove_module_vertices already cleaned up.
-  defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
-    added_or_edited_modules
-    |> Enum.map(&Reflection.protocol_impl/1)
-    |> Enum.reject(&is_nil/1)
-    |> Enum.uniq()
-    |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
-  end
-
   defp add_protocol_call_graph_edges(call_graph, module) do
     funs = module.__protocol__(:functions)
     impls = Reflection.list_protocol_implementations(module)
@@ -1418,6 +1404,20 @@ defmodule Hologram.Compiler.CallGraph do
     end
 
     call_graph
+  end
+
+  # When modules that are protocol implementations are added or edited, the protocol
+  # module itself (e.g. Enumerable) is unchanged and not re-processed by patch. Its
+  # dispatch edges remain stale. This function re-runs add_protocol_call_graph_edges
+  # for each affected protocol so dispatch edges reflect the current set of implementations.
+  # Removed modules are excluded because add_protocol_call_graph_edges auto-creates vertices,
+  # which would re-introduce vertices that remove_module_vertices already cleaned up.
+  defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
+    added_or_edited_modules
+    |> Enum.map(&Reflection.protocol_impl/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
   end
 
   defp remove_module_vertices(call_graph, module) do
