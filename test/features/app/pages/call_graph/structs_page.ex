@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.CallGraph.StructsPage do
 
   alias HologramFeatureTests.StructFixture
 
-  route "/structs"
+  route "/call-graph/structs"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
