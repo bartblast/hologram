@@ -21,8 +21,8 @@ defmodule HologramFeatureTests.CallGraph.ProtocolsPage do
     <p>
       <button $click="dispatch_enumerable_for_list"> Dispatch Enumerable for list </button>
       <button $click="dispatch_enumerable_for_struct"> Dispatch Enumerable for struct </button>
-      <button $click="dispatch_custom_for_atom"> Dispatch for atom </button>
-      <button $click="dispatch_custom_for_struct"> Dispatch for struct </button>
+      <button $click="dispatch_custom_for_atom"> Dispatch custom for atom </button>
+      <button $click="dispatch_custom_for_struct"> Dispatch custom for struct </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
