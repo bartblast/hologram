@@ -4,7 +4,7 @@ defmodule HologramFeatureTests.CallGraph.StructsPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  alias HologramFeatureTests.StructFixture
+  alias HologramFeatureTests.StructFixture1
 
   route "/call-graph/structs"
 
@@ -27,13 +27,13 @@ defmodule HologramFeatureTests.CallGraph.StructsPage do
   end
 
   def action(:create_with_custom_values, _params, component) do
-    my_struct = %StructFixture{name: "custom", value: 42}
+    my_struct = %StructFixture1{name: "custom", value: 42}
 
     put_state(component, :result, {my_struct.name, my_struct.value})
   end
 
   def action(:create_with_defaults, _params, component) do
-    my_struct = %StructFixture{}
+    my_struct = %StructFixture1{}
 
     put_state(component, :result, {my_struct.name, my_struct.value})
   end

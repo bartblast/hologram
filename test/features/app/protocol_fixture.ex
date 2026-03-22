@@ -8,7 +8,7 @@ defimpl HologramFeatureTests.ProtocolFixture, for: Atom do
   end
 end
 
-defimpl HologramFeatureTests.ProtocolFixture, for: HologramFeatureTests.StructFixture do
+defimpl HologramFeatureTests.ProtocolFixture, for: HologramFeatureTests.StructFixture1 do
   def format(data) do
     "<<#{data.value}|#{data.name}>>"
   end
