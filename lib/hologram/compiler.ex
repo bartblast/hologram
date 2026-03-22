@@ -715,8 +715,9 @@ defmodule Hologram.Compiler do
     start_marker = "// Start #{key}"
     end_marker = "// End #{key}"
 
+    # Matches: start_marker, optional // comment lines, "key": <captured body>, end_marker
     regex =
-      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
+      ~r/#{Regex.escape(start_marker)}\s+(?:\/\/[^\n]*\s+)*"#{Regex.escape(key)}":\s+(.+),\s+#{Regex.escape(end_marker)}/s
 
     file_contents = File.read!(file_path)
 
