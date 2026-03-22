@@ -18,12 +18,19 @@ defmodule HologramFeatureTests.CallGraph.ProtocolsPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click="dispatch_for_atom"> Dispatch for atom </button>
       <button $click="dispatch_for_struct"> Dispatch for struct </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
+  end
+
+  def action(:dispatch_for_atom, _params, component) do
+    result = ProtocolFixture.format(:hello)
+
+    put_state(component, :result, result)
   end
 
   def action(:dispatch_for_struct, _params, component) do
