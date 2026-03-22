@@ -32,6 +32,7 @@ defmodule Hologram.CompilerTest do
   @js_dir Path.join(@assets_dir, "js")
   @erlang_js_dir Path.join(@js_dir, "erlang")
 
+  @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
 
   defp setup_js_deps_test(test_subdir) do
@@ -788,6 +789,58 @@ defmodule Hologram.CompilerTest do
     test ":maps module function that is not implemented" do
       result = Compiler.get_erlang_function_js(:maps, :not_implemented, 2, @erlang_js_dir)
       assert result == nil
+    end
+
+    test "no comment lines between start marker and key" do
+      result =
+        Compiler.get_erlang_function_js(:erlang_fixture, :no_comments, 1, @fixtures_compiler_dir)
+
+      expected =
+        normalize_newlines("""
+        (x) => {
+            return x;
+          }\
+        """)
+
+      assert normalize_newlines(result) == expected
+    end
+
+    test "single comment line between start marker and key" do
+      result =
+        Compiler.get_erlang_function_js(
+          :erlang_fixture,
+          :single_comment,
+          0,
+          @fixtures_compiler_dir
+        )
+
+      expected =
+        normalize_newlines("""
+        () => {
+            return 1;
+          }\
+        """)
+
+      assert normalize_newlines(result) == expected
+    end
+
+    test "multiple comment lines between start marker and key" do
+      result =
+        Compiler.get_erlang_function_js(
+          :erlang_fixture,
+          :multiple_comments,
+          2,
+          @fixtures_compiler_dir
+        )
+
+      expected =
+        normalize_newlines("""
+        (a, b) => {
+            return a + b;
+          }\
+        """)
+
+      assert normalize_newlines(result) == expected
     end
 
     test "module file doesn't exist" do
