@@ -436,7 +436,9 @@ defmodule Hologram.Compiler do
       "--files-max-size=#{1024 * 1024 * 1024}"
     ]
 
-    cmd_opts = [cd: opts[:assets_dir], parallelism: true, stderr_to_stdout: true]
+    # Run from the project root so that asdf/mise resolves the Node.js version from the
+    # consuming project's config, not from any .tool-versions inside a git-checked-out dependency.
+    cmd_opts = [parallelism: true, stderr_to_stdout: true]
 
     args_length =
       base_args
@@ -525,8 +527,13 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
   def install_js_deps(assets_dir, build_dir) do
-    opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
-    {_result, exit_status} = SystemUtils.cmd_cross_platform("npm", ["install"], opts)
+    # Run npm from the project root (not from inside assets_dir) so that version managers
+    # like asdf/mise resolve the Node.js version from the consuming project's config,
+    # not from any .tool-versions that may be present inside a git-checked-out dependency.
+    opts = [into: IO.stream(:stdio, :line)]
+
+    {_result, exit_status} =
+      SystemUtils.cmd_cross_platform("npm", ["install", "--prefix", assets_dir], opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
