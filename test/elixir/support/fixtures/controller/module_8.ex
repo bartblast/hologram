@@ -3,6 +3,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module8 do
   use Hologram.Component
   alias Hologram.Component.Action
 
+  @impl Component
   def command(:my_command_8, _params, server) do
     action = %Action{
       name: :my_action_8,

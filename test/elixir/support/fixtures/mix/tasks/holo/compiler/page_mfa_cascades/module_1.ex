@@ -13,6 +13,7 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageMfaCascades.Module1
     """
   end
 
+  @impl Page
   def action(:test, _params, component) do
     module = Map
     module.get(%{a: 1}, :a)

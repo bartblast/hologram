@@ -18,6 +18,12 @@ defmodule Hologram.Page do
   """
   @callback template() :: (map -> list)
 
+  # The following callbacks are implemented so that users may use
+  # `@impl Hologram.Page` in their page modules.
+  @callback action(atom, map, Component.t()) :: Component.t()
+  @callback command(atom, map, Server.t()) :: Server.t()
+  @optional_callbacks [action: 3, command: 3]
+
   defmacro __using__(_opts) do
     template_path = Component.colocated_template_path(__CALLER__.file)
 

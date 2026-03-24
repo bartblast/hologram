@@ -38,6 +38,13 @@ defmodule Hologram.Component do
   @callback init(%{atom => any}, Component.t(), Server.t()) ::
               {Component.t(), Server.t()} | Component.t() | Server.t()
 
+  # The following callbacks are implemented so that users may use
+  # `@impl Hologram.Component` in their component modules.
+  @callback init(map, Component.t()) :: Component.t()
+  @callback action(atom, map, Component.t()) :: Component.t()
+  @callback command(atom, map, Server.t()) :: Server.t()
+  @optional_callbacks [init: 2, action: 3, command: 3]
+
   @doc """
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
   """
