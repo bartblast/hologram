@@ -401,9 +401,9 @@ defmodule Hologram.Compiler.IR do
   defmodule WithBareClause do
     @moduledoc false
 
-    defstruct [:clause]
+    defstruct [:expression]
 
-    @type t :: %__MODULE__{clause: IR.t()}
+    @type t :: %__MODULE__{expression: IR.t()}
   end
 
   defmodule WithMatchClause do
