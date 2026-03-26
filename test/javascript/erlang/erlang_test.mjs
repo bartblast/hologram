@@ -5821,6 +5821,61 @@ describe("Erlang", () => {
     });
   });
 
+  describe("iolist_to_binary/1", () => {
+    const iolist_to_binary = Erlang["iolist_to_binary/1"];
+
+    it("returns a binary unchanged", () => {
+      const binary = Bitstring.fromBytes([1, 2, 3]);
+
+      assert.deepStrictEqual(iolist_to_binary(binary), binary);
+    });
+
+    it("delegates valid list input to :erlang.list_to_binary/1", () => {
+      const fragment = Type.improperList([
+        Type.bitstring("0"),
+        Type.bitstring("1"),
+      ]);
+
+      const iodata = Type.improperList([
+        Type.bitstring("2022"),
+        Type.improperList([
+          Type.integer(45),
+          Type.improperList([
+            fragment,
+            Type.improperList([Type.integer(45), fragment]),
+          ]),
+        ]),
+      ]);
+
+      const result = iolist_to_binary(iodata);
+
+      assertBoxedStrictEqual(result, Type.bitstring("2022-01-01"));
+    });
+
+    it("raises ArgumentError for non-list input", () => {
+      assertBoxedError(
+        () => iolist_to_binary(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    });
+
+    it("remaps invalid iolist errors from :erlang.list_to_binary/1", () => {
+      const nonBinary = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {
+          type: "integer",
+          size: Type.integer(3),
+        }),
+      ]);
+
+      assertBoxedError(
+        () => iolist_to_binary(Type.list([nonBinary])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    });
+  });
+
   describe("is_atom/1", () => {
     const is_atom = Erlang["is_atom/1"];
 
@@ -6242,6 +6297,28 @@ describe("Erlang", () => {
       );
 
       assert.deepStrictEqual(result, Bitstring.fromBytes([1, 2, 3]));
+    });
+
+    it("nested improper list with list tail", () => {
+      const fragment = Type.improperList([
+        Type.bitstring("0"),
+        Type.bitstring("1"),
+      ]);
+
+      const iodata = Type.improperList([
+        Type.bitstring("2022"),
+        Type.improperList([
+          Type.integer(45),
+          Type.improperList([
+            fragment,
+            Type.improperList([Type.integer(45), fragment]),
+          ]),
+        ]),
+      ]);
+
+      const result = list_to_binary(iodata);
+
+      assertBoxedStrictEqual(result, Type.bitstring("2022-01-01"));
     });
 
     it("mixed integers and binaries (iolist from doc example)", () => {

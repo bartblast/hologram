@@ -20,6 +20,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module21
   alias Hologram.Test.Fixtures.Compiler.Module23
+  alias Hologram.Test.Fixtures.Compiler.Module24
+  alias Hologram.Test.Fixtures.Compiler.Module25
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module8
@@ -30,6 +32,7 @@ defmodule Hologram.CompilerTest do
   @js_dir Path.join(@assets_dir, "js")
   @erlang_js_dir Path.join(@js_dir, "erlang")
 
+  @fixtures_compiler_dir Path.join(@fixtures_dir, "compiler")
   @tmp_dir Reflection.tmp_dir()
 
   defp setup_js_deps_test(test_subdir) do
@@ -167,7 +170,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "has both Erlang and Elixir function defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module9, call_graph, ir_plt, MapSet.new(), @js_dir)
+      result = build_page_js(Module24, call_graph, ir_plt, MapSet.new(), @js_dir)
 
       js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -179,7 +182,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "has only Elixir defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module11, call_graph, ir_plt, MapSet.new(), @js_dir)
+      result = build_page_js(Module25, call_graph, ir_plt, MapSet.new(), @js_dir)
 
       js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -652,9 +655,18 @@ defmodule Hologram.CompilerTest do
     @unformatted_valid_js_code "const myVar  =  123"
     @formatted_valid_js_code "const myVar = 123;\n"
 
-    test "valid JS code" do
+    @opts [
+      assets_dir: @assets_dir,
+      formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
+    ]
+
+    test "0 file paths" do
+      assert Compiler.format_files([], @opts) == 0
+    end
+
+    test "single batch" do
       test_tmp_dir =
-        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_valid_input_files"])
+        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_single_batch"])
 
       clean_dir(test_tmp_dir)
 
@@ -664,16 +676,34 @@ defmodule Hologram.CompilerTest do
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
       File.write!(file_path_2, @unformatted_valid_js_code)
 
-      opts = [
-        assets_dir: @assets_dir,
-        formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
-      ]
-
-      assert Compiler.format_files([file_path_1, file_path_2], opts) =~
-               ~r"Formatted 2 files in [0-9]+[mµ]?s\. Fixed 2 files\.\n"u
+      assert Compiler.format_files([file_path_1, file_path_2], @opts) == 1
 
       assert File.read!(file_path_1) == @formatted_valid_js_code
       assert File.read!(file_path_2) == @formatted_valid_js_code
+    end
+
+    test "multiple batches" do
+      test_tmp_dir =
+        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_multiple_batches"])
+
+      clean_dir(test_tmp_dir)
+
+      # Create enough files so that total command line length exceeds the 8191 char limit.
+      file_paths =
+        for i <- 1..100 do
+          file_name = "module_#{String.pad_leading("#{i}", 3, "0")}.entry.js"
+          file_path = Path.join(test_tmp_dir, file_name)
+
+          File.write!(file_path, @unformatted_valid_js_code)
+
+          file_path
+        end
+
+      assert Compiler.format_files(file_paths, @opts) >= 2
+
+      Enum.each(file_paths, fn file_path ->
+        assert File.read!(file_path) == @formatted_valid_js_code
+      end)
     end
 
     test "invalid JS code" do
@@ -689,16 +719,17 @@ defmodule Hologram.CompilerTest do
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
       File.write!(file_path_2, @unformatted_valid_js_code)
 
-      opts = [
-        assets_dir: @assets_dir,
-        formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
-      ]
+      expected_message = ~r"""
+      Biome formatter failed \(probably there were JavaScript syntax errors\)\.
+      Formatter binary: .+biome
+      Exit status: [1-9]\d*
+      Output: .+
+      Files: .+file_1\.js, .+file_2\.js
+      """s
 
-      assert_raise RuntimeError,
-                   "Biome formatter failed (probably there were JavaScript syntax errors)",
-                   fn ->
-                     Compiler.format_files([file_path_1, file_path_2], opts)
-                   end
+      assert_raise RuntimeError, expected_message, fn ->
+        Compiler.format_files([file_path_1, file_path_2], @opts)
+      end
 
       assert File.read!(file_path_1) == unformatted_invalid_js_code
       assert File.read!(file_path_2) == @formatted_valid_js_code
@@ -758,6 +789,58 @@ defmodule Hologram.CompilerTest do
     test ":maps module function that is not implemented" do
       result = Compiler.get_erlang_function_js(:maps, :not_implemented, 2, @erlang_js_dir)
       assert result == nil
+    end
+
+    test "no comment lines between start marker and key" do
+      result =
+        Compiler.get_erlang_function_js(:erlang_fixture, :no_comments, 1, @fixtures_compiler_dir)
+
+      expected =
+        normalize_newlines("""
+        (x) => {
+            return x;
+          }\
+        """)
+
+      assert normalize_newlines(result) == expected
+    end
+
+    test "single comment line between start marker and key" do
+      result =
+        Compiler.get_erlang_function_js(
+          :erlang_fixture,
+          :single_comment,
+          0,
+          @fixtures_compiler_dir
+        )
+
+      expected =
+        normalize_newlines("""
+        () => {
+            return 1;
+          }\
+        """)
+
+      assert normalize_newlines(result) == expected
+    end
+
+    test "multiple comment lines between start marker and key" do
+      result =
+        Compiler.get_erlang_function_js(
+          :erlang_fixture,
+          :multiple_comments,
+          2,
+          @fixtures_compiler_dir
+        )
+
+      expected =
+        normalize_newlines("""
+        (a, b) => {
+            return a + b;
+          }\
+        """)
+
+      assert normalize_newlines(result) == expected
     end
 
     test "module file doesn't exist" do

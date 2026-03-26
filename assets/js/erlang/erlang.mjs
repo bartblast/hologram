@@ -1373,38 +1373,30 @@ const Erlang = {
   // End integer_to_list/2
   // Deps: []
 
-  // TODO: test
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {
-    // TODO: validate arg
-
-    if (Type.isBitstring(ioListOrBinary)) {
+    if (Type.isBinary(ioListOrBinary)) {
       return ioListOrBinary;
     }
 
-    const chunks = Erlang_Lists["flatten/1"](ioListOrBinary).data.map(
-      (term) => {
-        // TODO: validate list item (binary or integer allowed)
+    if (!Type.isList(ioListOrBinary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    }
 
-        if (Type.isBitstring(term)) {
-          return term;
-        }
-
-        const segment = Type.bitstringSegment(term, {
-          type: "integer",
-          size: Type.integer(8),
-          unit: 1n,
-          endianness: "big",
-        });
-
-        return Bitstring.fromSegmentWithIntegerValue(segment);
-      },
-    );
-
-    return Bitstring.concat(chunks);
+    // :erlang.list_to_binary/1 raises ArgumentError "not an iolist term" on invalid input.
+    // Remap to "not an iodata term" to match OTP's iolist_to_binary/1 behavior.
+    try {
+      return Erlang["list_to_binary/1"](ioListOrBinary);
+    } catch {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    }
   },
   // End iolist_to_binary/1
-  // Deps: [:lists.flatten/1]
+  // Deps: [:erlang.list_to_binary/1]
 
   // Start is_atom/1
   "is_atom/1": (term) => {
@@ -1615,6 +1607,8 @@ const Erlang = {
 
         if (Type.isBinary(tail)) {
           chunks.push(tail);
+        } else if (Type.isList(tail)) {
+          collect(tail);
         } else {
           Interpreter.raiseArgumentError(
             Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),

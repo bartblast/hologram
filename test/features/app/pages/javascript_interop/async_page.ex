@@ -133,7 +133,7 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
       |> JS.call(:asyncSum, [17, 16])
       |> Task.await()
 
-    module = Kernel
+    module = HologramFeatureTests.ModuleFixture3
     is_int = module.is_integer(result)
 
     put_state(component, :result, {result, is_int})
