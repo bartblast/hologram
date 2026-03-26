@@ -6899,5 +6899,50 @@ defmodule Hologram.Compiler.TransformerTest do
                else_clauses: []
              }
     end
+
+    test "handles lists as base expressions" do
+      ast =
+        ast("""
+        with [:a, :b, :c] do
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %Hologram.Compiler.IR.With{
+               clauses: [
+                 %Hologram.Compiler.IR.WithBareClause{
+                   expression: %Hologram.Compiler.IR.ListType{
+                     data: [
+                       %Hologram.Compiler.IR.AtomType{value: :a},
+                       %Hologram.Compiler.IR.AtomType{value: :b},
+                       %Hologram.Compiler.IR.AtomType{value: :c}
+                     ]
+                   }
+                 }
+               ],
+               body: %Hologram.Compiler.IR.Block{expressions: []},
+               else_clauses: []
+             }
+    end
+
+    test "handles empty else blocks" do
+      ast =
+        ast("""
+        with x <- y do
+        else
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %Hologram.Compiler.IR.With{
+               clauses: [
+                 %Hologram.Compiler.IR.WithMatchClause{
+                   match: %Hologram.Compiler.IR.Variable{name: :x, version: nil},
+                   guards: [],
+                   expression: %Hologram.Compiler.IR.Variable{name: :y, version: nil}
+                 }
+               ],
+               body: %Hologram.Compiler.IR.Block{expressions: []},
+               else_clauses: []
+             }
+    end
   end
 end
