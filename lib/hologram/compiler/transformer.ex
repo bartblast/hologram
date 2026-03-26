@@ -934,24 +934,29 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_with_clause(do_and_else, acc, context) when is_list(do_and_else) do
-    do_part =
+    do_block_or_expression =
       do_and_else
       |> Keyword.get(:do)
       |> transform(context)
-      |> case do
+
+    body =
+      case do_block_or_expression do
         %IR.Block{} = block ->
+          # Body is already a block, no need to wrap it
           block
 
         other ->
+          # This can be returned from transform if the body has only one expression.
+          # For consistency and better type-checking, we want to wrap it in a block
           %IR.Block{expressions: [other]}
       end
 
     else_part =
       do_and_else
       |> Keyword.get(:else, [])
-      |> Enum.map(&transform(&1, context))
+      |> Enum.map(&transform(&1, %{context | pattern?: true}))
 
-    %{acc | body: do_part, else_clauses: else_part}
+    %{acc | body: body, else_clauses: else_part}
   end
 
   defp transform_with_clause(
