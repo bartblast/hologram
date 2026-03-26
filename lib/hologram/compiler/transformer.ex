@@ -938,6 +938,13 @@ defmodule Hologram.Compiler.Transformer do
       do_and_else
       |> Keyword.get(:do)
       |> transform(context)
+      |> case do
+        %IR.Block{} = block ->
+          block
+
+        other ->
+          %IR.Block{expressions: [other]}
+      end
 
     else_part =
       do_and_else
@@ -952,7 +959,7 @@ defmodule Hologram.Compiler.Transformer do
          acc,
          context
        ) do
-    clause = %IR.WithClause{
+    clause = %IR.WithMatchClause{
       match: transform(match, %{context | pattern?: true}),
       guards: transform_guards(guards, context),
       expression: transform(body, context)
@@ -962,7 +969,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_with_clause({:<-, _meta, [match, body]}, acc, context) do
-    clause = %IR.WithClause{
+    clause = %IR.WithMatchClause{
       match: transform(match, %{context | pattern?: true}),
       guards: [],
       expression: transform(body, context)
@@ -973,9 +980,7 @@ defmodule Hologram.Compiler.Transformer do
 
   defp transform_with_clause(clause, acc, context) do
     clause =
-      %IR.WithClause{
-        match: %IR.MatchPlaceholder{},
-        guards: [],
+      %IR.WithBareClause{
         expression: transform(clause, context)
       }
 

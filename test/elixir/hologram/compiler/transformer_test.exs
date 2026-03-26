@@ -6488,9 +6488,9 @@ defmodule Hologram.Compiler.TransformerTest do
                else_clauses: [first_else, _second_else]
              } = transform(ast, %Context{})
 
-      assert body == %IR.AtomType{value: :ok}
+      assert body == %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
 
-      assert %IR.WithClause{
+      assert %IR.WithMatchClause{
                match: %IR.TupleType{data: [%IR.AtomType{value: :ok}, %IR.Variable{name: :x}]},
                guards: [
                  %IR.LocalFunctionCall{
@@ -6541,7 +6541,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert body == %IR.Block{expressions: []}
 
-      assert clause == %IR.WithClause{
+      assert clause == %IR.WithMatchClause{
                match: %IR.AtomType{value: :ok},
                guards: [],
                expression: %IR.Variable{name: :y}
@@ -6556,7 +6556,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %{clauses: [clause], body: body} = transform(ast, %Context{})
 
-      assert clause == %IR.WithClause{
+      assert clause == %IR.WithMatchClause{
                match: %IR.Variable{
                  name: :i
                },
@@ -6569,7 +6569,7 @@ defmodule Hologram.Compiler.TransformerTest do
                expression: %IR.Variable{name: :x}
              }
 
-      assert body == %IR.Variable{name: :x}
+      assert body == %IR.Block{expressions: [%IR.Variable{name: :x}]}
     end
 
     test "with compound guard calls" do
@@ -6579,10 +6579,10 @@ defmodule Hologram.Compiler.TransformerTest do
         """)
 
       assert transform(ast, %Context{}) == %IR.With{
-               body: %IR.AtomType{value: nil},
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
                else_clauses: [],
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.Variable{
                      name: :x
                    },
@@ -6628,9 +6628,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %{clauses: [plain_clause, arrow_clause]} = transform(ast, %Context{})
 
-      assert plain_clause == %IR.WithClause{
-               match: %IR.MatchPlaceholder{},
-               guards: [],
+      assert plain_clause == %IR.WithBareClause{
                expression: %IR.MatchOperator{
                  left: %IR.Variable{name: :x},
                  right: %IR.LocalFunctionCall{
@@ -6642,7 +6640,7 @@ defmodule Hologram.Compiler.TransformerTest do
                }
              }
 
-      assert arrow_clause == %IR.WithClause{
+      assert arrow_clause == %IR.WithMatchClause{
                match: %IR.Variable{name: :y},
                guards: [],
                expression: %IR.Variable{name: :x}
@@ -6659,9 +6657,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.With{
                body: %IR.Block{expressions: []},
                clauses: [
-                 %IR.WithClause{
-                   match: %IR.MatchPlaceholder{},
-                   guards: [],
+                 %IR.WithBareClause{
                    expression: %IR.LocalFunctionCall{
                      function: :baz,
                      args: [
@@ -6684,7 +6680,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.With{
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.TupleType{
                      data: [
                        %IR.AtomType{value: :ok},
@@ -6696,10 +6692,14 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.LocalFunctionCall{
-                 function: :foo,
-                 args: [
-                   %IR.Variable{name: :x}
+               body: %IR.Block{
+                 expressions: [
+                   %IR.LocalFunctionCall{
+                     function: :foo,
+                     args: [
+                       %IR.Variable{name: :x}
+                     ]
+                   }
                  ]
                }
              }
@@ -6716,7 +6716,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.With{
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.Variable{name: :x},
                    guards: [],
                    expression: %IR.Variable{name: :y}
@@ -6838,7 +6838,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert with_ir == %IR.With{
                body: %IR.Block{expressions: []},
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.PinOperator{variable: %IR.Variable{name: :key, version: nil}},
                    expression: %IR.Variable{name: :y},
                    guards: []
@@ -6864,7 +6864,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert with_ir == %IR.With{
                body: %IR.Block{expressions: []},
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.Variable{name: :x},
                    expression: %IR.Variable{name: :y},
                    guards: []
@@ -6890,7 +6890,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.With{
                body: %IR.Block{expressions: []},
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.Variable{name: :x},
                    guards: [],
                    expression: %IR.Variable{name: :y}
