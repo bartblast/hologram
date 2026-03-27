@@ -142,7 +142,7 @@ defmodule Hologram.LiveReload do
 
   defp recompile_hologram do
     # credo:disable-for-next-line Credo.Check.Design.AliasUsage
-    Mix.Tasks.Compile.Hologram.run([])
+    Mix.Tasks.Compile.Hologram.run(force?: true)
   end
 
   defp reload_code(endpoint) do
