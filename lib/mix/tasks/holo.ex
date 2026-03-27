@@ -11,6 +11,8 @@ defmodule Mix.Tasks.Holo do
   @impl Mix.Task
   def run(args) do
     System.put_env("HOLOGRAM_START", "1")
+
+    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     Mix.Tasks.Phx.Server.run(args)
   end
 end

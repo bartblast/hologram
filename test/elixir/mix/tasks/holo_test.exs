@@ -5,7 +5,9 @@ defmodule Mix.Tasks.HoloTest do
     original_hologram_start_flag = System.get_env("HOLOGRAM_START")
     System.delete_env("HOLOGRAM_START")
 
+    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     task = Task.async(fn -> Mix.Tasks.Holo.run([]) end)
+
     Process.sleep(500)
 
     on_exit(fn ->
