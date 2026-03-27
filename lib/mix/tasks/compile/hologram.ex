@@ -177,7 +177,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp compiler_enabled? do
     # credo:disable-for-next-line Credo.Check.Warning.MixEnv
-    Mix.env() == :prod or System.get_env("HOLOGRAM_START") == "1"
+    Mix.env() not in [:dev, :test] or System.get_env("HOLOGRAM_START") == "1"
   end
 
   defp language_server_build?(opts) do
