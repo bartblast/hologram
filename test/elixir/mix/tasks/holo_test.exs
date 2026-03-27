@@ -3,8 +3,16 @@ defmodule Mix.Tasks.HoloTest do
 
   setup do
     original_hologram_start_flag = System.get_env("HOLOGRAM_START")
+    System.delete_env("HOLOGRAM_START")
+
+    task = Task.async(fn -> Mix.Tasks.Holo.run([]) end)
+    Process.sleep(500)
 
     on_exit(fn ->
+      Process.exit(task.pid, :kill)
+
+      # Mix.Tasks.Phx.Server sets System.no_halt(true) which is a global VM flag
+      # that persists after process kill. Reset it so the BEAM can exit.
       System.no_halt(false)
 
       if original_hologram_start_flag do
@@ -17,24 +25,13 @@ defmodule Mix.Tasks.HoloTest do
 
   describe "run/1" do
     test "sets HOLOGRAM_START env var to 1" do
-      System.delete_env("HOLOGRAM_START")
-
-      task = Task.async(fn -> Mix.Tasks.Holo.run([]) end)
-      Process.sleep(500)
-
       assert System.get_env("HOLOGRAM_START") == "1"
-
-      Task.shutdown(task, :brutal_kill)
     end
 
     test "starts the application" do
-      task = Task.async(fn -> Mix.Tasks.Holo.run([]) end)
-      Process.sleep(500)
-
       started_apps = Enum.map(Application.started_applications(), &elem(&1, 0))
-      assert :hologram in started_apps
 
-      Task.shutdown(task, :brutal_kill)
+      assert :hologram in started_apps
     end
   end
 end
