@@ -442,9 +442,21 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir(context)
   end
 
-  # TODO: finish implementing
-  def transform({:with, _meta, parts}, _context) when is_list(parts) do
-    %IR.With{}
+  def transform({:with, _meta, parts}, context) when is_list(parts) do
+    initial_acc = %IR.With{
+      clauses: [],
+      else_clauses: [],
+      body: nil
+    }
+
+    parts
+    |> Enum.reduce(
+      initial_acc,
+      &transform_with_clause(&1, &2, context)
+    )
+    |> then(fn %{clauses: clauses} = ir ->
+      %{ir | clauses: Enum.reverse(clauses)}
+    end)
   end
 
   # --- PRESERVE ORDER (BEGIN) ---
@@ -919,5 +931,68 @@ defmodule Hologram.Compiler.Transformer do
       _fallback ->
         %IR.Variable{name: name, version: version}
     end
+  end
+
+  defp transform_with_clause([{:do, do_value} | rest], acc, context) do
+    do_block_or_expression = transform(do_value, context)
+
+    body =
+      case do_block_or_expression do
+        %IR.Block{} = block ->
+          # Body is already a block, no need to wrap it
+          block
+
+        other ->
+          # This can be returned from transform if the body has only one expression.
+          # For consistency and better type-checking, we want to wrap it in a block
+          %IR.Block{expressions: [other]}
+      end
+
+    else_clauses =
+      case rest do
+        [] ->
+          []
+
+        [{:else, else_ast}] when is_list(else_ast) ->
+          Enum.map(else_ast, &transform(&1, %{context | pattern?: true}))
+
+        [{:else, {:__block__, [], []}}] ->
+          []
+      end
+
+    %{acc | body: body, else_clauses: else_clauses}
+  end
+
+  defp transform_with_clause(
+         {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, body]},
+         acc,
+         context
+       ) do
+    clause = %IR.WithMatchClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: transform_guards(guards, context),
+      expression: transform(body, context)
+    }
+
+    %{acc | clauses: [clause | acc.clauses]}
+  end
+
+  defp transform_with_clause({:<-, _meta, [match, body]}, acc, context) do
+    clause = %IR.WithMatchClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: [],
+      expression: transform(body, context)
+    }
+
+    %{acc | clauses: [clause | acc.clauses]}
+  end
+
+  defp transform_with_clause(clause, acc, context) do
+    clause =
+      %IR.WithBareClause{
+        expression: transform(clause, context)
+      }
+
+    %{acc | clauses: [clause | acc.clauses]}
   end
 end

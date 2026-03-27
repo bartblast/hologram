@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.JavaScriptInterop.NpmImportPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  js_import from: "decimal.js", as: :Decimal
+  js_import(from: "decimal.js", as: :Decimal)
 
   route "/js-interop/npm-import"
 
