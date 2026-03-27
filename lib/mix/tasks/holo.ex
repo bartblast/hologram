@@ -1,6 +1,6 @@
 defmodule Mix.Tasks.Holo do
   @moduledoc """
-  Starts the application with Hologram compilation enabled.
+  Starts the application with Hologram enabled.
 
       $ mix holo
   """
@@ -10,7 +10,7 @@ defmodule Mix.Tasks.Holo do
   @doc false
   @impl Mix.Task
   def run(args) do
-    System.put_env("HOLOGRAM_COMPILE", "1")
+    System.put_env("HOLOGRAM_START", "1")
     Mix.Tasks.Phx.Server.run(args)
   end
 end

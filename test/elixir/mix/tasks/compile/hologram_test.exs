@@ -197,14 +197,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup_all do
-    original_hologram_compile = System.get_env("HOLOGRAM_COMPILE")
-    System.put_env("HOLOGRAM_COMPILE", "1")
+    original_hologram_start_flag = System.get_env("HOLOGRAM_START")
+    System.put_env("HOLOGRAM_START", "1")
 
     on_exit(fn ->
-      if original_hologram_compile do
-        System.put_env("HOLOGRAM_COMPILE", original_hologram_compile)
+      if original_hologram_start_flag do
+        System.put_env("HOLOGRAM_START", original_hologram_start_flag)
       else
-        System.delete_env("HOLOGRAM_COMPILE")
+        System.delete_env("HOLOGRAM_START")
       end
     end)
 
@@ -242,11 +242,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   describe "compiler skipping" do
     setup do
-      on_exit(fn -> System.put_env("HOLOGRAM_COMPILE", "1") end)
+      on_exit(fn -> System.put_env("HOLOGRAM_START", "1") end)
     end
 
-    test "skips compilation when HOLOGRAM_COMPILE env var is not set", %{opts: opts} do
-      System.delete_env("HOLOGRAM_COMPILE")
+    test "skips compilation when HOLOGRAM_START env var is not set", %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
 
       assert run(opts) == :noop
     end
@@ -257,8 +257,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert run(ls_opts) == :noop
     end
 
-    test "runs compilation when HOLOGRAM_COMPILE env var is set to 1", %{opts: opts} do
-      System.put_env("HOLOGRAM_COMPILE", "1")
+    test "runs compilation when HOLOGRAM_START env var is set to 1", %{opts: opts} do
+      System.put_env("HOLOGRAM_START", "1")
 
       assert run(opts) == :ok
     end
