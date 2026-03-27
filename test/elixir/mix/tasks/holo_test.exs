@@ -5,6 +5,8 @@ defmodule Mix.Tasks.HoloTest do
     original_hologram_start_flag = System.get_env("HOLOGRAM_START")
 
     on_exit(fn ->
+      System.no_halt(false)
+
       if original_hologram_start_flag do
         System.put_env("HOLOGRAM_START", original_hologram_start_flag)
       else
