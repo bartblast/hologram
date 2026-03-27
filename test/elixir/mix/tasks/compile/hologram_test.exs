@@ -197,6 +197,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup_all do
+    original_hologram_compile = System.get_env("HOLOGRAM_COMPILE")
+    System.put_env("HOLOGRAM_COMPILE", "1")
+
+    on_exit(fn ->
+      if original_hologram_compile do
+        System.put_env("HOLOGRAM_COMPILE", original_hologram_compile)
+      else
+        System.delete_env("HOLOGRAM_COMPILE")
+      end
+    end)
+
     clean_dir(@test_dir)
     File.mkdir!(@assets_dir)
     File.mkdir!(@build_dir)
@@ -227,6 +238,30 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     clean_dir(@static_dir)
     clean_dir(@tmp_dir)
+  end
+
+  describe "compiler skipping" do
+    setup do
+      on_exit(fn -> System.put_env("HOLOGRAM_COMPILE", "1") end)
+    end
+
+    test "skips compilation when HOLOGRAM_COMPILE env var is not set", %{opts: opts} do
+      System.delete_env("HOLOGRAM_COMPILE")
+
+      assert run(opts) == :noop
+    end
+
+    test "skips compilation for language server builds", %{opts: opts} do
+      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+
+      assert run(ls_opts) == :noop
+    end
+
+    test "runs compilation when HOLOGRAM_COMPILE env var is set to 1", %{opts: opts} do
+      System.put_env("HOLOGRAM_COMPILE", "1")
+
+      assert run(opts) == :ok
+    end
   end
 
   test "compilation artifacts", %{opts: initial_opts} do
