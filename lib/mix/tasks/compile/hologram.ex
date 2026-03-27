@@ -37,14 +37,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  defp compile_with_lock(opts) do
-    lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
-
-    with_lock(lock_path, fn ->
-      compile(opts)
-    end)
-  end
-
   defp bin_available?(cmd) do
     args = ["--version"]
     opts = [parallelism: true, stderr_to_stdout: true]
@@ -173,6 +165,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.info("Hologram: compiler finished")
 
     :ok
+  end
+
+  defp compile_with_lock(opts) do
+    lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
+
+    with_lock(lock_path, fn ->
+      compile(opts)
+    end)
   end
 
   defp compiler_enabled? do
