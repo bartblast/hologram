@@ -40,9 +40,9 @@ defmodule Hologram.Component do
 
   # The following callbacks are implemented so that users may use
   # `@impl Hologram.Component` in their component modules.
-  @callback init(map, Component.t()) :: Component.t()
-  @callback action(atom, map, Component.t()) :: Component.t()
-  @callback command(atom, map, Server.t()) :: Server.t()
+  @callback init(%{atom => any}, Component.t()) :: Component.t()
+  @callback action(atom, %{atom => any}, Component.t()) :: Component.t()
+  @callback command(atom, %{atom => any}, Server.t()) :: Server.t()
   @optional_callbacks [init: 2, action: 3, command: 3]
 
   @doc """
