@@ -12,7 +12,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module8 do
       target: nil
     }
 
-    %Hologram.Server{server | next_action: action}
+    %{server | next_action: action}
   end
 
   @impl Component
