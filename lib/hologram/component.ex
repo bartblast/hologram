@@ -12,7 +12,7 @@ defmodule Hologram.Component do
 
     @type t :: %__MODULE__{
             delay: non_neg_integer,
-            name: :atom,
+            name: atom(),
             params: %{atom => any},
             target: String.t() | nil
           }
