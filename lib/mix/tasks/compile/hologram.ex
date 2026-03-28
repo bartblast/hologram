@@ -116,55 +116,60 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
 
-    runtime_entry_file_path =
-      Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
+    try do
+      runtime_entry_file_path =
+        Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
 
-    page_modules = Reflection.list_pages()
+      page_modules = Reflection.list_pages()
 
-    Compiler.validate_page_modules(page_modules)
+      Compiler.validate_page_modules(page_modules)
 
-    call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+      call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
-    page_entry_files_info =
-      page_modules
-      |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, async_mfas, opts)
-      |> Enum.map(fn {entry_name, entry_file_path} ->
-        {entry_name, entry_file_path, "page"}
-      end)
+      page_entry_files_info =
+        page_modules
+        |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, async_mfas, opts)
+        |> Enum.map(fn {entry_name, entry_file_path} ->
+          {entry_name, entry_file_path, "page"}
+        end)
 
-    page_entry_file_paths =
-      Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path, _bundle_name} ->
-        entry_file_path
-      end)
+      page_entry_file_paths =
+        Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path, _bundle_name} ->
+          entry_file_path
+        end)
 
-    Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
+      Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
 
-    entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
+      entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
 
-    old_build_static_artifacts =
-      opts[:static_dir]
-      |> File.ls!()
-      |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
+      old_build_static_artifacts =
+        opts[:static_dir]
+        |> File.ls!()
+        |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
 
-    bundles_info = Compiler.bundle(entry_files_info, opts)
+      bundles_info = Compiler.bundle(entry_files_info, opts)
 
-    new_build_static_artifacts =
-      Enum.reduce(bundles_info, [], fn bundle_info, acc ->
-        [bundle_info.static_bundle_path, bundle_info.static_source_map_path | acc]
-      end)
+      new_build_static_artifacts =
+        Enum.reduce(bundles_info, [], fn bundle_info, acc ->
+          [bundle_info.static_bundle_path, bundle_info.static_source_map_path | acc]
+        end)
 
-    {page_digest_plt, page_digest_plt_dump_path} =
-      Compiler.build_page_digest_plt(bundles_info, opts)
+      {page_digest_plt, page_digest_plt_dump_path} =
+        Compiler.build_page_digest_plt(bundles_info, opts)
 
-    PLT.dump(page_digest_plt, page_digest_plt_dump_path)
-    CallGraph.dump(call_graph, call_graph_dump_path)
-    PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
+      PLT.dump(page_digest_plt, page_digest_plt_dump_path)
+      CallGraph.dump(call_graph, call_graph_dump_path)
+      PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
 
-    Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
+      Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 
-    Logger.info("Hologram: compiler finished")
+      Logger.info("Hologram: compiler finished")
 
-    :ok
+      :ok
+    after
+      CallGraph.stop(call_graph)
+      CallGraph.stop(call_graph_for_runtime)
+    end
   end
 
   defp compile_with_lock(opts) do
