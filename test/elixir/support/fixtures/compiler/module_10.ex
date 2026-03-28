@@ -12,5 +12,5 @@ defmodule Hologram.Test.Fixtures.Compiler.Module10 do
     fun_10a(params, component)
   end
 
-  def fun_10a(params, state), do: {params, state}
+  def fun_10a(_params, state), do: state
 end

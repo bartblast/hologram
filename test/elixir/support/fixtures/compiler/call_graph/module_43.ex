@@ -9,6 +9,7 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module43 do
     """
   end
 
+  @impl Component
   def command(:command_43a, _params, server) do
     server
   end

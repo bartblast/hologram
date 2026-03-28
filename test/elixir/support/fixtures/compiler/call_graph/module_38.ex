@@ -2,6 +2,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module38 do
   use Hologram.Component
 
+  @impl Component
   def init(_props, component) do
     component
   end
@@ -13,6 +14,7 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module38 do
     """
   end
 
+  @impl Component
   def action(_action, _params, component) do
     component
   end
