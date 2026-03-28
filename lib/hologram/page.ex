@@ -18,10 +18,16 @@ defmodule Hologram.Page do
   """
   @callback template() :: (map -> list)
 
-  # The following callbacks are implemented so that users may use
-  # `@impl Hologram.Page` in their page modules.
+  @doc """
+  Called when the component starts its lifecycle directly on the client.
+  """
   @callback action(atom, map, Component.t()) :: Component.t()
+
+  @doc """
+  Run server-side operations.
+  """
   @callback command(atom, map, Server.t()) :: Server.t()
+
   @optional_callbacks [action: 3, command: 3]
 
   defmacro __using__(_opts) do
