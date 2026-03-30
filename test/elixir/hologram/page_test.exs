@@ -1,6 +1,7 @@
 defmodule Hologram.PageTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Page
+  import ExUnit.CaptureIO
 
   alias Hologram.Component
   alias Hologram.Server
@@ -147,6 +148,54 @@ defmodule Hologram.PageTest do
              ] = result
 
       assert normalize_newlines(text) == "Module5 template\n"
+    end
+  end
+
+  describe "optional callbacks" do
+    test "raises impl warning when impl not given for action" do
+      warning =
+        capture_io(:stderr, fn ->
+          Code.compile_string("""
+          defmodule TestPageActionOptionalCallbacks do
+            use Hologram.Page
+
+            @impl Hologram.Page
+            def template do
+              ~HOLO""
+            end
+
+            def action(:fire_missiles, _params, component) do
+              component
+            end
+          end
+          """)
+        end)
+
+      assert warning =~ "warning:"
+      assert warning =~ "module attribute @impl was not set for function action/3"
+    end
+
+    test "raises impl warning when impl not given for command" do
+      warning =
+        capture_io(:stderr, fn ->
+          Code.compile_string("""
+          defmodule TestPageCommand do
+            use Hologram.Page
+
+            @impl Hologram.Page
+            def template do
+              ~HOLO""
+            end
+
+            def command(:siphon_money, _params, server) do
+              server
+            end
+          end
+          """)
+        end)
+
+      assert warning =~ "warning:"
+      assert warning =~ "module attribute @impl was not set for function command/3"
     end
   end
 end

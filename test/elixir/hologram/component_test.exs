@@ -1,6 +1,7 @@
 defmodule Hologram.ComponentTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Component
+  import ExUnit.CaptureIO
 
   alias Hologram.Component
   alias Hologram.Component.Action
@@ -323,6 +324,77 @@ defmodule Hologram.ComponentTest do
              ] = result
 
       assert normalize_newlines(text) == "Module3 template\n"
+    end
+  end
+
+  describe "optional callbacks" do
+    test "raises impl warning when impl not given for init" do
+      warning =
+        capture_io(:stderr, fn ->
+          Code.compile_string("""
+          defmodule TestComponentInitOptionalCallbacks do
+            use Hologram.Component
+
+            def init(_params, component) do
+              component
+            end
+
+            @impl Hologram.Component
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert warning =~ "warning:"
+      assert warning =~ "module attribute @impl was not set for function init/2"
+    end
+
+    test "raises impl warning when impl not given for action" do
+      warning =
+        capture_io(:stderr, fn ->
+          Code.compile_string("""
+          defmodule TestComponentActionOptionalCallbacks do
+            use Hologram.Component
+
+            @impl Hologram.Component
+            def template do
+              ~HOLO""
+            end
+
+            def action(:fire_missiles, _params, component) do
+              component
+            end
+          end
+          """)
+        end)
+
+      assert warning =~ "warning:"
+      assert warning =~ "module attribute @impl was not set for function action/3"
+    end
+
+    test "raises impl warning when impl not given for command" do
+      warning =
+        capture_io(:stderr, fn ->
+          Code.compile_string("""
+          defmodule TestPageCommandOptionalCallbacks do
+            use Hologram.Component
+
+            @impl Hologram.Component
+            def template do
+              ~HOLO""
+            end
+
+            def command(:fire_missiles, _params, server) do
+              server
+            end
+          end
+          """)
+        end)
+
+      assert warning =~ "warning:"
+      assert warning =~ "module attribute @impl was not set for function command/3"
     end
   end
 end

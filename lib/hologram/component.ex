@@ -12,7 +12,7 @@ defmodule Hologram.Component do
 
     @type t :: %__MODULE__{
             delay: non_neg_integer,
-            name: :atom,
+            name: atom(),
             params: %{atom => any},
             target: String.t() | nil
           }
@@ -37,6 +37,23 @@ defmodule Hologram.Component do
   """
   @callback init(%{atom => any}, Component.t(), Server.t()) ::
               {Component.t(), Server.t()} | Component.t() | Server.t()
+
+  @doc """
+  Called when the component starts its lifecycle directly on the client.
+  """
+  @callback init(%{atom => any}, Component.t()) :: Component.t()
+
+  @doc """
+  Client side operations, typically executed in response to user interactions.
+  """
+  @callback action(atom, %{atom => any}, Component.t()) :: Component.t()
+
+  @doc """
+  Run server-side operations.
+  """
+  @callback command(atom, %{atom => any}, Server.t()) :: Server.t()
+
+  @optional_callbacks [init: 2, action: 3, command: 3]
 
   @doc """
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
