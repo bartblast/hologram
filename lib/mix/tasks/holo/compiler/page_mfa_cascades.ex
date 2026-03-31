@@ -34,9 +34,12 @@ defmodule Mix.Tasks.Holo.Compiler.PageMfaCascades do
       |> CallGraph.remove_manually_ported_mfas()
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
-    call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
-    graph = CallGraph.get_pruned_page_graph(call_graph_for_pages, page_module)
+    graph =
+      call_graph_for_runtime
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+      |> CallGraph.remove_other_pages_mfas!(page_module)
+      |> CallGraph.get_graph()
 
     reachable =
       graph
