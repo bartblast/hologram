@@ -3030,6 +3030,73 @@ defmodule Hologram.Compiler.CallGraphTest do
     end)
   end
 
+  describe "remove_server_only_erlang_mfas_and_callers/1" do
+    test "removes server-only Erlang MFA sinks and their transitive callers", %{
+      empty_call_graph: call_graph
+    } do
+      sink = {:file, :make_symlink, 2}
+
+      result =
+        call_graph
+        |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
+        |> add_edge({Module16, :fun_16a, 1}, sink)
+        |> remove_server_only_erlang_mfas_and_callers()
+
+      refute has_vertex?(result, sink)
+      refute has_vertex?(result, {Module16, :fun_16a, 1})
+      refute has_vertex?(result, {Module14, :fun_14a, 3})
+    end
+
+    test "keeps vertices that don't call any sink even if their only caller was removed", %{
+      empty_call_graph: call_graph
+    } do
+      sink = {:file, :make_symlink, 2}
+
+      result =
+        call_graph
+        |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
+        |> add_edge({Module16, :fun_16a, 1}, sink)
+        |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16b, 0})
+        |> remove_server_only_erlang_mfas_and_callers()
+
+      assert has_vertex?(result, {Module16, :fun_16b, 0})
+    end
+
+    test "stops at protocol dispatch boundary without removing the protocol function or its callers",
+         %{
+           empty_call_graph: call_graph
+         } do
+      sink = {:file, :make_symlink, 2}
+
+      result =
+        call_graph
+        |> add_edge({Module14, :fun_14a, 3}, {Enumerable, :reduce, 3})
+        |> add_edge({Enumerable, :reduce, 3}, {Enumerable.MyStruct, :reduce, 3})
+        |> add_edge({Enumerable, :reduce, 3}, {Enumerable.OtherStruct, :reduce, 3})
+        |> add_edge({Enumerable.MyStruct, :reduce, 3}, sink)
+        |> remove_server_only_erlang_mfas_and_callers()
+
+      refute has_vertex?(result, sink)
+      refute has_vertex?(result, {Enumerable.MyStruct, :reduce, 3})
+
+      assert has_vertex?(result, {Enumerable, :reduce, 3})
+      assert has_vertex?(result, {Module14, :fun_14a, 3})
+      assert has_vertex?(result, {Enumerable.OtherStruct, :reduce, 3})
+    end
+
+    test "keeps all vertices when no server-only Erlang MFA sinks are present", %{
+      empty_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
+        |> remove_server_only_erlang_mfas_and_callers()
+
+      assert has_vertex?(result, {Module14, :fun_14a, 3})
+      assert has_vertex?(result, {Module16, :fun_16a, 1})
+    end
+  end
+
   test "remove_vertex/2", %{empty_call_graph: call_graph} do
     call_graph
     |> add_vertex(:vertex_1)

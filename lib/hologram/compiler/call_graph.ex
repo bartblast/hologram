@@ -312,6 +312,12 @@ defmodule Hologram.Compiler.CallGraph do
     ]
   ]
 
+  # Erlang functions that must only run on the server (e.g. filesystem, network, OS).
+  # Any MFA that transitively calls one of these is pruned from the client bundle.
+  @server_only_erlang_mfas [
+    {:file, :make_symlink, 2}
+  ]
+
   @doc """
   Adds an edge between two vertices in the call graph.
   Automatically adds vertices if they don't exist.
@@ -961,8 +967,8 @@ defmodule Hologram.Compiler.CallGraph do
   def get_pruned_page_graph(call_graph, page_module) do
     call_graph
     |> get_graph()
-    |> remove_server_only_mfas()
-    |> remove_other_page_mfas(page_module)
+    |> remove_templatable_server_callbacks()
+    |> remove_other_pages_mfas(page_module)
   end
 
   @doc """
@@ -1237,6 +1243,42 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Removes server-only Erlang MFAs (e.g. filesystem operations) and all MFAs
+  that transitively call them. Protocol dispatch edges are not traversed
+  backwards, so if only one protocol implementation calls a server-only
+  function, only that implementation is removed - not the protocol function
+  or its other callers.
+  """
+  @spec remove_server_only_erlang_mfas_and_callers(t) :: t
+  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
+  def remove_server_only_erlang_mfas_and_callers(%{pid: pid} = call_graph) do
+    Agent.cast(pid, fn graph ->
+      existing_sinks =
+        Enum.filter(@server_only_erlang_mfas, &Digraph.has_vertex?(graph, &1))
+
+      if existing_sinks == [] do
+        graph
+      else
+        protocol_vertices = list_protocol_vertices(graph)
+
+        vertices_to_remove =
+          graph
+          |> Digraph.reaching(existing_sinks,
+            opaque_vertices: protocol_vertices,
+            skip_module_vertices: true
+          )
+          |> Enum.filter(fn vertex ->
+            is_tuple(vertex) && !MapSet.member?(protocol_vertices, vertex)
+          end)
+
+        Digraph.remove_vertices(graph, vertices_to_remove)
+      end
+    end)
+
+    call_graph
+  end
+
+  @doc """
   Removes the vertex from the call graph.
   """
   @spec remove_vertex(t, vertex) :: t
@@ -1360,6 +1402,16 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Digraph.incoming_edges(&1, vertex), :infinity)
   end
 
+  defp list_protocol_vertices(graph) do
+    graph
+    |> Digraph.vertices()
+    |> Enum.filter(fn
+      {module, _fun, _arity} -> Reflection.protocol?(module)
+      _other -> false
+    end)
+    |> MapSet.new()
+  end
+
   defp list_reflection_mfas_reachable_from_server_init(templetable, graph) do
     graph
     |> Digraph.reachable([{templetable, :init, 3}])
@@ -1424,7 +1476,7 @@ defmodule Hologram.Compiler.CallGraph do
     remove_vertices(call_graph, module_vertices(call_graph, module))
   end
 
-  defp remove_other_page_mfas(graph, page_module) do
+  defp remove_other_pages_mfas(graph, page_module) do
     other_page_modules =
       Reflection.list_pages()
       |> Enum.reject(&(&1 == page_module))
@@ -1445,7 +1497,7 @@ defmodule Hologram.Compiler.CallGraph do
     Digraph.remove_vertices(graph, other_page_vertices)
   end
 
-  defp remove_server_only_mfas(graph) do
+  defp remove_templatable_server_callbacks(graph) do
     server_only_vertices =
       graph
       |> Digraph.vertices()
