@@ -113,6 +113,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
       # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
       |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.remove_server_only_mfas!()
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
 
