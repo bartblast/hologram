@@ -897,31 +897,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  For each given sink MFA, counts how many MFAs from the reachable set can reach it.
-
-  Returns a list of `{mfa, reaching_count}` tuples sorted by reaching count
-  (biggest sinks first).
-  """
-  @spec compute_sink_reaching_counts(Digraph.t(), [mfa], MapSet.t()) :: [
-          {mfa, non_neg_integer}
-        ]
-  def compute_sink_reaching_counts(graph, sink_mfas, reachable) do
-    sink_mfas
-    |> Enum.map(fn mfa ->
-      reaching_count =
-        graph
-        |> Digraph.reaching([mfa], skip_module_vertices: true)
-        |> Enum.count(fn
-          {_module, _function, _arity} = vertex -> MapSet.member?(reachable, vertex)
-          _module -> false
-        end)
-
-      {mfa, reaching_count}
-    end)
-    |> Enum.sort_by(fn {_mfa, count} -> count end, :desc)
-  end
-
-  @doc """
   Computes cascade entries for module vertices in a call graph.
 
   Returns a list of `{source, module, downstream_mfa_count}` tuples sorted by
@@ -945,6 +920,31 @@ defmodule Hologram.Compiler.CallGraph do
       |> Enum.map(fn source -> {source, module, downstream_mfa_count} end)
     end)
     |> Enum.sort_by(fn {_source, _module, count} -> count end, :desc)
+  end
+
+  @doc """
+  For each given sink MFA, counts how many MFAs from the reachable set can reach it.
+
+  Returns a list of `{mfa, reaching_count}` tuples sorted by reaching count
+  (biggest sinks first).
+  """
+  @spec compute_sink_reaching_counts(Digraph.t(), [mfa], MapSet.t()) :: [
+          {mfa, non_neg_integer}
+        ]
+  def compute_sink_reaching_counts(graph, sink_mfas, reachable) do
+    sink_mfas
+    |> Enum.map(fn mfa ->
+      reaching_count =
+        graph
+        |> Digraph.reaching([mfa], skip_module_vertices: true)
+        |> Enum.count(fn
+          {_module, _function, _arity} = vertex -> MapSet.member?(reachable, vertex)
+          _module -> false
+        end)
+
+      {mfa, reaching_count}
+    end)
+    |> Enum.sort_by(fn {_mfa, count} -> count end, :desc)
   end
 
   @doc """
