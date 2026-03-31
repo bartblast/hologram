@@ -2134,6 +2134,69 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "compute_sinks/3" do
+    # Graph:
+    # {Module1, :fun_1a, 0} -> {:erlang, :hd, 1}       (sink A)
+    # {Module1, :fun_1a, 0} -> {Module2, :fun_2a, 1}
+    # {Module2, :fun_2a, 1} -> {:erlang, :hd, 1}       (sink A)
+    # {Module3, :fun_3a, 0} -> {:erlang, :tl, 1}       (sink B)
+    # {Module3, :fun_3a, 0} -> {:erlang, :hd, 1}       (sink A)
+
+    setup do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module1, :fun_1a, 0}, {:erlang, :hd, 1})
+        |> Digraph.add_edge({Module1, :fun_1a, 0}, {Module2, :fun_2a, 1})
+        |> Digraph.add_edge({Module2, :fun_2a, 1}, {:erlang, :hd, 1})
+        |> Digraph.add_edge({Module3, :fun_3a, 0}, {:erlang, :tl, 1})
+        |> Digraph.add_edge({Module3, :fun_3a, 0}, {:erlang, :hd, 1})
+
+      reachable =
+        MapSet.new([
+          {Module1, :fun_1a, 0},
+          {Module2, :fun_2a, 1},
+          {Module3, :fun_3a, 0},
+          {:erlang, :hd, 1},
+          {:erlang, :tl, 1}
+        ])
+
+      erlang_mfas = [{:erlang, :hd, 1}, {:erlang, :tl, 1}]
+
+      [graph: graph, erlang_mfas: erlang_mfas, reachable: reachable]
+    end
+
+    test "returns sinks sorted by reaching count descending", %{
+      graph: graph,
+      erlang_mfas: erlang_mfas,
+      reachable: reachable
+    } do
+      result = CallGraph.compute_sinks(graph, erlang_mfas, reachable)
+
+      assert result == [
+               {{:erlang, :hd, 1}, 4},
+               {{:erlang, :tl, 1}, 2}
+             ]
+    end
+
+    test "only counts MFAs in the reachable set", %{
+      graph: graph,
+      erlang_mfas: erlang_mfas,
+      reachable: reachable
+    } do
+      restricted_reachable = MapSet.delete(reachable, {Module1, :fun_1a, 0})
+      result = CallGraph.compute_sinks(graph, erlang_mfas, restricted_reachable)
+
+      assert result == [
+               {{:erlang, :hd, 1}, 3},
+               {{:erlang, :tl, 1}, 2}
+             ]
+    end
+
+    test "returns empty list when no erlang MFAs given", %{graph: graph, reachable: reachable} do
+      assert CallGraph.compute_sinks(graph, [], reachable) == []
+    end
+  end
+
   test "dump/2", %{empty_call_graph: call_graph} do
     dump_dir =
       Path.join([

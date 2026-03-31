@@ -44,20 +44,7 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeErlangSinks do
       end)
       |> Enum.sort()
 
-    sinks =
-      erlang_mfas
-      |> Enum.map(fn mfa ->
-        reaching_count =
-          graph
-          |> Digraph.reaching([mfa], skip_module_vertices: true)
-          |> Enum.count(fn
-            {_module, _function, _arity} = vertex -> MapSet.member?(reachable, vertex)
-            _module -> false
-          end)
-
-        {mfa, reaching_count}
-      end)
-      |> Enum.sort_by(fn {_mfa, count} -> count end, :desc)
+    sinks = CallGraph.compute_sinks(graph, erlang_mfas, reachable)
 
     # credo:disable-for-lines:5 Credo.Check.Refactor.IoPuts
     IO.puts("#{length(sinks)} Erlang MFA sinks in runtime:\n")
