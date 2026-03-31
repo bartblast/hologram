@@ -936,7 +936,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> Enum.map(fn mfa ->
       reaching_count =
         graph
-        |> Digraph.reaching([mfa], skip_module_vertices: true)
+        |> Digraph.reaching([mfa], opaque_vertex?: &is_atom/1)
         |> Enum.count(fn
           {_module, _function, _arity} = vertex -> MapSet.member?(reachable, vertex)
           _module -> false
@@ -1011,7 +1011,7 @@ defmodule Hologram.Compiler.CallGraph do
     graph = get_graph(call_graph)
 
     graph
-    |> Digraph.reaching([{Task, :await, 1}], skip_module_vertices: true)
+    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
     # Excludes bare module atom vertices, keeping only MFA tuples.
     # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
     # the result is only used for MapSet.member? lookups against already-included MFAs.
@@ -1320,7 +1320,7 @@ defmodule Hologram.Compiler.CallGraph do
           graph
           |> Digraph.reaching(existing_sinks,
             opaque_vertices: protocol_vertices,
-            skip_module_vertices: true
+            opaque_vertex?: &is_atom/1
           )
           |> Enum.filter(fn vertex ->
             is_tuple(vertex) && !MapSet.member?(protocol_vertices, vertex)
