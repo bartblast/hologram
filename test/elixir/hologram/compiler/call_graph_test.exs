@@ -2182,110 +2182,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert %Digraph{} = get_graph(call_graph)
   end
 
-  describe "get_pruned_page_graph/2" do
-    test "returns a Digraph struct", %{empty_call_graph: empty_call_graph} do
-      module_14_ir = IR.for_module(Module14)
-
-      call_graph = build(empty_call_graph, module_14_ir, %Context{})
-      result = get_pruned_page_graph(call_graph, Module14)
-
-      assert %Digraph{} = result
-    end
-
-    test "removes command/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
-      # Page
-      module_42_ir = IR.for_module(Module42)
-
-      # Component
-      module_43_ir = IR.for_module(Module43)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_42_ir, %Context{})
-        |> build(module_43_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module42)
-      vertices = Digraph.vertices(graph)
-
-      refute {Module42, :command, 3} in vertices
-      refute {Module43, :command, 3} in vertices
-    end
-
-    test "removes init/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
-      # Page
-      module_44_ir = IR.for_module(Module44)
-
-      # Component
-      module_45_ir = IR.for_module(Module45)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_44_ir, %Context{})
-        |> build(module_45_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module44)
-      vertices = Digraph.vertices(graph)
-
-      refute {Module44, :init, 3} in vertices
-      refute {Module45, :init, 3} in vertices
-    end
-
-    test "removes other page functions except __params__/0 and __route__/0", %{
-      empty_call_graph: empty_call_graph
-    } do
-      module_14_ir = IR.for_module(Module14)
-      module_17_ir = IR.for_module(Module17)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_14_ir, %Context{})
-        |> build(module_17_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module14)
-      vertices = Digraph.vertices(graph)
-
-      assert {Module14, :action, 3} in vertices
-      assert {Module14, :template, 0} in vertices
-
-      assert {Module17, :__params__, 0} in vertices
-      assert {Module17, :__route__, 0} in vertices
-
-      refute {Module17, :action, 3} in vertices
-      refute {Module17, :template, 0} in vertices
-    end
-
-    test "keeps command/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
-      module_42_ir = IR.for_module(Module42)
-      module_43_ir = IR.for_module(Module43)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_42_ir, %Context{})
-        |> build(module_43_ir, %Context{})
-        |> add_edge({Module42, :action, 3}, {Module16, :command, 3})
-
-      graph = get_pruned_page_graph(call_graph, Module42)
-      vertices = Digraph.vertices(graph)
-
-      assert {Module16, :command, 3} in vertices
-    end
-
-    test "keeps init/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
-      module_46_ir = IR.for_module(Module46)
-      module_47_ir = IR.for_module(Module47)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_46_ir, %Context{})
-        |> build(module_47_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module47)
-      vertices = Digraph.vertices(graph)
-
-      assert {Module46, :init, 3} in vertices
-    end
-  end
-
   describe "has_edge?/3" do
     test "has the given edge", %{empty_call_graph: call_graph} do
       add_edge(call_graph, :vertex_1, :vertex_2)
@@ -2395,6 +2291,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(module_14_ir, %Context{})
         |> build(module_15_ir, %Context{})
         |> build(module_16_ir, %Context{})
+        |> remove_server_only_mfas()
         |> list_page_mfas(Module14)
 
       assert result == [
@@ -2426,6 +2323,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(module_42_ir, %Context{})
         |> build(module_43_ir, %Context{})
         |> build(module_44_ir, %Context{})
+        |> remove_server_only_mfas()
         |> list_page_mfas(Module42)
 
       # Server-only MFA is excluded
@@ -3015,6 +2913,49 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "remove_other_pages_mfas/2" do
+    test "removes other page functions except __params__/0 and __route__/0", %{
+      empty_call_graph: empty_call_graph
+    } do
+      module_14_ir = IR.for_module(Module14)
+      module_17_ir = IR.for_module(Module17)
+
+      graph =
+        empty_call_graph
+        |> build(module_14_ir, %Context{})
+        |> build(module_17_ir, %Context{})
+        |> get_graph()
+        |> remove_other_pages_mfas(Module14)
+
+      vertices = Digraph.vertices(graph)
+
+      assert {Module14, :action, 3} in vertices
+      assert {Module14, :template, 0} in vertices
+
+      assert {Module17, :__params__, 0} in vertices
+      assert {Module17, :__route__, 0} in vertices
+
+      refute {Module17, :action, 3} in vertices
+      refute {Module17, :template, 0} in vertices
+    end
+  end
+
+  describe "remove_other_pages_mfas!/2" do
+    test "mutates the call graph", %{empty_call_graph: empty_call_graph} do
+      module_14_ir = IR.for_module(Module14)
+      module_17_ir = IR.for_module(Module17)
+
+      result =
+        empty_call_graph
+        |> build(module_14_ir, %Context{})
+        |> build(module_17_ir, %Context{})
+        |> remove_other_pages_mfas!(Module14)
+
+      assert has_vertex?(result, {Module14, :action, 3})
+      refute has_vertex?(result, {Module17, :action, 3})
+    end
+  end
+
   test "remove_runtime_mfas!/2", %{ir_plt: ir_plt} do
     call_graph = Compiler.build_call_graph(ir_plt)
     runtime_mfas = list_runtime_mfas(call_graph)
@@ -3030,7 +2971,62 @@ defmodule Hologram.Compiler.CallGraphTest do
     end)
   end
 
-  describe "remove_server_only_erlang_mfas_and_callers/1" do
+  describe "remove_server_only_mfas/1" do
+    test "removes command/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
+      module_42_ir = IR.for_module(Module42)
+      module_43_ir = IR.for_module(Module43)
+
+      result =
+        empty_call_graph
+        |> build(module_42_ir, %Context{})
+        |> build(module_43_ir, %Context{})
+        |> remove_server_only_mfas()
+
+      refute has_vertex?(result, {Module42, :command, 3})
+      refute has_vertex?(result, {Module43, :command, 3})
+    end
+
+    test "removes init/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
+      module_44_ir = IR.for_module(Module44)
+      module_45_ir = IR.for_module(Module45)
+
+      result =
+        empty_call_graph
+        |> build(module_44_ir, %Context{})
+        |> build(module_45_ir, %Context{})
+        |> remove_server_only_mfas()
+
+      refute has_vertex?(result, {Module44, :init, 3})
+      refute has_vertex?(result, {Module45, :init, 3})
+    end
+
+    test "keeps command/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
+      module_42_ir = IR.for_module(Module42)
+      module_43_ir = IR.for_module(Module43)
+
+      result =
+        empty_call_graph
+        |> build(module_42_ir, %Context{})
+        |> build(module_43_ir, %Context{})
+        |> add_edge({Module42, :action, 3}, {Module16, :command, 3})
+        |> remove_server_only_mfas()
+
+      assert has_vertex?(result, {Module16, :command, 3})
+    end
+
+    test "keeps init/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
+      module_46_ir = IR.for_module(Module46)
+      module_47_ir = IR.for_module(Module47)
+
+      result =
+        empty_call_graph
+        |> build(module_46_ir, %Context{})
+        |> build(module_47_ir, %Context{})
+        |> remove_server_only_mfas()
+
+      assert has_vertex?(result, {Module46, :init, 3})
+    end
+
     test "removes server-only Erlang MFA sinks and their transitive callers", %{
       empty_call_graph: call_graph
     } do
@@ -3040,7 +3036,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         call_graph
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
         |> add_edge({Module16, :fun_16a, 1}, sink)
-        |> remove_server_only_erlang_mfas_and_callers()
+        |> remove_server_only_mfas()
 
       refute has_vertex?(result, sink)
       refute has_vertex?(result, {Module16, :fun_16a, 1})
@@ -3057,7 +3053,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
         |> add_edge({Module16, :fun_16a, 1}, sink)
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16b, 0})
-        |> remove_server_only_erlang_mfas_and_callers()
+        |> remove_server_only_mfas()
 
       assert has_vertex?(result, {Module16, :fun_16b, 0})
     end
@@ -3074,7 +3070,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Enumerable, :reduce, 3}, {Enumerable.MyStruct, :reduce, 3})
         |> add_edge({Enumerable, :reduce, 3}, {Enumerable.OtherStruct, :reduce, 3})
         |> add_edge({Enumerable.MyStruct, :reduce, 3}, sink)
-        |> remove_server_only_erlang_mfas_and_callers()
+        |> remove_server_only_mfas()
 
       refute has_vertex?(result, sink)
       refute has_vertex?(result, {Enumerable.MyStruct, :reduce, 3})
@@ -3084,13 +3080,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_vertex?(result, {Enumerable.OtherStruct, :reduce, 3})
     end
 
-    test "keeps all vertices when no server-only Erlang MFA sinks are present", %{
+    test "keeps all vertices when no server-only MFAs are present", %{
       empty_call_graph: call_graph
     } do
       result =
         call_graph
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
-        |> remove_server_only_erlang_mfas_and_callers()
+        |> remove_server_only_mfas()
 
       assert has_vertex?(result, {Module14, :fun_14a, 3})
       assert has_vertex?(result, {Module16, :fun_16a, 1})

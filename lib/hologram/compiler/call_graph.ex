@@ -960,18 +960,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the underlying digraph pruned to the given page, with server-only
-  and other-page MFAs removed.
-  """
-  @spec get_pruned_page_graph(t, module) :: Digraph.t()
-  def get_pruned_page_graph(call_graph, page_module) do
-    call_graph
-    |> get_graph()
-    |> remove_templatable_server_callbacks()
-    |> remove_other_pages_mfas(page_module)
-  end
-
-  @doc """
   Checks if an edge exists between two given vertices in the call graph.
   """
   @spec has_edge?(t, vertex, vertex) :: boolean
@@ -1013,8 +1001,8 @@ defmodule Hologram.Compiler.CallGraph do
   def list_page_mfas(call_graph, page_module) do
     graph = get_graph(call_graph)
 
-    call_graph
-    |> get_pruned_page_graph(page_module)
+    graph
+    |> remove_other_pages_mfas(page_module)
     |> sorted_reachable_mfas([page_module])
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
@@ -1202,6 +1190,43 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Removes other pages' MFAs from the digraph,
+  keeping only cross-page functions (__params__/0, __route__/0).
+  """
+  @spec remove_other_pages_mfas(Digraph.t(), module) :: Digraph.t()
+  def remove_other_pages_mfas(%Digraph{} = graph, page_module) do
+    other_page_modules =
+      Reflection.list_pages()
+      |> Enum.reject(&(&1 == page_module))
+      |> MapSet.new()
+
+    other_page_vertices =
+      graph
+      |> Digraph.vertices()
+      |> Enum.filter(fn
+        {module, fun, arity} ->
+          MapSet.member?(other_page_modules, module) &&
+            {fun, arity} not in @cross_page_funs
+
+        _fallback ->
+          false
+      end)
+
+    Digraph.remove_vertices(graph, other_page_vertices)
+  end
+
+  @doc """
+  Removes other pages' MFAs from the call graph,
+  keeping only cross-page functions (__params__/0, __route__/0).
+  """
+  @spec remove_other_pages_mfas!(t, module) :: t
+  def remove_other_pages_mfas!(%{pid: pid} = call_graph, page_module) do
+    Agent.cast(pid, &remove_other_pages_mfas(&1, page_module))
+
+    call_graph
+  end
+
+  @doc """
   Removes call graph vertices and edges related to MFAs used by the runtime.
 
   remove_vertices/2 is slow on very large graphs, and in such cases
@@ -1243,16 +1268,21 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Removes server-only Erlang MFAs (e.g. filesystem operations) and all MFAs
-  that transitively call them. Protocol dispatch edges are not traversed
-  backwards, so if only one protocol implementation calls a server-only
-  function, only that implementation is removed - not the protocol function
-  or its other callers.
+  Removes server-only MFAs from the call graph:
+  * command/3 and init/3 for templatable modules (pages and components)
+  * server-only Erlang MFAs (e.g. filesystem operations) and all MFAs
+    that transitively call them
+
+  Protocol dispatch edges are not traversed backwards, so if only one
+  protocol implementation calls a server-only function, only that
+  implementation is removed - not the protocol function or its other callers.
   """
-  @spec remove_server_only_erlang_mfas_and_callers(t) :: t
-  # credo:disable-for-lines:25 Credo.Check.Refactor.Nesting
-  def remove_server_only_erlang_mfas_and_callers(%{pid: pid} = call_graph) do
+  @spec remove_server_only_mfas(t) :: t
+  # credo:disable-for-lines:28 Credo.Check.Refactor.Nesting
+  def remove_server_only_mfas(%{pid: pid} = call_graph) do
     Agent.cast(pid, fn graph ->
+      graph = remove_templatable_server_callbacks(graph)
+
       existing_sinks =
         Enum.filter(@server_only_erlang_mfas, &Digraph.has_vertex?(graph, &1))
 
@@ -1474,27 +1504,6 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
-  end
-
-  defp remove_other_pages_mfas(graph, page_module) do
-    other_page_modules =
-      Reflection.list_pages()
-      |> Enum.reject(&(&1 == page_module))
-      |> MapSet.new()
-
-    other_page_vertices =
-      graph
-      |> Digraph.vertices()
-      |> Enum.filter(fn
-        {module, fun, arity} ->
-          MapSet.member?(other_page_modules, module) &&
-            {fun, arity} not in @cross_page_funs
-
-        _fallback ->
-          false
-      end)
-
-    Digraph.remove_vertices(graph, other_page_vertices)
   end
 
   defp remove_templatable_server_callbacks(graph) do
