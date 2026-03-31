@@ -2134,7 +2134,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "compute_sinks/3" do
+  describe "compute_sink_reaching_counts/3" do
     # Graph:
     # {Module1, :fun_1a, 0} -> {:erlang, :hd, 1}       (sink A)
     # {Module1, :fun_1a, 0} -> {Module2, :fun_2a, 1}
@@ -2170,7 +2170,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       erlang_mfas: erlang_mfas,
       reachable: reachable
     } do
-      result = CallGraph.compute_sinks(graph, erlang_mfas, reachable)
+      result = CallGraph.compute_sink_reaching_counts(graph, erlang_mfas, reachable)
 
       assert result == [
                {{:erlang, :hd, 1}, 4},
@@ -2184,7 +2184,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       reachable: reachable
     } do
       restricted_reachable = MapSet.delete(reachable, {Module1, :fun_1a, 0})
-      result = CallGraph.compute_sinks(graph, erlang_mfas, restricted_reachable)
+      result = CallGraph.compute_sink_reaching_counts(graph, erlang_mfas, restricted_reachable)
 
       assert result == [
                {{:erlang, :hd, 1}, 3},
@@ -2193,7 +2193,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "returns empty list when no erlang MFAs given", %{graph: graph, reachable: reachable} do
-      assert CallGraph.compute_sinks(graph, [], reachable) == []
+      assert CallGraph.compute_sink_reaching_counts(graph, [], reachable) == []
     end
   end
 

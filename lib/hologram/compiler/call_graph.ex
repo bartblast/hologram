@@ -897,14 +897,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Computes sink entries for Erlang MFAs in a call graph.
+  For each given sink MFA, counts how many MFAs from the reachable set can reach it.
 
   Returns a list of `{mfa, reaching_count}` tuples sorted by reaching count
-  (biggest sinks first). Only MFAs from the reachable set are counted.
+  (biggest sinks first).
   """
-  @spec compute_sinks(Digraph.t(), [mfa], MapSet.t()) :: [{mfa, non_neg_integer}]
-  def compute_sinks(graph, erlang_mfas, reachable) do
-    erlang_mfas
+  @spec compute_sink_reaching_counts(Digraph.t(), [mfa], MapSet.t()) :: [
+          {mfa, non_neg_integer}
+        ]
+  def compute_sink_reaching_counts(graph, sink_mfas, reachable) do
+    sink_mfas
     |> Enum.map(fn mfa ->
       reaching_count =
         graph

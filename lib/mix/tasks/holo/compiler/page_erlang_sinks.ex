@@ -56,7 +56,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageErlangSinks do
       end)
       |> Enum.sort()
 
-    sinks = CallGraph.compute_sinks(graph, erlang_mfas, reachable)
+    sinks = CallGraph.compute_sink_reaching_counts(graph, erlang_mfas, reachable)
 
     # credo:disable-for-lines:5 Credo.Check.Refactor.IoPuts
     IO.puts("#{length(sinks)} Erlang MFA sinks for #{inspect(page_module)}:\n")
