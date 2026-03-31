@@ -2291,7 +2291,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(module_14_ir, %Context{})
         |> build(module_15_ir, %Context{})
         |> build(module_16_ir, %Context{})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
         |> list_page_mfas(Module14)
 
       assert result == [
@@ -2323,7 +2323,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(module_42_ir, %Context{})
         |> build(module_43_ir, %Context{})
         |> build(module_44_ir, %Context{})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
         |> list_page_mfas(Module42)
 
       # Server-only MFA is excluded
@@ -2971,7 +2971,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end)
   end
 
-  describe "remove_server_only_mfas/1" do
+  describe "remove_server_only_mfas!/1" do
     test "removes command/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
       module_42_ir = IR.for_module(Module42)
       module_43_ir = IR.for_module(Module43)
@@ -2980,7 +2980,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         empty_call_graph
         |> build(module_42_ir, %Context{})
         |> build(module_43_ir, %Context{})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       refute has_vertex?(result, {Module42, :command, 3})
       refute has_vertex?(result, {Module43, :command, 3})
@@ -2994,7 +2994,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         empty_call_graph
         |> build(module_44_ir, %Context{})
         |> build(module_45_ir, %Context{})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       refute has_vertex?(result, {Module44, :init, 3})
       refute has_vertex?(result, {Module45, :init, 3})
@@ -3009,7 +3009,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(module_42_ir, %Context{})
         |> build(module_43_ir, %Context{})
         |> add_edge({Module42, :action, 3}, {Module16, :command, 3})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       assert has_vertex?(result, {Module16, :command, 3})
     end
@@ -3022,7 +3022,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         empty_call_graph
         |> build(module_46_ir, %Context{})
         |> build(module_47_ir, %Context{})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       assert has_vertex?(result, {Module46, :init, 3})
     end
@@ -3036,7 +3036,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         call_graph
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
         |> add_edge({Module16, :fun_16a, 1}, sink)
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       refute has_vertex?(result, sink)
       refute has_vertex?(result, {Module16, :fun_16a, 1})
@@ -3053,7 +3053,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
         |> add_edge({Module16, :fun_16a, 1}, sink)
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16b, 0})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       assert has_vertex?(result, {Module16, :fun_16b, 0})
     end
@@ -3070,7 +3070,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Enumerable, :reduce, 3}, {Enumerable.MyStruct, :reduce, 3})
         |> add_edge({Enumerable, :reduce, 3}, {Enumerable.OtherStruct, :reduce, 3})
         |> add_edge({Enumerable.MyStruct, :reduce, 3}, sink)
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       refute has_vertex?(result, sink)
       refute has_vertex?(result, {Enumerable.MyStruct, :reduce, 3})
@@ -3086,7 +3086,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       result =
         call_graph
         |> add_edge({Module14, :fun_14a, 3}, {Module16, :fun_16a, 1})
-        |> remove_server_only_mfas()
+        |> remove_server_only_mfas!()
 
       assert has_vertex?(result, {Module14, :fun_14a, 3})
       assert has_vertex?(result, {Module16, :fun_16a, 1})

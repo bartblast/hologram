@@ -1277,9 +1277,9 @@ defmodule Hologram.Compiler.CallGraph do
   protocol implementation calls a server-only function, only that
   implementation is removed - not the protocol function or its other callers.
   """
-  @spec remove_server_only_mfas(t) :: t
+  @spec remove_server_only_mfas!(t) :: t
   # credo:disable-for-lines:28 Credo.Check.Refactor.Nesting
-  def remove_server_only_mfas(%{pid: pid} = call_graph) do
+  def remove_server_only_mfas!(%{pid: pid} = call_graph) do
     Agent.cast(pid, fn graph ->
       graph = remove_templatable_server_callbacks(graph)
 
