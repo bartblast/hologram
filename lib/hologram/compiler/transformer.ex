@@ -971,8 +971,23 @@ defmodule Hologram.Compiler.Transformer do
 
   defp transform_with_else_clauses([], _context), do: []
 
-  defp transform_with_else_clauses([{:else, else_ast}], context) when is_list(else_ast),
-    do: Enum.map(else_ast, &transform(&1, %{context | pattern?: true}))
+  defp transform_with_else_clauses([{:else, else_ast}], context) when is_list(else_ast) do
+    Enum.map(else_ast, fn
+      {:->, _meta_1, [[{:when, _meta_2, [match, guards]}], body]} ->
+        %IR.Clause{
+          match: transform(match, %{context | pattern?: true}),
+          guards: transform_guards(guards, context),
+          body: transform(body, context)
+        }
+
+      {:->, _meta, [[match], body]} ->
+        %IR.Clause{
+          match: transform(match, %{context | pattern?: true}),
+          guards: [],
+          body: transform(body, context)
+        }
+    end)
+  end
 
   defp transform_with_else_clauses([{:else, {:__block__, [], []}}], _context), do: []
 end
