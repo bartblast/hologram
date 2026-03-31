@@ -35,7 +35,8 @@ defmodule Mix.Tasks.Holo.Compiler.PageErlangSinks do
     graph =
       call_graph
       |> CallGraph.remove_runtime_mfas!(runtime_mfas)
-      |> CallGraph.get_pruned_page_graph(page_module)
+      |> CallGraph.remove_other_pages_mfas!(page_module)
+      |> CallGraph.get_graph()
 
     reachable =
       graph
