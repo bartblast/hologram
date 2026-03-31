@@ -6944,5 +6944,35 @@ defmodule Hologram.Compiler.TransformerTest do
                else_clauses: []
              }
     end
+
+    test "handles bare clauses that are keyword lists containing do" do
+      ast =
+        ast("""
+        with [do: 1] do
+          :ok
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{
+                 expressions: [%IR.AtomType{value: :ok}]
+               },
+               clauses: [
+                 %IR.WithBareClause{
+                   expression: %IR.ListType{
+                     data: [
+                       %Hologram.Compiler.IR.TupleType{
+                         data: [
+                           %Hologram.Compiler.IR.AtomType{value: :do},
+                           %Hologram.Compiler.IR.IntegerType{value: 1}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ],
+               else_clauses: []
+             }
+    end
   end
 end

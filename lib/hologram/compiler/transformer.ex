@@ -443,20 +443,18 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform({:with, _meta, parts}, context) when is_list(parts) do
-    initial_acc = %IR.With{
-      clauses: [],
-      else_clauses: [],
-      body: nil
-    }
+    [[{:do, do_part} | else_clauses] | reversed_clauses] = Enum.reverse(parts)
 
-    parts
-    |> Enum.reduce(
-      initial_acc,
-      &transform_with_clause(&1, &2, context)
-    )
-    |> then(fn %{clauses: clauses} = ir ->
-      %{ir | clauses: Enum.reverse(clauses)}
-    end)
+    clauses =
+      reversed_clauses
+      |> Enum.reverse()
+      |> Enum.map(&transform_with_clause(&1, context))
+
+    %IR.With{
+      clauses: clauses,
+      else_clauses: transform_with_else_clauses(else_clauses, context),
+      body: transform_with_body(do_part, context)
+    }
   end
 
   # --- PRESERVE ORDER (BEGIN) ---
@@ -933,66 +931,48 @@ defmodule Hologram.Compiler.Transformer do
     end
   end
 
-  defp transform_with_clause([{:do, do_value} | rest], acc, context) do
-    do_block_or_expression = transform(do_value, context)
-
-    body =
-      case do_block_or_expression do
-        %IR.Block{} = block ->
-          # Body is already a block, no need to wrap it
-          block
-
-        other ->
-          # This can be returned from transform if the body has only one expression.
-          # For consistency and better type-checking, we want to wrap it in a block
-          %IR.Block{expressions: [other]}
-      end
-
-    else_clauses =
-      case rest do
-        [] ->
-          []
-
-        [{:else, else_ast}] when is_list(else_ast) ->
-          Enum.map(else_ast, &transform(&1, %{context | pattern?: true}))
-
-        [{:else, {:__block__, [], []}}] ->
-          []
-      end
-
-    %{acc | body: body, else_clauses: else_clauses}
-  end
-
   defp transform_with_clause(
          {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, body]},
-         acc,
          context
        ) do
-    clause = %IR.WithMatchClause{
+    %IR.WithMatchClause{
       match: transform(match, %{context | pattern?: true}),
       guards: transform_guards(guards, context),
       expression: transform(body, context)
     }
-
-    %{acc | clauses: [clause | acc.clauses]}
   end
 
-  defp transform_with_clause({:<-, _meta, [match, body]}, acc, context) do
-    clause = %IR.WithMatchClause{
+  defp transform_with_clause({:<-, _meta, [match, body]}, context) do
+    %IR.WithMatchClause{
       match: transform(match, %{context | pattern?: true}),
       guards: [],
       expression: transform(body, context)
     }
-
-    %{acc | clauses: [clause | acc.clauses]}
   end
 
-  defp transform_with_clause(clause, acc, context) do
-    clause =
-      %IR.WithBareClause{
-        expression: transform(clause, context)
-      }
-
-    %{acc | clauses: [clause | acc.clauses]}
+  defp transform_with_clause(clause, context) do
+    %IR.WithBareClause{
+      expression: transform(clause, context)
+    }
   end
+
+  defp transform_with_body(do_part, context) do
+    case transform(do_part, context) do
+      %IR.Block{} = block ->
+        # Body is already a block, no need to wrap it
+        block
+
+      other ->
+        # This can be returned from transform if the body has only one expression.
+        # For consistency and better type-checking, we want to wrap it in a block
+        %IR.Block{expressions: [other]}
+    end
+  end
+
+  defp transform_with_else_clauses([], _context), do: []
+
+  defp transform_with_else_clauses([{:else, else_ast}], context) when is_list(else_ast),
+    do: Enum.map(else_ast, &transform(&1, %{context | pattern?: true}))
+
+  defp transform_with_else_clauses([{:else, {:__block__, [], []}}], _context), do: []
 end
