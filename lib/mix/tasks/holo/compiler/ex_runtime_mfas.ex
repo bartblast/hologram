@@ -18,6 +18,7 @@ defmodule Mix.Tasks.Holo.Compiler.ExRuntimeMfas do
     mfas =
       Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.remove_server_only_mfas!()
       |> CallGraph.list_runtime_mfas()
       |> Enum.filter(fn {module, _fun, _arity} -> Reflection.elixir_module?(module) end)
 

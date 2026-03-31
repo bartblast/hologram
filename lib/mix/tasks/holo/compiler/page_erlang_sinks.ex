@@ -29,7 +29,12 @@ defmodule Mix.Tasks.Holo.Compiler.PageErlangSinks do
   @impl Mix.Task
   def run([page_module_name]) do
     page_module = String.to_existing_atom("Elixir." <> page_module_name)
-    call_graph = CallGraph.remove_manually_ported_mfas(Compiler.build_call_graph())
+
+    call_graph =
+      Compiler.build_call_graph()
+      |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.remove_server_only_mfas!()
+
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
 
     graph =

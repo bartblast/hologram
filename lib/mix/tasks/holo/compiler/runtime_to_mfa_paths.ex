@@ -19,6 +19,7 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
     graph =
       Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.remove_server_only_mfas!()
       |> CallGraph.get_graph()
 
     Enum.each(CallGraph.list_runtime_entry_mfas(), fn entry_mfa ->

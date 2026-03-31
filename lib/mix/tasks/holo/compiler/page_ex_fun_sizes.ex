@@ -57,6 +57,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     ir_plt
     |> Compiler.build_call_graph()
     |> CallGraph.remove_manually_ported_mfas()
+    |> CallGraph.remove_server_only_mfas!()
     |> remove_runtime_mfas()
   end
 
