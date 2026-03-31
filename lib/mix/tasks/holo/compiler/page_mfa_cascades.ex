@@ -25,18 +25,11 @@ defmodule Mix.Tasks.Holo.Compiler.PageMfaCascades do
   @impl Mix.Task
   def run([page_module_name]) do
     page_module = String.to_existing_atom("Elixir." <> page_module_name)
-
-    call_graph = Compiler.build_call_graph()
-
-    call_graph_for_runtime =
-      call_graph
-      |> CallGraph.clone()
-      |> CallGraph.remove_manually_ported_mfas()
-
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
+    call_graph = CallGraph.remove_manually_ported_mfas(Compiler.build_call_graph())
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
 
     graph =
-      call_graph_for_runtime
+      call_graph
       |> CallGraph.remove_runtime_mfas!(runtime_mfas)
       |> CallGraph.remove_other_pages_mfas!(page_module)
       |> CallGraph.get_graph()
