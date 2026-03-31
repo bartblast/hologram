@@ -206,6 +206,10 @@ defmodule Hologram.Compiler.Digraph do
 
   ## Options
 
+    * `:opaque_vertices` - a `MapSet` of vertices whose incoming edges should not be
+      traversed. The vertices themselves are still included in the result when reached,
+      but the BFS does not follow their incoming edges. Defaults to `nil`.
+
     * `:skip_module_vertices` - when `true`, module vertices (atoms) are added to the
       result but their incoming edges are not traversed. This prevents module atom
       references from propagating through module-to-function-definition edges.
@@ -449,12 +453,18 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   # BFS traversal for reachable vertices
-  # credo:disable-for-lines:31 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:37 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
   defp bfs_reachable(queue, visited, edges, opts) do
     case :queue.out(queue) do
       {{:value, current}, rest_queue} ->
-        if opts[:skip_module_vertices] && is_atom(current) do
+        opaque_vertices = opts[:opaque_vertices]
+
+        skip? =
+          (opts[:skip_module_vertices] && is_atom(current)) ||
+            (opaque_vertices != nil && MapSet.member?(opaque_vertices, current))
+
+        if skip? do
           bfs_reachable(rest_queue, visited, edges, opts)
         else
           # Get neighbors of current vertex
