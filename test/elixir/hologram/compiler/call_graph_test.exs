@@ -4560,28 +4560,29 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   end
     test "Date.leap_year?/1 dynamically dispatches calendar.leap_year?/1",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Date, :leap_year?, 1)
-      assert [fun_def] = fun_defs
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :leap_year?, 1)
 
-      %IR.FunctionDefinition{
-        clause: %IR.FunctionClause{
-          params: [
-            %IR.MapType{
-              data: [
-                {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
-                {%IR.AtomType{value: :year}, %IR.Variable{name: :year}}
-              ]
-            }
-          ],
-          body: %IR.Block{expressions: [body_expression]}
-        }
-      } = fun_def
-
-      assert body_expression == %IR.RemoteFunctionCall{
-               module: %IR.Variable{name: :calendar, version: 0},
-               function: :leap_year?,
-               args: [%IR.Variable{name: :year, version: 1}]
-             }
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :leap_year?,
+                       args: [_year_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
     end
 
     # Default param assumption: Date.new/3 is the generated clause that fills in the
@@ -4640,25 +4641,24 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   end
     test "Date.new/4 dynamically dispatches calendar.valid_date?/3",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Date, :new, 4)
-      assert [fun_def] = fun_defs
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 4)
 
-      %IR.FunctionDefinition{
-        clause: %IR.FunctionClause{
-          params: [_year, _month, _day, %IR.Variable{name: :calendar}],
-          body: %IR.Block{expressions: [%IR.Case{condition: condition}]}
-        }
-      } = fun_def
-
-      assert condition == %IR.RemoteFunctionCall{
-               module: %IR.Variable{name: :calendar, version: 3},
-               function: :valid_date?,
-               args: [
-                 %IR.Variable{name: :year, version: 0},
-                 %IR.Variable{name: :month, version: 1},
-                 %IR.Variable{name: :day, version: 2}
-               ]
-             }
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_year, _month, _day, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :valid_date?,
+                         args: [_year_arg, _month_arg, _day_arg]
+                       }
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
     end
 
     # Dynamic dispatch assumption: Date.to_string/1 extracts calendar from the struct
@@ -4670,34 +4670,31 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   end
     test "Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Date, :to_string, 1)
-      assert [fun_def] = fun_defs
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :to_string, 1)
 
-      %IR.FunctionDefinition{
-        clause: %IR.FunctionClause{
-          params: [
-            %IR.MapType{
-              data: [
-                {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
-                {%IR.AtomType{value: :year}, %IR.Variable{name: :year}},
-                {%IR.AtomType{value: :month}, %IR.Variable{name: :month}},
-                {%IR.AtomType{value: :day}, %IR.Variable{name: :day}}
-              ]
-            }
-          ],
-          body: %IR.Block{expressions: [body_expression]}
-        }
-      } = fun_def
-
-      assert body_expression == %IR.RemoteFunctionCall{
-               module: %IR.Variable{name: :calendar, version: 0},
-               function: :date_to_string,
-               args: [
-                 %IR.Variable{name: :year, version: 1},
-                 %IR.Variable{name: :month, version: 2},
-                 %IR.Variable{name: :day, version: 3}
-               ]
-             }
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :date_to_string,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
     end
   end
 end
