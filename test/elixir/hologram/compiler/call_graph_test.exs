@@ -5121,6 +5121,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   def to_string(%{calendar: calendar, year: year, month: month, day: day}) do
     #     calendar.date_to_string(year, month, day)
     #   end
+    # credo:disable-for-lines:28 Credo.Check.Design.DuplicatedCode
     test "String.Chars.Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Date, :to_string, 1)
