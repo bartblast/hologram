@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Design.DuplicatedCode
 defmodule Hologram.Compiler.CallGraphTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.CallGraph
@@ -603,7 +604,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "function definition ir, impl_for/1 suppresses module vertex edges from body", %{
       empty_call_graph: call_graph
     } do
-      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
       ir = %IR.FunctionDefinition{
         name: :impl_for,
         arity: 1,
@@ -1993,7 +1993,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  # credo:disable-for-lines:50 Credo.Check.Design.DuplicatedCode
   test "build_for_module/3", %{empty_call_graph: call_graph} do
     ir = %IR.ModuleDefinition{
       module: %IR.AtomType{value: Module11},
@@ -3630,7 +3629,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       if Version.match?(System.version(), ">= 1.18.0") do
         assert [msg_clause, args_clause] = fun_defs
 
-        # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
         assert msg_clause == %IR.FunctionDefinition{
                  name: :exception,
                  arity: 1,
@@ -3699,7 +3697,6 @@ defmodule Hologram.Compiler.CallGraphTest do
         # (safe - missed optimization only).
         assert [msg_clause, args_clause] = fun_defs
 
-        # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
         assert msg_clause == %IR.FunctionDefinition{
                  name: :exception,
                  arity: 1,
@@ -3932,7 +3929,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert [struct_clause, integer_clause, catch_all_clause] = fun_defs
 
-      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
       assert struct_clause == %IR.FunctionDefinition{
                name: :impl_for,
                arity: 1,
@@ -5661,7 +5657,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     #          hour: hour, minute: minute, second: second, microsecond: microsecond}) do
     #     calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
     #   end
-    # credo:disable-for-lines:32 Credo.Check.Design.DuplicatedCode
     test "NaiveDateTime.to_iso_days/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_iso_days, 1)
@@ -5755,7 +5750,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   def to_string(%{calendar: calendar, year: year, month: month, day: day}) do
     #     calendar.date_to_string(year, month, day)
     #   end
-    # credo:disable-for-lines:28 Credo.Check.Design.DuplicatedCode
     test "String.Chars.Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Date, :to_string, 1)
@@ -5847,7 +5841,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     #       microsecond: microsecond, calendar: calendar} = time
     #     calendar.time_to_string(hour, minute, second, microsecond)
     #   end
-    # credo:disable-for-lines:30 Credo.Check.Design.DuplicatedCode
     test "String.Chars.Time.to_string/1 dynamically dispatches calendar.time_to_string/4",
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Time, :to_string, 1)
