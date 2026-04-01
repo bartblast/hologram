@@ -5164,5 +5164,41 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = clause_2
     end
+
+    # Dynamic dispatch assumption: Time.from_seconds_after_midnight/3 receives calendar
+    # as a parameter (default Calendar.ISO) and calls
+    # `calendar.time_from_day_fraction({seconds_in_day, @seconds_per_day})`.
+    #
+    # Original source:
+    #   def from_seconds_after_midnight(seconds, microsecond \\ {0, 0}, calendar \\ Calendar.ISO)
+    #       when is_integer(seconds) do
+    #     seconds_in_day = Integer.mod(seconds, @seconds_per_day)
+    #     {hour, minute, second, {_, _}} =
+    #       calendar.time_from_day_fraction({seconds_in_day, @seconds_per_day})
+    #     ...
+    #   end
+    test "Time.from_seconds_after_midnight/3 dynamically dispatches calendar.time_from_day_fraction/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :from_seconds_after_midnight, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_seconds, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     _seconds_in_day,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :time_from_day_fraction,
+                         args: [_day_fraction]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
   end
 end
