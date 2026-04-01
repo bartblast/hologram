@@ -5254,5 +5254,49 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = clause_2
     end
+
+    # Dynamic dispatch assumption: Time.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_time(hour, minute, second, microsecond, duration)`.
+    # Time.shift/2 was added in Elixir 1.17.0.
+    #
+    # Original source:
+    #   def shift(%{calendar: calendar} = time, duration) do
+    #     %{hour: hour, minute: minute, second: second, microsecond: microsecond} = time
+    #     {hour, minute, second, microsecond} =
+    #       calendar.shift_time(hour, minute, second, microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "Time.shift/2 dynamically dispatches calendar.shift_time/5",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, Time, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_time,
+                           args: [_hour, _minute, _second, _microsecond, _duration_arg]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
   end
 end
