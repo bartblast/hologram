@@ -5029,6 +5029,42 @@ defmodule Hologram.Compiler.CallGraphTest do
       end
     end
 
+    # Dynamic dispatch assumption: DateTime.from_gregorian_seconds/3 receives calendar
+    # as a parameter (default Calendar.ISO) and calls
+    # `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   def from_gregorian_seconds(seconds, {microsecond, precision} \\ {0, 0},
+    #         calendar \\ Calendar.ISO) when is_integer(seconds) do
+    #     iso_days = Calendar.ISO.gregorian_seconds_to_iso_days(seconds, microsecond)
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "DateTime.from_gregorian_seconds/3 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :from_gregorian_seconds, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_seconds, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     _iso_days_assignment,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
     # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
     # years reach this clause in all Elixir versions:
