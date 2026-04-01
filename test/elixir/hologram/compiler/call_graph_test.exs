@@ -4957,5 +4957,41 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = fun_def
     end
+
+    # Dynamic dispatch assumption: Date.year_of_era/1 extracts calendar from the struct
+    # and calls `calendar.year_of_era(year, month, day)`.
+    #
+    # Original source:
+    #   def year_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.year_of_era(year, month, day)
+    #   end
+    test "Date.year_of_era/1 dynamically dispatches calendar.year_of_era/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :year_of_era, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :year_of_era,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
   end
 end
