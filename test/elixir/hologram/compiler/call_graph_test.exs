@@ -5386,6 +5386,61 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = clause_2
     end
 
+    # Dynamic dispatch assumption: NaiveDateTime.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    # microsecond, duration)`. NaiveDateTime.shift/2 was added in Elixir 1.17.0.
+    #
+    # Original source:
+    #   def shift(%{calendar: calendar} = naive_datetime, duration) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond} = naive_datetime
+    #     {year, month, day, hour, minute, second, microsecond} =
+    #       calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    #         microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "NaiveDateTime.shift/2 dynamically dispatches calendar.shift_naive_datetime/8",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year,
+                             _month,
+                             _day,
+                             _hour,
+                             _minute,
+                             _second,
+                             _microsecond,
+                             _duration_arg
+                           ]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
     # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
     # the struct and calls `calendar.date_to_string(year, month, day)`.
     #
