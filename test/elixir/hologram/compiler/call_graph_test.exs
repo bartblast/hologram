@@ -5200,5 +5200,38 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = fun_def
     end
+
+    # Dynamic dispatch assumption: Time.new/5 receives calendar as a parameter
+    # (default Calendar.ISO) and calls `calendar.valid_time?(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def new(hour, minute, second, {microsecond, precision}, calendar)
+    #       when is_integer(hour) and ... do
+    #     case calendar.valid_time?(hour, minute, second, {microsecond, precision}) do
+    #       ...
+    #     end
+    #   end
+    test "Time.new/5 dynamically dispatches calendar.valid_time?/4",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Time, :new, 5)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_hour, _minute, _second, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :valid_time?,
+                         args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                       }
+                     }
+                   ]
+                 }
+               }
+             } = clause_2
+    end
   end
 end
