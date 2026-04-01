@@ -5128,5 +5128,41 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = fun_def
     end
+
+    # Dynamic dispatch assumption: Time.convert/2 receives calendar as a parameter and
+    # calls `calendar.time_from_day_fraction(day_fraction)`.
+    #
+    # Original source:
+    #   def convert(%{microsecond: {_, precision}} = time, calendar) do
+    #     {hour, minute, second, {microsecond, _}} =
+    #       time
+    #       |> to_day_fraction()
+    #       |> calendar.time_from_day_fraction()
+    #     ...
+    #   end
+    test "Time.convert/2 dynamically dispatches calendar.time_from_day_fraction/1",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Time, :convert, 2)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_time, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :time_from_day_fraction,
+                         args: [_day_fraction]
+                       }
+                     },
+                     _struct_assignment,
+                     _ok_tuple
+                   ]
+                 }
+               }
+             } = clause_2
+    end
   end
 end
