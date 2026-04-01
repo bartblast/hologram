@@ -6482,7 +6482,7 @@ defmodule Hologram.Compiler.TransformerTest do
         end
         """)
 
-      assert %Hologram.Compiler.IR.With{
+      assert %IR.With{
                body: body,
                clauses: [first_clause, _second, _third],
                else_clauses: [first_else, _second_else]
@@ -6907,19 +6907,19 @@ defmodule Hologram.Compiler.TransformerTest do
         end
         """)
 
-      assert transform(ast, %Context{}) == %Hologram.Compiler.IR.With{
+      assert transform(ast, %Context{}) == %IR.With{
                clauses: [
-                 %Hologram.Compiler.IR.WithBareClause{
-                   expression: %Hologram.Compiler.IR.ListType{
+                 %IR.WithBareClause{
+                   expression: %IR.ListType{
                      data: [
-                       %Hologram.Compiler.IR.AtomType{value: :a},
-                       %Hologram.Compiler.IR.AtomType{value: :b},
-                       %Hologram.Compiler.IR.AtomType{value: :c}
+                       %IR.AtomType{value: :a},
+                       %IR.AtomType{value: :b},
+                       %IR.AtomType{value: :c}
                      ]
                    }
                  }
                ],
-               body: %Hologram.Compiler.IR.Block{expressions: []},
+               body: %IR.Block{expressions: []},
                else_clauses: []
              }
     end
@@ -6932,15 +6932,15 @@ defmodule Hologram.Compiler.TransformerTest do
         end
         """)
 
-      assert transform(ast, %Context{}) == %Hologram.Compiler.IR.With{
+      assert transform(ast, %Context{}) == %IR.With{
                clauses: [
-                 %Hologram.Compiler.IR.WithMatchClause{
-                   match: %Hologram.Compiler.IR.Variable{name: :x, version: nil},
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x, version: nil},
                    guards: [],
-                   expression: %Hologram.Compiler.IR.Variable{name: :y, version: nil}
+                   expression: %IR.Variable{name: :y, version: nil}
                  }
                ],
-               body: %Hologram.Compiler.IR.Block{expressions: []},
+               body: %IR.Block{expressions: []},
                else_clauses: []
              }
     end
@@ -6961,10 +6961,10 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.WithBareClause{
                    expression: %IR.ListType{
                      data: [
-                       %Hologram.Compiler.IR.TupleType{
+                       %IR.TupleType{
                          data: [
-                           %Hologram.Compiler.IR.AtomType{value: :do},
-                           %Hologram.Compiler.IR.IntegerType{value: 1}
+                           %IR.AtomType{value: :do},
+                           %IR.IntegerType{value: 1}
                          ]
                        }
                      ]
