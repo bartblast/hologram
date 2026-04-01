@@ -5125,6 +5125,90 @@ defmodule Hologram.Compiler.CallGraphTest do
       end
     end
 
+    # Dynamic dispatch assumption: Inspect.NaiveDateTime.inspect/2 destructures calendar
+    # from the struct in the body and calls `calendar.naive_datetime_to_string(...)`.
+    # In Elixir >= 1.18 the call is guarded by `if calendar != Calendar.ISO or year in -9999..9999`;
+    # in Elixir < 1.18 the call is unconditional. Calendar.ISO dates reach the dispatch in both.
+    #
+    # Original source (Elixir >= 1.18):
+    #   def inspect(naive_datetime, _) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, calendar: calendar} = naive_datetime
+    #     if calendar != Calendar.ISO or year in -9999..9999 do
+    #       formatted = calendar.naive_datetime_to_string(...)
+    #       ...
+    #
+    # Original source (Elixir < 1.18):
+    #   def inspect(naive_datetime, _) do
+    #     %{...calendar: calendar} = naive_datetime
+    #     formatted = calendar.naive_datetime_to_string(...)
+    #     ...
+    test "Inspect.NaiveDateTime.inspect/2 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.NaiveDateTime, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :naive_datetime}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+
+      # The dispatch `formatted = calendar.naive_datetime_to_string(...)` is in different
+      # IR locations:
+      # - Elixir >= 1.18: inside `if` true branch (compiled to nested Case)
+      # - Elixir < 1.18: directly in body as second expression
+      dispatch_expressions =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          [_destructure, %IR.Case{clauses: [_false_clause, true_clause]}] =
+            fun_def.clause.body.expressions
+
+          assert %IR.Clause{match: %IR.AtomType{value: true}} = true_clause
+          true_clause.body.expressions
+        else
+          [_destructure | rest] = fun_def.clause.body.expressions
+          rest
+        end
+
+      assert [
+               %IR.MatchOperator{
+                 left: %IR.Variable{name: :formatted},
+                 right: %IR.RemoteFunctionCall{
+                   module: %IR.Variable{name: :calendar},
+                   function: :naive_datetime_to_string,
+                   args: [
+                     _year_arg,
+                     _month_arg,
+                     _day_arg,
+                     _hour_arg,
+                     _minute_arg,
+                     _second_arg,
+                     _microsecond_arg
+                   ]
+                 }
+               }
+               | _rest_exprs
+             ] = dispatch_expressions
+    end
+
     # Dynamic dispatch assumption: Inspect.Time.inspect/2 destructures calendar from the
     # struct in the body and calls `calendar.time_to_string(hour, minute, second, microsecond)`.
     #

@@ -65,6 +65,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}},
     {{Date, :year_of_era, 1}, {Calendar.ISO, :year_of_era, 3}},
     {{Inspect.Date, :inspect, 2}, {Calendar.ISO, :date_to_string, 3}},
+    {{Inspect.NaiveDateTime, :inspect, 2}, {Calendar.ISO, :naive_datetime_to_string, 7}},
     {{Inspect.Time, :inspect, 2}, {Calendar.ISO, :time_to_string, 4}},
     {{NaiveDateTime, :beginning_of_day, 1}, {Calendar.ISO, :iso_days_to_beginning_of_day, 1}},
     {{NaiveDateTime, :end_of_day, 1}, {Calendar.ISO, :iso_days_to_end_of_day, 1}},
