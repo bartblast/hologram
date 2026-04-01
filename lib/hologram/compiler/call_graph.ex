@@ -55,6 +55,7 @@ defmodule Hologram.Compiler.CallGraph do
   @dynamic_dispatch_edges [
     {{Date, :days_in_month, 1}, {Calendar.ISO, :days_in_month, 2}},
     {{Date, :leap_year?, 1}, {Calendar.ISO, :leap_year?, 1}},
+    {{Date, :months_in_year, 1}, {Calendar.ISO, :months_in_year, 1}},
     {{Date, :new, 4}, {Calendar.ISO, :valid_date?, 3}},
     {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}}
   ]
