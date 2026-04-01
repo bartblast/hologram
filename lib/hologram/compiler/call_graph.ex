@@ -57,6 +57,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{Date, :leap_year?, 1}, {Calendar.ISO, :leap_year?, 1}},
     {{Date, :months_in_year, 1}, {Calendar.ISO, :months_in_year, 1}},
     {{Date, :new, 4}, {Calendar.ISO, :valid_date?, 3}},
+    {{Date, :shift, 2}, {Calendar.ISO, :shift_date, 4}},
     {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}}
   ]
 
