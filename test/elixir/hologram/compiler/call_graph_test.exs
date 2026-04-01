@@ -5365,6 +5365,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #       microsecond: microsecond, calendar: calendar} = time
     #     calendar.time_to_string(hour, minute, second, microsecond)
     #   end
+    # credo:disable-for-lines:30 Credo.Check.Design.DuplicatedCode
     test "String.Chars.Time.to_string/1 dynamically dispatches calendar.time_to_string/4",
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Time, :to_string, 1)
