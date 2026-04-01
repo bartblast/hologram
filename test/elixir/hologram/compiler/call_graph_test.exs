@@ -4551,6 +4551,47 @@ defmodule Hologram.Compiler.CallGraphTest do
              }
     end
 
+    # Default param assumption: Date.new/3 is the generated clause that fills in the
+    # Calendar.ISO default and calls Date.new/4. The Calendar.ISO atom appears in the body
+    # as data (not a dispatch target).
+    #
+    # Generated from: def new(year, month, day, calendar \\ Calendar.ISO)
+    #
+    # Expanded:
+    #   def new(x0, x1, x2), do: new(x0, x1, x2, Calendar.ISO)
+    test "Date.new/3 fills in Calendar.ISO default and calls Date.new/4",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Date, :new, 3)
+      assert [fun_def] = fun_defs
+
+      assert fun_def == %IR.FunctionDefinition{
+               name: :new,
+               arity: 3,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :x0, version: 0},
+                   %IR.Variable{name: :x1, version: 1},
+                   %IR.Variable{name: :x2, version: 2}
+                 ],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :new,
+                       args: [
+                         %IR.Variable{name: :x0, version: 0},
+                         %IR.Variable{name: :x1, version: 1},
+                         %IR.Variable{name: :x2, version: 2},
+                         %IR.AtomType{value: Calendar.ISO}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
     # Dynamic dispatch assumption: Date.new/4 has `calendar \\ Calendar.ISO` and calls
     # `calendar.valid_date?(year, month, day)` where calendar is a variable, not a literal
     # module atom. This call can't be discovered from static IR analysis, so we add a
@@ -4571,7 +4612,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       %IR.FunctionDefinition{
         clause: %IR.FunctionClause{
-          params: [_, _, _, %IR.Variable{name: :calendar}],
+          params: [_year, _month, _day, %IR.Variable{name: :calendar}],
           body: %IR.Block{expressions: [%IR.Case{condition: condition}]}
         }
       } = fun_def
