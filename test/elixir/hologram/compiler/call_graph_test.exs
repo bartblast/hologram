@@ -92,6 +92,20 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.sorted_edges(graph) == edges
   end
 
+  describe "add_non_discoverable_edges/1" do
+    test "adds @erlang_mfa_edges to the call graph", %{empty_call_graph: call_graph} do
+      add_non_discoverable_edges(call_graph)
+
+      assert has_edge?(call_graph, {:binary, :match, 2}, {:binary, :match, 3})
+    end
+
+    test "adds @dynamic_dispatch_edges to the call graph", %{empty_call_graph: call_graph} do
+      add_non_discoverable_edges(call_graph)
+
+      assert has_edge?(call_graph, {Date, :new, 4}, {Calendar.ISO, :valid_date?, 3})
+    end
+  end
+
   test "add_vertex/2", %{empty_call_graph: call_graph} do
     result = add_vertex(call_graph, :vertex_3)
     assert result == call_graph
@@ -2541,11 +2555,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Enum, :to_list, 1} in result
       assert {Enum, :reverse, 1} in result
       assert {:lists, :reverse, 1} in result
-    end
 
-    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{
-      runtime_mfas: result
-    } do
       assert {:erlang, :==, 2} in result
       assert {:erlang, :error, 2} in result
     end
@@ -4538,6 +4548,42 @@ defmodule Hologram.Compiler.CallGraphTest do
                    ]
                  }
                }
+             }
+    end
+
+    # Dynamic dispatch assumption: Date.new/4 has `calendar \\ Calendar.ISO` and calls
+    # `calendar.valid_date?(year, month, day)` where calendar is a variable, not a literal
+    # module atom. This call can't be discovered from static IR analysis, so we add a
+    # manual edge in @dynamic_dispatch_edges.
+    #
+    # Original source:
+    #   def new(year, month, day, calendar \\ Calendar.ISO) do
+    #     if calendar.valid_date?(year, month, day) do
+    #       {:ok, %Date{year: year, month: month, day: day, calendar: calendar}}
+    #     else
+    #       {:error, :invalid_date}
+    #     end
+    #   end
+    test "Date.new/4 dynamically dispatches calendar.valid_date?/3",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Date, :new, 4)
+      assert [fun_def] = fun_defs
+
+      %IR.FunctionDefinition{
+        clause: %IR.FunctionClause{
+          params: [_, _, _, %IR.Variable{name: :calendar}],
+          body: %IR.Block{expressions: [%IR.Case{condition: condition}]}
+        }
+      } = fun_def
+
+      assert condition == %IR.RemoteFunctionCall{
+               module: %IR.Variable{name: :calendar, version: 3},
+               function: :valid_date?,
+               args: [
+                 %IR.Variable{name: :year, version: 0},
+                 %IR.Variable{name: :month, version: 1},
+                 %IR.Variable{name: :day, version: 2}
+               ]
              }
     end
   end

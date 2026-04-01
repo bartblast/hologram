@@ -50,6 +50,12 @@ defmodule Hologram.Compiler.CallGraph do
   # Page functions needed by other pages for link building (e.g. in Hologram.UI.Link component).
   @cross_page_funs [{:__params__, 0}, {:__route__, 0}]
 
+  # Edges for dynamic dispatch patterns where the target module is determined at runtime.
+  # These edges can't be discovered from static IR analysis.
+  @dynamic_dispatch_edges [
+    {{Date, :new, 4}, {Calendar.ISO, :valid_date?, 3}}
+  ]
+
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
     {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
@@ -335,6 +341,22 @@ defmodule Hologram.Compiler.CallGraph do
   @spec add_edges(t, [edge]) :: t
   def add_edges(%{pid: pid} = call_graph, edges) do
     Agent.cast(pid, &Digraph.add_edges(&1, edges))
+    call_graph
+  end
+
+  @doc """
+  Adds call graph edges that can't be discovered from static IR analysis:
+  Erlang functions depending on other Erlang functions, and dynamic dispatch
+  patterns in Elixir stdlib (e.g. behaviour callbacks called via variable with known default).
+  """
+  @spec add_non_discoverable_edges(t) :: t
+  def add_non_discoverable_edges(%{pid: pid} = call_graph) do
+    Agent.cast(pid, fn graph ->
+      graph
+      |> Digraph.add_edges(@erlang_mfa_edges)
+      |> Digraph.add_edges(@dynamic_dispatch_edges)
+    end)
+
     call_graph
   end
 
@@ -1064,7 +1086,6 @@ defmodule Hologram.Compiler.CallGraph do
 
     call_graph
     |> get_graph()
-    |> add_edges_for_erlang_functions()
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
   end
@@ -1404,11 +1425,6 @@ defmodule Hologram.Compiler.CallGraph do
   @spec vertices(t) :: [vertex]
   def vertices(%{pid: pid}) do
     Agent.get(pid, &Digraph.vertices/1, :infinity)
-  end
-
-  # Add call graph edges for Erlang functions depending on other Erlang functions.
-  defp add_edges_for_erlang_functions(graph) do
-    Digraph.add_edges(graph, @erlang_mfa_edges)
   end
 
   defp add_protocol_call_graph_edges(call_graph, module) do
