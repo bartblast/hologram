@@ -5212,6 +5212,47 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: String.Chars.Time.to_string/1 destructures calendar
+    # from the struct in the body and calls
+    # `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(time) do
+    #     %{hour: hour, minute: minute, second: second,
+    #       microsecond: microsecond, calendar: calendar} = time
+    #     calendar.time_to_string(hour, minute, second, microsecond)
+    #   end
+    test "String.Chars.Time.to_string/1 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Time, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :time}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_string,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: Time.convert/2 receives calendar as a parameter and
     # calls `calendar.time_from_day_fraction(day_fraction)`.
     #
