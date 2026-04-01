@@ -96,6 +96,8 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
 
+    CallGraph.add_non_discoverable_edges(call_graph)
+
     call_graph
   end
 
