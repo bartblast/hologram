@@ -4787,8 +4787,10 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
                  params: [
-                   %IR.MapType{
-                     data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
                    },
                    _duration
                  ],
