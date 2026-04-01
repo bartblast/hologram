@@ -5298,5 +5298,43 @@ defmodule Hologram.Compiler.CallGraphTest do
                } = fun_def
       end
     end
+
+    # Dynamic dispatch assumption: Time.to_day_fraction/1 (private) extracts calendar
+    # from the struct and calls `calendar.time_to_day_fraction(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   defp to_day_fraction(%{hour: hour, minute: minute, second: second,
+    #          microsecond: {_, _} = microsecond, calendar: calendar}) do
+    #     calendar.time_to_day_fraction(hour, minute, second, microsecond)
+    #   end
+    test "Time.to_day_fraction/1 dynamically dispatches calendar.time_to_day_fraction/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :to_day_fraction, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond},
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_day_fraction,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
   end
 end
