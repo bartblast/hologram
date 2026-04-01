@@ -4961,9 +4961,18 @@ defmodule Hologram.Compiler.CallGraphTest do
     # Dynamic dispatch assumption: Date.year_of_era/1 extracts calendar from the struct
     # and calls `calendar.year_of_era(year, month, day)`.
     #
-    # Original source:
+    # Original source (Elixir >= 1.18):
     #   def year_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
     #     calendar.year_of_era(year, month, day)
+    #   end
+    #
+    # Original source (Elixir < 1.18):
+    #   def year_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     if function_exported?(calendar, :year_of_era, 3) do
+    #       calendar.year_of_era(year, month, day)
+    #     else
+    #       calendar.year_of_era(year)
+    #     end
     #   end
     test "Date.year_of_era/1 dynamically dispatches calendar.year_of_era/3",
          %{ir_plt: ir_plt} do
@@ -4980,28 +4989,61 @@ defmodule Hologram.Compiler.CallGraphTest do
                        {%IR.AtomType{value: :day}, _day}
                      ]
                    }
-                 ],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.Variable{name: :calendar},
-                       function: :year_of_era,
-                       args: [_year_arg, _month_arg, _day_arg]
-                     }
-                   ]
-                 }
+                 ]
                }
              } = fun_def
+
+      if Version.match?(System.version(), ">= 1.18.0") do
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :year_of_era,
+                         args: [_year_arg, _month_arg, _day_arg]
+                       }
+                     ]
+                   }
+                 }
+               } = fun_def
+      else
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.Case{
+                         condition: %IR.RemoteFunctionCall{
+                           function: :function_exported,
+                           args: [
+                             %IR.Variable{name: :calendar},
+                             %IR.AtomType{value: :year_of_era},
+                             %IR.IntegerType{value: 3}
+                           ]
+                         }
+                       }
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
     end
 
     # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
-    # and calls `calendar.date_to_string(year, month, day)`. The guard
-    # `when calendar != Calendar.ISO or year in -9999..9999` ensures Calendar.ISO dates
-    # with normal years reach this clause (the `or` makes it a sufficient condition).
+    # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
+    # years reach this clause in both Elixir versions:
+    # - Elixir >= 1.18: guard `when calendar != Calendar.ISO or year in -9999..9999`
+    # - Elixir < 1.18: guard `when year in -9999..9999`
     #
-    # Original source:
+    # Original source (Elixir >= 1.18):
     #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
     #       when calendar != Calendar.ISO or year in -9999..9999 do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    #
+    # Original source (Elixir < 1.18):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
+    #       when year in -9999..9999 do
     #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
     #   end
     test "Inspect.Date.inspect/2 dynamically dispatches calendar.date_to_string/3",
@@ -5021,55 +5063,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                      ]
                    },
                    _opts
-                 ],
-                 guards: [
-                   %IR.RemoteFunctionCall{
-                     module: %IR.AtomType{value: :erlang},
-                     function: :orelse,
-                     args: [
-                       %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{value: :erlang},
-                         function: :"/=",
-                         args: [
-                           %IR.Variable{name: :calendar},
-                           %IR.AtomType{value: Calendar.ISO}
-                         ]
-                       },
-                       %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{value: :erlang},
-                         function: :andalso,
-                         args: [
-                           %IR.RemoteFunctionCall{
-                             module: %IR.AtomType{value: :erlang},
-                             function: :is_integer,
-                             args: [%IR.Variable{name: :year}]
-                           },
-                           %IR.RemoteFunctionCall{
-                             module: %IR.AtomType{value: :erlang},
-                             function: :andalso,
-                             args: [
-                               %IR.RemoteFunctionCall{
-                                 module: %IR.AtomType{value: :erlang},
-                                 function: :>=,
-                                 args: [
-                                   %IR.Variable{name: :year},
-                                   %IR.IntegerType{value: -9999}
-                                 ]
-                               },
-                               %IR.RemoteFunctionCall{
-                                 module: %IR.AtomType{value: :erlang},
-                                 function: :"=<",
-                                 args: [
-                                   %IR.Variable{name: :year},
-                                   %IR.IntegerType{value: 9999}
-                                 ]
-                               }
-                             ]
-                           }
-                         ]
-                       }
-                     ]
-                   }
                  ],
                  body: %IR.Block{
                    expressions: [
@@ -5091,6 +5084,34 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              } = first_clause
+
+      [guard] = first_clause.clause.guards
+
+      if Version.match?(System.version(), ">= 1.18.0") do
+        assert %IR.RemoteFunctionCall{
+                 module: %IR.AtomType{value: :erlang},
+                 function: :orelse,
+                 args: [
+                   %IR.RemoteFunctionCall{
+                     function: :"/=",
+                     args: [%IR.Variable{name: :calendar}, %IR.AtomType{value: Calendar.ISO}]
+                   },
+                   _year_range_check
+                 ]
+               } = guard
+      else
+        assert %IR.RemoteFunctionCall{
+                 module: %IR.AtomType{value: :erlang},
+                 function: :andalso,
+                 args: [
+                   %IR.RemoteFunctionCall{
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :year}]
+                   },
+                   _year_range_check
+                 ]
+               } = guard
+      end
     end
 
     # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
