@@ -53,6 +53,7 @@ defmodule Hologram.Compiler.CallGraph do
   # Edges for dynamic dispatch patterns where the target module is determined at runtime.
   # These edges can't be discovered from static IR analysis.
   @dynamic_dispatch_edges [
+    {{Date, :day_of_week, 2}, {Calendar.ISO, :day_of_week, 4}},
     {{Date, :days_in_month, 1}, {Calendar.ISO, :days_in_month, 2}},
     {{Date, :leap_year?, 1}, {Calendar.ISO, :leap_year?, 1}},
     {{Date, :months_in_year, 1}, {Calendar.ISO, :months_in_year, 1}},
