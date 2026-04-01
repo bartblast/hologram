@@ -5031,9 +5031,10 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
     # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
-    # years reach this clause in both Elixir versions:
+    # years reach this clause in all Elixir versions:
     # - Elixir >= 1.18: guard `when calendar != Calendar.ISO or year in -9999..9999`
-    # - Elixir < 1.18: guard `when year in -9999..9999`
+    # - Elixir 1.17: guard `when year in -9999..9999`
+    # - Elixir < 1.17: no guard (single clause handles all dates)
     #
     # Original source (Elixir >= 1.18):
     #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
@@ -5041,9 +5042,14 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
     #   end
     #
-    # Original source (Elixir < 1.18):
+    # Original source (Elixir 1.17):
     #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
     #       when year in -9999..9999 do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    #
+    # Original source (Elixir < 1.17):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _) do
     #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
     #   end
     test "Inspect.Date.inspect/2 dynamically dispatches calendar.date_to_string/3",
@@ -5085,32 +5091,37 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = first_clause
 
-      [guard] = first_clause.clause.guards
+      cond do
+        Version.match?(System.version(), ">= 1.18.0") ->
+          assert [
+                   %IR.RemoteFunctionCall{
+                     function: :orelse,
+                     args: [
+                       %IR.RemoteFunctionCall{
+                         function: :"/=",
+                         args: [%IR.Variable{name: :calendar}, %IR.AtomType{value: Calendar.ISO}]
+                       },
+                       _year_range_check
+                     ]
+                   }
+                 ] = first_clause.clause.guards
 
-      if Version.match?(System.version(), ">= 1.18.0") do
-        assert %IR.RemoteFunctionCall{
-                 module: %IR.AtomType{value: :erlang},
-                 function: :orelse,
-                 args: [
+        Version.match?(System.version(), ">= 1.17.0") ->
+          assert [
                    %IR.RemoteFunctionCall{
-                     function: :"/=",
-                     args: [%IR.Variable{name: :calendar}, %IR.AtomType{value: Calendar.ISO}]
-                   },
-                   _year_range_check
-                 ]
-               } = guard
-      else
-        assert %IR.RemoteFunctionCall{
-                 module: %IR.AtomType{value: :erlang},
-                 function: :andalso,
-                 args: [
-                   %IR.RemoteFunctionCall{
-                     function: :is_integer,
-                     args: [%IR.Variable{name: :year}]
-                   },
-                   _year_range_check
-                 ]
-               } = guard
+                     function: :andalso,
+                     args: [
+                       %IR.RemoteFunctionCall{
+                         function: :is_integer,
+                         args: [%IR.Variable{name: :year}]
+                       },
+                       _year_range_check
+                     ]
+                   }
+                 ] = first_clause.clause.guards
+
+        true ->
+          assert [] = first_clause.clause.guards
       end
     end
 
