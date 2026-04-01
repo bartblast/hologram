@@ -5286,6 +5286,38 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: NaiveDateTime.from_iso_days/3 (private) receives calendar
+    # as a parameter and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp from_iso_days(iso_days, calendar, precision) do
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "NaiveDateTime.from_iso_days/3 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :from_iso_days, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_iso_days, %IR.Variable{name: :calendar}, _precision],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days_arg]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
     # the struct and calls `calendar.date_to_string(year, month, day)`.
     #
