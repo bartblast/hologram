@@ -5096,6 +5096,121 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: DateTime.shift/3 extracts calendar from the struct and
+    # calls `calendar.shift_naive_datetime(...)` (both clauses) and
+    # `calendar.naive_datetime_to_iso_days(...)` (non-UTC clause).
+    # DateTime.shift/3 was added in Elixir 1.17.0.
+    #
+    # Original source (UTC clause):
+    #   def shift(%{calendar: calendar, time_zone: "Etc/UTC"} = datetime, duration, _) do
+    #     ...
+    #     {year, month, day, hour, minute, second, microsecond} =
+    #       calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    #         microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    #
+    # Original source (non-UTC clause):
+    #   def shift(%{calendar: calendar} = datetime, duration, time_zone_database) do
+    #     ...
+    #     {year, month, day, hour, minute, second, {_, precision} = microsecond} =
+    #       calendar.shift_naive_datetime(...)
+    #     result =
+    #       calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
+    #       |> ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "DateTime.shift/3 dynamically dispatches calendar.shift_naive_datetime/8 and calendar.naive_datetime_to_iso_days/7",
+           %{ir_plt: ir_plt} do
+        fun_defs = find_fun_defs(ir_plt, DateTime, :shift, 3)
+        assert [utc_clause, non_utc_clause] = fun_defs
+
+        # UTC clause: calendar.shift_naive_datetime(...)
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year,
+                             _month,
+                             _day,
+                             _hour,
+                             _minute,
+                             _second,
+                             _microsecond,
+                             _duration
+                           ]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = utc_clause
+
+        # Non-UTC clause: calendar.shift_naive_datetime(...) and
+        # calendar.naive_datetime_to_iso_days(...) piped through apply_tz_offset
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure2,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year2,
+                             _month2,
+                             _day2,
+                             _hour2,
+                             _minute2,
+                             _second2,
+                             _microsecond2,
+                             _duration2
+                           ]
+                         }
+                       },
+                       %IR.MatchOperator{
+                         right: %IR.LocalFunctionCall{
+                           function: :shift_zone_for_iso_days_utc,
+                           args: [
+                             %IR.LocalFunctionCall{
+                               function: :apply_tz_offset,
+                               args: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.Variable{name: :calendar},
+                                   function: :naive_datetime_to_iso_days,
+                                   args: [
+                                     _year3,
+                                     _month3,
+                                     _day3,
+                                     _hour3,
+                                     _minute3,
+                                     _second3,
+                                     _microsecond3
+                                   ]
+                                 },
+                                 _offset
+                               ]
+                             }
+                             | _shift_zone_args
+                           ]
+                         }
+                       }
+                       | _rest2
+                     ]
+                   }
+                 }
+               } = non_utc_clause
+      end
+    end
+
     # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
     # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
     # years reach this clause in all Elixir versions:
