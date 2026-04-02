@@ -467,8 +467,8 @@ const Erlang = {
     );
   },
   // End binary_part/3
-
   // Deps: []
+
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
