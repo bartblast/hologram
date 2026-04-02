@@ -6157,6 +6157,68 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: String.Chars.DateTime.to_string/1 destructures calendar
+    # from the struct in the body and calls `calendar.datetime_to_string(year, month, day,
+    # hour, minute, second, microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def to_string(datetime) do
+    #     %{calendar: calendar, year: year, month: month, day: day, hour: hour,
+    #       minute: minute, second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset} = datetime
+    #     calendar.datetime_to_string(year, month, day, hour, minute, second,
+    #       microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #   end
+    test "String.Chars.DateTime.to_string/1 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.DateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :datetime}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :time_zone}, _time_zone},
+                           {%IR.AtomType{value: :zone_abbr}, _zone_abbr},
+                           {%IR.AtomType{value: :utc_offset}, _utc_offset},
+                           {%IR.AtomType{value: :std_offset}, _std_offset}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :datetime_to_string,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg,
+                         _time_zone_arg,
+                         _zone_abbr_arg,
+                         _utc_offset_arg,
+                         _std_offset_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: String.Chars.NaiveDateTime.to_string/1 destructures
     # calendar from the struct in the body and calls
     # `calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)`.
