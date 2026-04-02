@@ -101,7 +101,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     ir_plt = Compiler.build_ir_plt()
 
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
-    CallGraph.patch(call_graph, ir_plt, module_digests_diff)
+
+    call_graph
+    |> CallGraph.patch(ir_plt, module_digests_diff)
+    |> CallGraph.add_non_discoverable_edges()
 
     # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
     async_mfas = CallGraph.list_async_mfas(call_graph)

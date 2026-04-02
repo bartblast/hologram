@@ -83,6 +83,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     CallGraph.load(call_graph, call_graph_dump_path)
 
     assert CallGraph.has_vertex?(call_graph, Module2)
+
+    # Erlang MFA edges are added during compilation
+    assert CallGraph.has_edge?(call_graph, {:binary, :match, 2}, {:binary, :match, 3})
+
+    # Dynamic dispatch edges are added during compilation
+    assert CallGraph.has_edge?(call_graph, {Date, :new, 4}, {Calendar.ISO, :valid_date?, 3})
   end
 
   defp test_dirs(opts) do
