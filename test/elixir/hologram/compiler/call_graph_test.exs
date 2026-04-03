@@ -1324,7 +1324,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir, page module has edges to its functions", %{
+    test "module definition ir, page module has edges to page entry functions", %{
       empty_call_graph: call_graph
     } do
       module_2_ir = IR.for_module(Module2)
@@ -1332,14 +1332,11 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert has_vertex?(call_graph, {Module2, :__params__, 0})
-      assert has_vertex?(call_graph, {Module2, :__route__, 0})
-
       assert has_edge?(call_graph, Module2, {Module2, :__params__, 0})
       assert has_edge?(call_graph, Module2, {Module2, :__route__, 0})
     end
 
-    test "module definition ir, component module has edges to its functions", %{
+    test "module definition ir, component module has edges to component entry functions", %{
       empty_call_graph: call_graph
     } do
       module_38_ir = IR.for_module(Module38)
@@ -1347,10 +1344,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert has_vertex?(call_graph, {Module38, :action, 3})
-      assert has_vertex?(call_graph, {Module38, :init, 2})
-      assert has_vertex?(call_graph, {Module38, :template, 0})
-
+      assert has_edge?(call_graph, Module38, {Module38, :__props__, 0})
       assert has_edge?(call_graph, Module38, {Module38, :action, 3})
       assert has_edge?(call_graph, Module38, {Module38, :init, 2})
       assert has_edge?(call_graph, Module38, {Module38, :template, 0})
@@ -2011,12 +2005,16 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert sorted_vertices(call_graph) == [
              Module11,
              Module5,
-             Module6
+             Module6,
+             {Module11, :__params__, 0},
+             {Module11, :__route__, 0}
            ]
 
     assert sorted_edges(call_graph) == [
              {Module11, Module5},
-             {Module11, Module6}
+             {Module11, Module6},
+             {Module11, {Module11, :__params__, 0}},
+             {Module11, {Module11, :__route__, 0}}
            ]
   end
 
@@ -2382,6 +2380,8 @@ defmodule Hologram.Compiler.CallGraphTest do
                {Module14, :template, 0},
                {Module15, :__is_hologram_component__, 0},
                {Module15, :__props__, 0},
+               {Module15, :action, 3},
+               {Module15, :init, 2},
                {Module15, :template, 0},
                {Module16, :my_fun_16a, 2},
                {Kernel, :inspect, 1},

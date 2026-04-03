@@ -669,6 +669,7 @@ defmodule Hologram.Compiler.CallGraph do
     }
 
     call_graph
+    |> maybe_add_templatable_call_graph_edges(module)
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
@@ -1565,6 +1566,26 @@ defmodule Hologram.Compiler.CallGraph do
       add_edges(call_graph, [
         {module, {module, :__struct__, 0}},
         {module, {module, :__struct__, 1}}
+      ])
+    end
+
+    call_graph
+  end
+
+  defp maybe_add_templatable_call_graph_edges(call_graph, module) do
+    if Reflection.component?(module) do
+      add_edges(call_graph, [
+        {module, {module, :__props__, 0}},
+        {module, {module, :action, 3}},
+        {module, {module, :init, 2}},
+        {module, {module, :template, 0}}
+      ])
+    end
+
+    if Reflection.page?(module) do
+      add_edges(call_graph, [
+        {module, {module, :__params__, 0}},
+        {module, {module, :__route__, 0}}
       ])
     end
 
