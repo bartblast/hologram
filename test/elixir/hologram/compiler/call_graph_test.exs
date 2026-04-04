@@ -2137,6 +2137,56 @@ defmodule Hologram.Compiler.CallGraphTest do
       end
     end
 
+    # Dynamic dispatch assumption: Inspect.Time.inspect/2 destructures calendar from the
+    # struct in the body and calls `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def inspect(time, _) do
+    #     %{hour: hour, minute: minute, second: second,
+    #       microsecond: microsecond, calendar: calendar} = time
+    #     "~T[" <> calendar.time_to_string(hour, minute, second, microsecond) <>
+    #       suffix(calendar) <> "]"
+    #   end
+    test "Inspect.Time.inspect/2 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.Time, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :time}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.BitstringType{
+                       segments: [
+                         _prefix,
+                         %IR.BitstringSegment{
+                           value: %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :time_to_string,
+                             args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                           }
+                         },
+                         _suffix,
+                         _closing
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
     # the struct and calls `calendar.date_to_string(year, month, day)`.
     #
