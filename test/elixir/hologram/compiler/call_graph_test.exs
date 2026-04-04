@@ -2371,6 +2371,57 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: DateTime.to_string/1 extracts calendar from the struct
+    # and calls `calendar.datetime_to_string(year, month, day, hour, minute, second,
+    # microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar} = datetime) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset} = datetime
+    #     calendar.datetime_to_string(year, month, day, hour, minute, second,
+    #       microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #   end
+    test "DateTime.to_string/1 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _destructure,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :datetime_to_string,
+                       args: [
+                         _year,
+                         _month,
+                         _day,
+                         _hour,
+                         _minute,
+                         _second,
+                         _microsecond,
+                         _time_zone,
+                         _zone_abbr,
+                         _utc_offset,
+                         _std_offset
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
     # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
     # years reach this clause in all Elixir versions:
