@@ -759,6 +759,11 @@ defmodule Hologram.FrameworkTest do
         // End atom_to_binary/1
         // Deps: []
 
+        // Start atom_to_binary/2
+        "atom_to_binary/2": (atom, _encoding) => atom.toString(),
+        // End atom_to_binary/2
+        // Deps: []
+
         // Start hd/1
         "hd/1": (list) => list[0],
         // End hd/1
@@ -999,6 +1004,11 @@ defmodule Hologram.FrameworkTest do
         // Start atom_to_binary/1
         "atom_to_binary/1": (atom) => atom.toString(),
         // End atom_to_binary/1
+        // Deps: []
+
+        // Start atom_to_binary/2
+        "atom_to_binary/2": (atom, _encoding) => atom.toString(),
+        // End atom_to_binary/2
         // Deps: []
       };
       """
