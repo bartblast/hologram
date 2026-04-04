@@ -1564,6 +1564,47 @@ defmodule Hologram.Compiler.CallGraphTest do
       Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
     end
 
+    # Dynamic dispatch assumption: Date.day_of_week/2 extracts calendar from the struct
+    # and calls `calendar.day_of_week(year, month, day, starting_on)`.
+    #
+    # Original source:
+    #   def day_of_week(%{calendar: calendar, year: year, month: month, day: day}, starting_on) do
+    #     {day_of_week, _first, _last} = calendar.day_of_week(year, month, day, starting_on)
+    #     day_of_week
+    #   end
+    test "Date.day_of_week/2 dynamically dispatches calendar.day_of_week/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :day_of_week, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   },
+                   _starting_on
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :day_of_week,
+                         args: [_year_arg, _month_arg, _day_arg, _starting_on_arg]
+                       }
+                     },
+                     _result
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: Date.days_in_month/1 extracts calendar from the struct
     # and calls `calendar.days_in_month(year, month)`.
     #
