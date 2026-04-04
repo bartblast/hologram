@@ -35,7 +35,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{Time, :from_seconds_after_midnight, 3}, {Calendar.ISO, :time_from_day_fraction, 1}},
     {{Time, :new, 5}, {Calendar.ISO, :valid_time?, 4}},
     {{Time, :shift, 2}, {Calendar.ISO, :shift_time, 5}},
-    {{Time, :to_day_fraction, 1}, {Calendar.ISO, :time_to_day_fraction, 4}}
+    {{Time, :to_day_fraction, 1}, {Calendar.ISO, :time_to_day_fraction, 4}},
+    {{Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}}
   ]
 
   # TODO: Determine automatically based on deps annotations next to function implementations
