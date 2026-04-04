@@ -1564,6 +1564,39 @@ defmodule Hologram.Compiler.CallGraphTest do
       Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
     end
 
+    # Dynamic dispatch assumption: Date.leap_year?/1 extracts calendar from the struct
+    # and calls `calendar.leap_year?(year)`.
+    #
+    # Original source:
+    #   def leap_year?(%{calendar: calendar, year: year}) do
+    #     calendar.leap_year?(year)
+    #   end
+    test "Date.leap_year?/1 dynamically dispatches calendar.leap_year?/1",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Date, :leap_year?, 1)
+      assert [fun_def] = fun_defs
+
+      %IR.FunctionDefinition{
+        clause: %IR.FunctionClause{
+          params: [
+            %IR.MapType{
+              data: [
+                {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                {%IR.AtomType{value: :year}, %IR.Variable{name: :year}}
+              ]
+            }
+          ],
+          body: %IR.Block{expressions: [body_expression]}
+        }
+      } = fun_def
+
+      assert body_expression == %IR.RemoteFunctionCall{
+               module: %IR.Variable{name: :calendar, version: 0},
+               function: :leap_year?,
+               args: [%IR.Variable{name: :year, version: 1}]
+             }
+    end
+
     # Default param assumption: Date.new/3 is the generated clause that fills in the
     # Calendar.ISO default and calls Date.new/4. The Calendar.ISO atom appears in the body
     # as data (not a dispatch target).

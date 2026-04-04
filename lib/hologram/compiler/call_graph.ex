@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   # These edges can't be discovered from static IR analysis.
   @dynamic_dispatch_edges [
+    {{Date, :leap_year?, 1}, {Calendar.ISO, :leap_year?, 1}},
     {{Date, :new, 4}, {Calendar.ISO, :valid_date?, 3}},
     {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}}
   ]
