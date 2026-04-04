@@ -1633,6 +1633,40 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: Date.months_in_year/1 extracts calendar from the struct
+    # and calls `calendar.months_in_year(year)`.
+    #
+    # Original source:
+    #   def months_in_year(%{calendar: calendar, year: year}) do
+    #     calendar.months_in_year(year)
+    #   end
+    test "Date.months_in_year/1 dynamically dispatches calendar.months_in_year/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :months_in_year, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :months_in_year,
+                       args: [_year_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Default param assumption: Date.new/3 is the generated clause that fills in the
     # Calendar.ISO default and calls Date.new/4. The Calendar.ISO atom appears in the body
     # as data (not a dispatch target).
