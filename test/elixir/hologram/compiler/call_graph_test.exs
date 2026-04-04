@@ -1640,5 +1640,44 @@ defmodule Hologram.Compiler.CallGraphTest do
                ]
              }
     end
+
+    # Dynamic dispatch assumption: Date.to_string/1 extracts calendar from the struct
+    # and calls `calendar.date_to_string(year, month, day)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.date_to_string(year, month, day)
+    #   end
+    test "Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Date, :to_string, 1)
+      assert [fun_def] = fun_defs
+
+      %IR.FunctionDefinition{
+        clause: %IR.FunctionClause{
+          params: [
+            %IR.MapType{
+              data: [
+                {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                {%IR.AtomType{value: :year}, %IR.Variable{name: :year}},
+                {%IR.AtomType{value: :month}, %IR.Variable{name: :month}},
+                {%IR.AtomType{value: :day}, %IR.Variable{name: :day}}
+              ]
+            }
+          ],
+          body: %IR.Block{expressions: [body_expression]}
+        }
+      } = fun_def
+
+      assert body_expression == %IR.RemoteFunctionCall{
+               module: %IR.Variable{name: :calendar, version: 0},
+               function: :date_to_string,
+               args: [
+                 %IR.Variable{name: :year, version: 1},
+                 %IR.Variable{name: :month, version: 2},
+                 %IR.Variable{name: :day, version: 3}
+               ]
+             }
+    end
   end
 end
