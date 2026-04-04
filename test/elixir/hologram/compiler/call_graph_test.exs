@@ -2240,6 +2240,64 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: NaiveDateTime.end_of_day/1 extracts calendar from
+    # the struct and calls `calendar.iso_days_to_end_of_day(iso_days)`.
+    #
+    # Original source:
+    #   def end_of_day(%{calendar: calendar, microsecond: {_, precision}} = naive_datetime) do
+    #     end_of_day =
+    #       naive_datetime
+    #       |> to_iso_days()
+    #       |> calendar.iso_days_to_end_of_day()
+    #       |> from_iso_days(calendar, precision)
+    #     ...
+    #   end
+    test "NaiveDateTime.end_of_day/1 dynamically dispatches calendar.iso_days_to_end_of_day/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :end_of_day, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                         {%IR.AtomType{value: :microsecond}, _microsecond}
+                       ]
+                     }
+                   }
+                 ]
+               }
+             } = fun_def
+
+      # The pipe chain compiles to:
+      # from_iso_days(calendar.iso_days_to_end_of_day(to_iso_days(ndt)), calendar, precision)
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.LocalFunctionCall{
+                         function: :from_iso_days,
+                         args: [
+                           %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :iso_days_to_end_of_day,
+                             args: [_iso_days]
+                           },
+                           %IR.Variable{name: :calendar},
+                           _precision
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
     # the struct and calls `calendar.date_to_string(year, month, day)`.
     #
