@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Design.DuplicatedCode
 defmodule Hologram.Compiler.CallGraphTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.CallGraph
@@ -617,7 +618,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  # credo:disable-for-lines:50 Credo.Check.Design.DuplicatedCode
   test "build_for_module/3", %{empty_call_graph: call_graph} do
     ir = %IR.ModuleDefinition{
       module: %IR.AtomType{value: Module11},
