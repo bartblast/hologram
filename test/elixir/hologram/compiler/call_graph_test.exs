@@ -2227,6 +2227,45 @@ defmodule Hologram.Compiler.CallGraphTest do
       end
     end
 
+    # Dynamic dispatch assumption: DateTime.shift_by_offset/2 (private) extracts calendar
+    # from the struct and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp shift_by_offset(%{calendar: calendar} = datetime, offset) do
+    #     total_offset = datetime.utc_offset + datetime.std_offset
+    #     datetime
+    #     |> to_iso_days()
+    #     |> Calendar.ISO.add_day_fraction_to_iso_days(offset - total_offset, 86400)
+    #     |> calendar.naive_datetime_from_iso_days()
+    #   end
+    test "DateTime.shift_by_offset/2 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :shift_by_offset, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   },
+                   _offset
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _total_offset,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_from_iso_days,
+                       args: [_iso_days]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
     # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
     # years reach this clause in all Elixir versions:
