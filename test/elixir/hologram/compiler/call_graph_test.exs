@@ -2330,6 +2330,74 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: NaiveDateTime.new/8 receives calendar as a parameter
+    # (default Calendar.ISO) and calls both `calendar.valid_date?(year, month, day)` and
+    # `calendar.valid_time?(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def new(year, month, day, hour, minute, second, microsecond, calendar) do
+    #     cond do
+    #       not calendar.valid_date?(year, month, day) -> {:error, :invalid_date}
+    #       not calendar.valid_time?(hour, minute, second, microsecond) -> {:error, :invalid_time}
+    #       true -> ...
+    #     end
+    #   end
+    test "NaiveDateTime.new/8 dynamically dispatches calendar.valid_date?/3 and calendar.valid_time?/4",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, NaiveDateTime, :new, 8)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   _year,
+                   _month,
+                   _day,
+                   _hour,
+                   _minute,
+                   _second,
+                   _microsecond,
+                   %IR.Variable{name: :calendar}
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Cond{
+                       clauses: [
+                         %IR.CondClause{
+                           condition: %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :not,
+                             args: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.Variable{name: :calendar},
+                                 function: :valid_date?,
+                                 args: [_year_arg, _month_arg, _day_arg]
+                               }
+                             ]
+                           }
+                         },
+                         %IR.CondClause{
+                           condition: %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :not,
+                             args: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.Variable{name: :calendar},
+                                 function: :valid_time?,
+                                 args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                               }
+                             ]
+                           }
+                         },
+                         _true_clause
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause_2
+    end
+
     # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
     # the struct and calls `calendar.date_to_string(year, month, day)`.
     #
