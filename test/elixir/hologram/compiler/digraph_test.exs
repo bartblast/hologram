@@ -808,6 +808,48 @@ defmodule Hologram.Compiler.DigraphTest do
       assert result == []
     end
 
+    test "skips traversal of vertices in opaque_vertices MapSet" do
+      # :a -> :b -> :c -> :target
+      # :b is in opaque_vertices, so :a should NOT be in the result
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :target)
+        |> reaching([:target], opaque_vertices: MapSet.new([:b]))
+
+      assert Enum.sort(result) == [:b, :c, :target]
+    end
+
+    test "still reaches predecessor through non-opaque path when opaque path also exists" do
+      # :caller -> :opaque -> :target  (blocked)
+      # :caller -> :direct -> :target  (not blocked)
+      # :caller should be in the result because of the non-opaque path
+      result =
+        new()
+        |> add_edge(:caller, :opaque)
+        |> add_edge(:opaque, :target)
+        |> add_edge(:caller, :direct)
+        |> add_edge(:direct, :target)
+        |> reaching([:target], opaque_vertices: MapSet.new([:opaque]))
+
+      assert Enum.sort(result) == [:caller, :direct, :opaque, :target]
+    end
+
+    test "blocks all predecessors behind an opaque vertex" do
+      # :pred_1 -> :opaque -> :target
+      # :pred_2 -> :opaque -> :target
+      # Neither predecessor should be in the result
+      result =
+        new()
+        |> add_edge(:pred_1, :opaque)
+        |> add_edge(:pred_2, :opaque)
+        |> add_edge(:opaque, :target)
+        |> reaching([:target], opaque_vertices: MapSet.new([:opaque]))
+
+      assert Enum.sort(result) == [:opaque, :target]
+    end
+
     test "skips traversal of module (atom) vertices when skip_module_vertices is true" do
       # {MyModule, :fun_a, 0} -> SomeModule -> {SomeModule, :fun_b, 1} -> {Target, :fun, 0}
       # {MyModule, :fun_a, 0} should NOT be in the result because SomeModule's incoming edges
