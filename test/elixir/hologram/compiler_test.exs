@@ -251,12 +251,23 @@ defmodule Hologram.CompilerTest do
 
   test "build_call_graph/0" do
     assert %CallGraph{} = call_graph = build_call_graph()
+
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
   end
 
-  test "build_call_graph/1", %{ir_plt: ir_plt} do
-    assert %CallGraph{} = call_graph = build_call_graph(ir_plt)
-    assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
+  describe "build_call_graph/1" do
+    test "builds call graph from IR PLT", %{ir_plt: ir_plt} do
+      assert %CallGraph{} = call_graph = build_call_graph(ir_plt)
+
+      assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
+    end
+
+    test "adds non-discoverable edges", %{ir_plt: ir_plt} do
+      call_graph = build_call_graph(ir_plt)
+
+      assert CallGraph.has_edge?(call_graph, {:binary, :match, 2}, {:binary, :match, 3})
+      assert CallGraph.has_edge?(call_graph, {Date, :new, 4}, {Calendar.ISO, :valid_date?, 3})
+    end
   end
 
   test "build_ir_plt/0" do
