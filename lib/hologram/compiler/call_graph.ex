@@ -27,7 +27,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{Date, :new, 4}, {Calendar.ISO, :valid_date?, 3}},
     {{Date, :quarter_of_year, 1}, {Calendar.ISO, :quarter_of_year, 3}},
     {{Date, :shift, 2}, {Calendar.ISO, :shift_date, 4}},
-    {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}}
+    {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}},
+    {{Date, :year_of_era, 1}, {Calendar.ISO, :year_of_era, 3}}
   ]
 
   # TODO: Determine automatically based on deps annotations next to function implementations
