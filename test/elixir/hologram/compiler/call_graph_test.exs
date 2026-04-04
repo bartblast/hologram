@@ -1893,6 +1893,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     # Dynamic dispatch assumption: Date.shift/2 extracts calendar from the struct
     # and calls `calendar.shift_date(year, month, day, duration)`.
+    # Date.shift/2 was added in Elixir 1.17.0.
     #
     # Original source:
     #   def shift(%{calendar: calendar} = date, duration) do
@@ -1900,35 +1901,37 @@ defmodule Hologram.Compiler.CallGraphTest do
     #     {year, month, day} = calendar.shift_date(year, month, day, __duration__!(duration))
     #     %Date{calendar: calendar, year: year, month: month, day: day}
     #   end
-    test "Date.shift/2 dynamically dispatches calendar.shift_date/4",
-         %{ir_plt: ir_plt} do
-      assert [fun_def] = find_fun_defs(ir_plt, Date, :shift, 2)
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "Date.shift/2 dynamically dispatches calendar.shift_date/4",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, Date, :shift, 2)
 
-      assert %IR.FunctionDefinition{
-               clause: %IR.FunctionClause{
-                 params: [
-                   %IR.MatchOperator{
-                     left: %IR.MapType{
-                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
-                     }
-                   },
-                   _duration
-                 ],
-                 body: %IR.Block{
-                   expressions: [
-                     _destructure,
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
                      %IR.MatchOperator{
-                       right: %IR.RemoteFunctionCall{
-                         module: %IR.Variable{name: :calendar},
-                         function: :shift_date,
-                         args: [_year, _month, _day, _duration_arg]
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
                        }
                      },
-                     _result
-                   ]
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_date,
+                           args: [_year, _month, _day, _duration_arg]
+                         }
+                       },
+                       _result
+                     ]
+                   }
                  }
-               }
-             } = fun_def
+               } = fun_def
+      end
     end
 
     # Dynamic dispatch assumption: Date.to_string/1 extracts calendar from the struct
