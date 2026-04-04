@@ -1608,8 +1608,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     #   def new(x0, x1, x2), do: new(x0, x1, x2, Calendar.ISO)
     test "Date.new/3 fills in Calendar.ISO default and calls Date.new/4",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Date, :new, 3)
-      assert [fun_def] = fun_defs
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 3)
 
       assert fun_def == %IR.FunctionDefinition{
                name: :new,
