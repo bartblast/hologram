@@ -2005,5 +2005,104 @@ defmodule Hologram.Compiler.CallGraphTest do
                }
              } = fun_def
     end
+
+    # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
+    # and calls `calendar.date_to_string(year, month, day)`. The guard
+    # `when calendar != Calendar.ISO or year in -9999..9999` ensures Calendar.ISO dates
+    # with normal years reach this clause (the `or` makes it a sufficient condition).
+    #
+    # Original source:
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
+    #       when calendar != Calendar.ISO or year in -9999..9999 do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    test "Inspect.Date.inspect/2 dynamically dispatches calendar.date_to_string/3",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Inspect.Date, :inspect, 2)
+      assert [first_clause | _rest] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   },
+                   _opts
+                 ],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :orelse,
+                     args: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: :erlang},
+                         function: :"/=",
+                         args: [
+                           %IR.Variable{name: :calendar},
+                           %IR.AtomType{value: Calendar.ISO}
+                         ]
+                       },
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: :erlang},
+                         function: :andalso,
+                         args: [
+                           %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :is_integer,
+                             args: [%IR.Variable{name: :year}]
+                           },
+                           %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :andalso,
+                             args: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.AtomType{value: :erlang},
+                                 function: :>=,
+                                 args: [
+                                   %IR.Variable{name: :year},
+                                   %IR.IntegerType{value: -9999}
+                                 ]
+                               },
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.AtomType{value: :erlang},
+                                 function: :"=<",
+                                 args: [
+                                   %IR.Variable{name: :year},
+                                   %IR.IntegerType{value: 9999}
+                                 ]
+                               }
+                             ]
+                           }
+                         ]
+                       }
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.BitstringType{
+                       segments: [
+                         _prefix,
+                         %IR.BitstringSegment{
+                           value: %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :date_to_string,
+                             args: [_year_arg, _month_arg, _day_arg]
+                           }
+                         },
+                         _suffix,
+                         _closing
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = first_clause
+    end
   end
 end
