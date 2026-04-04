@@ -2560,6 +2560,51 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: NaiveDateTime.to_string/1 extracts calendar from the
+    # struct and calls `calendar.naive_datetime_to_string(year, month, day, hour, minute,
+    # second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar} = naive_datetime) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond} = naive_datetime
+    #     calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "NaiveDateTime.to_string/1 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _destructure,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_string,
+                       args: [
+                         _year,
+                         _month,
+                         _day,
+                         _hour,
+                         _minute,
+                         _second,
+                         _microsecond
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
     # the struct and calls `calendar.date_to_string(year, month, day)`.
     #
