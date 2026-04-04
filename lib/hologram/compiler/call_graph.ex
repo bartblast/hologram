@@ -36,6 +36,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{NaiveDateTime, :from_iso_days, 3}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
     {{NaiveDateTime, :new, 8}, {Calendar.ISO, :valid_date?, 3}},
     {{NaiveDateTime, :new, 8}, {Calendar.ISO, :valid_time?, 4}},
+    {{NaiveDateTime, :shift, 2}, {Calendar.ISO, :shift_naive_datetime, 8}},
     {{String.Chars.Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}},
     {{String.Chars.Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}},
     {{Time, :convert, 2}, {Calendar.ISO, :time_from_day_fraction, 1}},
