@@ -2725,6 +2725,58 @@ defmodule Hologram.Compiler.CallGraphTest do
              } = fun_def
     end
 
+    # Dynamic dispatch assumption: String.Chars.NaiveDateTime.to_string/1 destructures
+    # calendar from the struct in the body and calls
+    # `calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(naive_datetime) do
+    #     %{calendar: calendar, year: year, month: month, day: day, hour: hour,
+    #       minute: minute, second: second, microsecond: microsecond} = naive_datetime
+    #     calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "String.Chars.NaiveDateTime.to_string/1 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.NaiveDateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :naive_datetime}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_string,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: String.Chars.Time.to_string/1 destructures calendar
     # from the struct in the body and calls
     # `calendar.time_to_string(hour, minute, second, microsecond)`.
