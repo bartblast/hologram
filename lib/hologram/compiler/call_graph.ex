@@ -522,7 +522,7 @@ defmodule Hologram.Compiler.CallGraph do
     graph = get_graph(call_graph)
 
     graph
-    |> Digraph.reaching([{Task, :await, 1}], skip_module_vertices: true)
+    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
     # Excludes bare module atom vertices, keeping only MFA tuples.
     # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
     # the result is only used for MapSet.member? lookups against already-included MFAs.

@@ -850,7 +850,7 @@ defmodule Hologram.Compiler.DigraphTest do
       assert Enum.sort(result) == [:opaque, :target]
     end
 
-    test "skips traversal of module (atom) vertices when skip_module_vertices is true" do
+    test "skips traversal of vertices matching the opaque_vertex? predicate" do
       # {MyModule, :fun_a, 0} -> SomeModule -> {SomeModule, :fun_b, 1} -> {Target, :fun, 0}
       # {MyModule, :fun_a, 0} should NOT be in the result because SomeModule's incoming edges
       # are not traversed
@@ -859,7 +859,7 @@ defmodule Hologram.Compiler.DigraphTest do
         |> add_edge({MyModule, :fun_a, 0}, SomeModule)
         |> add_edge(SomeModule, {SomeModule, :fun_b, 1})
         |> add_edge({SomeModule, :fun_b, 1}, {Target, :fun, 0})
-        |> reaching([{Target, :fun, 0}], skip_module_vertices: true)
+        |> reaching([{Target, :fun, 0}], opaque_vertex?: &is_atom/1)
 
       assert Enum.sort(result) == [SomeModule, {SomeModule, :fun_b, 1}, {Target, :fun, 0}]
     end
