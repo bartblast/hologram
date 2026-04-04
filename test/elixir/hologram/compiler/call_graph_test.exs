@@ -1564,6 +1564,41 @@ defmodule Hologram.Compiler.CallGraphTest do
       Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
     end
 
+    # Dynamic dispatch assumption: Date.days_in_month/1 extracts calendar from the struct
+    # and calls `calendar.days_in_month(year, month)`.
+    #
+    # Original source:
+    #   def days_in_month(%{calendar: calendar, year: year, month: month}) do
+    #     calendar.days_in_month(year, month)
+    #   end
+    test "Date.days_in_month/1 dynamically dispatches calendar.days_in_month/2",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :days_in_month, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :days_in_month,
+                       args: [_year_arg, _month_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
     # Dynamic dispatch assumption: Date.leap_year?/1 extracts calendar from the struct
     # and calls `calendar.leap_year?(year)`.
     #
