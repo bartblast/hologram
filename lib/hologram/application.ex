@@ -12,24 +12,7 @@ defmodule Hologram.Application do
     |> Supervisor.start_link(opts)
   end
 
-  defp children(:dev) do
-    if start_children?() do
-      # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
-      base_children() ++ [Hologram.LiveReload]
-    else
-      []
-    end
-  end
-
-  defp children(_env) do
-    if start_children?() do
-      base_children()
-    else
-      []
-    end
-  end
-
-  defp base_children do
+  defp all_envs_children do
     [
       {Phoenix.PubSub, name: Hologram.PubSub},
       Hologram.Router.PageModuleResolver,
@@ -39,7 +22,10 @@ defmodule Hologram.Application do
     ]
   end
 
-  defp start_children? do
-    Hologram.env() not in [:dev, :test] or System.get_env("HOLOGRAM_START") == "1"
+  defp children(:dev) do
+    # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
+    all_envs_children() ++ [Hologram.LiveReload]
   end
+
+  defp children(_env), do: all_envs_children()
 end

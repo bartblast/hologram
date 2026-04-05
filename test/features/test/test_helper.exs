@@ -1,5 +1,3 @@
-Hologram.Test.setup()
-
 if System.get_env("GITHUB_ACTIONS") == "true" do
   ExUnit.configure(max_cases: 1)
 end

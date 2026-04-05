@@ -19,6 +19,17 @@ defmodule Mix.Tasks.Compile.Hologram do
   @impl Mix.Task.Compiler
   # If the options are strings, it means that the task was executed directly by the Elixir compiler.
   def run([hd | _tail]) when is_binary(hd) do
+    opts = build_default_opts()
+
+    if language_server_build?(opts) do
+      :ok
+    else
+      run(opts)
+    end
+  end
+
+  @impl Mix.Task.Compiler
+  def run([]) do
     run(build_default_opts())
   end
 
@@ -27,14 +38,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   """
   @impl Mix.Task.Compiler
   def run(opts) do
-    opts = Keyword.merge(build_default_opts(), opts)
+    lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
 
-    cond do
-      opts[:force?] -> compile_with_lock(opts)
-      language_server_build?(opts) -> :noop
-      !compiler_enabled?() -> :noop
-      true -> compile_with_lock(opts)
-    end
+    with_lock(lock_path, fn ->
+      compile(opts)
+    end)
   end
 
   defp bin_available?(cmd) do
@@ -168,19 +176,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.info("Hologram: compiler finished")
 
     :ok
-  end
-
-  defp compile_with_lock(opts) do
-    lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
-
-    with_lock(lock_path, fn ->
-      compile(opts)
-    end)
-  end
-
-  defp compiler_enabled? do
-    # credo:disable-for-next-line Credo.Check.Warning.MixEnv
-    Mix.env() not in [:dev, :test] or System.get_env("HOLOGRAM_START") == "1"
   end
 
   defp language_server_build?(opts) do
