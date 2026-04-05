@@ -442,9 +442,19 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir(context)
   end
 
-  # TODO: finish implementing
-  def transform({:with, _meta, parts}, _context) when is_list(parts) do
-    %IR.With{}
+  def transform({:with, _meta, parts}, context) when is_list(parts) do
+    [[{:do, do_part} | else_clauses] | reversed_clauses] = Enum.reverse(parts)
+
+    clauses =
+      reversed_clauses
+      |> Enum.reverse()
+      |> Enum.map(&transform_with_clause(&1, context))
+
+    %IR.With{
+      clauses: clauses,
+      else_clauses: transform_with_else_clauses(else_clauses, context),
+      body: transform_with_body(do_part, context)
+    }
   end
 
   # --- PRESERVE ORDER (BEGIN) ---
@@ -920,4 +930,64 @@ defmodule Hologram.Compiler.Transformer do
         %IR.Variable{name: name, version: version}
     end
   end
+
+  defp transform_with_clause(
+         {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, body]},
+         context
+       ) do
+    %IR.WithMatchClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: transform_guards(guards, context),
+      expression: transform(body, context)
+    }
+  end
+
+  defp transform_with_clause({:<-, _meta, [match, body]}, context) do
+    %IR.WithMatchClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: [],
+      expression: transform(body, context)
+    }
+  end
+
+  defp transform_with_clause(clause, context) do
+    %IR.WithBareClause{
+      expression: transform(clause, context)
+    }
+  end
+
+  defp transform_with_body(do_part, context) do
+    case transform(do_part, context) do
+      %IR.Block{} = block ->
+        # Body is already a block, no need to wrap it
+        block
+
+      other ->
+        # This can be returned from transform if the body has only one expression.
+        # For consistency and better type-checking, we want to wrap it in a block
+        %IR.Block{expressions: [other]}
+    end
+  end
+
+  defp transform_with_else_clauses([], _context), do: []
+
+  defp transform_with_else_clauses([{:else, else_ast}], context) when is_list(else_ast) do
+    Enum.map(else_ast, fn
+      {:->, _meta_1, [[{:when, _meta_2, [match, guards]}], body]} ->
+        %IR.Clause{
+          match: transform(match, %{context | pattern?: true}),
+          guards: transform_guards(guards, context),
+          body: transform(body, context)
+        }
+
+      {:->, _meta, [[match], body]} ->
+        %IR.Clause{
+          match: transform(match, %{context | pattern?: true}),
+          guards: [],
+          body: transform(body, context)
+        }
+    end)
+  end
+
+  defp transform_with_else_clauses([{:else, {:__block__, [], []}}], _context), do: []
 end
