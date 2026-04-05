@@ -5,40 +5,9 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler.CallGraph
-  alias Hologram.Compiler.CallGraph.Context
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
-
-  defmodule Context.Modifiers do
-    @moduledoc false
-
-    @type t :: %__MODULE__{
-            suppress_edges_to_module_vertices?: bool
-          }
-
-    defstruct suppress_edges_to_module_vertices?: false
-  end
-
-  defmodule Context do
-    @moduledoc false
-
-    alias Hologram.Compiler.CallGraph.Context.Modifiers
-
-    @type t :: %__MODULE__{
-            from_vertex: module | mfa | nil,
-            guard?: bool,
-            modifiers: Modifiers.t(),
-            pattern?: bool,
-            protocol_impl: module | nil
-          }
-
-    defstruct from_vertex: nil,
-              guard?: false,
-              modifiers: %Modifiers{},
-              pattern?: false,
-              protocol_impl: nil
-  end
 
   defstruct pid: nil
 
@@ -47,8 +16,52 @@ defmodule Hologram.Compiler.CallGraph do
   @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
 
-  # Page functions needed by other pages for link building (e.g. in Hologram.UI.Link component).
-  @cross_page_funs [{:__params__, 0}, {:__route__, 0}]
+  # These edges can't be discovered from static IR analysis.
+  @dynamic_dispatch_edges [
+    {{Date, :day_of_era, 1}, {Calendar.ISO, :day_of_era, 3}},
+    {{Date, :day_of_week, 2}, {Calendar.ISO, :day_of_week, 4}},
+    {{Date, :day_of_year, 1}, {Calendar.ISO, :day_of_year, 3}},
+    {{Date, :days_in_month, 1}, {Calendar.ISO, :days_in_month, 2}},
+    {{Date, :leap_year?, 1}, {Calendar.ISO, :leap_year?, 1}},
+    {{Date, :months_in_year, 1}, {Calendar.ISO, :months_in_year, 1}},
+    {{Date, :new, 4}, {Calendar.ISO, :valid_date?, 3}},
+    {{Date, :quarter_of_year, 1}, {Calendar.ISO, :quarter_of_year, 3}},
+    {{Date, :shift, 2}, {Calendar.ISO, :shift_date, 4}},
+    {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}},
+    {{Date, :year_of_era, 1}, {Calendar.ISO, :year_of_era, 3}},
+    {{DateTime, :from_gregorian_seconds, 3}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :from_iso_days, 4}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :shift, 3}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{DateTime, :shift, 3}, {Calendar.ISO, :shift_naive_datetime, 8}},
+    {{DateTime, :shift_by_offset, 2}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :shift_zone_for_iso_days_utc, 5},
+     {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :to_iso_days, 1}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{DateTime, :to_string, 1}, {Calendar.ISO, :datetime_to_string, 11}},
+    {{Inspect.Date, :inspect, 2}, {Calendar.ISO, :date_to_string, 3}},
+    {{Inspect.DateTime, :inspect, 2}, {Calendar.ISO, :datetime_to_string, 11}},
+    {{Inspect.NaiveDateTime, :inspect, 2}, {Calendar.ISO, :naive_datetime_to_string, 7}},
+    {{Inspect.Time, :inspect, 2}, {Calendar.ISO, :time_to_string, 4}},
+    {{NaiveDateTime, :beginning_of_day, 1}, {Calendar.ISO, :iso_days_to_beginning_of_day, 1}},
+    {{NaiveDateTime, :end_of_day, 1}, {Calendar.ISO, :iso_days_to_end_of_day, 1}},
+    {{NaiveDateTime, :from_iso_days, 3}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{NaiveDateTime, :new, 8}, {Calendar.ISO, :valid_date?, 3}},
+    {{NaiveDateTime, :new, 8}, {Calendar.ISO, :valid_time?, 4}},
+    {{NaiveDateTime, :shift, 2}, {Calendar.ISO, :shift_naive_datetime, 8}},
+    {{NaiveDateTime, :to_gregorian_seconds, 1}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{NaiveDateTime, :to_iso_days, 1}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{NaiveDateTime, :to_string, 1}, {Calendar.ISO, :naive_datetime_to_string, 7}},
+    {{String.Chars.Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}},
+    {{String.Chars.DateTime, :to_string, 1}, {Calendar.ISO, :datetime_to_string, 11}},
+    {{String.Chars.NaiveDateTime, :to_string, 1}, {Calendar.ISO, :naive_datetime_to_string, 7}},
+    {{String.Chars.Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}},
+    {{Time, :convert, 2}, {Calendar.ISO, :time_from_day_fraction, 1}},
+    {{Time, :from_seconds_after_midnight, 3}, {Calendar.ISO, :time_from_day_fraction, 1}},
+    {{Time, :new, 5}, {Calendar.ISO, :valid_time?, 4}},
+    {{Time, :shift, 2}, {Calendar.ISO, :shift_time, 5}},
+    {{Time, :to_day_fraction, 1}, {Calendar.ISO, :time_to_day_fraction, 4}},
+    {{Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}}
+  ]
 
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
@@ -333,6 +346,22 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Adds call graph edges that can't be discovered from static IR analysis:
+  Erlang functions depending on other Erlang functions, and dynamic dispatch
+  patterns in Elixir stdlib (e.g. behaviour callbacks called via variable with known default).
+  """
+  @spec add_non_discoverable_edges(t) :: t
+  def add_non_discoverable_edges(%{pid: pid} = call_graph) do
+    Agent.cast(pid, fn graph ->
+      graph
+      |> Digraph.add_edges(@erlang_mfa_edges)
+      |> Digraph.add_edges(@dynamic_dispatch_edges)
+    end)
+
+    call_graph
+  end
+
+  @doc """
   Adds the vertex to the call graph.
   """
   @spec add_vertex(t, vertex) :: t
@@ -344,14 +373,10 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Builds a call graph from IR.
   """
-  @spec build(t, IR.t() | list, Context.t()) :: t
+  @spec build(t, IR.t() | list | map | tuple, vertex | nil) :: t
+  def build(call_graph, ir, from_vertex \\ nil)
 
-  def build(call_graph, %IR.AtomType{value: value}, %Context{
-        from_vertex: from_vertex,
-        guard?: false,
-        pattern?: false,
-        modifiers: %{suppress_edges_to_module_vertices?: false}
-      }) do
+  def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
     if Reflection.alias?(value) do
       add_edge(call_graph, from_vertex, value)
     end
@@ -359,250 +384,41 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
-  def build(call_graph, %IR.AtomType{}, _context), do: call_graph
-
-  def build(
-        call_graph,
-        %IR.Clause{match: match, guards: guards, body: body},
-        context
-      ) do
-    call_graph
-    |> build(match, %{context | pattern?: true})
-    |> build(guards, %{context | guard?: true})
-    |> build(body, %{context | pattern?: false})
-  end
-
-  def build(
-        call_graph,
-        %IR.FunctionClause{params: params, guards: guards, body: body},
-        context
-      ) do
-    call_graph
-    |> build(params, %{context | pattern?: true})
-    |> build(guards, %{context | guard?: true})
-    |> build(body, %{context | pattern?: false})
-  end
-
-  # Suppress module vertex edges in __impl__/1 clause body. This function is generated by
-  # defimpl and its body contains module atoms (the :for and :protocol values) that are
-  # metadata, not real dependencies. Without this, reaching any protocol implementation
-  # would pull in the target module's entire function tree via the AtomType handler.
-  # MFA edges are not affected.
-  def build(
-        call_graph,
-        %IR.FunctionDefinition{name: :__impl__, arity: 1, clause: clause},
-        %Context{from_vertex: from_vertex} = context
-      ) do
-    fun_def_vertex = {from_vertex, :__impl__, 1}
-
-    new_context = %{
-      context
-      | from_vertex: fun_def_vertex,
-        modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> add_edge(from_vertex, fun_def_vertex)
-    |> build(clause, new_context)
-  end
-
-  # Suppress module vertex edges in __protocol__/1 clause body. This function is generated
-  # by defprotocol and its body contains module atoms (consolidated implementations, the
-  # protocol module) that are metadata, not real dependencies. Without this, reaching any
-  # protocol function would pull in every consolidated implementation module's entire
-  # function tree. MFA edges are not affected.
-  def build(
-        call_graph,
-        %IR.FunctionDefinition{name: :__protocol__, arity: 1, clause: clause},
-        %Context{from_vertex: from_vertex} = context
-      ) do
-    fun_def_vertex = {from_vertex, :__protocol__, 1}
-
-    new_context = %{
-      context
-      | from_vertex: fun_def_vertex,
-        modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> add_edge(from_vertex, fun_def_vertex)
-    |> build(clause, new_context)
-  end
-
-  # Suppress module vertex edges in __struct__/0 and __struct__/1 clause bodies. These
-  # functions are generated by defstruct and their bodies contain module atoms as default
-  # field values in the struct map (e.g. calendar: Calendar.ISO in Date). These are data
-  # defaults, not real dependencies. Without this, any struct with a module atom as a default
-  # value would pull in that module's entire function tree. MFA edges (Enum.reduce/3,
-  # Map.merge/2, etc.) are not affected.
-  def build(
-        call_graph,
-        %IR.FunctionDefinition{name: :__struct__, arity: arity, clause: clause},
-        %Context{from_vertex: from_vertex} = context
-      )
-      when arity in [0, 1] do
-    fun_def_vertex = {from_vertex, :__struct__, arity}
-
-    new_context = %{
-      context
-      | from_vertex: fun_def_vertex,
-        modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> add_edge(from_vertex, fun_def_vertex)
-    |> build(clause, new_context)
-  end
-
-  # Suppress module vertex edges in impl_for/1 clause body. This function is generated by
-  # defprotocol and its body contains module atoms for ALL implementation modules (return
-  # values for type-based dispatch). Without this, every implementation module vertex would
-  # be reached, pulling in their entire function trees. MFA edges (struct_impl_for/1 local
-  # call in the struct dispatch clause) are not affected. The actual protocol dispatch is
-  # handled by add_protocol_call_graph_edges/2.
-  def build(
-        call_graph,
-        %IR.FunctionDefinition{name: :impl_for, arity: 1, clause: clause},
-        %Context{from_vertex: from_vertex} = context
-      ) do
-    fun_def_vertex = {from_vertex, :impl_for, 1}
-
-    new_context = %{
-      context
-      | from_vertex: fun_def_vertex,
-        modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> add_edge(from_vertex, fun_def_vertex)
-    |> build(clause, new_context)
-  end
-
-  # Suppress module vertex edges in impl_for!/1 clause body. This function is generated by
-  # defprotocol and its body contains a self-referential module atom (__MODULE__ in the
-  # Protocol.UndefinedError message). Without this, reaching impl_for!/1 would pull in
-  # the protocol module vertex, making ALL protocol functions and ALL their implementations
-  # reachable. MFA edges (impl_for/1 local call, :erlang.error/1, etc.) are not affected.
-  # The actual protocol dispatch is handled by add_protocol_call_graph_edges/2.
-  def build(
-        call_graph,
-        %IR.FunctionDefinition{name: :impl_for!, arity: 1, clause: clause},
-        %Context{from_vertex: from_vertex} = context
-      ) do
-    fun_def_vertex = {from_vertex, :impl_for!, 1}
-
-    new_context = %{
-      context
-      | from_vertex: fun_def_vertex,
-        modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> add_edge(from_vertex, fun_def_vertex)
-    |> build(clause, new_context)
-  end
-
-  # Suppress module vertex edges in struct_impl_for/1 clause body. This function is generated
-  # by defprotocol and its body contains module atoms for ALL struct-based implementation
-  # modules (both as pattern matches and return values). Without this, every struct
-  # implementation module vertex would be reached, pulling in their entire function trees.
-  # MFA edges (Module.concat/2, Code.ensure_compiled/1 in non-consolidated protocols) are
-  # not affected. The actual protocol dispatch is handled by add_protocol_call_graph_edges/2.
-  def build(
-        call_graph,
-        %IR.FunctionDefinition{name: :struct_impl_for, arity: 1, clause: clause},
-        %Context{from_vertex: from_vertex} = context
-      ) do
-    fun_def_vertex = {from_vertex, :struct_impl_for, 1}
-
-    new_context = %{
-      context
-      | from_vertex: fun_def_vertex,
-        modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> add_edge(from_vertex, fun_def_vertex)
-    |> build(clause, new_context)
-  end
-
-  # Suppress module vertex edges in count/1, member?/2, and slice/1 clause bodies in
-  # Enumerable protocol implementations. The Enumerable protocol convention requires these
-  # functions to return {:error, __MODULE__} when deferring to the default implementation.
-  # The __MODULE__ atom creates a module vertex edge that pulls in all sibling functions
-  # (including reduce/3 which can cascade heavily). MFA edges are not affected. The actual
-  # protocol dispatch is already handled by add_protocol_call_graph_edges/2.
   def build(
         call_graph,
         %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
-        %Context{from_vertex: from_vertex} = context
-      )
-      when (name == :count and arity == 1) or
-             (name == :member? and arity == 2) or
-             (name == :slice and arity == 1) do
-    fun_def_vertex = {from_vertex, name, arity}
-    call_graph = add_edge(call_graph, from_vertex, fun_def_vertex)
-
-    new_context =
-      if context.protocol_impl == Enumerable do
-        %{
-          context
-          | from_vertex: fun_def_vertex,
-            modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-        }
-      else
-        %{context | from_vertex: fun_def_vertex}
-      end
-
-    build(call_graph, clause, new_context)
-  end
-
-  def build(
-        call_graph,
-        %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
-        %Context{from_vertex: from_vertex} = context
+        from_vertex
       ) do
     fun_def_vertex = {from_vertex, name, arity}
 
     call_graph
-    |> add_edge(from_vertex, fun_def_vertex)
-    |> build(clause, %{context | from_vertex: fun_def_vertex})
+    |> add_vertex(fun_def_vertex)
+    |> build(clause, fun_def_vertex)
   end
 
   def build(
         call_graph,
         %IR.LocalFunctionCall{function: function, args: args},
-        %Context{from_vertex: {module, _function, _arity}} = context
+        {module, _function, _arity} = from_vertex
       ) do
     to_vertex = {module, function, Enum.count(args)}
 
     call_graph
-    |> add_edge(context.from_vertex, to_vertex)
-    |> build(args, context)
-  end
-
-  def build(call_graph, %IR.MatchOperator{left: left, right: right}, context) do
-    call_graph
-    |> build(left, %{context | pattern?: true})
-    |> build(right, context)
+    |> add_edge(from_vertex, to_vertex)
+    |> build(args, from_vertex)
   end
 
   def build(
         call_graph,
         %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
-        context
+        _from_vertex
       ) do
-    new_context = %{
-      context
-      | from_vertex: module,
-        protocol_impl: Reflection.protocol_impl(module)
-    }
-
     call_graph
+    |> maybe_add_templatable_call_graph_edges(module)
     |> maybe_add_protocol_call_graph_edges(module)
     |> maybe_add_struct_call_graph_edges(module)
     |> maybe_add_ecto_schema_call_graph_edges(module)
-    |> build(body, new_context)
+    |> build(body, module)
   end
 
   # :erlang.apply/3 is not added to the call graph because the encoder
@@ -618,12 +434,12 @@ defmodule Hologram.Compiler.CallGraph do
             %IR.ListType{data: args}
           ]
         },
-        context
+        from_vertex
       ) do
     to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, context.from_vertex, to_vertex)
+    add_edge(call_graph, from_vertex, to_vertex)
 
-    build(call_graph, args, context)
+    build(call_graph, args, from_vertex)
   end
 
   # :erlang.apply/3 is not added to the call graph because the encoder
@@ -635,153 +451,12 @@ defmodule Hologram.Compiler.CallGraph do
           function: :apply,
           args: [module, function, %IR.ListType{data: args}]
         },
-        context
+        from_vertex
       ) do
     call_graph
-    |> build(module, context)
-    |> build(function, context)
-    |> build(args, context)
-  end
-
-  # Suppress module vertex edges in the third argument (error options) of :erlang.error/3.
-  # The Elixir compiler transforms `raise` into :erlang.error/3 with
-  # error_info: %{module: Exception} as the third argument. This Exception
-  # module atom is compiler-injected metadata for error formatting, not a
-  # real dependency. Without this, every `raise` would pull in the Exception
-  # module's entire function tree (58 functions). MFA edges are not affected.
-  def build(
-        call_graph,
-        %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: :erlang},
-          function: :error,
-          args: [reason, args, error_options]
-        },
-        context
-      ) do
-    add_edge(call_graph, context.from_vertex, {:erlang, :error, 3})
-
-    suppressed_context = %{
-      context
-      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> build(reason, context)
-    |> build(args, context)
-    |> build(error_options, suppressed_context)
-  end
-
-  # Skip module atoms in the first argument (deduplication key) of IO.warn_once/3.
-  # The key is typically a tuple like {ModuleName, some_value} used to track
-  # whether a warning has already been printed. The module atom in the key is
-  # a namespace identifier, not a real dependency. Without this, any module
-  # calling IO.warn_once with its own name as a key would pull in its entire
-  # function tree via the module vertex.
-  # Non-atom elements in the key are still traversed to capture any function call edges.
-  def build(
-        call_graph,
-        %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: IO},
-          function: :warn_once,
-          args: [key, message, stacktrace_depth]
-        },
-        context
-      ) do
-    add_edge(call_graph, context.from_vertex, {IO, :warn_once, 3})
-
-    suppressed_context = %{
-      context
-      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> build(key, suppressed_context)
-    |> build(message, context)
-    |> build(stacktrace_depth, context)
-  end
-
-  # Suppress module vertex edges in Kernel.inspect/1,2 first argument. Module atoms passed
-  # to inspect are used for string formatting (e.g. in error messages), not as real
-  # dependencies. Without this, code like `inspect(MyModule)` in error paths would pull in
-  # MyModule's entire function tree. MFA edges are not affected. The second argument
-  # (options) is traversed normally.
-  def build(
-        call_graph,
-        %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: Kernel},
-          function: :inspect,
-          args: [term | opts]
-        },
-        context
-      ) do
-    to_vertex = {Kernel, :inspect, 1 + length(opts)}
-    add_edge(call_graph, context.from_vertex, to_vertex)
-
-    suppressed_context = %{
-      context
-      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    call_graph
-    |> build(term, suppressed_context)
-    |> build(opts, context)
-  end
-
-  # For Kernel.struct!/2 with a literal module atom as the first argument, create targeted
-  # edges to {module, :__struct__, 0} and {module, :__struct__, 1} instead of the module
-  # vertex. Kernel.struct!/2 only uses the module to call __struct__/0 and __struct__/1.
-  # This is the same approach as the __struct__ key-in-map special case. Without this,
-  # every defexception module's exception/1 function (which calls Kernel.struct!(__MODULE__,
-  # args)) would pull in the module's entire function tree.
-  def build(
-        call_graph,
-        %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: Kernel},
-          function: :struct!,
-          args: [%IR.AtomType{value: module}, fields]
-        },
-        context
-      ) do
-    call_graph
-    |> add_edge(context.from_vertex, {Kernel, :struct!, 2})
-    |> add_edge(context.from_vertex, {module, :__struct__, 0})
-    |> add_edge(context.from_vertex, {module, :__struct__, 1})
-    |> build(fields, context)
-  end
-
-  # Suppress module vertex edges in the :protocol key value of
-  # Protocol.UndefinedError.exception/1 args. This is expanded from:
-  # raise Protocol.UndefinedError, protocol: SomeProtocol, value: data
-  # The protocol module atom is just metadata identifying the protocol in the error message,
-  # not a real dependency. Without this, raising Protocol.UndefinedError in protocol
-  # implementation fallback clauses would pull in the protocol module's entire function tree.
-  # MFA edges are not affected. Other keyword entries (e.g. :value, :description) are
-  # traversed normally.
-  def build(
-        call_graph,
-        %IR.RemoteFunctionCall{
-          module: %IR.AtomType{value: Protocol.UndefinedError},
-          function: :exception,
-          args: [%IR.ListType{data: data}]
-        },
-        context
-      ) do
-    add_edge(call_graph, context.from_vertex, {Protocol.UndefinedError, :exception, 1})
-
-    suppressed_context = %{
-      context
-      | modifiers: %{context.modifiers | suppress_edges_to_module_vertices?: true}
-    }
-
-    Enum.each(data, fn
-      %IR.TupleType{data: [%IR.AtomType{value: :protocol}, module]} ->
-        build(call_graph, module, suppressed_context)
-
-      entry ->
-        build(call_graph, entry, context)
-    end)
-
-    call_graph
+    |> build(module, from_vertex)
+    |> build(function, from_vertex)
+    |> build(args, from_vertex)
   end
 
   def build(
@@ -791,84 +466,40 @@ defmodule Hologram.Compiler.CallGraph do
           function: function,
           args: args
         },
-        context
+        from_vertex
       ) do
     to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, context.from_vertex, to_vertex)
+    add_edge(call_graph, from_vertex, to_vertex)
 
-    build(call_graph, args, context)
+    build(call_graph, args, from_vertex)
   end
 
-  def build(
-        call_graph,
-        %IR.TryCatchClause{kind: kind, value: value, guards: guards, body: body},
-        context
-      ) do
-    call_graph
-    |> build(kind, context)
-    |> build(value, %{context | pattern?: true})
-    |> build(guards, %{context | guard?: true})
-    |> build(body, context)
-  end
-
-  # Rescue clause exception modules are used for pattern matching against exception types,
-  # not as module dependencies. Without this, rescuing UndefinedFunctionError (as Access.get/3
-  # and Access.fetch/2 do) would pull in the entire UndefinedFunctionError function tree
-  # (blame/2, hint/4, exports_for/1, etc.).
-  def build(
-        call_graph,
-        %IR.TryRescueClause{variable: variable, modules: modules, body: body},
-        context
-      ) do
-    call_graph
-    |> build(variable, %{context | pattern?: true})
-    |> build(modules, %{context | pattern?: true})
-    |> build(body, context)
-  end
-
-  def build(call_graph, list, context) when is_list(list) do
-    Enum.each(list, &build(call_graph, &1, context))
+  def build(call_graph, list, from_vertex) when is_list(list) do
+    Enum.each(list, &build(call_graph, &1, from_vertex))
     call_graph
   end
 
-  def build(call_graph, map, context) when is_map(map) do
+  def build(call_graph, map, from_vertex) when is_map(map) do
     map
     |> Map.to_list()
     |> Enum.each(fn {key, value} ->
-      build(call_graph, key, context)
-      build(call_graph, value, context)
+      call_graph
+      |> build(key, from_vertex)
+      |> build(value, from_vertex)
     end)
 
     call_graph
   end
 
-  # For __struct__ key in map data, create targeted edges to __struct__/0 and __struct__/1
-  # instead of to the module vertex, to avoid pulling in the module's entire function tree.
-  def build(call_graph, {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: module}}, %Context{
-        from_vertex: from_vertex,
-        guard?: false,
-        pattern?: false
-      }) do
-    if Reflection.alias?(module) do
-      call_graph
-      |> add_edge(from_vertex, {module, :__struct__, 0})
-      |> add_edge(from_vertex, {module, :__struct__, 1})
-    else
-      call_graph
-    end
-  end
-
-  def build(call_graph, {%IR.AtomType{value: :__struct__}, _value}, _context), do: call_graph
-
-  def build(call_graph, tuple, context) when is_tuple(tuple) do
+  def build(call_graph, tuple, from_vertex) when is_tuple(tuple) do
     tuple
     |> Tuple.to_list()
-    |> Enum.each(&build(call_graph, &1, context))
+    |> Enum.each(&build(call_graph, &1, from_vertex))
 
     call_graph
   end
 
-  def build(call_graph, _ir, _context), do: call_graph
+  def build(call_graph, _ir, _from_vertex), do: call_graph
 
   @doc """
   Builds a call graph from a module definition IR located in the given IR PLT.
@@ -876,7 +507,7 @@ defmodule Hologram.Compiler.CallGraph do
   @spec build_for_module(t, PLT.t(), module) :: t
   def build_for_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
-    build(call_graph, module_def, %Context{})
+    build(call_graph, module_def)
   end
 
   @doc """
@@ -888,32 +519,6 @@ defmodule Hologram.Compiler.CallGraph do
   def clone(call_graph) do
     graph = get_graph(call_graph)
     start(graph)
-  end
-
-  @doc """
-  Computes cascade entries for module vertices in a call graph.
-
-  Returns a list of `{source, module, downstream_mfa_count}` tuples sorted by
-  downstream MFA count (biggest cascades first).
-  """
-  @spec compute_cascades(Digraph.t(), MapSet.t(), MapSet.t()) :: [
-          {vertex, vertex, non_neg_integer}
-        ]
-  def compute_cascades(graph, module_vertices, reachable) do
-    module_vertices
-    |> Enum.flat_map(fn module ->
-      downstream_mfa_count =
-        graph
-        |> Digraph.reachable([module])
-        |> Enum.count(&match?({_module, _function, _arity}, &1))
-
-      graph
-      |> Digraph.incoming_edges(module)
-      |> Enum.map(&elem(&1, 0))
-      |> Enum.filter(&MapSet.member?(reachable, &1))
-      |> Enum.map(fn source -> {source, module, downstream_mfa_count} end)
-    end)
-    |> Enum.sort_by(fn {_source, _module, count} -> count end, :desc)
   end
 
   @doc """
@@ -954,18 +559,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the underlying digraph pruned to the given page, with server-only
-  and other-page MFAs removed.
-  """
-  @spec get_pruned_page_graph(t, module) :: Digraph.t()
-  def get_pruned_page_graph(call_graph, page_module) do
-    call_graph
-    |> get_graph()
-    |> remove_server_only_mfas()
-    |> remove_other_page_mfas(page_module)
-  end
-
-  @doc """
   Checks if an edge exists between two given vertices in the call graph.
   """
   @spec has_edge?(t, vertex, vertex) :: boolean
@@ -992,7 +585,7 @@ defmodule Hologram.Compiler.CallGraph do
     graph = get_graph(call_graph)
 
     graph
-    |> Digraph.reaching([{Task, :await, 1}], skip_module_vertices: true)
+    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
     # Excludes bare module atom vertices, keeping only MFA tuples.
     # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
     # the result is only used for MapSet.member? lookups against already-included MFAs.
@@ -1001,15 +594,47 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Lists the entry MFAs {module, function, arity} for a given page module.
+
+  This function returns a list of MFAs that are considered entry points for a page,
+  including functions from both the page module and its associated layout module.
+
+  ## Parameters
+
+    * `page_module` - The module of the page for which to list entry MFAs.
+
+  ## Returns
+
+  A list of MFAs (tuples of {module, function, arity}) that serve as entry points
+  for the given page module and its layout.
+  """
+  @spec list_page_entry_mfas(module) :: [mfa]
+  def list_page_entry_mfas(page_module) do
+    layout_module = page_module.__layout_module__()
+
+    [
+      {page_module, :__layout_module__, 0},
+      {page_module, :__layout_props__, 0},
+      {page_module, :__params__, 0},
+      {page_module, :__route__, 0},
+      {page_module, :action, 3},
+      {page_module, :template, 0},
+      {layout_module, :__props__, 0},
+      {layout_module, :action, 3},
+      {layout_module, :template, 0}
+    ]
+  end
+
+  @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
   """
   @spec list_page_mfas(t, module) :: [mfa]
   def list_page_mfas(call_graph, page_module) do
+    entry_mfas = list_page_entry_mfas(page_module)
     graph = get_graph(call_graph)
 
-    call_graph
-    |> get_pruned_page_graph(page_module)
-    |> sorted_reachable_mfas([page_module])
+    graph
+    |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
@@ -1024,12 +649,9 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_runtime_entry_mfas :: [mfa]
   def list_runtime_entry_mfas do
     @mfas_used_by_client_runtime
-    |> Enum.reduce(
-      @mfas_used_by_all_pages_and_components,
-      fn {_key, mfas}, acc ->
-        mfas ++ acc
-      end
-    )
+    |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
+      mfas ++ acc
+    end)
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1045,7 +667,6 @@ defmodule Hologram.Compiler.CallGraph do
 
     call_graph
     |> get_graph()
-    |> add_edges_for_erlang_functions()
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
   end
@@ -1309,9 +930,24 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Digraph.vertices/1, :infinity)
   end
 
-  # Add call graph edges for Erlang functions depending on other Erlang functions.
-  defp add_edges_for_erlang_functions(graph) do
-    Digraph.add_edges(graph, @erlang_mfa_edges)
+  # TODO: think how to avoid this
+  # A component module can be passed as a prop to another component, allowing dynamic usage.
+  # In such cases, when this scenario is identified, it becomes necessary
+  # to include the entire component on the client side.
+  # This is because we lack precise information about which specific component functions will be used.
+  defp add_component_call_graph_edges(call_graph, module) do
+    call_graph
+    |> add_edge(module, {module, :__props__, 0})
+    |> add_edge(module, {module, :action, 3})
+    |> add_edge(module, {module, :init, 2})
+    |> add_edge(module, {module, :template, 0})
+  end
+
+  # __props__/0 and __route__/0 functions are needed to build page link href (e.g. in Hologram.UI.Link component).
+  defp add_page_call_graph_edges(call_graph, module) do
+    call_graph
+    |> add_edge(module, {module, :__params__, 0})
+    |> add_edge(module, {module, :__route__, 0})
   end
 
   defp add_protocol_call_graph_edges(call_graph, module) do
@@ -1406,6 +1042,18 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  defp maybe_add_templatable_call_graph_edges(call_graph, module) do
+    if Reflection.page?(module) do
+      add_page_call_graph_edges(call_graph, module)
+    end
+
+    if Reflection.component?(module) do
+      add_component_call_graph_edges(call_graph, module)
+    end
+
+    call_graph
+  end
+
   # When modules that are protocol implementations are added or edited, the protocol
   # module itself (e.g. Enumerable) is unchanged and not re-processed by patch. Its
   # dispatch edges remain stale. This function re-runs add_protocol_call_graph_edges
@@ -1422,39 +1070,5 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
-  end
-
-  defp remove_other_page_mfas(graph, page_module) do
-    other_page_modules =
-      Reflection.list_pages()
-      |> Enum.reject(&(&1 == page_module))
-      |> MapSet.new()
-
-    other_page_vertices =
-      graph
-      |> Digraph.vertices()
-      |> Enum.filter(fn
-        {module, fun, arity} ->
-          MapSet.member?(other_page_modules, module) &&
-            {fun, arity} not in @cross_page_funs
-
-        _fallback ->
-          false
-      end)
-
-    Digraph.remove_vertices(graph, other_page_vertices)
-  end
-
-  defp remove_server_only_mfas(graph) do
-    server_only_vertices =
-      graph
-      |> Digraph.vertices()
-      |> Enum.filter(fn
-        {module, :command, 3} -> Reflection.templatable?(module)
-        {module, :init, 3} -> Reflection.templatable?(module)
-        _fallback -> false
-      end)
-
-    Digraph.remove_vertices(graph, server_only_vertices)
   end
 end

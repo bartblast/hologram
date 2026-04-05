@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Design.DuplicatedCode
 defmodule Hologram.Compiler.CallGraphTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.CallGraph
@@ -6,7 +7,6 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
-  alias Hologram.Compiler.CallGraph.Context
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -20,7 +20,9 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module16
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module17
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module18
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module19
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module20
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module21
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module22
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module24
@@ -35,24 +37,12 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module35
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module36
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module39
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module41Error
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module42
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module43
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module44
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module45
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module46
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module47
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
-  alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct2
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
@@ -92,6 +82,20 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.sorted_edges(graph) == edges
   end
 
+  describe "add_non_discoverable_edges/1" do
+    test "adds @erlang_mfa_edges to the call graph", %{empty_call_graph: call_graph} do
+      add_non_discoverable_edges(call_graph)
+
+      assert has_edge?(call_graph, {:binary, :match, 2}, {:binary, :match, 3})
+    end
+
+    test "adds @dynamic_dispatch_edges to the call graph", %{empty_call_graph: call_graph} do
+      add_non_discoverable_edges(call_graph)
+
+      assert has_edge?(call_graph, {Date, :new, 4}, {Calendar.ISO, :valid_date?, 3})
+    end
+  end
+
   test "add_vertex/2", %{empty_call_graph: call_graph} do
     result = add_vertex(call_graph, :vertex_3)
     assert result == call_graph
@@ -103,7 +107,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   describe "build/3" do
     test "atom type ir, which is not an alias", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, ir, :vertex_1)
 
       assert result == call_graph
 
@@ -115,7 +119,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Aaa.Bbb}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, ir, :vertex_1)
 
       assert result == call_graph
 
@@ -127,7 +131,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, ir, :vertex_1)
 
       assert result == call_graph
 
@@ -137,7 +141,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is an alias of a page module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, ir, :vertex_1)
 
       assert result == call_graph
 
@@ -147,7 +151,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, ir, :vertex_1)
 
       assert result == call_graph
 
@@ -157,224 +161,12 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, ir, :vertex_1)
 
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [Module4, :vertex_1]
       assert sorted_edges(call_graph) == [{:vertex_1, Module4}]
-    end
-
-    test "atom type ir, alias in guard context does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.AtomType{value: Module1}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1, guard?: true})
-
-      assert result == call_graph
-
-      assert vertices(call_graph) == []
-      assert edges(call_graph) == []
-    end
-
-    test "atom type ir, alias in pattern context does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.AtomType{value: Module1}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1, pattern?: true})
-
-      assert result == call_graph
-
-      assert vertices(call_graph) == []
-      assert edges(call_graph) == []
-    end
-
-    test "atom type ir, alias with suppress_edges_to_module_vertices? modifier does not create edge",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.AtomType{value: Module1}
-
-      modifiers = %Context.Modifiers{suppress_edges_to_module_vertices?: true}
-      result = build(call_graph, ir, %Context{from_vertex: :vertex_1, modifiers: modifiers})
-
-      assert result == call_graph
-
-      assert vertices(call_graph) == []
-      assert edges(call_graph) == []
-    end
-
-    test "clause ir, module alias in match does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.Clause{
-        match: %IR.AtomType{value: Module5},
-        guards: [],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module6}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module6,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module6}
-             ]
-    end
-
-    test "clause ir, module alias in body creates edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.Clause{
-        match: %IR.Variable{name: :x},
-        guards: [],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module5}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module5,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module5}
-             ]
-    end
-
-    test "clause ir, module alias in guards does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.Clause{
-        match: %IR.Variable{name: :x},
-        guards: [%IR.AtomType{value: Module5}],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module6}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module6,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module6}
-             ]
-    end
-
-    test "function clause ir, module alias in body creates edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :my_fun,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :x}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               Module5,
-               {Module1, :my_fun, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :my_fun, 1}},
-               {{Module1, :my_fun, 1}, Module5}
-             ]
-    end
-
-    test "function clause ir, module alias in guards does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :my_fun,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :x}],
-          guards: [%IR.AtomType{value: Module5}],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module6}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               Module6,
-               {Module1, :my_fun, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :my_fun, 1}},
-               {{Module1, :my_fun, 1}, Module6}
-             ]
-    end
-
-    test "function clause ir, module alias in params does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :my_fun,
-        arity: 2,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.AtomType{value: Module5}, %IR.Variable{name: :y}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.AtomType{value: Module6}
-            ]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               Module6,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :my_fun, 2}},
-               {{Module1, :my_fun, 2}, Module6}
-             ]
     end
 
     test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
@@ -394,19 +186,19 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
+      result = build(call_graph, ir, Module1)
 
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
-               Module1,
+               Module5,
                Module6,
                Module7,
                {Module1, :my_fun, 2}
              ]
 
       assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :my_fun, 2}},
+               {{Module1, :my_fun, 2}, Module5},
                {{Module1, :my_fun, 2}, Module6},
                {{Module1, :my_fun, 2}, Module7}
              ]
@@ -428,610 +220,17 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
+      result = build(call_graph, ir, Module1)
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [Module1, {Module1, :my_fun, 2}]
-      assert sorted_edges(call_graph) == [{Module1, {Module1, :my_fun, 2}}]
-    end
-
-    test "function definition ir, __impl__/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :__impl__,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.AtomType{value: :for}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [Module1, {Module1, :__impl__, 1}]
-      assert sorted_edges(call_graph) == [{Module1, {Module1, :__impl__, 1}}]
-    end
-
-    test "function definition ir, __protocol__/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :__protocol__,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.AtomType{value: :functions}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [Module1, {Module1, :__protocol__, 1}]
-      assert sorted_edges(call_graph) == [{Module1, {Module1, :__protocol__, 1}}]
-    end
-
-    test "function definition ir, __struct__/0 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :__struct__,
-        arity: 0,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.MapType{
-                data: [
-                  {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
-                  {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
-                ]
-              }
-            ]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      # Module5 and Module6 should NOT appear as module vertices.
-      # {Module5, :__struct__, 0/1} are MFA edges from the __struct__ key-in-map special case.
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               {Module1, :__struct__, 0},
-               {Module5, :__struct__, 0},
-               {Module5, :__struct__, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :__struct__, 0}},
-               {{Module1, :__struct__, 0}, {Module5, :__struct__, 0}},
-               {{Module1, :__struct__, 0}, {Module5, :__struct__, 1}}
-             ]
-    end
-
-    test "function definition ir, __struct__/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :__struct__,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :kv}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.RemoteFunctionCall{
-                module: %IR.AtomType{value: Enum},
-                function: :reduce,
-                args: [
-                  %IR.Variable{name: :kv},
-                  %IR.TupleType{
-                    data: [
-                      %IR.MapType{
-                        data: [
-                          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
-                          {%IR.AtomType{value: :calendar}, %IR.AtomType{value: Module6}}
-                        ]
-                      },
-                      %IR.ListType{data: []}
-                    ]
-                  },
-                  %IR.AtomType{value: :some_fun}
-                ]
-              }
-            ]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      # Module5 and Module6 should NOT appear as module vertices.
-      # {Module5, :__struct__, 0/1} are MFA edges from the __struct__ key-in-map special case,
-      # not module vertex edges - they don't cascade.
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               {Enum, :reduce, 3},
-               {Module1, :__struct__, 1},
-               {Module5, :__struct__, 0},
-               {Module5, :__struct__, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :__struct__, 1}},
-               {{Module1, :__struct__, 1}, {Enum, :reduce, 3}},
-               {{Module1, :__struct__, 1}, {Module5, :__struct__, 0}},
-               {{Module1, :__struct__, 1}, {Module5, :__struct__, 1}}
-             ]
-    end
-
-    test "function definition ir, impl_for/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
-      ir = %IR.FunctionDefinition{
-        name: :impl_for,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [
-            %IR.MapType{
-              data: [
-                {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
-              ]
-            }
-          ],
-          guards: [
-            %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: :erlang},
-              function: :is_atom,
-              args: [%IR.Variable{name: :x, version: -1}]
-            }
-          ],
-          body: %IR.Block{
-            expressions: [
-              %IR.LocalFunctionCall{
-                function: :struct_impl_for,
-                args: [%IR.Variable{name: :x, version: -1}]
-              }
-            ]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      # Module atoms are suppressed; struct_impl_for/1 local call and :erlang.is_atom/1
-      # guard call are discovered through body traversal (no explicit edges needed).
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               {Module1, :impl_for, 1},
-               {Module1, :struct_impl_for, 1},
-               {:erlang, :is_atom, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :impl_for, 1}},
-               {{Module1, :impl_for, 1}, {Module1, :struct_impl_for, 1}},
-               {{Module1, :impl_for, 1}, {:erlang, :is_atom, 1}}
-             ]
-    end
-
-    test "function definition ir, impl_for!/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :impl_for!,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :data, version: 0}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.Case{
-                condition: %IR.LocalFunctionCall{
-                  function: :impl_for,
-                  args: [%IR.Variable{name: :data, version: 0}]
-                },
-                clauses: [
-                  %IR.Clause{
-                    match: %IR.Variable{name: :x, version: 1},
-                    guards: [
-                      %IR.RemoteFunctionCall{
-                        module: %IR.AtomType{value: :erlang},
-                        function: :"=:=",
-                        args: [
-                          %IR.Variable{name: :x, version: 1},
-                          %IR.AtomType{value: nil}
-                        ]
-                      }
-                    ],
-                    body: %IR.Block{
-                      expressions: [
-                        %IR.RemoteFunctionCall{
-                          module: %IR.AtomType{value: :erlang},
-                          function: :error,
-                          args: [
-                            %IR.RemoteFunctionCall{
-                              module: %IR.AtomType{value: Protocol.UndefinedError},
-                              function: :exception,
-                              args: [
-                                %IR.ListType{
-                                  data: [
-                                    %IR.TupleType{
-                                      data: [
-                                        %IR.AtomType{value: :protocol},
-                                        %IR.AtomType{value: Module5}
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  },
-                  %IR.Clause{
-                    match: %IR.Variable{name: :x, version: 2},
-                    guards: [],
-                    body: %IR.Block{
-                      expressions: [%IR.Variable{name: :x, version: 2}]
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      # Module5 (protocol module atom in error message) is suppressed; impl_for/1 local
-      # call, Protocol.UndefinedError.exception/1, and :erlang MFA edges are discovered
-      # through body traversal.
-      assert sorted_vertices(call_graph) == [
-               Module1,
-               {Module1, :impl_for, 1},
-               {Module1, :impl_for!, 1},
-               {Protocol.UndefinedError, :exception, 1},
-               {:erlang, :"=:=", 2},
-               {:erlang, :error, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :impl_for!, 1}},
-               {{Module1, :impl_for!, 1}, {Module1, :impl_for, 1}},
-               {{Module1, :impl_for!, 1}, {Protocol.UndefinedError, :exception, 1}},
-               {{Module1, :impl_for!, 1}, {:erlang, :"=:=", 2}},
-               {{Module1, :impl_for!, 1}, {:erlang, :error, 1}}
-             ]
-    end
-
-    test "function definition ir, struct_impl_for/1 suppresses module vertex edges from body", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.FunctionDefinition{
-        name: :struct_impl_for,
-        arity: 1,
-        visibility: :private,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :struct}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [Module1, {Module1, :struct_impl_for, 1}]
-      assert sorted_edges(call_graph) == [{Module1, {Module1, :struct_impl_for, 1}}]
-    end
-
-    test "function definition ir, Enumerable impl count/1 suppresses module vertex edges from body",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.FunctionDefinition{
-        name: :count,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.MatchPlaceholder{}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.TupleType{
-                data: [
-                  %IR.AtomType{value: :error},
-                  %IR.AtomType{value: Enumerable.Function}
-                ]
-              }
-            ]
-          }
-        }
-      }
-
-      result =
-        build(call_graph, ir, %Context{
-          from_vertex: Enumerable.Function,
-          protocol_impl: Enumerable
-        })
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Enumerable.Function,
-               {Enumerable.Function, :count, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Enumerable.Function, {Enumerable.Function, :count, 1}}
-             ]
-    end
-
-    test "function definition ir, Enumerable impl member?/2 suppresses module vertex edges from body",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.FunctionDefinition{
-        name: :member?,
-        arity: 2,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.MatchPlaceholder{}, %IR.MatchPlaceholder{}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.TupleType{
-                data: [
-                  %IR.AtomType{value: :error},
-                  %IR.AtomType{value: Enumerable.Function}
-                ]
-              }
-            ]
-          }
-        }
-      }
-
-      result =
-        build(call_graph, ir, %Context{
-          from_vertex: Enumerable.Function,
-          protocol_impl: Enumerable
-        })
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Enumerable.Function,
-               {Enumerable.Function, :member?, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Enumerable.Function, {Enumerable.Function, :member?, 2}}
-             ]
-    end
-
-    test "function definition ir, Enumerable impl slice/1 suppresses module vertex edges from body",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.FunctionDefinition{
-        name: :slice,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.MatchPlaceholder{}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [
-              %IR.TupleType{
-                data: [
-                  %IR.AtomType{value: :error},
-                  %IR.AtomType{value: Enumerable.Function}
-                ]
-              }
-            ]
-          }
-        }
-      }
-
-      result =
-        build(call_graph, ir, %Context{
-          from_vertex: Enumerable.Function,
-          protocol_impl: Enumerable
-        })
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Enumerable.Function,
-               {Enumerable.Function, :slice, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Enumerable.Function, {Enumerable.Function, :slice, 1}}
-             ]
-    end
-
-    test "function definition ir, non-Enumerable module count/1 traverses clause body normally",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.FunctionDefinition{
-        name: :count,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :data}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [Module1, Module5, {Module1, :count, 1}]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :count, 1}},
-               {{Module1, :count, 1}, Module5}
-             ]
-    end
-
-    test "function definition ir, non-Enumerable module member?/2 traverses clause body normally",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.FunctionDefinition{
-        name: :member?,
-        arity: 2,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :data}, %IR.Variable{name: :value}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [Module1, Module5, {Module1, :member?, 2}]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :member?, 2}},
-               {{Module1, :member?, 2}, Module5}
-             ]
-    end
-
-    test "function definition ir, non-Enumerable module slice/1 traverses clause body normally",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.FunctionDefinition{
-        name: :slice,
-        arity: 1,
-        visibility: :public,
-        clause: %IR.FunctionClause{
-          params: [%IR.Variable{name: :data}],
-          guards: [],
-          body: %IR.Block{
-            expressions: [%IR.AtomType{value: Module5}]
-          }
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: Module1})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [Module1, Module5, {Module1, :slice, 1}]
-
-      assert sorted_edges(call_graph) == [
-               {Module1, {Module1, :slice, 1}},
-               {{Module1, :slice, 1}, Module5}
-             ]
-    end
-
-    test "function definition ir, module atom as call argument makes module functions reachable",
-         %{empty_call_graph: call_graph} do
-      # Module5 has a function my_fun/1.
-      # Module1.caller/0 passes Module5 as a call argument.
-      # Module5.my_fun/1 should be reachable from Module1.caller/0
-      # through: {Module1, :caller, 0} -> Module5 -> {Module5, :my_fun, 1}
-      module_5_ir = %IR.ModuleDefinition{
-        module: %IR.AtomType{value: Module5},
-        body: %IR.Block{
-          expressions: [
-            %IR.FunctionDefinition{
-              name: :my_fun,
-              arity: 1,
-              visibility: :public,
-              clause: %IR.FunctionClause{
-                params: [%IR.Variable{name: :x}],
-                guards: [],
-                body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
-              }
-            }
-          ]
-        }
-      }
-
-      module_1_ir = %IR.ModuleDefinition{
-        module: %IR.AtomType{value: Module1},
-        body: %IR.Block{
-          expressions: [
-            %IR.FunctionDefinition{
-              name: :caller,
-              arity: 0,
-              visibility: :public,
-              clause: %IR.FunctionClause{
-                params: [],
-                guards: [],
-                body: %IR.Block{
-                  expressions: [
-                    %IR.AtomType{value: Module5}
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      }
-
-      call_graph
-      |> build(module_5_ir, %Context{})
-      |> build(module_1_ir, %Context{})
-
-      graph = get_graph(call_graph)
-      reachable = reachable_mfas(graph, [{Module1, :caller, 0}])
-
-      assert {Module5, :my_fun, 1} in reachable
+      assert sorted_vertices(call_graph) == [{Module1, :my_fun, 2}]
+      assert sorted_edges(call_graph) == []
     end
 
     test "list", %{empty_call_graph: call_graph} do
       list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
-      result = build(call_graph, list, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, list, :vertex_1)
 
       assert result == call_graph
 
@@ -1053,7 +252,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert result == call_graph
 
@@ -1079,7 +278,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         %IR.AtomType{value: Module6} => %IR.AtomType{value: Module7}
       }
 
-      result = build(call_graph, map, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, map, :vertex_1)
 
       assert result == call_graph
 
@@ -1093,196 +292,6 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "map type ir, __struct__ key value creates edges to __struct__ functions instead of module vertex",
-         %{empty_call_graph: call_graph} do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
-          {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
-        ]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module6,
-               {Module1, :my_fun, 1},
-               {Module5, :__struct__, 0},
-               {Module5, :__struct__, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, Module6},
-               {{Module1, :my_fun, 1}, {Module5, :__struct__, 0}},
-               {{Module1, :my_fun, 1}, {Module5, :__struct__, 1}}
-             ]
-    end
-
-    test "map type ir, __struct__ key value in pattern context does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
-          {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
-        ]
-      }
-
-      result =
-        build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}, pattern?: true})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == []
-      assert sorted_edges(call_graph) == []
-    end
-
-    test "map type ir, __struct__ key value in guard context does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.MapType{
-        data: [
-          {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module5}},
-          {%IR.AtomType{value: :field_1}, %IR.AtomType{value: Module6}}
-        ]
-      }
-
-      result =
-        build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}, guard?: true})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == []
-      assert sorted_edges(call_graph) == []
-    end
-
-    test "match operator ir, module alias on left side does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.MatchOperator{
-        left: %IR.AtomType{value: Module5},
-        right: %IR.AtomType{value: Module6}
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module6,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module6}
-             ]
-    end
-
-    test "match operator ir, module alias on right side creates edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.MatchOperator{
-        left: %IR.Variable{name: :x},
-        right: %IR.AtomType{value: Module5}
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module5,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module5}
-             ]
-    end
-
-    test "match operator ir, nested, module on innermost right creates edge", %{
-      empty_call_graph: call_graph
-    } do
-      # x = y = Module5
-      ir = %IR.MatchOperator{
-        left: %IR.Variable{name: :x},
-        right: %IR.MatchOperator{
-          left: %IR.Variable{name: :y},
-          right: %IR.AtomType{value: Module5}
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module5,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module5}
-             ]
-    end
-
-    test "match operator ir, nested, module on inner left does not create edge",
-         %{
-           empty_call_graph: call_graph
-         } do
-      # x = Module5 = y
-      ir = %IR.MatchOperator{
-        left: %IR.Variable{name: :x},
-        right: %IR.MatchOperator{
-          left: %IR.AtomType{value: Module5},
-          right: %IR.Variable{name: :y}
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert vertices(call_graph) == []
-      assert edges(call_graph) == []
-    end
-
-    test "match operator ir, in pattern context, module on right does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      # In a function param like: x = Module5
-      ir = %IR.MatchOperator{
-        left: %IR.Variable{name: :x},
-        right: %IR.AtomType{value: Module5}
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}, pattern?: true})
-
-      assert result == call_graph
-
-      assert vertices(call_graph) == []
-      assert edges(call_graph) == []
-    end
-
-    test "match operator ir, in pattern context, module on left does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      # In a function param like: Module5 = x
-      ir = %IR.MatchOperator{
-        left: %IR.AtomType{value: Module5},
-        right: %IR.Variable{name: :x}
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}, pattern?: true})
-
-      assert result == call_graph
-
-      assert vertices(call_graph) == []
-      assert edges(call_graph) == []
-    end
-
     test "module definition ir, regular module", %{empty_call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
         module: %IR.AtomType{value: Module1},
@@ -1294,7 +303,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      result = build(call_graph, ir, %Context{})
+      result = build(call_graph, ir)
 
       assert result == call_graph
 
@@ -1310,11 +319,11 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir, page module has edges to its functions", %{
+    test "module definition ir, page module adds page-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_2_ir = IR.for_module(Module2)
-      result = build(call_graph, module_2_ir, %Context{})
+      result = build(call_graph, module_2_ir)
 
       assert result == call_graph
 
@@ -1325,28 +334,30 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module2, {Module2, :__route__, 0})
     end
 
-    test "module definition ir, component module has edges to its functions", %{
+    test "module definition ir, component module adds component-specific edges", %{
       empty_call_graph: call_graph
     } do
-      module_38_ir = IR.for_module(Module38)
-      result = build(call_graph, module_38_ir, %Context{})
+      module_4_ir = IR.for_module(Module4)
+      result = build(call_graph, module_4_ir)
 
       assert result == call_graph
 
-      assert has_vertex?(call_graph, {Module38, :action, 3})
-      assert has_vertex?(call_graph, {Module38, :init, 2})
-      assert has_vertex?(call_graph, {Module38, :template, 0})
+      assert has_vertex?(call_graph, {Module4, :__props__, 0})
+      assert has_vertex?(call_graph, {Module4, :action, 3})
+      assert has_vertex?(call_graph, {Module4, :init, 2})
+      assert has_vertex?(call_graph, {Module4, :template, 0})
 
-      assert has_edge?(call_graph, Module38, {Module38, :action, 3})
-      assert has_edge?(call_graph, Module38, {Module38, :init, 2})
-      assert has_edge?(call_graph, Module38, {Module38, :template, 0})
+      assert has_edge?(call_graph, Module4, {Module4, :__props__, 0})
+      assert has_edge?(call_graph, Module4, {Module4, :action, 3})
+      assert has_edge?(call_graph, Module4, {Module4, :init, 2})
+      assert has_edge?(call_graph, Module4, {Module4, :template, 0})
     end
 
     test "module definition ir, struct module adds struct-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_25_ir = IR.for_module(Module25)
-      result = build(call_graph, module_25_ir, %Context{})
+      result = build(call_graph, module_25_ir)
 
       assert result == call_graph
 
@@ -1361,7 +372,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       module_21_ir = IR.for_module(Module21)
-      result = build(call_graph, module_21_ir, %Context{})
+      result = build(call_graph, module_21_ir)
 
       assert result == call_graph
 
@@ -1378,7 +389,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       string_chars_ir = IR.for_module(String.Chars)
-      result = build(call_graph, string_chars_ir, %Context{})
+      result = build(call_graph, string_chars_ir)
 
       assert result == call_graph
 
@@ -1411,7 +422,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert result == call_graph
 
@@ -1442,7 +453,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert result == call_graph
 
@@ -1457,98 +468,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                {{Module1, :my_fun_1, 4}, Module6},
                {{Module1, :my_fun_1, 4}, Module7},
                {{Module1, :my_fun_1, 4}, Module8}
-             ]
-    end
-
-    test "remote function call ir, :erlang.error/3 suppresses module vertex edges in third argument (error options)",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: :erlang},
-        function: :error,
-        args: [
-          %IR.RemoteFunctionCall{
-            module: %IR.AtomType{value: Enum.EmptyError},
-            function: :exception,
-            args: [%IR.ListType{data: []}]
-          },
-          %IR.AtomType{value: :none},
-          %IR.ListType{
-            data: [
-              %IR.TupleType{
-                data: [
-                  %IR.AtomType{value: :error_info},
-                  %IR.MapType{
-                    data: [
-                      {%IR.AtomType{value: :module}, %IR.AtomType{value: Exception}}
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               {Enum.EmptyError, :exception, 1},
-               {Module1, :my_fun, 1},
-               {:erlang, :error, 3}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, {Enum.EmptyError, :exception, 1}},
-               {{Module1, :my_fun, 1}, {:erlang, :error, 3}}
-             ]
-    end
-
-    test "remote function call ir, IO.warn_once/3 skips first argument (deduplication key)", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: IO},
-        function: :warn_once,
-        args: [
-          %IR.TupleType{
-            data: [
-              %IR.AtomType{value: Module5},
-              %IR.AtomType{value: :some_key}
-            ]
-          },
-          %IR.AnonymousFunctionType{
-            arity: 0,
-            captured_function: nil,
-            captured_module: nil,
-            clauses: [
-              %IR.FunctionClause{
-                params: [],
-                guards: [],
-                body: %IR.Block{
-                  expressions: [%IR.StringType{value: "some warning"}]
-                }
-              }
-            ]
-          },
-          %IR.IntegerType{value: 4}
-        ]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               {Module1, :my_fun, 1},
-               {IO, :warn_once, 3}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, {IO, :warn_once, 3}}
              ]
     end
 
@@ -1570,7 +489,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert result == call_graph
 
@@ -1604,7 +523,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert result == call_graph
 
@@ -1638,7 +557,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert result == call_graph
 
@@ -1670,7 +589,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun_1, 4}})
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
 
       assert result == call_graph
 
@@ -1684,289 +603,9 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "remote function call ir, Kernel.inspect/1 suppresses module vertex edges in first argument",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: Kernel},
-        function: :inspect,
-        args: [%IR.AtomType{value: Module5}]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      # Module5 atom is suppressed; only the MFA edge to Kernel.inspect/1 is created.
-      assert sorted_vertices(call_graph) == [
-               {Module1, :my_fun, 1},
-               {Kernel, :inspect, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, {Kernel, :inspect, 1}}
-             ]
-    end
-
-    test "remote function call ir, Kernel.inspect/2 traverses second argument (options) normally",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: Kernel},
-        function: :inspect,
-        args: [
-          %IR.AtomType{value: Module5},
-          %IR.RemoteFunctionCall{
-            module: %IR.AtomType{value: Module6},
-            function: :opts,
-            args: []
-          }
-        ]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      # Module5 atom is suppressed, but Module6.opts/0 MFA edge is created.
-      assert sorted_vertices(call_graph) == [
-               {Module1, :my_fun, 1},
-               {Module6, :opts, 0},
-               {Kernel, :inspect, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, {Module6, :opts, 0}},
-               {{Module1, :my_fun, 1}, {Kernel, :inspect, 2}}
-             ]
-    end
-
-    test "remote function call ir, Kernel.struct!/2 with literal module creates targeted __struct__ edges",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: Kernel},
-        function: :struct!,
-        args: [
-          %IR.AtomType{value: Module5},
-          %IR.Variable{name: :args}
-        ]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               {Module1, :my_fun, 1},
-               {Module5, :__struct__, 0},
-               {Module5, :__struct__, 1},
-               {Kernel, :struct!, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, {Module5, :__struct__, 0}},
-               {{Module1, :my_fun, 1}, {Module5, :__struct__, 1}},
-               {{Module1, :my_fun, 1}, {Kernel, :struct!, 2}}
-             ]
-    end
-
-    test "remote function call ir, Kernel.struct!/2 with variable module traverses normally",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: Kernel},
-        function: :struct!,
-        args: [
-          %IR.Variable{name: :module},
-          %IR.Variable{name: :args}
-        ]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               {Module1, :my_fun, 1},
-               {Kernel, :struct!, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, {Kernel, :struct!, 2}}
-             ]
-    end
-
-    test "remote function call ir, Protocol.UndefinedError.exception/1 suppresses module vertex edges in :protocol key value",
-         %{
-           empty_call_graph: call_graph
-         } do
-      ir = %IR.RemoteFunctionCall{
-        module: %IR.AtomType{value: Protocol.UndefinedError},
-        function: :exception,
-        args: [
-          %IR.ListType{
-            data: [
-              %IR.TupleType{
-                data: [%IR.AtomType{value: :protocol}, %IR.AtomType{value: Module5}]
-              },
-              %IR.TupleType{
-                data: [%IR.AtomType{value: :value}, %IR.AtomType{value: :some_value}]
-              }
-            ]
-          }
-        ]
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 1}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               {Module1, :my_fun, 1},
-               {Protocol.UndefinedError, :exception, 1}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 1}, {Protocol.UndefinedError, :exception, 1}}
-             ]
-    end
-
-    test "try catch clause ir, module alias in body creates edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.TryCatchClause{
-        kind: %IR.AtomType{value: :error},
-        value: %IR.Variable{name: :e},
-        guards: [],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module5}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module5,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module5}
-             ]
-    end
-
-    test "try catch clause ir, module alias in guards does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.TryCatchClause{
-        kind: %IR.AtomType{value: :error},
-        value: %IR.Variable{name: :e},
-        guards: [%IR.AtomType{value: Module5}],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module6}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module6,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module6}
-             ]
-    end
-
-    test "try catch clause ir, module alias in value does not create edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.TryCatchClause{
-        kind: %IR.AtomType{value: :error},
-        value: %IR.AtomType{value: Module5},
-        guards: [],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module6}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module6,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module6}
-             ]
-    end
-
-    test "try rescue clause ir, module alias in modules does not create module vertex edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.TryRescueClause{
-        variable: %IR.Variable{name: :e},
-        modules: [%IR.AtomType{value: Module5}],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module6}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module6,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module6}
-             ]
-    end
-
-    test "try rescue clause ir, module alias in body creates edge", %{
-      empty_call_graph: call_graph
-    } do
-      ir = %IR.TryRescueClause{
-        variable: %IR.Variable{name: :e},
-        modules: [],
-        body: %IR.Block{
-          expressions: [%IR.AtomType{value: Module5}]
-        }
-      }
-
-      result = build(call_graph, ir, %Context{from_vertex: {Module1, :my_fun, 2}})
-
-      assert result == call_graph
-
-      assert sorted_vertices(call_graph) == [
-               Module5,
-               {Module1, :my_fun, 2}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {{Module1, :my_fun, 2}, Module5}
-             ]
-    end
-
     test "tuple", %{empty_call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
-      result = build(call_graph, tuple, %Context{from_vertex: :vertex_1})
+      result = build(call_graph, tuple, :vertex_1)
 
       assert result == call_graph
 
@@ -1979,7 +618,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  # credo:disable-for-lines:50 Credo.Check.Design.DuplicatedCode
   test "build_for_module/3", %{empty_call_graph: call_graph} do
     ir = %IR.ModuleDefinition{
       module: %IR.AtomType{value: Module11},
@@ -1998,12 +636,16 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert sorted_vertices(call_graph) == [
              Module11,
              Module5,
-             Module6
+             Module6,
+             {Module11, :__params__, 0},
+             {Module11, :__route__, 0}
            ]
 
     assert sorted_edges(call_graph) == [
              {Module11, Module5},
-             {Module11, Module6}
+             {Module11, Module6},
+             {Module11, {Module11, :__params__, 0}},
+             {Module11, {Module11, :__route__, 0}}
            ]
   end
 
@@ -2012,126 +654,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     refute call_graph_clone == call_graph
     assert get_graph(call_graph_clone) == get_graph(call_graph)
-  end
-
-  describe "compute_cascades/3" do
-    # :module_1 (module vertex) - large cascade
-    # ├─ {:module_5, :fun_5a, 1} -> :module_1
-    # ├─ {:module_6, :fun_6a, 2} -> :module_1
-    # │  :module_1 -> {:module_7, :fun_7a, 1}
-    # │  :module_1 -> {:module_7, :fun_7b, 1}
-    # │  :module_1 -> {:module_8, :fun_8a, 2}
-    # │  :module_1 -> {:module_8, :fun_8b, 1}
-    # │  :module_1 -> {:module_9, :fun_9a, 1}
-    #
-    # :module_2 (module vertex) - medium cascade
-    # ├─ {:module_6, :fun_6b, 3} -> :module_2
-    # │  :module_2 -> {:module_10, :fun_10a, 1}
-    # │  :module_2 -> {:module_10, :fun_10b, 2}
-    # │  :module_2 -> {:module_11, :fun_11a, 1}
-    #
-    # :module_3 (module vertex) - small cascade, multiple incoming edges
-    # ├─ {:module_5, :fun_5b, 1} -> :module_3
-    # ├─ {:module_6, :fun_6a, 2} -> :module_3
-    # ├─ {:module_9, :fun_9a, 1} -> :module_3
-    # │  :module_3 -> {:module_11, :fun_11b, 1}
-    #
-    # :module_4 (module vertex) - leaf, no downstream MFAs
-    # ├─ {:module_8, :fun_8a, 2} -> :module_4
-
-    setup do
-      graph =
-        Digraph.new()
-        # Edges into :module_1
-        |> Digraph.add_edge({:module_5, :fun_5a, 1}, :module_1)
-        |> Digraph.add_edge({:module_6, :fun_6a, 2}, :module_1)
-        # :module_1 downstream MFAs
-        |> Digraph.add_edge(:module_1, {:module_7, :fun_7a, 1})
-        |> Digraph.add_edge(:module_1, {:module_7, :fun_7b, 1})
-        |> Digraph.add_edge(:module_1, {:module_8, :fun_8a, 2})
-        |> Digraph.add_edge(:module_1, {:module_8, :fun_8b, 1})
-        |> Digraph.add_edge(:module_1, {:module_9, :fun_9a, 1})
-        # Edges into :module_2
-        |> Digraph.add_edge({:module_6, :fun_6b, 3}, :module_2)
-        # :module_2 downstream MFAs
-        |> Digraph.add_edge(:module_2, {:module_10, :fun_10a, 1})
-        |> Digraph.add_edge(:module_2, {:module_10, :fun_10b, 2})
-        |> Digraph.add_edge(:module_2, {:module_11, :fun_11a, 1})
-        # Edges into :module_3
-        |> Digraph.add_edge({:module_5, :fun_5b, 1}, :module_3)
-        |> Digraph.add_edge({:module_6, :fun_6a, 2}, :module_3)
-        |> Digraph.add_edge({:module_9, :fun_9a, 1}, :module_3)
-        # :module_3 downstream MFAs
-        |> Digraph.add_edge(:module_3, {:module_11, :fun_11b, 1})
-        # Edges into :module_4
-        |> Digraph.add_edge({:module_8, :fun_8a, 2}, :module_4)
-
-      reachable =
-        MapSet.new([
-          :module_1,
-          :module_2,
-          :module_3,
-          :module_4,
-          {:module_5, :fun_5a, 1},
-          {:module_5, :fun_5b, 1},
-          {:module_6, :fun_6a, 2},
-          {:module_6, :fun_6b, 3},
-          {:module_7, :fun_7a, 1},
-          {:module_7, :fun_7b, 1},
-          {:module_8, :fun_8a, 2},
-          {:module_8, :fun_8b, 1},
-          {:module_9, :fun_9a, 1},
-          {:module_10, :fun_10a, 1},
-          {:module_10, :fun_10b, 2},
-          {:module_11, :fun_11a, 1},
-          {:module_11, :fun_11b, 1}
-        ])
-
-      module_vertices = MapSet.new([:module_1, :module_2, :module_3, :module_4])
-
-      [graph: graph, module_vertices: module_vertices, reachable: reachable]
-    end
-
-    test "returns cascades sorted by downstream MFA count descending", %{
-      graph: graph,
-      module_vertices: module_vertices,
-      reachable: reachable
-    } do
-      result = compute_cascades(graph, module_vertices, reachable)
-
-      assert result == [
-               {{:module_5, :fun_5a, 1}, :module_1, 6},
-               {{:module_6, :fun_6a, 2}, :module_1, 6},
-               {{:module_6, :fun_6b, 3}, :module_2, 3},
-               {{:module_5, :fun_5b, 1}, :module_3, 1},
-               {{:module_6, :fun_6a, 2}, :module_3, 1},
-               {{:module_9, :fun_9a, 1}, :module_3, 1},
-               {{:module_8, :fun_8a, 2}, :module_4, 0}
-             ]
-    end
-
-    test "filters out sources not in reachable set", %{
-      graph: graph,
-      module_vertices: module_vertices,
-      reachable: reachable
-    } do
-      restricted_reachable =
-        reachable
-        |> MapSet.delete({:module_6, :fun_6a, 2})
-        |> MapSet.delete({:module_9, :fun_9a, 1})
-
-      result = compute_cascades(graph, module_vertices, restricted_reachable)
-
-      sources = Enum.map(result, &elem(&1, 0))
-
-      refute {:module_6, :fun_6a, 2} in sources
-      refute {:module_9, :fun_9a, 1} in sources
-      assert {:module_5, :fun_5a, 1} in sources
-    end
-
-    test "returns empty list when no module vertices", %{graph: graph, reachable: reachable} do
-      assert compute_cascades(graph, MapSet.new(), reachable) == []
-    end
   end
 
   test "dump/2", %{empty_call_graph: call_graph} do
@@ -2180,110 +702,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "get_graph/1", %{empty_call_graph: call_graph} do
     assert %Digraph{} = get_graph(call_graph)
-  end
-
-  describe "get_pruned_page_graph/2" do
-    test "returns a Digraph struct", %{empty_call_graph: empty_call_graph} do
-      module_14_ir = IR.for_module(Module14)
-
-      call_graph = build(empty_call_graph, module_14_ir, %Context{})
-      result = get_pruned_page_graph(call_graph, Module14)
-
-      assert %Digraph{} = result
-    end
-
-    test "removes command/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
-      # Page
-      module_42_ir = IR.for_module(Module42)
-
-      # Component
-      module_43_ir = IR.for_module(Module43)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_42_ir, %Context{})
-        |> build(module_43_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module42)
-      vertices = Digraph.vertices(graph)
-
-      refute {Module42, :command, 3} in vertices
-      refute {Module43, :command, 3} in vertices
-    end
-
-    test "removes init/3 for templatable modules", %{empty_call_graph: empty_call_graph} do
-      # Page
-      module_44_ir = IR.for_module(Module44)
-
-      # Component
-      module_45_ir = IR.for_module(Module45)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_44_ir, %Context{})
-        |> build(module_45_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module44)
-      vertices = Digraph.vertices(graph)
-
-      refute {Module44, :init, 3} in vertices
-      refute {Module45, :init, 3} in vertices
-    end
-
-    test "removes other page functions except __params__/0 and __route__/0", %{
-      empty_call_graph: empty_call_graph
-    } do
-      module_14_ir = IR.for_module(Module14)
-      module_17_ir = IR.for_module(Module17)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_14_ir, %Context{})
-        |> build(module_17_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module14)
-      vertices = Digraph.vertices(graph)
-
-      assert {Module14, :action, 3} in vertices
-      assert {Module14, :template, 0} in vertices
-
-      assert {Module17, :__params__, 0} in vertices
-      assert {Module17, :__route__, 0} in vertices
-
-      refute {Module17, :action, 3} in vertices
-      refute {Module17, :template, 0} in vertices
-    end
-
-    test "keeps command/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
-      module_42_ir = IR.for_module(Module42)
-      module_43_ir = IR.for_module(Module43)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_42_ir, %Context{})
-        |> build(module_43_ir, %Context{})
-        |> add_edge({Module42, :action, 3}, {Module16, :command, 3})
-
-      graph = get_pruned_page_graph(call_graph, Module42)
-      vertices = Digraph.vertices(graph)
-
-      assert {Module16, :command, 3} in vertices
-    end
-
-    test "keeps init/3 for non-templatable modules", %{empty_call_graph: empty_call_graph} do
-      module_46_ir = IR.for_module(Module46)
-      module_47_ir = IR.for_module(Module47)
-
-      call_graph =
-        empty_call_graph
-        |> build(module_46_ir, %Context{})
-        |> build(module_47_ir, %Context{})
-
-      graph = get_pruned_page_graph(call_graph, Module47)
-      vertices = Digraph.vertices(graph)
-
-      assert {Module46, :init, 3} in vertices
-    end
   end
 
   describe "has_edge?/3" do
@@ -2374,6 +792,20 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  test "list_page_entry_mfas/1" do
+    assert list_page_entry_mfas(Module19) == [
+             {Module19, :__layout_module__, 0},
+             {Module19, :__layout_props__, 0},
+             {Module19, :__params__, 0},
+             {Module19, :__route__, 0},
+             {Module19, :action, 3},
+             {Module19, :template, 0},
+             {Module20, :__props__, 0},
+             {Module20, :action, 3},
+             {Module20, :template, 0}
+           ]
+  end
+
   describe "list_page_mfas/2" do
     setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
       page_module_22_mfas =
@@ -2392,23 +824,23 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       result =
         start()
-        |> build(module_14_ir, %Context{})
-        |> build(module_15_ir, %Context{})
-        |> build(module_16_ir, %Context{})
+        |> build(module_14_ir)
+        |> build(module_15_ir)
+        |> build(module_16_ir)
         |> list_page_mfas(Module14)
 
       assert result == [
                {Enum, :reverse, 1},
                {Enum, :to_list, 1},
-               {Module14, :__is_hologram_page__, 0},
                {Module14, :__layout_module__, 0},
                {Module14, :__layout_props__, 0},
                {Module14, :__params__, 0},
                {Module14, :__route__, 0},
                {Module14, :action, 3},
                {Module14, :template, 0},
-               {Module15, :__is_hologram_component__, 0},
                {Module15, :__props__, 0},
+               {Module15, :action, 3},
+               {Module15, :init, 2},
                {Module15, :template, 0},
                {Module16, :my_fun_16a, 2},
                {Kernel, :inspect, 1},
@@ -2416,31 +848,12 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "excludes server-only and other-page MFAs" do
-      module_42_ir = IR.for_module(Module42)
-      module_43_ir = IR.for_module(Module43)
-      module_44_ir = IR.for_module(Module44)
-
-      result =
-        start()
-        |> build(module_42_ir, %Context{})
-        |> build(module_43_ir, %Context{})
-        |> build(module_44_ir, %Context{})
-        |> list_page_mfas(Module42)
-
-      # Server-only MFA is excluded
-      refute {Module42, :command, 3} in result
-
-      # Other page's MFA is excluded
-      refute {Module44, :action, 3} in result
-    end
-
     test "excludes Hex MFAs" do
       module_17_ir = IR.for_module(Module17)
 
       call_graph =
         start()
-        |> build(module_17_ir, %Context{})
+        |> build(module_17_ir)
         |> add_edge({Module17, :action, 3}, {Hex, :start, 2})
         |> add_edge({Module17, :action, 3}, {Hex, :version, 0})
 
@@ -2457,7 +870,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       call_graph =
         start()
-        |> build(module_17_ir, %Context{})
+        |> build(module_17_ir)
         |> add_edge({Module17, :action, 3}, {Hex.API, :request, 4})
         |> add_edge({Module17, :action, 3}, {Hex.Registry.Server, :versions, 2})
 
@@ -2474,7 +887,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       result =
         start()
-        |> build(module_17_ir, %Context{})
+        |> build(module_17_ir)
         |> list_page_mfas(Module17)
 
       assert {Module18, :my_fun_18, 2} in result
@@ -2580,13 +993,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Enum, :to_list, 1} in result
       assert {Enum, :reverse, 1} in result
       assert {:lists, :reverse, 1} in result
-    end
-
-    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{
-      runtime_mfas: result
-    } do
-      assert {:erlang, :==, 2} in result
-      assert {:erlang, :error, 2} in result
     end
 
     test "excludes MFAs with non-existing modules", %{full_call_graph: call_graph} do
@@ -2718,11 +1124,10 @@ defmodule Hologram.Compiler.CallGraphTest do
     call_graph
     |> add_vertex({:module_1, :fun_a, 1})
     |> add_vertex({:module_3, :fun_b, 2})
-    |> build(ir, %Context{})
+    |> build(ir)
     |> add_vertex(:module_4)
 
     assert module_vertices(call_graph, Module13) == [
-             Module13,
              {Module13, :fun_b, 2},
              {Module13, :fun_d, 4},
              {Module13, :fun_e, 2}
@@ -2741,8 +1146,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       call_graph_2 =
         start()
-        |> build(module_9_ir, %Context{})
-        |> build(module_10_ir, %Context{})
+        |> build(module_9_ir)
+        |> build(module_10_ir)
 
       diff = %{
         added_modules: [Module10, Module9],
@@ -2826,7 +1231,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       # implementation module was already built (has its own internal edges).
       call_graph
       |> add_vertex(from_vertex)
-      |> build(impl_ir, %Context{})
+      |> build(impl_ir)
 
       # The impl's internal edges exist, but there are no dispatch edges
       # from the protocol to the implementation.
@@ -2874,7 +1279,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       patch(call_graph, ir_plt, diff)
 
       assert sorted_vertices(call_graph) == [
-               Module10,
                Module9,
                {Module10, :my_fun_3, 0},
                {Module10, :my_fun_4, 0},
@@ -2889,10 +1293,6 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               {Module10, {Module10, :my_fun_3, 0}},
-               {Module10, {Module10, :my_fun_4, 0}},
-               {Module9, {Module9, :my_fun_1, 0}},
-               {Module9, {Module9, :my_fun_2, 0}},
                {{Module10, :my_fun_3, 0}, {Module10, :my_fun_4, 0}},
                {{Module9, :my_fun_1, 0}, {Module9, :my_fun_2, 0}},
                {{:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0}},
@@ -3153,9 +1553,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_5 in result
   end
 
-  # Consistency tests verifying that Elixir stdlib IR patterns assumed by call graph
-  # build/3 special cases still hold. If these fail after an Elixir upgrade,
-  # the corresponding special cases in CallGraph.build/3 need updating.
+  # Consistency tests verifying that the Elixir stdlib IR patterns
+  # assumed by the call graph still hold. If these fail after an
+  # Elixir upgrade, the corresponding call graph code needs updating.
   describe "Elixir stdlib IR pattern assumptions" do
     defp find_fun_defs(ir_plt, module, name, arity) do
       %IR.ModuleDefinition{body: %IR.Block{expressions: expressions}} =
@@ -3164,1255 +1564,1994 @@ defmodule Hologram.Compiler.CallGraphTest do
       Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
     end
 
+    # Dynamic dispatch assumption: Date.day_of_era/1 extracts calendar from the struct
+    # and calls `calendar.day_of_era(year, month, day)`.
+    #
     # Original source:
-    #   defimpl Protocol1, for: Integer do
-    #     def my_fun(_data), do: :ok
+    #   def day_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.day_of_era(year, month, day)
     #   end
-    #
-    # Expanded (Elixir >= 1.16):
-    #   def __impl__(:for), do: Integer
-    #   def __impl__(:protocol), do: Protocol1
-    #
-    # Expanded (Elixir < 1.16):
-    #   def __impl__(:for), do: Integer
-    #   def __impl__(:protocol), do: Protocol1
-    #   def __impl__(:target), do: Protocol1.Integer
-    test "__impl__/1 clauses have 'for' and 'protocol' module atoms in body",
+    test "Date.day_of_era/1 dynamically dispatches calendar.day_of_era/3",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :day_of_era, 1)
 
-      {for_clause, protocol_clause} =
-        if Version.match?(System.version(), ">= 1.16.0") do
-          assert [for_clause, protocol_clause] = fun_defs
-          {for_clause, protocol_clause}
-        else
-          assert [target_clause, for_clause, protocol_clause] = fun_defs
-
-          assert target_clause == %IR.FunctionDefinition{
-                   name: :__impl__,
-                   arity: 1,
-                   visibility: :public,
-                   clause: %IR.FunctionClause{
-                     params: [%IR.AtomType{value: :target}],
-                     guards: [],
-                     body: %IR.Block{
-                       expressions: [%IR.AtomType{value: Protocol1.Integer}]
-                     }
-                   }
-                 }
-
-          {for_clause, protocol_clause}
-        end
-
-      assert for_clause == %IR.FunctionDefinition{
-               name: :__impl__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :for}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: Integer}]
-                 }
-               }
-             }
-
-      assert protocol_clause == %IR.FunctionDefinition{
-               name: :__impl__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :protocol}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: Protocol1}]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
-    #   end
-    #
-    # Expanded (after consolidation):
-    #   def __protocol__(:module), do: Protocol1
-    #   def __protocol__(:functions), do: [my_fun: 1]
-    #   def __protocol__(:consolidated?), do: true
-    #   def __protocol__(:impls), do: {:consolidated, [Struct1, Integer]}
-    test "__protocol__/1 clauses have module atoms in body (protocol module and implementations)",
-         %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Protocol1, :__protocol__, 1)
-
-      assert [module_clause, functions_clause, consolidated_clause, impls_clause] = fun_defs
-
-      assert module_clause == %IR.FunctionDefinition{
-               name: :__protocol__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :module}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: Protocol1}]
-                 }
-               }
-             }
-
-      assert functions_clause == %IR.FunctionDefinition{
-               name: :__protocol__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :functions}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.ListType{
-                       data: [
-                         %IR.TupleType{
-                           data: [
-                             %IR.AtomType{value: :my_fun},
-                             %IR.IntegerType{value: 1}
-                           ]
-                         }
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-
-      assert consolidated_clause == %IR.FunctionDefinition{
-               name: :__protocol__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :consolidated?}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: true}]
-                 }
-               }
-             }
-
-      assert impls_clause == %IR.FunctionDefinition{
-               name: :__protocol__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: :impls}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :consolidated},
-                         %IR.ListType{
-                           data: [
-                             %IR.AtomType{value: Struct1},
-                             %IR.AtomType{value: Integer}
-                           ]
-                         }
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defmodule Struct1 do
-    #     defstruct [:field_1]
-    #   end
-    #
-    # Expanded:
-    #   def __struct__(), do: %{__struct__: Struct1, field_1: nil}
-    test "__struct__/0 body has a map with __struct__ key containing the module atom",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Struct1, :__struct__, 0)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :__struct__,
-               arity: 0,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.MapType{
-                       data: [
-                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct1}},
-                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}}
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source (Struct2):
-    #   defstruct field_1: nil, field_2: Module1
-    #
-    # Generated __struct__/0:
-    #   def __struct__(), do: %{__struct__: Struct2, field_1: nil, field_2: Module1}
-    test "__struct__/0 body map values include module atoms when given as field defaults",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 0)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :__struct__,
-               arity: 0,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.MapType{
-                       data: [
-                         {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct2}},
-                         {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}},
-                         {%IR.AtomType{value: :field_2}, %IR.AtomType{value: Module1}}
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source (Struct2):
-    #   defstruct field_1: nil, field_2: Module1
-    #
-    # Generated __struct__/1:
-    #   def __struct__(kv) do
-    #     Enum.reduce(kv,
-    #       %{__struct__: Struct2, field_1: nil, field_2: Module1},
-    #       fn {key, val}, map -> Map.merge(map, %{key => val}) end)
-    #   end
-    test "__struct__/1 body has Enum.reduce/3 with default struct map containing module atoms",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Struct2, :__struct__, 1)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :__struct__,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.Variable{name: :kv, version: 0}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: Enum},
-                       function: :reduce,
-                       args: [
-                         %IR.Variable{name: :kv, version: 0},
-                         %IR.MapType{
-                           data: [
-                             {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Struct2}},
-                             {%IR.AtomType{value: :field_1}, %IR.AtomType{value: nil}},
-                             {%IR.AtomType{value: :field_2}, %IR.AtomType{value: Module1}}
-                           ]
-                         },
-                         %IR.AnonymousFunctionType{
-                           arity: 2,
-                           captured_function: nil,
-                           captured_module: nil,
-                           clauses: [
-                             %IR.FunctionClause{
-                               params: [
-                                 %IR.TupleType{
-                                   data: [
-                                     %IR.Variable{name: :key, version: 1},
-                                     %IR.Variable{name: :val, version: 2}
-                                   ]
-                                 },
-                                 %IR.Variable{name: :map, version: 3}
-                               ],
-                               guards: [],
-                               body: %IR.Block{
-                                 expressions: [
-                                   %IR.RemoteFunctionCall{
-                                     module: %IR.AtomType{value: Map},
-                                     function: :merge,
-                                     args: [
-                                       %IR.Variable{name: :map, version: 3},
-                                       %IR.MapType{
-                                         data: [
-                                           {%IR.Variable{name: :key, version: 1},
-                                            %IR.Variable{name: :val, version: 2}}
-                                         ]
-                                       }
-                                     ]
-                                   }
-                                 ]
-                               }
-                             }
-                           ]
-                         }
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source (Module41Error):
-    #   defexception message: "test error"
-    #
-    # Generated exception/1 (Elixir >= 1.18):
-    #   def exception(msg) when is_binary(msg), do: exception(message: msg)
-    #   def exception(args) when is_list(args), do: Kernel.struct!(Module41Error, args)
-    #
-    # Generated exception/1 (Elixir < 1.18):
-    #   def exception(msg) when is_binary(msg), do: exception(message: msg)
-    #   def exception(args) when is_list(args) do
-    #     struct = __struct__()
-    #     {valid, invalid} = Enum.split_with(args, fn {k, _} -> :maps.is_key(k, struct) end)
-    #     case invalid do
-    #       [] -> :ok
-    #       _ -> IO.warn("the following fields are unknown when raising " <>
-    #              inspect(Module41Error) <> ": " <> inspect(invalid) <> ". " <>
-    #              "Please make sure to only give known fields when raising " <>
-    #              "or redefine " <> inspect(Module41Error) <> ".exception/1 to " <>
-    #              "discard unknown fields. Future Elixir versions will raise on " <>
-    #              "unknown fields given to raise/2")
-    #     end
-    #     Kernel.struct!(struct, valid)
-    #   end
-    test "defexception exception/1 calls Kernel.struct!/2 with literal module atom",
-         %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Module41Error, :exception, 1)
-
-      if Version.match?(System.version(), ">= 1.18.0") do
-        assert [msg_clause, args_clause] = fun_defs
-
-        # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
-        assert msg_clause == %IR.FunctionDefinition{
-                 name: :exception,
-                 arity: 1,
-                 visibility: :public,
-                 clause: %IR.FunctionClause{
-                   params: [%IR.Variable{name: :msg, version: 0}],
-                   guards: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: :erlang},
-                       function: :is_binary,
-                       args: [%IR.Variable{name: :msg, version: 0}]
-                     }
-                   ],
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.LocalFunctionCall{
-                         function: :exception,
-                         args: [
-                           %IR.ListType{
-                             data: [
-                               %IR.TupleType{
-                                 data: [
-                                   %IR.AtomType{value: :message},
-                                   %IR.Variable{name: :msg, version: 0}
-                                 ]
-                               }
-                             ]
-                           }
-                         ]
-                       }
-                     ]
-                   }
-                 }
-               }
-
-        assert args_clause == %IR.FunctionDefinition{
-                 name: :exception,
-                 arity: 1,
-                 visibility: :public,
-                 clause: %IR.FunctionClause{
-                   params: [%IR.Variable{name: :args, version: 0}],
-                   guards: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: :erlang},
-                       function: :is_list,
-                       args: [%IR.Variable{name: :args, version: 0}]
-                     }
-                   ],
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{value: Kernel},
-                         function: :struct!,
-                         args: [
-                           %IR.AtomType{value: Module41Error},
-                           %IR.Variable{name: :args, version: 0}
-                         ]
-                       }
-                     ]
-                   }
-                 }
-               }
-      else
-        # Elixir < 1.18: Kernel.struct!/2 is called with a variable (not a literal module
-        # atom) - so the Kernel.struct!/2 special case in CallGraph.build/3 won't fire
-        # (safe - missed optimization only).
-        assert [msg_clause, args_clause] = fun_defs
-
-        # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
-        assert msg_clause == %IR.FunctionDefinition{
-                 name: :exception,
-                 arity: 1,
-                 visibility: :public,
-                 clause: %IR.FunctionClause{
-                   params: [%IR.Variable{name: :msg, version: 0}],
-                   guards: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: :erlang},
-                       function: :is_binary,
-                       args: [%IR.Variable{name: :msg, version: 0}]
-                     }
-                   ],
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.LocalFunctionCall{
-                         function: :exception,
-                         args: [
-                           %IR.ListType{
-                             data: [
-                               %IR.TupleType{
-                                 data: [
-                                   %IR.AtomType{value: :message},
-                                   %IR.Variable{name: :msg, version: 0}
-                                 ]
-                               }
-                             ]
-                           }
-                         ]
-                       }
-                     ]
-                   }
-                 }
-               }
-
-        assert args_clause == %IR.FunctionDefinition{
-                 name: :exception,
-                 arity: 1,
-                 visibility: :public,
-                 clause: %IR.FunctionClause{
-                   params: [%IR.Variable{name: :args, version: 0}],
-                   guards: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: :erlang},
-                       function: :is_list,
-                       args: [%IR.Variable{name: :args, version: 0}]
-                     }
-                   ],
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.MatchOperator{
-                         left: %IR.Variable{name: :struct, version: 1},
-                         right: %IR.LocalFunctionCall{function: :__struct__, args: []}
-                       },
-                       %IR.MatchOperator{
-                         left: %IR.TupleType{
-                           data: [
-                             %IR.Variable{name: :valid, version: 3},
-                             %IR.Variable{name: :invalid, version: 4}
-                           ]
-                         },
-                         right: %IR.RemoteFunctionCall{
-                           module: %IR.AtomType{value: Enum},
-                           function: :split_with,
-                           args: [
-                             %IR.Variable{name: :args, version: 0},
-                             %IR.AnonymousFunctionType{
-                               arity: 1,
-                               captured_function: nil,
-                               captured_module: nil,
-                               clauses: [
-                                 %IR.FunctionClause{
-                                   params: [
-                                     %IR.TupleType{
-                                       data: [
-                                         %IR.Variable{name: :k, version: 2},
-                                         %IR.MatchPlaceholder{}
-                                       ]
-                                     }
-                                   ],
-                                   guards: [],
-                                   body: %IR.Block{
-                                     expressions: [
-                                       %IR.RemoteFunctionCall{
-                                         module: %IR.AtomType{value: :maps},
-                                         function: :is_key,
-                                         args: [
-                                           %IR.Variable{name: :k, version: 2},
-                                           %IR.Variable{name: :struct, version: 1}
-                                         ]
-                                       }
-                                     ]
-                                   }
-                                 }
-                               ]
-                             }
-                           ]
-                         }
-                       },
-                       %IR.Case{
-                         condition: %IR.Variable{name: :invalid, version: 4},
-                         clauses: [
-                           %IR.Clause{
-                             match: %IR.ListType{data: []},
-                             guards: [],
-                             body: %IR.Block{
-                               expressions: [%IR.AtomType{value: :ok}]
-                             }
-                           },
-                           %IR.Clause{
-                             match: %IR.MatchPlaceholder{},
-                             guards: [],
-                             body: %IR.Block{
-                               expressions: [
-                                 %IR.RemoteFunctionCall{
-                                   module: %IR.AtomType{value: IO},
-                                   function: :warn,
-                                   args: [
-                                     %IR.BitstringType{
-                                       segments: [
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{
-                                             value:
-                                               "the following fields are unknown when raising "
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.RemoteFunctionCall{
-                                             module: %IR.AtomType{value: Kernel},
-                                             function: :inspect,
-                                             args: [%IR.AtomType{value: Module41Error}]
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{value: ": "},
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.RemoteFunctionCall{
-                                             module: %IR.AtomType{value: Kernel},
-                                             function: :inspect,
-                                             args: [
-                                               %IR.Variable{name: :invalid, version: 4}
-                                             ]
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{value: ". "},
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{
-                                             value:
-                                               "Please make sure to only give known fields when raising "
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{
-                                             value: "or redefine "
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.RemoteFunctionCall{
-                                             module: %IR.AtomType{value: Kernel},
-                                             function: :inspect,
-                                             args: [%IR.AtomType{value: Module41Error}]
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{
-                                             value: ".exception/1 to "
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{
-                                             value:
-                                               "discard unknown fields. Future Elixir versions will raise on "
-                                           },
-                                           modifiers: [type: :binary]
-                                         },
-                                         %IR.BitstringSegment{
-                                           value: %IR.StringType{
-                                             value: "unknown fields given to raise/2"
-                                           },
-                                           modifiers: [type: :binary]
-                                         }
-                                       ]
-                                     }
-                                   ]
-                                 }
-                               ]
-                             }
-                           }
-                         ]
-                       },
-                       %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{value: Kernel},
-                         function: :struct!,
-                         args: [
-                           %IR.Variable{name: :struct, version: 1},
-                           %IR.Variable{name: :valid, version: 3}
-                         ]
-                       }
-                     ]
-                   }
-                 }
-               }
-      end
-    end
-
-    # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
-    #   end
-    #
-    # Expanded (after consolidation):
-    #   def impl_for(%{__struct__: x}) when is_atom(x), do: struct_impl_for(x)
-    #   def impl_for(x) when is_integer(x), do: Protocol1.Integer
-    #   def impl_for(_), do: nil
-    test "impl_for/1 clauses have module atoms in body and struct dispatch calls struct_impl_for/1",
-         %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Protocol1, :impl_for, 1)
-
-      assert [struct_clause, integer_clause, catch_all_clause] = fun_defs
-
-      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
-      assert struct_clause == %IR.FunctionDefinition{
-               name: :impl_for,
-               arity: 1,
-               visibility: :public,
+      assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
                  params: [
                    %IR.MapType{
                      data: [
-                       {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
                      ]
-                   }
-                 ],
-                 guards: [
-                   %IR.RemoteFunctionCall{
-                     module: %IR.AtomType{value: :erlang},
-                     function: :is_atom,
-                     args: [%IR.Variable{name: :x, version: -1}]
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :day_of_era,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.day_of_week/2 extracts calendar from the struct
+    # and calls `calendar.day_of_week(year, month, day, starting_on)`.
+    #
+    # Original source:
+    #   def day_of_week(%{calendar: calendar, year: year, month: month, day: day}, starting_on) do
+    #     {day_of_week, _first, _last} = calendar.day_of_week(year, month, day, starting_on)
+    #     day_of_week
+    #   end
+    test "Date.day_of_week/2 dynamically dispatches calendar.day_of_week/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :day_of_week, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   },
+                   _starting_on
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :day_of_week,
+                         args: [_year_arg, _month_arg, _day_arg, _starting_on_arg]
+                       }
+                     },
+                     _result
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.day_of_year/1 extracts calendar from the struct
+    # and calls `calendar.day_of_year(year, month, day)`.
+    #
+    # Original source:
+    #   def day_of_year(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.day_of_year(year, month, day)
+    #   end
+    test "Date.day_of_year/1 dynamically dispatches calendar.day_of_year/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :day_of_year, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :day_of_year,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.days_in_month/1 extracts calendar from the struct
+    # and calls `calendar.days_in_month(year, month)`.
+    #
+    # Original source:
+    #   def days_in_month(%{calendar: calendar, year: year, month: month}) do
+    #     calendar.days_in_month(year, month)
+    #   end
+    test "Date.days_in_month/1 dynamically dispatches calendar.days_in_month/2",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :days_in_month, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :days_in_month,
+                       args: [_year_arg, _month_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.leap_year?/1 extracts calendar from the struct
+    # and calls `calendar.leap_year?(year)`.
+    #
+    # Original source:
+    #   def leap_year?(%{calendar: calendar, year: year}) do
+    #     calendar.leap_year?(year)
+    #   end
+    test "Date.leap_year?/1 dynamically dispatches calendar.leap_year?/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :leap_year?, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :leap_year?,
+                       args: [_year_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.months_in_year/1 extracts calendar from the struct
+    # and calls `calendar.months_in_year(year)`.
+    #
+    # Original source:
+    #   def months_in_year(%{calendar: calendar, year: year}) do
+    #     calendar.months_in_year(year)
+    #   end
+    test "Date.months_in_year/1 dynamically dispatches calendar.months_in_year/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :months_in_year, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :months_in_year,
+                       args: [_year_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Default param assumption: Date.new/3 is the generated clause that fills in the
+    # Calendar.ISO default and calls Date.new/4. The Calendar.ISO atom appears in the body
+    # as data (not a dispatch target).
+    #
+    # Generated from: def new(year, month, day, calendar \\ Calendar.ISO)
+    #
+    # Expanded:
+    #   def new(x0, x1, x2), do: new(x0, x1, x2, Calendar.ISO)
+    test "Date.new/3 fills in Calendar.ISO default and calls Date.new/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 3)
+
+      assert fun_def == %IR.FunctionDefinition{
+               name: :new,
+               arity: 3,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :x0, version: 0},
+                   %IR.Variable{name: :x1, version: 1},
+                   %IR.Variable{name: :x2, version: 2}
+                 ],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
                      %IR.LocalFunctionCall{
-                       function: :struct_impl_for,
-                       args: [%IR.Variable{name: :x, version: -1}]
+                       function: :new,
+                       args: [
+                         %IR.Variable{name: :x0, version: 0},
+                         %IR.Variable{name: :x1, version: 1},
+                         %IR.Variable{name: :x2, version: 2},
+                         %IR.AtomType{value: Calendar.ISO}
+                       ]
                      }
                    ]
                  }
                }
              }
+    end
 
-      assert integer_clause == %IR.FunctionDefinition{
-               name: :impl_for,
-               arity: 1,
-               visibility: :public,
+    # Dynamic dispatch assumption: Date.new/4 has `calendar \\ Calendar.ISO` and calls
+    # `calendar.valid_date?(year, month, day)` where calendar is a variable, not a literal
+    # module atom. This call can't be discovered from static IR analysis, so we add a
+    # manual edge in @dynamic_dispatch_edges.
+    #
+    # Original source:
+    #   def new(year, month, day, calendar \\ Calendar.ISO) do
+    #     if calendar.valid_date?(year, month, day) do
+    #       {:ok, %Date{year: year, month: month, day: day, calendar: calendar}}
+    #     else
+    #       {:error, :invalid_date}
+    #     end
+    #   end
+    test "Date.new/4 dynamically dispatches calendar.valid_date?/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 4)
+
+      assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
-                 params: [%IR.Variable{name: :x, version: -1}],
-                 guards: [
-                   %IR.RemoteFunctionCall{
-                     module: %IR.AtomType{value: :erlang},
-                     function: :is_integer,
-                     args: [%IR.Variable{name: :x, version: -1}]
+                 params: [_year, _month, _day, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :valid_date?,
+                         args: [_year_arg, _month_arg, _day_arg]
+                       }
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.quarter_of_year/1 extracts calendar from the struct
+    # and calls `calendar.quarter_of_year(year, month, day)`.
+    #
+    # Original source:
+    #   def quarter_of_year(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.quarter_of_year(year, month, day)
+    #   end
+    test "Date.quarter_of_year/1 dynamically dispatches calendar.quarter_of_year/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :quarter_of_year, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
-                     %IR.AtomType{value: Protocol1.Integer}
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :quarter_of_year,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
                    ]
                  }
                }
-             }
-
-      assert catch_all_clause == %IR.FunctionDefinition{
-               name: :impl_for,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.MatchPlaceholder{}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: nil}]
-                 }
-               }
-             }
+             } = fun_def
     end
 
+    # Dynamic dispatch assumption: Date.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_date(year, month, day, duration)`.
+    # Date.shift/2 was added in Elixir 1.17.0.
+    #
     # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
+    #   def shift(%{calendar: calendar} = date, duration) do
+    #     %{year: year, month: month, day: day} = date
+    #     {year, month, day} = calendar.shift_date(year, month, day, __duration__!(duration))
+    #     %Date{calendar: calendar, year: year, month: month, day: day}
     #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "Date.shift/2 dynamically dispatches calendar.shift_date/4",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, Date, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_date,
+                           args: [_year, _month, _day, _duration_arg]
+                         }
+                       },
+                       _result
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: Date.to_string/1 extracts calendar from the struct
+    # and calls `calendar.date_to_string(year, month, day)`.
     #
-    # Expanded (Elixir >= 1.18):
-    #   def impl_for!(data) do
-    #     case impl_for(data) do
-    #       x when x == false or x == nil ->
-    #         :erlang.error(Protocol.UndefinedError.exception(
-    #           protocol: Protocol1, value: data, description: ""))
-    #       x -> x
-    #     end
+    # Original source:
+    #   def to_string(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.date_to_string(year, month, day)
     #   end
-    #
-    # Expanded (Elixir < 1.18):
-    #   def impl_for!(data) do
-    #     case impl_for(data) do
-    #       x when x == false or x == nil ->
-    #         :erlang.error(Protocol.UndefinedError.exception(
-    #           protocol: Protocol1, value: data))
-    #       x -> x
-    #     end
-    #   end
-    test "impl_for!/1 body calls impl_for/1 and has protocol module atom in error path",
+    test "Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
          %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :to_string, 1)
 
-      exception_keyword_data =
-        if Version.match?(System.version(), ">= 1.18.0") do
-          [
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :protocol},
-                %IR.AtomType{value: Protocol1}
-              ]
-            },
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :value},
-                %IR.Variable{name: :data, version: 0}
-              ]
-            },
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :description},
-                %IR.StringType{value: ""}
-              ]
-            }
-          ]
-        else
-          [
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :protocol},
-                %IR.AtomType{value: Protocol1}
-              ]
-            },
-            %IR.TupleType{
-              data: [
-                %IR.AtomType{value: :value},
-                %IR.Variable{name: :data, version: 0}
-              ]
-            }
-          ]
-        end
-
-      assert clause == %IR.FunctionDefinition{
-               name: :impl_for!,
-               arity: 1,
-               visibility: :public,
+      assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
-                 params: [%IR.Variable{name: :data, version: 0}],
-                 guards: [],
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :date_to_string,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.year_of_era/1 extracts calendar from the struct
+    # and calls `calendar.year_of_era(year, month, day)`.
+    #
+    # Original source (Elixir >= 1.18):
+    #   def year_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.year_of_era(year, month, day)
+    #   end
+    #
+    # Original source (Elixir < 1.18):
+    #   def year_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     if function_exported?(calendar, :year_of_era, 3) do
+    #       calendar.year_of_era(year, month, day)
+    #     else
+    #       calendar.year_of_era(year)
+    #     end
+    #   end
+    test "Date.year_of_era/1 dynamically dispatches calendar.year_of_era/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :year_of_era, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ]
+               }
+             } = fun_def
+
+      if Version.match?(System.version(), ">= 1.18.0") do
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :year_of_era,
+                         args: [_year_arg, _month_arg, _day_arg]
+                       }
+                     ]
+                   }
+                 }
+               } = fun_def
+      else
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.Case{
+                         condition: %IR.RemoteFunctionCall{
+                           function: :function_exported,
+                           args: [
+                             %IR.Variable{name: :calendar},
+                             %IR.AtomType{value: :year_of_era},
+                             %IR.IntegerType{value: 3}
+                           ]
+                         }
+                       }
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: DateTime.from_gregorian_seconds/3 receives calendar
+    # as a parameter (default Calendar.ISO) and calls
+    # `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   def from_gregorian_seconds(seconds, {microsecond, precision} \\ {0, 0},
+    #         calendar \\ Calendar.ISO) when is_integer(seconds) do
+    #     iso_days = Calendar.ISO.gregorian_seconds_to_iso_days(seconds, microsecond)
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "DateTime.from_gregorian_seconds/3 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :from_gregorian_seconds, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_seconds, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     _iso_days_assignment,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.from_iso_days/4 (private) receives calendar
+    # as a parameter and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp from_iso_days(iso_days, datetime, calendar, precision) do
+    #     %{time_zone: time_zone, zone_abbr: zone_abbr, utc_offset: utc_offset,
+    #       std_offset: std_offset} = datetime
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "DateTime.from_iso_days/4 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :from_iso_days, 4)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_iso_days, _datetime, %IR.Variable{name: :calendar}, _precision],
+                 body: %IR.Block{
+                   expressions: [
+                     _datetime_destructure,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days_arg]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.shift/3 extracts calendar from the struct and
+    # calls `calendar.shift_naive_datetime(...)` (both clauses) and
+    # `calendar.naive_datetime_to_iso_days(...)` (non-UTC clause).
+    # DateTime.shift/3 was added in Elixir 1.17.0.
+    #
+    # Original source (UTC clause):
+    #   def shift(%{calendar: calendar, time_zone: "Etc/UTC"} = datetime, duration, _) do
+    #     ...
+    #     {year, month, day, hour, minute, second, microsecond} =
+    #       calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    #         microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    #
+    # Original source (non-UTC clause):
+    #   def shift(%{calendar: calendar} = datetime, duration, time_zone_database) do
+    #     ...
+    #     {year, month, day, hour, minute, second, {_, precision} = microsecond} =
+    #       calendar.shift_naive_datetime(...)
+    #     result =
+    #       calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
+    #       |> ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "DateTime.shift/3 dynamically dispatches calendar.shift_naive_datetime/8 and calendar.naive_datetime_to_iso_days/7",
+           %{ir_plt: ir_plt} do
+        fun_defs = find_fun_defs(ir_plt, DateTime, :shift, 3)
+        assert [utc_clause, non_utc_clause] = fun_defs
+
+        # UTC clause: calendar.shift_naive_datetime(...)
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year,
+                             _month,
+                             _day,
+                             _hour,
+                             _minute,
+                             _second,
+                             _microsecond,
+                             _duration
+                           ]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = utc_clause
+
+        # Non-UTC clause: calendar.shift_naive_datetime(...) and
+        # calendar.naive_datetime_to_iso_days(...) piped through apply_tz_offset
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure2,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year2,
+                             _month2,
+                             _day2,
+                             _hour2,
+                             _minute2,
+                             _second2,
+                             _microsecond2,
+                             _duration2
+                           ]
+                         }
+                       },
+                       %IR.MatchOperator{
+                         right: %IR.LocalFunctionCall{
+                           function: :shift_zone_for_iso_days_utc,
+                           args: [
+                             %IR.LocalFunctionCall{
+                               function: :apply_tz_offset,
+                               args: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.Variable{name: :calendar},
+                                   function: :naive_datetime_to_iso_days,
+                                   args: [
+                                     _year3,
+                                     _month3,
+                                     _day3,
+                                     _hour3,
+                                     _minute3,
+                                     _second3,
+                                     _microsecond3
+                                   ]
+                                 },
+                                 _offset
+                               ]
+                             }
+                             | _shift_zone_args
+                           ]
+                         }
+                       }
+                       | _rest2
+                     ]
+                   }
+                 }
+               } = non_utc_clause
+      end
+    end
+
+    # Dynamic dispatch assumption: DateTime.shift_by_offset/2 (private) extracts calendar
+    # from the struct and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp shift_by_offset(%{calendar: calendar} = datetime, offset) do
+    #     total_offset = datetime.utc_offset + datetime.std_offset
+    #     datetime
+    #     |> to_iso_days()
+    #     |> Calendar.ISO.add_day_fraction_to_iso_days(offset - total_offset, 86400)
+    #     |> calendar.naive_datetime_from_iso_days()
+    #   end
+    test "DateTime.shift_by_offset/2 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :shift_by_offset, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   },
+                   _offset
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _total_offset,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_from_iso_days,
+                       args: [_iso_days]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.shift_zone_for_iso_days_utc/5 (private) receives
+    # calendar as a parameter and calls `calendar.naive_datetime_from_iso_days(iso_days)`
+    # inside the :ok clause of a case on time_zone_db.time_zone_period_from_utc_iso_days/2.
+    #
+    # Original source:
+    #   defp shift_zone_for_iso_days_utc(iso_days_utc, calendar, precision, time_zone, time_zone_db) do
+    #     case time_zone_db.time_zone_period_from_utc_iso_days(iso_days_utc, time_zone) do
+    #       {:ok, %{std_offset: std_offset, utc_offset: utc_offset, zone_abbr: zone_abbr}} ->
+    #         {year, month, day, hour, minute, second, {microsecond_without_precision, _}} =
+    #           iso_days_utc
+    #           |> apply_tz_offset(-(utc_offset + std_offset))
+    #           |> calendar.naive_datetime_from_iso_days()
+    #         ...
+    #     end
+    #   end
+    test "DateTime.shift_zone_for_iso_days_utc/5 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :shift_zone_for_iso_days_utc, 5)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   _iso_days_utc,
+                   %IR.Variable{name: :calendar},
+                   _precision,
+                   _time_zone,
+                   _time_zone_db
+                 ],
                  body: %IR.Block{
                    expressions: [
                      %IR.Case{
-                       condition: %IR.LocalFunctionCall{
-                         function: :impl_for,
-                         args: [%IR.Variable{name: :data, version: 0}]
-                       },
                        clauses: [
                          %IR.Clause{
-                           match: %IR.Variable{name: :x, version: 1},
-                           guards: [
-                             %IR.RemoteFunctionCall{
-                               module: %IR.AtomType{value: :erlang},
-                               function: :orelse,
-                               args: [
-                                 %IR.RemoteFunctionCall{
-                                   module: %IR.AtomType{value: :erlang},
-                                   function: :"=:=",
-                                   args: [
-                                     %IR.Variable{name: :x, version: 1},
-                                     %IR.AtomType{value: false}
-                                   ]
-                                 },
-                                 %IR.RemoteFunctionCall{
-                                   module: %IR.AtomType{value: :erlang},
-                                   function: :"=:=",
-                                   args: [
-                                     %IR.Variable{name: :x, version: 1},
-                                     %IR.AtomType{value: nil}
-                                   ]
-                                 }
-                               ]
-                             }
-                           ],
                            body: %IR.Block{
                              expressions: [
+                               %IR.MatchOperator{
+                                 right: %IR.RemoteFunctionCall{
+                                   module: %IR.Variable{name: :calendar},
+                                   function: :naive_datetime_from_iso_days,
+                                   args: [_iso_days_arg]
+                                 }
+                               }
+                               | _rest
+                             ]
+                           }
+                         }
+                         | _other_clauses
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.to_iso_days/1 (private) extracts calendar
+    # from the struct and calls `calendar.naive_datetime_to_iso_days(year, month, day,
+    # hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   defp to_iso_days(%{calendar: calendar, year: year, month: month, day: day,
+    #          hour: hour, minute: minute, second: second, microsecond: microsecond}) do
+    #     calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "DateTime.to_iso_days/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :to_iso_days, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day},
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_iso_days,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.to_string/1 extracts calendar from the struct
+    # and calls `calendar.datetime_to_string(year, month, day, hour, minute, second,
+    # microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar} = datetime) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset} = datetime
+    #     calendar.datetime_to_string(year, month, day, hour, minute, second,
+    #       microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #   end
+    test "DateTime.to_string/1 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _destructure,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :datetime_to_string,
+                       args: [
+                         _year,
+                         _month,
+                         _day,
+                         _hour,
+                         _minute,
+                         _second,
+                         _microsecond,
+                         _time_zone,
+                         _zone_abbr,
+                         _utc_offset,
+                         _std_offset
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
+    # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
+    # years reach this clause in all Elixir versions:
+    # - Elixir >= 1.18: guard `when calendar != Calendar.ISO or year in -9999..9999`
+    # - Elixir 1.17: guard `when year in -9999..9999`
+    # - Elixir < 1.17: no guard (single clause handles all dates)
+    #
+    # Original source (Elixir >= 1.18):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
+    #       when calendar != Calendar.ISO or year in -9999..9999 do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    #
+    # Original source (Elixir 1.17):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
+    #       when year in -9999..9999 do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    #
+    # Original source (Elixir < 1.17):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _) do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    test "Inspect.Date.inspect/2 dynamically dispatches calendar.date_to_string/3",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Inspect.Date, :inspect, 2)
+      assert [first_clause | _rest] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   },
+                   _opts
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.BitstringType{
+                       segments: [
+                         _prefix,
+                         %IR.BitstringSegment{
+                           value: %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :date_to_string,
+                             args: [_year_arg, _month_arg, _day_arg]
+                           }
+                         },
+                         _suffix,
+                         _closing
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = first_clause
+
+      cond do
+        Version.match?(System.version(), ">= 1.18.0") ->
+          assert [
+                   %IR.RemoteFunctionCall{
+                     function: :orelse,
+                     args: [
+                       %IR.RemoteFunctionCall{
+                         function: :"/=",
+                         args: [%IR.Variable{name: :calendar}, %IR.AtomType{value: Calendar.ISO}]
+                       },
+                       _year_range_check
+                     ]
+                   }
+                 ] = first_clause.clause.guards
+
+        Version.match?(System.version(), ">= 1.17.0") ->
+          assert [
+                   %IR.RemoteFunctionCall{
+                     function: :andalso,
+                     args: [
+                       %IR.RemoteFunctionCall{
+                         function: :is_integer,
+                         args: [%IR.Variable{name: :year}]
+                       },
+                       _year_range_check
+                     ]
+                   }
+                 ] = first_clause.clause.guards
+
+        true ->
+          assert [] = first_clause.clause.guards
+      end
+    end
+
+    # Dynamic dispatch assumption: Inspect.DateTime.inspect/2 destructures calendar from
+    # the struct in the body and calls `calendar.datetime_to_string(year, month, day, hour,
+    # minute, second, microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def inspect(datetime, _) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset,
+    #       calendar: calendar} = datetime
+    #     formatted = calendar.datetime_to_string(year, month, day, hour, minute,
+    #       second, microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #     ...
+    #   end
+    test "Inspect.DateTime.inspect/2 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.DateTime, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :datetime}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :time_zone}, _time_zone},
+                           {%IR.AtomType{value: :zone_abbr}, _zone_abbr},
+                           {%IR.AtomType{value: :utc_offset}, _utc_offset},
+                           {%IR.AtomType{value: :std_offset}, _std_offset},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.MatchOperator{
+                       left: %IR.Variable{name: :formatted},
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :datetime_to_string,
+                         args: [
+                           _year_arg,
+                           _month_arg,
+                           _day_arg,
+                           _hour_arg,
+                           _minute_arg,
+                           _second_arg,
+                           _microsecond_arg,
+                           _time_zone_arg,
+                           _zone_abbr_arg,
+                           _utc_offset_arg,
+                           _std_offset_arg
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Inspect.NaiveDateTime.inspect/2 destructures calendar
+    # from the struct in the body and calls `calendar.naive_datetime_to_string(...)`.
+    # In Elixir >= 1.18 the call is guarded by `if calendar != Calendar.ISO or year in -9999..9999`;
+    # in Elixir < 1.18 the call is unconditional. Calendar.ISO dates reach the dispatch in both.
+    #
+    # Original source (Elixir >= 1.18):
+    #   def inspect(naive_datetime, _) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, calendar: calendar} = naive_datetime
+    #     if calendar != Calendar.ISO or year in -9999..9999 do
+    #       formatted = calendar.naive_datetime_to_string(...)
+    #       ...
+    #
+    # Original source (Elixir < 1.18):
+    #   def inspect(naive_datetime, _) do
+    #     %{...calendar: calendar} = naive_datetime
+    #     formatted = calendar.naive_datetime_to_string(...)
+    #     ...
+    test "Inspect.NaiveDateTime.inspect/2 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.NaiveDateTime, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :naive_datetime}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+
+      # The dispatch `formatted = calendar.naive_datetime_to_string(...)` is in different
+      # IR locations:
+      # - Elixir >= 1.18: inside `if` true branch (compiled to nested Case)
+      # - Elixir < 1.18: directly in body as second expression
+      dispatch_expressions =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          [_destructure, %IR.Case{clauses: [_false_clause, true_clause]}] =
+            fun_def.clause.body.expressions
+
+          assert %IR.Clause{match: %IR.AtomType{value: true}} = true_clause
+          true_clause.body.expressions
+        else
+          [_destructure | rest] = fun_def.clause.body.expressions
+          rest
+        end
+
+      assert [
+               %IR.MatchOperator{
+                 left: %IR.Variable{name: :formatted},
+                 right: %IR.RemoteFunctionCall{
+                   module: %IR.Variable{name: :calendar},
+                   function: :naive_datetime_to_string,
+                   args: [
+                     _year_arg,
+                     _month_arg,
+                     _day_arg,
+                     _hour_arg,
+                     _minute_arg,
+                     _second_arg,
+                     _microsecond_arg
+                   ]
+                 }
+               }
+               | _rest_exprs
+             ] = dispatch_expressions
+    end
+
+    # Dynamic dispatch assumption: Inspect.Time.inspect/2 destructures calendar from the
+    # struct in the body and calls `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def inspect(time, _) do
+    #     %{hour: hour, minute: minute, second: second,
+    #       microsecond: microsecond, calendar: calendar} = time
+    #     "~T[" <> calendar.time_to_string(hour, minute, second, microsecond) <>
+    #       suffix(calendar) <> "]"
+    #   end
+    test "Inspect.Time.inspect/2 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.Time, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :time}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.BitstringType{
+                       segments: [
+                         _prefix,
+                         %IR.BitstringSegment{
+                           value: %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :time_to_string,
+                             args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                           }
+                         },
+                         _suffix,
+                         _closing
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.beginning_of_day/1 extracts calendar from
+    # the struct and calls `calendar.iso_days_to_beginning_of_day(iso_days)`.
+    #
+    # Original source:
+    #   def beginning_of_day(%{calendar: calendar, microsecond: {_, precision}} = naive_datetime) do
+    #     naive_datetime
+    #     |> to_iso_days()
+    #     |> calendar.iso_days_to_beginning_of_day()
+    #     |> from_iso_days(calendar, precision)
+    #   end
+    test "NaiveDateTime.beginning_of_day/1 dynamically dispatches calendar.iso_days_to_beginning_of_day/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :beginning_of_day, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                         {%IR.AtomType{value: :microsecond}, _microsecond}
+                       ]
+                     }
+                   }
+                 ]
+               }
+             } = fun_def
+
+      # The pipe chain compiles to:
+      # from_iso_days(calendar.iso_days_to_beginning_of_day(to_iso_days(ndt)), calendar, precision)
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :from_iso_days,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :iso_days_to_beginning_of_day,
+                           args: [_iso_days]
+                         },
+                         %IR.Variable{name: :calendar},
+                         _precision
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.end_of_day/1 extracts calendar from
+    # the struct and calls `calendar.iso_days_to_end_of_day(iso_days)`.
+    #
+    # Original source:
+    #   def end_of_day(%{calendar: calendar, microsecond: {_, precision}} = naive_datetime) do
+    #     end_of_day =
+    #       naive_datetime
+    #       |> to_iso_days()
+    #       |> calendar.iso_days_to_end_of_day()
+    #       |> from_iso_days(calendar, precision)
+    #     ...
+    #   end
+    test "NaiveDateTime.end_of_day/1 dynamically dispatches calendar.iso_days_to_end_of_day/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :end_of_day, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                         {%IR.AtomType{value: :microsecond}, _microsecond}
+                       ]
+                     }
+                   }
+                 ]
+               }
+             } = fun_def
+
+      # The pipe chain compiles to:
+      # from_iso_days(calendar.iso_days_to_end_of_day(to_iso_days(ndt)), calendar, precision)
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.LocalFunctionCall{
+                         function: :from_iso_days,
+                         args: [
+                           %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :iso_days_to_end_of_day,
+                             args: [_iso_days]
+                           },
+                           %IR.Variable{name: :calendar},
+                           _precision
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.from_iso_days/3 (private) receives calendar
+    # as a parameter and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp from_iso_days(iso_days, calendar, precision) do
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "NaiveDateTime.from_iso_days/3 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :from_iso_days, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_iso_days, %IR.Variable{name: :calendar}, _precision],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days_arg]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.new/8 receives calendar as a parameter
+    # (default Calendar.ISO) and calls both `calendar.valid_date?(year, month, day)` and
+    # `calendar.valid_time?(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def new(year, month, day, hour, minute, second, microsecond, calendar) do
+    #     cond do
+    #       not calendar.valid_date?(year, month, day) -> {:error, :invalid_date}
+    #       not calendar.valid_time?(hour, minute, second, microsecond) -> {:error, :invalid_time}
+    #       true -> ...
+    #     end
+    #   end
+    test "NaiveDateTime.new/8 dynamically dispatches calendar.valid_date?/3 and calendar.valid_time?/4",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, NaiveDateTime, :new, 8)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   _year,
+                   _month,
+                   _day,
+                   _hour,
+                   _minute,
+                   _second,
+                   _microsecond,
+                   %IR.Variable{name: :calendar}
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Cond{
+                       clauses: [
+                         %IR.CondClause{
+                           condition: %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :not,
+                             args: [
                                %IR.RemoteFunctionCall{
-                                 module: %IR.AtomType{value: :erlang},
-                                 function: :error,
-                                 args: [
-                                   %IR.RemoteFunctionCall{
-                                     module: %IR.AtomType{value: Protocol.UndefinedError},
-                                     function: :exception,
-                                     args: [
-                                       %IR.ListType{data: exception_keyword_data}
-                                     ]
-                                   }
-                                 ]
+                                 module: %IR.Variable{name: :calendar},
+                                 function: :valid_date?,
+                                 args: [_year_arg, _month_arg, _day_arg]
                                }
                              ]
                            }
                          },
-                         %IR.Clause{
-                           match: %IR.Variable{name: :x, version: 2},
-                           guards: [],
-                           body: %IR.Block{
-                             expressions: [%IR.Variable{name: :x, version: 2}]
+                         %IR.CondClause{
+                           condition: %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :not,
+                             args: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.Variable{name: :calendar},
+                                 function: :valid_time?,
+                                 args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                               }
+                             ]
                            }
-                         }
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source (Module39):
-    #   raise ArgumentError
-    #
-    # Expanded:
-    #   :erlang.error(ArgumentError.exception([]), :none,
-    #     [error_info: %{module: Exception}])
-    test "raise compiles to :erlang.error/3 with error_info: %{module: Exception}",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Module39, :my_fun, 0)
-
-      %IR.FunctionDefinition{
-        clause: %IR.FunctionClause{
-          body: %IR.Block{
-            expressions: [raise_expr]
-          }
-        }
-      } = clause
-
-      assert raise_expr == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: :erlang},
-               function: :error,
-               args: [
-                 %IR.RemoteFunctionCall{
-                   module: %IR.AtomType{value: ArgumentError},
-                   function: :exception,
-                   args: [%IR.ListType{data: []}]
-                 },
-                 %IR.AtomType{value: :none},
-                 %IR.ListType{
-                   data: [
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :error_info},
-                         %IR.MapType{
-                           data: [
-                             {%IR.AtomType{value: :module}, %IR.AtomType{value: Exception}}
-                           ]
-                         }
-                       ]
-                     }
-                   ]
-                 }
-               ]
-             }
-    end
-
-    # Original source:
-    #   defprotocol Protocol1 do
-    #     def my_fun(data)
-    #   end
-    #
-    # Expanded (after consolidation, one clause per struct + catch-all):
-    #   defp struct_impl_for(Struct1), do: Protocol1.Struct1
-    #   defp struct_impl_for(_), do: nil
-    test "struct_impl_for/1 clauses have struct and implementation module atoms",
-         %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Protocol1, :struct_impl_for, 1)
-
-      assert [struct_1_clause, catch_all_clause] = fun_defs
-
-      assert struct_1_clause == %IR.FunctionDefinition{
-               name: :struct_impl_for,
-               arity: 1,
-               visibility: :private,
-               clause: %IR.FunctionClause{
-                 params: [%IR.AtomType{value: Struct1}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.AtomType{value: Module.safe_concat(Protocol1, Struct1)}
-                   ]
-                 }
-               }
-             }
-
-      assert catch_all_clause == %IR.FunctionDefinition{
-               name: :struct_impl_for,
-               arity: 1,
-               visibility: :private,
-               clause: %IR.FunctionClause{
-                 params: [%IR.MatchPlaceholder{}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [%IR.AtomType{value: nil}]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defimpl Enumerable, for: Function do
-    #     def count(_function), do: {:error, __MODULE__}
-    #   end
-    #
-    # Expanded:
-    #   def count(_function), do: {:error, Enumerable.Function}
-    test "Enumerable impl count/1 body has {:error, __MODULE__} with implementation module atom",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Enumerable.Function, :count, 1)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :count,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.MatchPlaceholder{}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :error},
-                         %IR.AtomType{value: Enumerable.Function}
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defimpl Enumerable, for: Function do
-    #     def member?(_function, _value), do: {:error, __MODULE__}
-    #   end
-    #
-    # Expanded:
-    #   def member?(_function, _value), do: {:error, Enumerable.Function}
-    test "Enumerable impl member?/2 body has {:error, __MODULE__} with implementation module atom",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Enumerable.Function, :member?, 2)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :member?,
-               arity: 2,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.MatchPlaceholder{}, %IR.MatchPlaceholder{}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :error},
-                         %IR.AtomType{value: Enumerable.Function}
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source:
-    #   defimpl Enumerable, for: Function do
-    #     def slice(_function), do: {:error, __MODULE__}
-    #   end
-    #
-    # Expanded:
-    #   def slice(_function), do: {:error, Enumerable.Function}
-    test "Enumerable impl slice/1 body has {:error, __MODULE__} with implementation module atom",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, Enumerable.Function, :slice, 1)
-
-      assert clause == %IR.FunctionDefinition{
-               name: :slice,
-               arity: 1,
-               visibility: :public,
-               clause: %IR.FunctionClause{
-                 params: [%IR.MatchPlaceholder{}],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.TupleType{
-                       data: [
-                         %IR.AtomType{value: :error},
-                         %IR.AtomType{value: Enumerable.Function}
-                       ]
-                     }
-                   ]
-                 }
-               }
-             }
-    end
-
-    # Original source (System.warn/2):
-    #
-    # Elixir >= 1.17:
-    #   defp warn(unit, replacement_unit) do
-    #     IO.warn_once({System, unit}, fn ->
-    #       "deprecated time unit: " <> inspect(unit) <>
-    #         ". A time unit should be " <>
-    #         ":second, :millisecond, :microsecond, :nanosecond, or a positive integer"
-    #     end, _ = 4)
-    #     replacement_unit
-    #   end
-    #
-    # Elixir < 1.17:
-    #   defp warn(unit, replacement_unit) do
-    #     IO.warn_once({System, unit},
-    #       "deprecated time unit: " <> inspect(unit) <>
-    #         ". A time unit should be " <>
-    #         ":second, :millisecond, :microsecond, :nanosecond, or a positive integer",
-    #       _ = 4)
-    #     replacement_unit
-    #   end
-    #
-    # The first argument {System, unit} contains the System module atom as a
-    # namespace identifier for the deduplication key, not as a dependency.
-    test "IO.warn_once/3 first argument contains module atom as deduplication key",
-         %{ir_plt: ir_plt} do
-      assert [clause] = find_fun_defs(ir_plt, System, :warn, 2)
-
-      message_bitstring = %IR.BitstringType{
-        segments: [
-          %IR.BitstringSegment{
-            value: %IR.StringType{value: "deprecated time unit: "},
-            modifiers: [type: :binary]
-          },
-          %IR.BitstringSegment{
-            value: %IR.RemoteFunctionCall{
-              module: %IR.AtomType{value: Kernel},
-              function: :inspect,
-              args: [%IR.Variable{name: :unit, version: 0}]
-            },
-            modifiers: [type: :binary]
-          },
-          %IR.BitstringSegment{
-            value: %IR.StringType{value: ". A time unit should be "},
-            modifiers: [type: :binary]
-          },
-          %IR.BitstringSegment{
-            value: %IR.StringType{
-              value: ":second, :millisecond, :microsecond, :nanosecond, or a positive integer"
-            },
-            modifiers: [type: :binary]
-          }
-        ]
-      }
-
-      # Elixir >= 1.17 wraps the message in an anonymous function; < 1.17 passes it directly.
-      message_arg =
-        if Version.match?(System.version(), ">= 1.17.0") do
-          %IR.AnonymousFunctionType{
-            arity: 0,
-            captured_function: nil,
-            captured_module: nil,
-            clauses: [
-              %IR.FunctionClause{
-                params: [],
-                guards: [],
-                body: %IR.Block{expressions: [message_bitstring]}
-              }
-            ]
-          }
-        else
-          message_bitstring
-        end
-
-      assert clause == %IR.FunctionDefinition{
-               name: :warn,
-               arity: 2,
-               visibility: :private,
-               clause: %IR.FunctionClause{
-                 params: [
-                   %IR.Variable{name: :unit, version: 0},
-                   %IR.Variable{name: :replacement_unit, version: 1}
-                 ],
-                 guards: [],
-                 body: %IR.Block{
-                   expressions: [
-                     %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: IO},
-                       function: :warn_once,
-                       args: [
-                         %IR.TupleType{
-                           data: [
-                             %IR.AtomType{value: System},
-                             %IR.Variable{name: :unit, version: 0}
-                           ]
                          },
-                         message_arg,
-                         %IR.MatchOperator{
-                           left: %IR.MatchPlaceholder{},
-                           right: %IR.IntegerType{value: 4}
-                         }
+                         _true_clause
                        ]
-                     },
-                     %IR.Variable{name: :replacement_unit, version: 1}
+                     }
                    ]
                  }
                }
-             }
+             } = clause_2
     end
 
-    # Protocol implementation fallback clauses that raise Protocol.UndefinedError contain
-    # the protocol module atom in the exception keyword list. This pattern is not specific to
-    # Enumerable - it appears in any protocol impl with a guarded clause and a fallback,
-    # e.g. String.Chars.BitString.to_string/1, List.Chars.BitString.to_charlist/1.
+    # Dynamic dispatch assumption: NaiveDateTime.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    # microsecond, duration)`. NaiveDateTime.shift/2 was added in Elixir 1.17.0.
     #
-    # Original source (Enumerable.Function.reduce/3 as a concrete example):
-    #   defimpl Enumerable, for: Function do
-    #     def reduce(function, acc, fun) when is_function(function, 2), do: function.(acc, fun)
-    #     def reduce(function, _acc, _fun) do
-    #       raise Protocol.UndefinedError,
-    #         protocol: Enumerable, value: function,
-    #         description: "only anonymous functions of arity 2 are enumerable"
-    #     end
+    # Original source:
+    #   def shift(%{calendar: calendar} = naive_datetime, duration) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond} = naive_datetime
+    #     {year, month, day, hour, minute, second, microsecond} =
+    #       calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    #         microsecond, __duration__!(duration))
+    #     ...
     #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "NaiveDateTime.shift/2 dynamically dispatches calendar.shift_naive_datetime/8",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year,
+                             _month,
+                             _day,
+                             _hour,
+                             _minute,
+                             _second,
+                             _microsecond,
+                             _duration_arg
+                           ]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.to_gregorian_seconds/1 extracts calendar
+    # from the struct and calls `calendar.naive_datetime_to_iso_days(year, month, day,
+    # hour, minute, second, microsecond)`.
     #
-    # Expanded:
-    #   def reduce(function, acc, fun) when is_function(function, 2), do: function.(acc, fun)
-    #   def reduce(function, _, _) do
-    #     :erlang.error(Protocol.UndefinedError.exception(
-    #       protocol: Enumerable, value: function,
-    #       description: "only anonymous functions of arity 2 are enumerable"))
+    # Original source:
+    #   def to_gregorian_seconds(%{calendar: calendar, year: year, month: month, day: day,
+    #         hour: hour, minute: minute, second: second, microsecond: {microsecond, precision}}) do
+    #     {days, day_fraction} =
+    #       calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second,
+    #         {microsecond, precision})
+    #     ...
     #   end
-    test "protocol implementation fallback clause has protocol module atom in Protocol.UndefinedError.exception/1 call",
+    test "NaiveDateTime.to_gregorian_seconds/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
          %{ir_plt: ir_plt} do
-      fun_defs = find_fun_defs(ir_plt, Enumerable.Function, :reduce, 3)
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_gregorian_seconds, 1)
 
-      assert [guarded_clause, fallback_clause] = fun_defs
-
-      assert guarded_clause == %IR.FunctionDefinition{
-               name: :reduce,
-               arity: 3,
-               visibility: :public,
+      assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
                  params: [
-                   %IR.Variable{name: :function, version: 0},
-                   %IR.Variable{name: :acc, version: 1},
-                   %IR.Variable{name: :fun, version: 2}
-                 ],
-                 guards: [
-                   %IR.RemoteFunctionCall{
-                     module: %IR.AtomType{value: :erlang},
-                     function: :is_function,
-                     args: [
-                       %IR.Variable{name: :function, version: 0},
-                       %IR.IntegerType{value: 2}
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day},
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond}
                      ]
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
-                     %IR.AnonymousFunctionCall{
-                       function: %IR.Variable{name: :function, version: 0},
-                       args: [
-                         %IR.Variable{name: :acc, version: 1},
-                         %IR.Variable{name: :fun, version: 2}
-                       ]
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_to_iso_days,
+                         args: [
+                           _year_arg,
+                           _month_arg,
+                           _day_arg,
+                           _hour_arg,
+                           _minute_arg,
+                           _second_arg,
+                           _microsecond_arg
+                         ]
+                       }
                      }
+                     | _rest
                    ]
                  }
                }
-             }
+             } = fun_def
+    end
 
-      assert fallback_clause == %IR.FunctionDefinition{
-               name: :reduce,
-               arity: 3,
-               visibility: :public,
+    # Dynamic dispatch assumption: NaiveDateTime.to_iso_days/1 (private) extracts calendar
+    # from the struct and calls `calendar.naive_datetime_to_iso_days(year, month, day,
+    # hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   defp to_iso_days(%{calendar: calendar, year: year, month: month, day: day,
+    #          hour: hour, minute: minute, second: second, microsecond: microsecond}) do
+    #     calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
+    #   end
+    # credo:disable-for-lines:32 Credo.Check.Design.DuplicatedCode
+    test "NaiveDateTime.to_iso_days/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_iso_days, 1)
+
+      assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
                  params: [
-                   %IR.Variable{name: :function, version: 0},
-                   %IR.MatchPlaceholder{},
-                   %IR.MatchPlaceholder{}
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day},
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond}
+                     ]
+                   }
                  ],
-                 guards: [],
                  body: %IR.Block{
                    expressions: [
                      %IR.RemoteFunctionCall{
-                       module: %IR.AtomType{value: :erlang},
-                       function: :error,
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_iso_days,
                        args: [
-                         %IR.RemoteFunctionCall{
-                           module: %IR.AtomType{value: Protocol.UndefinedError},
-                           function: :exception,
-                           args: [
-                             %IR.ListType{
-                               data: [
-                                 %IR.TupleType{
-                                   data: [
-                                     %IR.AtomType{value: :protocol},
-                                     %IR.AtomType{value: Enumerable}
-                                   ]
-                                 },
-                                 %IR.TupleType{
-                                   data: [
-                                     %IR.AtomType{value: :value},
-                                     %IR.Variable{name: :function, version: 0}
-                                   ]
-                                 },
-                                 %IR.TupleType{
-                                   data: [
-                                     %IR.AtomType{value: :description},
-                                     %IR.StringType{
-                                       value: "only anonymous functions of arity 2 are enumerable"
-                                     }
-                                   ]
-                                 }
-                               ]
-                             }
-                           ]
-                         }
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg
                        ]
                      }
                    ]
                  }
                }
-             }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.to_string/1 extracts calendar from the
+    # struct and calls `calendar.naive_datetime_to_string(year, month, day, hour, minute,
+    # second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar} = naive_datetime) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond} = naive_datetime
+    #     calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "NaiveDateTime.to_string/1 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _destructure,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_string,
+                       args: [
+                         _year,
+                         _month,
+                         _day,
+                         _hour,
+                         _minute,
+                         _second,
+                         _microsecond
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
+    # the struct and calls `calendar.date_to_string(year, month, day)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.date_to_string(year, month, day)
+    #   end
+    test "String.Chars.Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Date, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :date_to_string,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.DateTime.to_string/1 destructures calendar
+    # from the struct in the body and calls `calendar.datetime_to_string(year, month, day,
+    # hour, minute, second, microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def to_string(datetime) do
+    #     %{calendar: calendar, year: year, month: month, day: day, hour: hour,
+    #       minute: minute, second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset} = datetime
+    #     calendar.datetime_to_string(year, month, day, hour, minute, second,
+    #       microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #   end
+    test "String.Chars.DateTime.to_string/1 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.DateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :datetime}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :time_zone}, _time_zone},
+                           {%IR.AtomType{value: :zone_abbr}, _zone_abbr},
+                           {%IR.AtomType{value: :utc_offset}, _utc_offset},
+                           {%IR.AtomType{value: :std_offset}, _std_offset}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :datetime_to_string,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg,
+                         _time_zone_arg,
+                         _zone_abbr_arg,
+                         _utc_offset_arg,
+                         _std_offset_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.NaiveDateTime.to_string/1 destructures
+    # calendar from the struct in the body and calls
+    # `calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(naive_datetime) do
+    #     %{calendar: calendar, year: year, month: month, day: day, hour: hour,
+    #       minute: minute, second: second, microsecond: microsecond} = naive_datetime
+    #     calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "String.Chars.NaiveDateTime.to_string/1 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.NaiveDateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :naive_datetime}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_string,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.Time.to_string/1 destructures calendar
+    # from the struct in the body and calls
+    # `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(time) do
+    #     %{hour: hour, minute: minute, second: second,
+    #       microsecond: microsecond, calendar: calendar} = time
+    #     calendar.time_to_string(hour, minute, second, microsecond)
+    #   end
+    test "String.Chars.Time.to_string/1 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Time, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :time}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_string,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Time.convert/2 receives calendar as a parameter and
+    # calls `calendar.time_from_day_fraction(day_fraction)`.
+    #
+    # Original source:
+    #   def convert(%{microsecond: {_, precision}} = time, calendar) do
+    #     {hour, minute, second, {microsecond, _}} =
+    #       time
+    #       |> to_day_fraction()
+    #       |> calendar.time_from_day_fraction()
+    #     ...
+    #   end
+    test "Time.convert/2 dynamically dispatches calendar.time_from_day_fraction/1",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Time, :convert, 2)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_time, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :time_from_day_fraction,
+                         args: [_day_fraction]
+                       }
+                     },
+                     _struct_assignment,
+                     _ok_tuple
+                   ]
+                 }
+               }
+             } = clause_2
+    end
+
+    # Dynamic dispatch assumption: Time.from_seconds_after_midnight/3 receives calendar
+    # as a parameter (default Calendar.ISO) and calls
+    # `calendar.time_from_day_fraction({seconds_in_day, @seconds_per_day})`.
+    #
+    # Original source:
+    #   def from_seconds_after_midnight(seconds, microsecond \\ {0, 0}, calendar \\ Calendar.ISO)
+    #       when is_integer(seconds) do
+    #     seconds_in_day = Integer.mod(seconds, @seconds_per_day)
+    #     {hour, minute, second, {_, _}} =
+    #       calendar.time_from_day_fraction({seconds_in_day, @seconds_per_day})
+    #     ...
+    #   end
+    test "Time.from_seconds_after_midnight/3 dynamically dispatches calendar.time_from_day_fraction/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :from_seconds_after_midnight, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_seconds, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     _seconds_in_day,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :time_from_day_fraction,
+                         args: [_day_fraction]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Time.new/5 receives calendar as a parameter
+    # (default Calendar.ISO) and calls `calendar.valid_time?(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def new(hour, minute, second, {microsecond, precision}, calendar)
+    #       when is_integer(hour) and ... do
+    #     case calendar.valid_time?(hour, minute, second, {microsecond, precision}) do
+    #       ...
+    #     end
+    #   end
+    test "Time.new/5 dynamically dispatches calendar.valid_time?/4",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Time, :new, 5)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_hour, _minute, _second, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :valid_time?,
+                         args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                       }
+                     }
+                   ]
+                 }
+               }
+             } = clause_2
+    end
+
+    # Dynamic dispatch assumption: Time.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_time(hour, minute, second, microsecond, duration)`.
+    # Time.shift/2 was added in Elixir 1.17.0.
+    #
+    # Original source:
+    #   def shift(%{calendar: calendar} = time, duration) do
+    #     %{hour: hour, minute: minute, second: second, microsecond: microsecond} = time
+    #     {hour, minute, second, microsecond} =
+    #       calendar.shift_time(hour, minute, second, microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "Time.shift/2 dynamically dispatches calendar.shift_time/5",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, Time, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_time,
+                           args: [_hour, _minute, _second, _microsecond, _duration_arg]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: Time.to_day_fraction/1 (private) extracts calendar
+    # from the struct and calls `calendar.time_to_day_fraction(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   defp to_day_fraction(%{hour: hour, minute: minute, second: second,
+    #          microsecond: {_, _} = microsecond, calendar: calendar}) do
+    #     calendar.time_to_day_fraction(hour, minute, second, microsecond)
+    #   end
+    test "Time.to_day_fraction/1 dynamically dispatches calendar.time_to_day_fraction/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :to_day_fraction, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond},
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_day_fraction,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Time.to_string/1 extracts calendar from the struct
+    # and calls `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(%{hour: hour, minute: minute, second: second,
+    #         microsecond: microsecond, calendar: calendar}) do
+    #     calendar.time_to_string(hour, minute, second, microsecond)
+    #   end
+    test "Time.to_string/1 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond},
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_string,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
     end
   end
 end
