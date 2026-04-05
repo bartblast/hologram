@@ -6,6 +6,8 @@ defmodule HologramFeatureTests.OperatorsPage do
   import HologramFeatureTests.Operators, only: [+++: 2]
   import Kernel, except: [+: 2, inspect: 1]
 
+  alias HologramFeatureTests.ModuleFixture3
+
   route "/operators"
 
   layout HologramFeatureTests.Components.DefaultLayout
@@ -211,7 +213,11 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:". (remote call)", _params, component) do
-    module = HologramFeatureTests.ModuleFixture3
+    # Explicit call to trick Hologram into including ModuleFixture3.reverse/1 in the bundle.
+    # TODO: replace with MFA whitelisting once it's supported in Hologram.
+    ModuleFixture3.reverse([@integer_c, @integer_b, @integer_a])
+
+    module = ModuleFixture3
     result = module.reverse([@integer_c, @integer_b, @integer_a])
 
     put_state(component, :result, result)
