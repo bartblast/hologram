@@ -127,18 +127,6 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
     put_state(component, :result, label)
   end
 
-  def action(:async_dynamic_call, _params, component) do
-    result =
-      :helpers
-      |> JS.call(:asyncSum, [17, 16])
-      |> Task.await()
-
-    module = HologramFeatureTests.ModuleFixture3
-    is_int = module.is_integer(result)
-
-    put_state(component, :result, {result, is_int})
-  end
-
   def action(:async_eval, _params, component) do
     result =
       "new Promise(resolve => setTimeout(() => resolve(88), 50))"
