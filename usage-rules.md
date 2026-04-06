@@ -90,3 +90,11 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Manage session: `put_session(server, :key, value)`, `get_session(server, :key)`, `delete_session(server, :key)`.
 - Manage cookies: `put_cookie(server, "key", value)`, `get_cookie(server, "key")`, `delete_cookie(server, "key")`.
 - Commands can be triggered from templates via longhand event syntax or from actions via `put_command/2`/`put_command/3`.
+
+## Navigation
+
+- Use `Hologram.UI.Link` for navigation links: `<Link to={MyPage}>text</Link>`. **Not** `<.link navigate={...}>` or `live_redirect`.
+- With params: `<Link to={MyPage, id: 123}>text</Link>`.
+- Programmatic navigation from actions: `put_page(component, MyPage)` or `put_page(component, MyPage, id: 123)`.
+- Hologram prefetches pages on `$pointer_down` for near-instant transitions.
+- Each page is loaded fresh from the server. Browser history (back/forward) works automatically.
