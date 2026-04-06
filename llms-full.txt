@@ -3390,3 +3390,36 @@ Custom amounts and creative sponsorship arrangements are also welcome.
 - **Advocate for corporate sponsorship** - If your company is interested in Hologram, consider advocating within your organization
 - **Consider consulting** - I'm available for consulting to help explore Hologram's potential for your specific needs
 - **Spread the word** - Talk about Hologram at meetups, conferences, or in your local Elixir community
+
+## Resources
+
+### Community
+
+Connect with other Hologram developers, ask questions, share your projects, and stay up to date with the latest developments.
+
+- **Elixir Forum** (https://elixirforum.com/hologram) - In-depth discussions, questions, and announcements
+- **Discord** (https://discord.gg/huJWNuqt8J) - Real-time conversations, quick questions, and community chat
+- **Slack** (https://elixir-lang.slack.com/channels/hologram) - Chat in the #hologram channel on the Elixir Slack workspace
+- **X / Twitter** (https://x.com/Bart_Blast) - Release announcements and project updates
+- **Bluesky** (https://bsky.app/profile/bartblast.com) - Release announcements and project updates
+- **LinkedIn** (https://www.linkedin.com/in/bartblast/) - Release announcements and project updates
+
+### Courses
+
+Get early access to comprehensive Hologram video courses.
+
+Learn to build real-world applications through step-by-step video tutorials that start with the Hologram basics and progress to recreating popular applications like Slack, Figma, and Spotify, as well as games like Tetris. You'll gain hands-on experience with different types of interfaces and functionality while learning frontend development patterns, component architecture, and state management.
+
+Beyond Hologram itself, you'll learn how to integrate with popular Elixir libraries like Ash, Ecto, Oban, and many others. Each course includes practical projects you can use as templates for your own work.
+
+The courses will be offered at an affordable price, with all proceeds going directly toward sustaining the Hologram project and supporting its ongoing development.
+
+Join the waiting list at https://hologram.page/courses.
+
+### Newsletter
+
+Join the growing community following Hologram's journey.
+
+Every month, you'll get updates on development milestones, ecosystem news, and insights from the Hologram world. Think of it as your monthly check-in with everything Hologram-related. Whether it's new features being worked on, interesting discussions in the community, or updates on the framework's direction, you'll get a nice overview of what's been happening.
+
+Subscribe at https://hologram.page/newsletter.
