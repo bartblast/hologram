@@ -32,7 +32,7 @@ defmodule Hologram.Generators.AIRules do
 
   defp append_marked_section(content, marked_content) do
     trimmed = String.trim_trailing(content)
-    trimmed <> "\n\n" <> marked_content <> "\n"
+    trimmed <> "\n\n" <> marked_content
   end
 
   defp build_marked_content(content) do
@@ -41,11 +41,17 @@ defmodule Hologram.Generators.AIRules do
       |> String.trim()
       |> strip_h1_heading()
 
-    "#{@marker_start}\n## Hologram\n\n#{stripped}\n#{@marker_end}"
+    """
+    #{@marker_start}
+    ## Hologram
+
+    #{stripped}
+    #{@marker_end}
+    """
   end
 
   defp create_file(path, filename, marked_content) do
-    File.write!(path, marked_content <> "\n")
+    File.write!(path, marked_content)
     print("Created #{filename}")
   end
 
@@ -59,7 +65,7 @@ defmodule Hologram.Generators.AIRules do
   end
 
   defp replace_between_markers(content, marked_content) do
-    pattern = ~r/#{Regex.escape(@marker_start)}.*?#{Regex.escape(@marker_end)}/s
+    pattern = ~r/#{Regex.escape(@marker_start)}.*?#{Regex.escape(@marker_end)}\r?\n?/s
     String.replace(content, pattern, marked_content)
   end
 
