@@ -21,7 +21,7 @@ defmodule Mix.Tasks.Holo.Gen.AgentsMdTest do
     clean_dir(test_dir)
 
     source_path = Path.join(test_dir, "usage-rules.md")
-    File.write!(source_path, "# Rules\n\n- Rule one\n")
+    File.write!(source_path, "- Rule one\n")
 
     %{
       source_path: source_path,

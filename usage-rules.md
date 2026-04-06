@@ -1,5 +1,3 @@
-# Hologram Usage Rules
-
 For full documentation, see deps/hologram/llms-full.txt or https://hologram.page/llms.txt
 
 ## Common Pitfalls

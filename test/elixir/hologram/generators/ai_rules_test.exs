@@ -26,8 +26,6 @@ defmodule Hologram.Generators.AIRulesTest do
     source_path = Path.join(test_dir, "usage-rules.md")
 
     File.write!(source_path, """
-    # Test Rules
-
     - Rule one
     - Rule two
     """)

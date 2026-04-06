@@ -36,16 +36,11 @@ defmodule Hologram.Generators.AIRules do
   end
 
   defp build_marked_content(content) do
-    stripped =
-      content
-      |> String.trim()
-      |> strip_h1_heading()
-
     """
     #{@marker_start}
     ## Hologram
 
-    #{stripped}
+    #{String.trim(content)}
     #{@marker_end}
     """
   end
@@ -67,10 +62,6 @@ defmodule Hologram.Generators.AIRules do
   defp replace_between_markers(content, marked_content) do
     pattern = ~r/#{Regex.escape(@marker_start)}.*?#{Regex.escape(@marker_end)}\r?\n?/s
     String.replace(content, pattern, marked_content)
-  end
-
-  defp strip_h1_heading(content) do
-    String.replace(content, ~r/^# .+(\r?\n)*/, "")
   end
 
   defp update_file(path, filename, marked_content) do
