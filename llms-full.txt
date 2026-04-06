@@ -1,0 +1,327 @@
+# Hologram
+
+> Full-stack isomorphic Elixir web framework that lets you build interactive web applications entirely in Elixir, without writing JavaScript.
+
+- [Website](https://hologram.page),
+- [GitHub](https://github.com/bartblast/hologram)
+- [HexDocs](https://hexdocs.pm/hologram)
+
+## Guides
+
+### Introduction
+
+Hologram is a full-stack isomorphic Elixir web framework that runs on top of Phoenix. It lets developers create dynamic, interactive web applications entirely in Elixir. Through intelligent code analysis and transformation, Hologram compiles the necessary parts of your Elixir code to JavaScript, delivering modern frontend functionality without requiring any JavaScript frameworks or direct JavaScript coding.
+
+#### Key Features
+
+- Pure Elixir development: write your entire web application in Elixir without needing to write JavaScript code
+- Client-side state: state management happens in the browser for snappy user interfaces
+- Automatic code distribution: Hologram automatically handles the separation and conversion of client/server code
+- Seamless communication: client-server interaction happens automatically through HTTP/2 persistent connections - no manual setup needed, with the speed of WebSockets and better scalability
+
+#### Framework Philosophy
+
+Hologram was created with several key principles in mind:
+
+- Developer experience: focus on writing features instead of boilerplate code
+- Convention over configuration: follow established patterns while maintaining flexibility
+- Unified language: use Elixir for both client and server-side logic
+- Component-based architecture: build applications using reusable building blocks
+
+#### Inspiration
+
+Hologram draws inspiration from several successful web technologies: Elm, Phoenix LiveView, Surface and Ruby on Rails.
+
+### Installation
+
+This guide will walk you through the installation process step by step.
+
+#### Prerequisites
+
+- `Elixir` version 1.15 or higher
+- `OTP` version 24 or higher
+- A working `Phoenix` application (see Phoenix installation guide: https://hexdocs.pm/phoenix/installation.html#phoenix)
+- `Node.js` version 20 or higher and `npm`, if not already installed, you can get them via `asdf`:
+
+```
+$ asdf plugin add nodejs
+$ asdf install nodejs latest
+$ asdf global nodejs latest
+```
+
+See asdf installation guide (https://asdf-vm.com/guide/getting-started.html) if you need to install asdf first.
+
+#### 1. Add Hologram Package
+
+Add the Hologram package to your dependencies list in `mix.exs`:
+
+```elixir
+{:hologram, "~> 0.8"},
+```
+
+#### 2. Fetch Dependencies
+
+Run the following command to fetch the Hologram package:
+
+```
+$ mix deps.get
+```
+
+#### 3. Configure Compiler
+
+Add the Hologram compiler to your project configuration in `mix.exs`:
+
+```elixir
+def project do
+  [
+    # ...
+    compilers: Mix.compilers() ++ [:hologram],
+    # ...
+  ]
+end
+```
+
+#### 4. Configure Router
+
+Add the Hologram router plug before your Phoenix router plug in your endpoint:
+
+```elixir
+defmodule MyAppWeb.Endpoint do
+  # ...
+
+  plug Hologram.Router
+  plug MyAppWeb.Router
+end
+```
+
+#### 5. Configure Static Asset Serving
+
+Add the Hologram directory to the list of served static directories in your endpoint:
+
+```elixir
+plug Plug.Static,
+  # ...
+  only: ["hologram" | MyAppWeb.static_paths()]
+```
+
+#### 6. Configure Formatter
+
+Import Hologram formatter rules in `.formatter.exs`:
+
+```elixir
+[
+  # ...
+  import_deps: [..., :hologram]
+  # ...
+]
+```
+
+#### 7. Update GitIgnore
+
+Add the following line to your `.gitignore` file to exclude Hologram generated JavaScript bundles:
+
+```
+# Hologram generated JavaScript bundles.
+/priv/static/hologram/
+```
+
+#### 8. Optional: Configure App Directory
+
+Many developers prefer to organize their Hologram pages and components in an `app` directory outside of `lib` for better project structure. If you want to use this approach, modify your existing `elixirc_paths/1` functions in `mix.exs` to include the `app` directory:
+
+```elixir
+defp elixirc_paths(:test), do: ["app", "lib", "test/support"]
+defp elixirc_paths(_env), do: ["app", "lib"]
+```
+
+This allows you to organize your code like `app/pages/`, `app/components/`, etc., which many developers find cleaner than keeping everything in `lib/`.
+
+#### Next Steps
+
+After completing the installation, you can start building your isomorphic web application with Hologram. For more information on how to use Hologram's features, please refer to the website's Documentation section.
+
+#### Notes
+
+- Make sure all dependencies are properly installed and configured
+- Verify that your Phoenix application is properly set up before installing Hologram
+
+### Quick Start
+
+Before starting, make sure you have installed Hologram correctly by following the Installation Guide.
+
+Let's build a simple blog application to demonstrate Hologram's key features. Our blog will have:
+
+- A home page listing blog posts
+- Individual post pages
+- A layout with navigation
+- The ability to like posts
+
+#### Creating the Layout
+
+First, let's create a layout that will be shared across all pages:
+
+```elixir
+defmodule Blog.MainLayout do
+  use Hologram.Component
+
+  alias Hologram.UI.Link
+  alias Hologram.UI.Runtime
+
+  def template do
+    ~HOLO"""
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <title>My Blog</title>
+        <Runtime />
+      </head>
+      <body>
+        <nav>
+          <Link to={Blog.HomePage}>Home</Link>
+        </nav>
+        <main>
+          <slot />
+        </main>
+      </body>
+    </html>
+    """
+  end
+end
+```
+
+#### Creating the Home Page
+
+Now let's create the home page that lists blog posts:
+
+```elixir
+defmodule Blog.HomePage do
+  use Hologram.Page
+  alias Blog.Components.PostPreview
+
+  route "/"
+
+  layout Blog.MainLayout
+
+  def init(_params, component, _server) do
+    # In real app, fetch from database
+    posts = [
+      %{id: 1, title: "First Post", excerpt: "This is my first post"},
+      %{id: 2, title: "Second Post", excerpt: nil}
+    ]
+
+    put_state(component, :posts, posts)
+  end
+
+  def template do
+    ~HOLO"""
+    <h1>Welcome to my Blog</h1>
+
+    <div class="posts">
+      {%for post <- @posts}
+        <PostPreview post={post} />
+      {/for}
+    </div>
+    """
+  end
+end
+```
+
+#### Creating a Post Preview Component
+
+Let's create a reusable component for displaying post previews:
+
+```elixir
+defmodule Blog.Components.PostPreview do
+  use Hologram.Component
+  alias Hologram.UI.Link
+
+  prop :post, :map
+
+  def template do
+    ~HOLO"""
+    <article class="post-preview">
+      <h2>{@post.title}</h2>
+      <p>{@post.excerpt}</p>
+      <Link to={Blog.PostPage, id: @post.id}>Read more</Link>
+    </article>
+    """
+  end
+end
+```
+
+#### Creating the Post Page
+
+Now let's create a page for individual posts with a like button:
+
+```elixir
+defmodule Blog.PostPage do
+  use Hologram.Page
+
+  route "/posts/:id"
+
+  param :id, :integer
+
+  layout Blog.MainLayout
+
+  def init(params, component, _server) do
+    # In real app, fetch from database
+    post = %{
+      id: params.id,
+      title: "Example Post",
+      content: "This is the full content...",
+      likes: 0
+    }
+
+    put_state(component, :post, post)
+  end
+
+  def template do
+    ~HOLO"""
+    <article>
+      <h1>{@post.title}</h1>
+      <p>{@post.content}</p>
+
+      <div class="likes">
+        Likes: {@post.likes}
+        <button $click="like_post">Like</button>
+      </div>
+    </article>
+    """
+  end
+
+  def action(:like_post, _params, component) do
+    # Update likes locally first for instant feedback
+    component
+    |> put_state([:post, :likes], component.state.post.likes + 1)
+    |> put_command(:save_like, post_id: component.state.post.id)
+  end
+
+  def command(:save_like, params, server) do
+    # In real app, save to database
+    IO.puts("Liked post #{params.post_id}")
+    server
+  end
+end
+```
+
+#### Key Concepts Demonstrated
+
+1. Pages: both `HomePage` and `PostPage` are Hologram pages with their own routes
+2. Components: the `PostPreview` component shows how to create reusable UI elements
+3. Layout: the `MainLayout` provides a consistent structure across pages
+4. Template Syntax:
+   - Using `{%for}` loops
+   - Interpolating values with `{@var}`
+   - Event binding with `$click`
+5. Navigation: using `Link` component to navigate between pages
+6. State Management: using `put_state/3` to manage component state
+7. Actions & Commands: the like button demonstrates:
+   - Client-side action for immediate UI update
+   - Server-side command for persistence
+8. Props: component properties with the `prop/2` macro
+9. Parameters: route parameters with the `param/2` macro
+
+This example demonstrates the basic building blocks of a Hologram application. The framework handles the client-server communication and state management automatically, letting you focus on building features.
+
+Remember that Hologram keeps state on the client side for better performance while using commands for server-side operations when needed.
