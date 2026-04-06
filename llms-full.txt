@@ -1343,3 +1343,131 @@ defmodule MyApp.Components.Counter do
   # ...
 end
 ```
+
+### Commands
+
+Commands in Hologram are server-side operations that allow you to:
+
+- Execute server-side logic
+- Access server-only resources (like databases, files, or APIs)
+- Manage server-side state (cookies and session)
+- Perform privileged operations
+- Trigger client-side actions (like updating UI state)
+
+They are typically used for operations that require server processing, and are always executed asynchronously.
+
+#### Defining Commands
+
+Commands are defined as functions in your page or component modules using the following syntax:
+
+```elixir
+def command(name, params, server) do
+  # Command logic here
+end
+```
+
+For example:
+
+```elixir
+def command(:save_user, params, server) do
+  case MyApp.Users.create(params) do
+    {:ok, user} ->
+      put_action(server, :user_saved, user: user)
+
+    {:error, changeset} ->
+      put_action(server, :validation_failed, errors: changeset.errors)
+  end
+end
+```
+
+#### Command Parameters
+
+Commands receive three arguments:
+
+- `name` - the atom representing the command name
+- `params` - a map containing:
+  - Custom parameters that can come from:
+    - Template event attributes
+    - Actions via `put_command/3`
+  - Event data under the `:event` key (see Events for details about event data)
+- `server` - the current `%Server{}` struct
+
+#### Command Results
+
+Commands must return a `%Server{}` struct. This struct not only manages server-side state (session and cookies) but also includes instructions for what happens next through functions that can be called on it. These functions are pure - they don't cause any side effects and simply return a new modified `%Server{}` struct. Since these functions return the modified `%Server{}` struct, they can be chained together using the pipe operator `|>`, allowing for a clean and composable way to combine multiple state changes and behaviors.
+
+Within a command, you can:
+
+##### Trigger a Client Action
+
+Action with the specified name without any additional parameters:
+
+```elixir
+put_action(server, :my_action)
+```
+
+Action with the specified name and additional parameters provided as a keyword list:
+
+```elixir
+put_action(server, :my_action, param_1: value_1, param_2: value_2)
+```
+
+Action using the longhand syntax (where `params`, `target`, and `delay` are optional):
+
+```elixir
+put_action(server, name: :my_action, target: "other_component", params: %{key: value})
+```
+
+Using an `%Action{}` struct:
+
+```elixir
+put_action(server, %Action{name: :my_action})
+```
+
+##### Update Session Data
+
+Session data can be managed using the session functions. For example, using `put_session/3`:
+
+```elixir
+put_session(server, :user_id, user.id)
+```
+
+See the Session documentation for more details on managing session data.
+
+##### Update Cookies
+
+Browser cookies can be managed using the cookie functions. For example, using `put_cookie/3`:
+
+```elixir
+put_cookie(server, "remember_token", token)
+```
+
+See the Cookies documentation for more details on managing cookies.
+
+##### Navigate to Another Page (coming soon)
+
+Future versions of Hologram will support server-side navigation, for example using `put_page/3`:
+
+```elixir
+put_page(server, ProductPage, id: product.id)
+```
+
+#### Triggering Commands
+
+Commands can be triggered using event attributes in templates or from actions. For detailed information about event binding syntax and available event types, see the Events documentation.
+
+##### From Actions
+
+Commands can also be triggered from actions using `put_command/3`:
+
+```elixir
+def action(:save_form, params, component) do
+  component
+  |> put_state(:saving, true)
+  |> put_command(:save_user, user: params.user)
+end
+```
+
+#### Command Targets
+
+By default, commands are executed on the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for execution using the `target` parameter. For more information about event targets, see the Events documentation.
