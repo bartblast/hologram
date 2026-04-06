@@ -127,3 +127,15 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Session keys must be atoms or strings.
 - Sessions can store any Elixir data type (maps, lists, tuples, etc.).
 - Session data cannot be read by client-side code. Use cookies if you need client-side access.
+
+## Cookies
+
+- Cookies are managed server-side. Use them in `init/3` and commands only.
+- Cookie keys must be **strings** (not atoms).
+- Read: `get_cookie(server, "key")` or `get_cookie(server, "key", default)`.
+- Write: `put_cookie(server, "key", value)` or `put_cookie(server, "key", value, opts)`.
+- Delete: `delete_cookie(server, "key")`.
+- Cookies can store complex Elixir data structures (maps, lists, etc.) - Hologram handles encoding/decoding automatically.
+- Default cookie options: `http_only: true`, `path: "/"`, `same_site: :lax`, `secure: true`.
+- Custom options: `http_only`, `path`, `same_site` (`:strict`, `:lax`, `:none`), `secure`, `max_age`, `domain`.
+- Use sessions for sensitive data. Use cookies when you need client-side access or specific cookie behavior.
