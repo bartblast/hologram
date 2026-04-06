@@ -895,3 +895,70 @@ The tradeoff is that you can't have two ambiguous parameterized routes at the sa
 #### Component ID
 
 The page is always assigned a component ID (cid) of `"page"`. This is important to remember when targeting actions or commands at the page.
+
+### Layouts
+
+Layouts are regular components that serve as the root of the component tree for pages. They don't have any specialized features - they are just components that wrap the page's content. For detailed information about components, see the Components documentation.
+
+#### Specifying a Layout for a Page
+
+Each page must specify which layout component to use. This can be done in one of the following ways.
+
+Using the `layout/1` macro to specify just the layout component:
+
+```elixir
+layout MyApp.MainLayout
+```
+
+Using the `layout/2` macro to specify the layout component and its props:
+
+```elixir
+layout MyApp.MainLayout, page_title: "My Page", show_sidebar?: true
+```
+
+Using the `layout/1` macro and setting props through the page's `init/3` function:
+
+```elixir
+layout MyApp.MainLayout
+
+def init(_params, component, _server) do
+  put_state(component, page_title: "My Page", show_sidebar?: true)
+end
+```
+
+#### Layout Template
+
+A layout template must include:
+
+- The `Hologram.UI.Runtime` component inside the `head` tag - it contains Hologram runtime and page JS bundles
+- The `<slot />` tag where the page content will be inserted
+
+#### Basic Example
+
+Here's a complete layout component implementation:
+
+```elixir
+defmodule MyApp.MainLayout do
+  use Hologram.Component
+
+  prop :page_title, :string
+
+  def template do
+    ~HOLO"""
+    <html>
+      <head>
+        <title>{@page_title}</title>
+        <Hologram.UI.Runtime />
+      </head>
+      <body>
+        <slot />
+      </body>
+    </html>
+    """
+  end
+end
+```
+
+#### Component ID
+
+The layout component is always assigned a component ID (cid) of `"layout"`. This is important to remember when targeting actions or commands at the layout component.
