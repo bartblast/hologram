@@ -2,7 +2,7 @@
 
 > Full-stack isomorphic Elixir web framework that lets you build interactive web applications entirely in Elixir, without writing JavaScript.
 
-- [Website](https://hologram.page),
+- [Website](https://hologram.page)
 - [GitHub](https://github.com/bartblast/hologram)
 - [HexDocs](https://hexdocs.pm/hologram)
 
