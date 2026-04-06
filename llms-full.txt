@@ -1848,3 +1848,194 @@ When using Context, keep these best practices in mind:
 - Use namespaced keys to avoid naming conflicts
 - Keep context values as simple as possible - avoid storing complex objects or functions
 - Document the context keys your components expect to receive
+
+### Session
+
+Session in Hologram provides secure storage that persists across page visits within a user's browsing session. Session data is stored in a secure session cookie that ensures data integrity and security. You can work with session data in two main contexts:
+
+- During page or component initialization (`init/3` functions)
+- In page or component commands for dynamic session operations
+
+Sessions are ideal for storing user authentication data, temporary state, and sensitive information. The data is automatically secured by the server through the session system. Hologram also provides functions for managing regular Cookies outside of the session system. See the "Session vs Direct Cookie Management" section below for guidance on when to use which approach.
+
+#### Session Functions
+
+Hologram provides the following functions for working with sessions:
+
+- `get_session(server, key)` - reads a session value
+- `get_session(server, key, default)` - reads a session value with a default if the key doesn't exist
+- `put_session(server, key, value)` - writes a session value
+- `delete_session(server, key)` - deletes a session value
+
+**Note:** Session keys must be either atoms or strings. Using other data types as keys will result in an error.
+
+#### Reading Session Data
+
+You can read session values using the `get_session/2` and `get_session/3` functions.
+
+##### Reading Simple Values
+
+For simple values stored in the session:
+
+```elixir
+def init(_params, component, server) do
+  user_id = get_session(server, :user_id)
+  put_state(component, :user_id, user_id)
+end
+```
+
+##### Reading Complex Data Structures
+
+Sessions can store any Elixir data type, including complex data structures like maps, lists, and tuples. You can work with these structures directly:
+
+```elixir
+def init(_params, component, server) do
+  preferences =
+    server
+    |> get_session(:user_profile)
+    |> Map.get(:preferences, %{})
+
+  put_state(component, :user_preferences, preferences)
+end
+```
+
+##### Handling Missing Session Values
+
+When a session key doesn't exist, `get_session/2` returns `nil`. You can provide default values using `get_session/3`:
+
+```elixir
+def init(_params, component, server) do
+  cart_items = get_session(server, :cart, [])
+  put_state(component, :cart_items, cart_items)
+end
+```
+
+#### Writing Session Data
+
+You can write session values using the `put_session/3` function. Session data is automatically persisted and will be available across page visits within the same session.
+
+##### Storing Simple Values
+
+Writing simple values to the session:
+
+```elixir
+def init(_params, _component, server) do
+  put_session(server, :user_id, 123)
+end
+```
+
+##### Storing Complex Data Structures
+
+Sessions can store complex Elixir data structures:
+
+```elixir
+def init(_params, _component, server) do
+  user_profile = %{
+    id: 123,
+    email: "user@example.com",
+    role: :admin,
+    preferences: %{
+      theme: "dark",
+      notifications: true
+    }
+  }
+
+  put_session(server, :user_profile, user_profile)
+end
+```
+
+##### Updating Session Data
+
+To update existing session data, retrieve it, modify it, and store it back:
+
+```elixir
+def init(_params, _component, server) do
+  cart = get_session(server, :cart, [])
+  updated_cart = [%{id: 456, quantity: 1} | cart]
+
+  put_session(server, :cart, updated_cart)
+end
+```
+
+#### Deleting Session Data
+
+Remove session values using the `delete_session/2` function:
+
+```elixir
+def init(_params, _component, server) do
+  delete_session(server, :temporary_data)
+end
+```
+
+#### Using Sessions in Commands
+
+Session operations can also be performed in server commands, allowing for dynamic session management in response to user interactions:
+
+##### Authentication Example
+
+```elixir
+def command(:login, params, server) do
+  case authenticate_user(params.email, params.password) do
+    {:ok, user} ->
+      server
+      |> put_session(:user_id, user.id)
+      |> put_session(:user_role, user.role)
+      |> put_action(:redirect_to_dashboard)
+
+    {:error, _reason} ->
+      put_action(server, :show_error_message, message: "Invalid credentials")
+  end
+end
+```
+
+##### Shopping Cart Example
+
+```elixir
+def command(:add_to_cart, params, server) do
+  cart = get_session(server, :cart, [])
+  item = %{product_id: params.product_id, quantity: params.quantity}
+  updated_cart = [item | cart]
+
+  server
+  |> put_session(:cart, updated_cart)
+  |> put_action(:update_cart_display, cart: updated_cart)
+end
+```
+
+##### Logout Example
+
+```elixir
+def command(:logout, _params, server) do
+  server
+  |> delete_session(:user_id)
+  |> delete_session(:user_role)
+  |> delete_session(:cart)
+  |> put_action(:redirect_to_home)
+end
+```
+
+#### Session vs Direct Cookie Management
+
+Understanding when to use Hologram's session system versus direct cookie management:
+
+- **Session System** - Automatic security handling, data is opaque to clients, managed through session functions
+- **Direct Cookie Management** - Full control over cookie behavior, data encoding, and security settings
+- **Data Access** - Session data cannot be read by client-side code; direct cookies can be configured for client access
+- **Security** - Sessions provide automatic security; direct cookies require manual security configuration
+- **Use Cases** - Sessions for sensitive/private data; direct cookies when you need client-side access or specific cookie behavior
+
+#### Common Use Cases
+
+- **User authentication** - Store user ID, role, and authentication status
+- **Shopping cart** - Temporary cart contents for logged-in users
+- **Multi-page form data** - Form progress and temporary state that spans multiple pages
+- **Flash messages** - Temporary success/error messages that persist across redirects
+- **User preferences** - Temporary UI state and user-specific settings
+- **CSRF protection** - Store anti-CSRF tokens securely on the server
+
+#### Best Practices
+
+- **Minimize session data** - Store only necessary information to keep memory usage low
+- **Use consistent keys** - Adopt a naming convention for session keys across your application
+- **Handle missing values** - Always provide defaults when reading session data that might not exist
+- **Clean up on logout** - Remove sensitive session data when users log out
