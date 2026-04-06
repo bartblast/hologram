@@ -15,3 +15,16 @@
 ## Documentation
 
 - [Architecture](https://hologram.page/docs/architecture): Pages and components, code distribution, client-server communication
+- [Template Syntax](https://hologram.page/docs/template-syntax): ~HOLO sigil, HTML markup, @var access, component nodes, interpolation, control flow blocks
+- [Components](https://hologram.page/docs/components): Reusable UI building blocks, props, stateful vs stateless, slots, templates
+- [Pages](https://hologram.page/docs/pages): Route entry points, routing and parameters, differences from regular components
+- [Layouts](https://hologram.page/docs/layouts): Root components that wrap page content, specifying layouts, layout templates
+- [Events](https://hologram.page/docs/events): User interaction handling, event types, event data, binding syntax, event targets
+- [Actions](https://hologram.page/docs/actions): Client-side operations, state updates, action parameters, targets, delays
+- [Commands](https://hologram.page/docs/commands): Server-side operations, database/API access, async execution, command targets
+- [Navigation](https://hologram.page/docs/navigation): Link component, programmatic navigation, History PushState transitions
+- [Forms](https://hologram.page/docs/forms): Synchronized vs non-synchronized inputs, event handling, input types
+- [Context](https://hologram.page/docs/context): Sharing data between components without prop drilling
+- [Session](https://hologram.page/docs/session): Secure server-side storage persisting across page visits
+- [Cookies](https://hologram.page/docs/cookies): Client-side persistent storage managed through server-side functions
+- [JavaScript Interop](https://hologram.page/docs/javascript-interop): Calling JavaScript from Elixir, importing JS modules, async support
