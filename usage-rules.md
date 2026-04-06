@@ -98,3 +98,13 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Programmatic navigation from actions: `put_page(component, MyPage)` or `put_page(component, MyPage, id: 123)`.
 - Hologram prefetches pages on `$pointer_down` for near-instant transitions.
 - Each page is loaded fresh from the server. Browser history (back/forward) works automatically.
+
+## Forms
+
+- Use standard HTML `<form>`, `<input>`, `<select>`, `<textarea>` elements. **Not** Phoenix form helpers (`to_form`, `<.simple_form>`, `<.input>`).
+- **Synchronized inputs** use `value={@state_var}` + `$change="handler"` on the input element. The component state is the single source of truth.
+- **Non-synchronized inputs** omit `$change` on the input. Access values via form-level `$change` or `$submit` handlers from `params.event`.
+- Text inputs and textareas sync with `value` attribute. Checkboxes and radio buttons sync with `checked` attribute.
+- Input-level `$change` on text inputs fires on every keystroke. Form-level `$change` fires on field blur.
+- `$submit` event data contains all form field values as a map: `params.event` => `%{field_name: value}`.
+- Elixir validation code (including Ecto changesets) runs both client-side and server-side since Hologram runs Elixir in the browser.
