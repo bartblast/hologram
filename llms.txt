@@ -37,3 +37,9 @@
 - [Contributing](https://hologram.page/reference/contributing): How to contribute, Erlang function porting initiative
 - [Package Naming](https://hologram.page/reference/package-naming): Reserved prefixes and namespaces for Hologram packages
 - [Sponsor](https://hologram.page/reference/sponsor): Sponsorship information and project impact
+
+## Resources
+
+- [Community](https://hologram.page/community): Elixir Forum, Discord, Slack, and Twitter/X links
+- [Courses](https://hologram.page/courses): Video courses for building real-world applications with Hologram
+- [Newsletter](https://hologram.page/newsletter): Monthly updates on development milestones and ecosystem news
