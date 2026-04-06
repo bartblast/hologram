@@ -2,6 +2,18 @@
 
 For full documentation, see deps/hologram/llms-full.txt or https://hologram.page/llms.txt
 
+## Common Pitfalls
+
+- **Never** use Phoenix/LiveView syntax: no `<%= %>`, no `phx-click`, no `<.component>`, no `<:slot>`, no `to_form`, no `<.simple_form>`, no `live_redirect`, no `handle_event`, no `assign`.
+- **Never** use HEEx templates. Hologram uses `~HOLO` sigil, not `~H`.
+- Actions use `put_state`, not `assign`. State is accessed with `component.state.key`, not `socket.assigns.key`.
+- Commands use `server` struct, not `socket`. Return `%Server{}`, not `{:noreply, socket}`.
+- Cookie keys are strings (`"my_cookie"`), session keys are atoms or strings (`:user_id`). Mixing these up causes errors.
+- `init/3` for pages receives URL params, not props. Don't confuse with component `init/3` which receives props.
+- Stateless components cannot handle events. You need a `cid` to make a component stateful.
+- The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
+- Not all Elixir standard library functions are available client-side yet. Check the Client Runtime reference for coverage.
+
 ## Architecture
 
 - Hologram applications are built with two building blocks: **Pages** (route entry points) and **Components** (reusable UI elements).
