@@ -384,3 +384,162 @@ The framework:
 2. Mounts the page in the browser
 3. Manages the virtual DOM for efficient updates
 4. Handles all client-server communication automatically
+
+### Template Syntax
+
+Hologram templates use a custom syntax called "HOLO" that combines HTML with Elixir expressions.
+
+#### Regular HTML Markup
+
+You can use standard HTML elements and attributes in your templates:
+
+```holo
+<div class="container">
+  <h1>Hello World</h1>
+  <p>This is a paragraph.</p>
+</div>
+```
+
+#### Accessing Props and State
+
+Props and state are accessible in templates using the `@var` syntax. This provides a convenient way to reference component data. For example, if you have a prop or state variable named `count`, you can access it as `@count` in your template.
+
+In the following sections, you'll see how to use these variables in Elixir expressions for interpolation and control flow blocks.
+
+#### Component Nodes
+
+Components can be used as custom elements in your templates. They can receive props (properties) as attributes. String props can be given as regular double-quoted attributes, while other Elixir values (like numbers, booleans, or expressions) are given using curly braces syntax:
+
+```holo
+<MyComponent title="Hello" count={42} />
+```
+
+For more information about components and their props, see the Components documentation.
+
+#### Elixir Expression Interpolation
+
+You can embed Elixir expressions in your templates using curly braces:
+
+##### Inside Text
+
+```holo
+<p>Hello, {@name}!</p>
+```
+
+##### Inside Attributes and Props
+
+You can interpolate Elixir expressions in attributes and props in two ways.
+
+First, you can interpolate the entire attribute value:
+
+```holo
+<div class={@class_name}>Content</div>
+```
+
+Or you can interpolate part of the attribute value within double quotes:
+
+```holo
+<div class="base-class {@dynamic_class}">Content</div>
+```
+
+Both approaches work for regular HTML attributes and component props:
+
+```holo
+<MyComponent count={Enum.count(@items)} label="Welcome, {@count}" />
+```
+
+###### Conditional Attributes
+
+When an attribute expression evaluates to a falsy value (`nil` or `false`), the attribute is not rendered at all. This is useful for conditional attributes:
+
+```holo
+<button disabled={@loading?}>Submit</button>
+<div class={if @active? do "active" else nil end}>Content</div>
+```
+
+In this example, when `@loading?` is `false`, the `disabled` attribute won't appear in the HTML. Similarly, when `@active?` is `false`, the `class` attribute will be omitted entirely.
+
+##### Security: Automatic HTML Escaping
+
+For security purposes, all interpolated expressions are automatically HTML-escaped to prevent XSS (Cross-Site Scripting) attacks. This means that potentially dangerous characters like `<`, `>`, `&`, and quotes are converted to their HTML entity equivalents (`&lt;`, `&gt;`, `&amp;`, etc.).
+
+```holo
+<p>User input: {@user_input}</p>
+```
+
+If `@user_input` contains `"<script>alert('XSS')</script>"`, it will be safely rendered as escaped text rather than executed as JavaScript. This escaping happens automatically for all values interpolated in text content and HTML attributes.
+
+#### Control Flow Blocks
+
+##### If Block
+
+Use `{%if}` blocks for conditional rendering. The condition follows Elixir's truthiness rules - only `nil` and `false` are considered falsy, while any other value is considered truthy. You can optionally include an `{%else}` branch.
+
+Simple if block without else:
+
+```holo
+<div>
+  {%if @show_message?}
+    <p>Message is visible</p>
+  {/if}
+</div>
+```
+
+If block with else branch:
+
+```holo
+<div>
+  {%if @show_message?}
+    <p>Message is visible</p>
+  {%else}
+    <p>Message is hidden</p>
+  {/if}
+</div>
+```
+
+##### For Block
+
+Use `{%for}` blocks to iterate over collections. The syntax follows Elixir's comprehension rules, allowing you to use the same pattern matching and filtering capabilities as regular Elixir comprehensions.
+
+```holo
+<ul>
+  {%for item <- @items}
+    <li>{item.name}</li>
+  {/for}
+</ul>
+```
+
+#### Event Binding
+
+You can bind events to elements using event attributes. For detailed information about event binding syntax and available event types, see the Events documentation.
+
+#### Escaping Curly Braces
+
+To output literal curly braces in your template, escape them with a backslash:
+
+```holo
+<p>\{@literal\} {@variable}</p>
+```
+
+#### Raw Block
+
+Use `{%raw}` blocks to output content without processing:
+
+```holo
+<div>
+  {%raw}
+    This content will be output as-is, including any \{curly braces\} or \{%control\}...\{/flow\} syntax.
+  {/raw}
+</div>
+```
+
+#### HTML Comments
+
+You can use standard HTML comments in your templates:
+
+```holo
+<div>
+  <!-- This is a comment that will be visible in the HTML output -->
+  <p>Content</p>
+</div>
+```
