@@ -802,3 +802,96 @@ end
 ```
 
 See the Actions and Commands documentation for more details.
+
+### Pages
+
+Pages are specialized components that serve as entry points for different routes in your Hologram application. Together with regular components, they form the fundamental building blocks of Hologram applications. They inherit all the capabilities of components, including templates, state management, actions, commands, and event handling. For detailed information about these shared features, see the Components documentation.
+
+#### Key Differences from Regular Components
+
+While pages are built on top of components, they have some unique characteristics:
+
+- They must define a route using the `route/1` macro
+- They must specify a layout component using either `layout/1` or `layout/2` macro, which serves as the root of the component tree and wraps the page's content (see Layouts for more information)
+- They use URL parameters instead of props
+- They are always stateful
+- They are always initialized on the server-side using `init/3`, unlike regular components which can be initialized on either client or server
+- Their `init/3` function receives URL parameters (`params`) instead of component props (`props`)
+
+#### Basic Example
+
+Here's a simple page implementation:
+
+```elixir
+defmodule MyApp.GreetingPage do
+  use Hologram.Page
+
+  route "/hello/:username"
+
+  layout MyApp.MainLayout
+
+  def init(params, component, _server) do
+    put_state(component, :username, params.username)
+  end
+
+  def template do
+    ~HOLO"""
+    <div>Hello, {@username}!</div>
+    """
+  end
+end
+```
+
+##### Chaining Actions in Initialization
+
+You can chain actions that will be executed when the page is mounted on the client:
+
+```elixir
+def init(_params, component, _server) do
+  put_action(component, :load_user_data)
+end
+```
+
+##### Optional Initialization
+
+The `init/3` function is optional. If you don't need to initialize state or perform any preparation, you can omit it entirely - Hologram provides a default implementation that simply returns the `Component` and `Server` structs unchanged.
+
+#### Routing and Parameters
+
+Pages must define their URL route using the `route/1` macro.
+
+Routes can be static:
+
+```elixir
+route "/products"
+```
+
+or contain dynamic parameters:
+
+```elixir
+route "/users/:username/posts/:post_id/comments"
+```
+
+For routes with parameters, use the `param/2` macro to specify how string parameters should be converted:
+
+```elixir
+param :username, :string
+param :post_id, :integer
+```
+
+Supported parameter types:
+
+- `:atom` - converts to atom
+- `:float` - converts to float
+- `:integer` - converts to integer
+- `:string` - keeps the parameter as string
+
+##### Route Resolution
+
+Hologram's router uses a search tree rather than ordered routing (like Phoenix or Rails). Static segments are always prioritized over parameterized ones automatically - so `/users` will always match before `/:username`, regardless of the order pages are defined. This eliminates a whole class of route shadowing bugs that are common in ordered routers, where adding a route in the wrong position can silently break another.
+
+The tradeoff is that you can't have two ambiguous parameterized routes at the same level (e.g. `/:username` and `/:post_slug`). In practice, this is a design smell in any framework - the fix is always to give them distinct prefixes, such as `/users/:username` and `/posts/:post_slug`.
+
+#### Component ID
+
+The page is always assigned a component ID (cid) of `"page"`. This is important to remember when targeting actions or commands at the page.
