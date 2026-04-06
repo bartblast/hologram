@@ -1,4 +1,6 @@
-For full documentation, see deps/hologram/llms-full.txt or https://hologram.page/llms.txt
+Hologram is a full-stack isomorphic Elixir web framework. It compiles Elixir to JavaScript for the browser. It is NOT Phoenix LiveView - it has its own template syntax (~HOLO), component model, and state management. Do not use Phoenix/LiveView patterns. Read documentation before attempting to use its features. Do not assume that you have prior knowledge of the framework or its conventions.
+
+For additional details beyond these rules, see deps/hologram/llms-full.txt or https://hologram.page/llms.txt
 
 ## Common Pitfalls
 
