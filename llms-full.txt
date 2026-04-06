@@ -2223,3 +2223,671 @@ When working with cookies, consider the following security best practices:
 - **Shopping cart** - Temporary cart contents for anonymous users
 - **Analytics** - User tracking (with appropriate consent)
 - **Feature flags** - User-specific feature toggles
+
+### JavaScript Interop
+
+Hologram lets you call JavaScript from your Elixir client-side code, and vice versa. You can import JS modules, call functions, manipulate objects, dispatch DOM events, and work with async code.
+
+JS interop is useful when you need to:
+
+- **Use JavaScript libraries** - integrate npm packages or your own JS modules (e.g. charting libraries, rich text editors, payment SDKs)
+- **Interact with existing JavaScript code** - call into JS code that's already part of your project
+- **Access Web APIs** - as an escape hatch, use browser APIs that Hologram doesn't wrap yet (e.g. Web Audio, WebGL, Geolocation, Clipboard, etc.)
+- **Manipulate the DOM directly** - for cases where you need fine-grained DOM control beyond what Hologram templates provide
+
+Here is a quick example showing a page that imports an npm package and uses it via JS interop:
+
+```elixir
+defmodule MyApp.CalculatorPage do
+  use Hologram.Page
+  use Hologram.JS
+
+  js_import from: "decimal.js", as: :Decimal
+
+  route "/calculator"
+
+  layout MyApp.DefaultLayout
+
+  def init(_params, component, _server) do
+    put_state(component, :result, nil)
+  end
+
+  def template do
+    ~HOLO"""
+    <button $click={:calculate}>Calculate</button>
+    <p>Result: {@result}</p>
+    """
+  end
+
+  def action(:calculate, _params, component) do
+    result =
+      :Decimal
+      |> JS.new([100])
+      |> JS.call(:plus, [23])
+      |> JS.call(:toNumber, [])  # 123
+
+    put_state(component, :result, result)
+  end
+end
+```
+
+Hologram JS interop works in both directions:
+
+1. **Elixir to JavaScript** - `JS.call`, `JS.new`, `JS.get`, `JS.set`, and friends give you direct, fine-grained control over JavaScript objects from Elixir. Calls work synchronously in event loop lock-step with your action handlers (unless you deliberately use async calls), integrate with state management, type conversion, and async handling, and keep your JS integration logic inside your Elixir modules.
+2. **JavaScript to Elixir** - `Hologram.dispatchAction()` triggers Elixir action handlers from JS code.
+
+Migrating from Phoenix LiveView? The `JS.dispatch_event` function maps closely to the LiveView hooks pattern for a quick migration path. See the "Coming from LiveView" section below.
+
+#### Setup
+
+Add `use Hologram.JS` to any module that runs on the client side where you need JS interop:
+
+```elixir
+defmodule MyApp.DashboardPage do
+  use Hologram.Page
+  use Hologram.JS
+
+  # ...
+end
+```
+
+This imports the `js_import` macro, the `~JS` sigil, and aliases the `Hologram.JS` module as `JS`.
+
+#### Importing JavaScript Modules
+
+Use `js_import` at the top of your module to make JavaScript exports available as named bindings. Bindings are scoped to the Elixir module where they are declared, and can be used as receivers or function references in `JS.*` calls within that module.
+
+Each `js_import` maps directly to a JavaScript `import` statement:
+
+| Elixir | Resolves To |
+|--------|-------------|
+| `js_import from: "decimal.js", as: :Decimal` | `import Decimal from "decimal.js"` |
+| `js_import :multiply, from: "./helpers.mjs"` | `import { multiply } from "./helpers.mjs"` |
+| `js_import :Chart, from: "chart.js", as: :MyChart` | `import { Chart as MyChart } from "chart.js"` |
+
+##### Default Export
+
+Import the default export of a JS module using the `:from` and `:as` options. Given this JavaScript file:
+
+```javascript
+// calculator.mjs
+
+export default class Calculator {
+  constructor(initial) {
+    this.value = initial;
+  }
+
+  add(n) {
+    this.value += n;
+    return this.value;
+  }
+}
+```
+
+You can import it in Elixir like this:
+
+```elixir
+js_import from: "./calculator.mjs", as: :Calculator
+```
+
+Both `:from` and `:as` are required for default imports.
+
+##### Named Export
+
+Import a specific named export. Given this JavaScript file:
+
+```javascript
+// helpers.mjs
+
+export function multiply(a, b) {
+  return a * b;
+}
+```
+
+You can import it in Elixir like this:
+
+```elixir
+js_import :multiply, from: "./helpers.mjs"
+```
+
+The binding name defaults to the export name. Use `:as` to alias it:
+
+```elixir
+js_import :Chart, from: "chart.js", as: :MyChart
+```
+
+##### Path Resolution
+
+Import paths are resolved as follows:
+
+- **Relative paths** (`./` or `../`) are resolved relative to the Elixir source file that contains the `js_import`. This means you can colocate JS files next to your Elixir modules.
+- **Bare specifiers** (no `./` or `../` prefix) are resolved as npm packages. Make sure the package is installed in your `assets/package.json`.
+- **Paths from the assets directory** work with relative paths from the caller.
+
+##### Duplicate Binding Names
+
+Each binding name must be unique within a module. Declaring two imports with the same `:as` name will raise a compile-time error.
+
+#### API Reference
+
+##### JS.call/2 - Call a Function
+
+Calls a function without a receiver. The function is resolved from your `js_import` bindings first, then from `window`.
+
+```elixir
+js_import :multiply, from: "./helpers.mjs"
+
+# Call an imported function
+JS.call(:multiply, [4, 6])  # 24
+
+# Call a global function
+JS.call(:parseInt, ["42abc"])  # 42
+```
+
+##### JS.call/3 - Call a Method
+
+Calls a method on a receiver. The receiver can be:
+
+- An **atom** referencing an imported binding or a global object (e.g. `:Math`, `:document`)
+- A **native value** returned by a previous JS interop call (e.g. an object from `JS.new/2`)
+
+```elixir
+js_import from: "./helpers.mjs", as: :helpers
+
+# Call a method on an imported module
+JS.call(:helpers, :sum, [1, 2])  # 3
+
+# Call a method on a global object
+JS.call(:Math, :round, [3.7])  # 4
+
+# Call a method on a native object reference
+:Calculator
+|> JS.new([10])
+|> JS.call(:add, [5])  # 15
+```
+
+##### Callback Interop
+
+Elixir anonymous functions can be passed as callbacks to JavaScript functions. They are automatically converted to JavaScript functions and their return values are converted back. Given this JavaScript file:
+
+```javascript
+// helpers.mjs
+
+const helpers = {
+  mapArray(arr, fn) {
+    return arr.map(fn);
+  },
+};
+
+export default helpers;
+```
+
+You can pass an Elixir anonymous function as a callback:
+
+```elixir
+callback = fn x -> x * 2 end
+JS.call(:helpers, :mapArray, [[1, 2, 3], callback])  # [2, 4, 6]
+```
+
+##### JS.new/2 - Instantiate a Class
+
+Creates a new instance of a JavaScript class:
+
+```elixir
+js_import from: "./calculator.mjs", as: :Calculator
+
+:Calculator
+|> JS.new([10])
+|> JS.call(:add, [5])  # 15
+```
+
+The class can be an imported binding or a global constructor.
+
+##### JS.get/2 - Get a Property
+
+Reads a property from a JavaScript object:
+
+```elixir
+value =
+  :Calculator
+  |> JS.new([10])
+  |> JS.get(:value)  # 10
+```
+
+##### JS.set/3 - Set a Property
+
+Sets a property on a JavaScript object. Returns the receiver (for chaining):
+
+```elixir
+value =
+  :Calculator
+  |> JS.new([10])
+  |> JS.set(:value, 20)
+  |> JS.get(:value)  # 20
+```
+
+##### JS.delete/2 - Delete a Property
+
+Deletes a property from a JavaScript object. Returns the receiver (for chaining):
+
+```elixir
+result =
+  :Calculator
+  |> JS.new([42])
+  |> JS.delete(:value)
+  |> JS.get(:value)
+  |> JS.typeof()  # "undefined"
+```
+
+##### JS.typeof/1 - Get Type
+
+Returns the JavaScript `typeof` result as a string:
+
+```elixir
+:Calculator
+|> JS.new([10])
+|> JS.typeof()  # "object"
+```
+
+##### JS.instanceof/2 - Check Instance
+
+Checks if a value is an instance of a JavaScript class. Returns a boolean:
+
+```elixir
+:Calculator
+|> JS.new([10])
+|> JS.instanceof(:Calculator)  # true
+```
+
+##### JS.eval/1 - Evaluate an Expression
+
+Evaluates a JavaScript expression and returns the result:
+
+```elixir
+JS.eval("3 + 4")  # 7
+```
+
+The expression is evaluated as a single expression (not statements). For multi-line code, use `JS.exec/1`.
+
+##### JS.exec/1 - Execute Code
+
+Executes arbitrary JavaScript code. You can optionally use `return` to produce a value:
+
+```elixir
+JS.exec("""
+const x = 2;
+return x + 3;
+""")  # 5
+```
+
+##### ~JS Sigil - Inline JavaScript
+
+The `~JS` sigil is a shorthand for `JS.exec/1`. It is convenient for DOM manipulation and fire-and-forget code:
+
+```elixir
+~JS"""
+const el = document.getElementById('my-element');
+el.textContent = 'Updated!';
+"""
+```
+
+The `~JS` sigil can also return a value:
+
+```elixir
+~JS"""
+const x = 7;
+return x + 4;
+"""  # 11
+```
+
+##### JS.dispatch_event - Dispatch Events
+
+Dispatches an event on a target. There are several variants:
+
+###### dispatch_event/2 - CustomEvent, No Options
+
+```elixir
+target = JS.call(:document, :getElementById, ["my-element"])
+JS.dispatch_event(target, "my:event")
+```
+
+###### dispatch_event/3 - CustomEvent with Options
+
+```elixir
+JS.dispatch_event(target, "my:event", detail: %{value: 99})
+```
+
+###### dispatch_event/3 - Specific Event Type
+
+```elixir
+JS.dispatch_event(target, :MouseEvent, "click")
+```
+
+###### dispatch_event/4 - Specific Event Type with Options
+
+```elixir
+JS.dispatch_event(target, :CustomEvent, "my:event", cancelable: true)
+```
+
+###### Dispatching on Global Objects
+
+Use atoms like `:document` or `:window` as the target:
+
+```elixir
+JS.dispatch_event(:document, "my:event")
+```
+
+###### Using Event Listeners with Callbacks
+
+You can combine `dispatch_event` with callback interop to set up listeners:
+
+```elixir
+target = JS.call(:document, :getElementById, ["my-element"])
+
+JS.call(target, :addEventListener, [
+  "my:event",
+  fn event ->
+    detail = JS.get(event, :detail)
+    JS.set(:window, :__captured__, JS.get(detail, :value))
+  end
+])
+
+JS.dispatch_event(target, "my:event", detail: %{value: 42})
+
+JS.get(:window, :__captured__)  # 42
+```
+
+#### Async / Promises
+
+In Hologram's client-side Elixir runtime, JavaScript Promises become Elixir `Task`s. Use `Task.await/1` to get the result, just like you would with any other Task in Elixir.
+
+##### Async Methods and Promise-Returning Functions
+
+If a JavaScript function is `async` or returns a Promise, `JS.call/3` returns a Task:
+
+```elixir
+# Async function
+result =
+  :helpers
+  |> JS.call(:asyncSum, [10, 20])
+  |> Task.await()  # 30
+
+# Promise-returning function
+result =
+  :helpers
+  |> JS.call(:promiseSum, [100, 200])
+  |> Task.await()  # 300
+```
+
+##### Async eval and exec
+
+If the evaluated expression or executed code returns a Promise, `JS.eval/1` and `JS.exec/1` return a Task:
+
+```elixir
+result =
+  "fetch('/api/data').then(r => r.json())"
+  |> JS.eval()
+  |> Task.await()
+```
+
+##### Async get
+
+If a property value is a Promise, `JS.get/2` returns a Task:
+
+```elixir
+result =
+  :promiseValue
+  |> JS.get(:data)
+  |> Task.await()  # 77
+```
+
+##### Async new
+
+If a constructor returns a Promise (e.g. for async initialization), `JS.new/2` returns a Task:
+
+```elixir
+obj =
+  :AsyncCounter
+  |> JS.new([50])
+  |> Task.await()
+
+result = JS.get(obj, :value)  # 51
+```
+
+#### Dispatching Actions from JavaScript
+
+You can dispatch Hologram actions directly from JavaScript code using `Hologram.dispatchAction()`. This is useful for integrating third-party JS libraries or handling events outside of Hologram's template system.
+
+```javascript
+Hologram.dispatchAction("my_action", "page", { amount: 42, label: "test" });
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actionName` | string | The action name (e.g. `"my_action"` maps to `def action(:my_action, ...)`) |
+| `target` | string | `"page"` for page actions, `"layout"` for layout actions, or a component CID for component actions |
+| `params` | object | (Optional) A plain JS object. Keys become atom keys in the `params` map |
+
+**Corresponding action in your page, layout, or component:**
+
+```elixir
+def action(:my_action, params, component) do
+  # params.amount => 42 (integer)
+  # params.label  => "test" (string)
+  put_state(component, :result, {params.amount, params.label})
+end
+```
+
+##### Dispatching Before Runtime Loads
+
+`Hologram.dispatchAction()` is available immediately - even before the Hologram runtime has fully loaded. Actions dispatched before initialization are queued and replayed once the page mounts. This is useful for inline `<script>` tags in templates:
+
+```holo
+<script>
+  Hologram.dispatchAction("init_from_js", "page", {value: 99});
+</script>
+```
+
+Note: Escape curly braces with backslashes (`\{`, `\}`) inside `~HOLO` templates to prevent them from being interpreted as Hologram expressions. Alternatively, wrap the script body in a `{%raw}...{/raw}` block to disable template syntax entirely.
+
+#### Type Conversion
+
+Values are automatically converted when crossing the Elixir/JavaScript boundary.
+
+##### Elixir to JavaScript
+
+| Elixir Type | JavaScript Type |
+|-------------|-----------------|
+| integer | number / bigint* |
+| float | number |
+| boolean | boolean |
+| nil | null |
+| string | string |
+| list | Array |
+| tuple | Array |
+| map | Object |
+| anonymous function | Function |
+| atom | JS binding** / string |
+
+\* Integers outside the safe integer range (`Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER`) are passed as `bigint`.
+
+\*\* Atoms are resolved in order: `js_import` binding, then `window` property, then string fallback. Exception: atom keys in maps are always converted to strings.
+
+##### JavaScript to Elixir
+
+| JavaScript Type | Elixir Type |
+|-----------------|-------------|
+| number | integer / float* |
+| boolean | boolean |
+| null | nil |
+| undefined | opaque native value |
+| string | string (bitstring) |
+| Array | list |
+| Plain Object | map (string keys) |
+| Promise | Task (await with Task.await/1) |
+| Class instance / other object | opaque native value |
+| bigint | opaque native value |
+| Function | opaque native value |
+| Symbol | opaque native value |
+
+\* Determined by `Number.isInteger()`: values like `42` or `3.0` become `integer`, values like `3.14` become `float`.
+
+**Opaque native values** are JavaScript values that don't have a direct Elixir equivalent. They are represented as `Hologram.JS.NativeValue` structs and can be passed back to JS interop functions. You can pattern match on the `type` field (`:bigint`, `:function`, `:object`, `:symbol`, `:undefined`).
+
+#### DOM Patching
+
+Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
+
+```elixir
+def template do
+  ~HOLO"""
+  <button $click={:populate}>Populate JS subtree</button>
+  <button $click={:increment}>Increment counter</button>
+  <p>Counter: {@counter}</p>
+  <div id="js_managed"></div>
+  """
+end
+
+def action(:populate, _params, component) do
+  ~JS"""
+  const container = document.getElementById('js_managed');
+  const span = document.createElement('span');
+  span.textContent = 'JS managed content';
+  container.appendChild(span);
+  """
+
+  put_state(component, :counter, component.state.counter + 1)
+end
+
+def action(:increment, _params, component) do
+  put_state(component, :counter, component.state.counter + 1)
+end
+```
+
+In this example, clicking "Populate JS subtree" adds a span via JavaScript and increments the counter. Clicking "Increment counter" afterwards will update the counter display without removing the JS-managed span.
+
+#### Coming from LiveView
+
+If you're migrating from Phoenix LiveView, Hologram offers two paths for JS interop. The event-based dispatching API (`JS.dispatch_event` and `Hologram.dispatchAction()`) maps directly to LiveView hooks patterns and is provided as a convenience for faster migration - it lets you port existing hook-based integrations with minimal changes.
+
+However, for new code the **low-level API is the recommended approach**. Functions like `JS.call`, `JS.new`, `JS.get`, and `JS.set` are tightly integrated with the Hologram runtime - they work synchronously in event loop lock-step with your action handlers, interact naturally with component state management, support automatic type conversion, and handle async results through `Task.await/1`. This keeps your JS integration logic inside your Elixir modules rather than split across separate hook files, and avoids the indirection of passing data through events. The low-level API has no LiveView equivalent - it's a new capability unique to Hologram.
+
+##### JS to Elixir: pushEvent to Hologram.dispatchAction
+
+In LiveView, you use `this.pushEvent()` inside a hook to send a message to the server:
+
+```javascript
+// LiveView hook
+Hooks.MyChart = {
+  mounted() {
+    this.pushEvent("chart_clicked", { point: 42 });
+  }
+};
+```
+
+```elixir
+# LiveView handler (server-side)
+def handle_event("chart_clicked", %{"point" => point}, socket) do
+  {:noreply, assign(socket, :selected, point)}
+end
+```
+
+In Hologram, use `Hologram.dispatchAction()` - no hook boilerplate needed:
+
+```javascript
+// Anywhere in your JavaScript
+Hologram.dispatchAction("chart_clicked", "page", { point: 42 });
+```
+
+```elixir
+# Hologram handler (runs in the browser)
+def action(:chart_clicked, params, component) do
+  put_state(component, :selected, params.point)
+end
+```
+
+##### Elixir to JS: push_event + handleEvent to JS.dispatch_event + addEventListener
+
+In LiveView, you push events from the server to a hook's `handleEvent` callback:
+
+```elixir
+# LiveView (server-side)
+def handle_event("refresh", _params, socket) do
+  {:noreply, push_event(socket, "data_updated", %{value: 99})}
+end
+```
+
+```javascript
+// LiveView hook
+Hooks.MyChart = {
+  mounted() {
+    this.handleEvent("data_updated", ({ value }) => {
+      this.chart.update(value);
+    });
+  }
+};
+```
+
+In Hologram, dispatch an event and listen for it with `addEventListener`:
+
+```elixir
+# Hologram action (runs in the browser)
+def action(:refresh, _params, component) do
+  target = JS.call(:document, :getElementById, ["my-chart"])
+  JS.dispatch_event(target, "data_updated", detail: %{value: 99})
+
+  component
+end
+```
+
+```javascript
+// Standard listener (no hook needed)
+document.getElementById("my-chart").addEventListener("data_updated", (event) => {
+  chart.update(event.detail.value);
+});
+```
+
+Alternatively, you can set up the listener entirely from Elixir using the low-level API:
+
+```elixir
+def action(:setup_chart, _params, component) do
+  target = JS.call(:document, :getElementById, ["my-chart"])
+
+  JS.call(target, :addEventListener, [
+    "data_updated",
+    fn event ->
+      detail = JS.get(event, :detail)
+      JS.call(:chart, :update, [JS.get(detail, :value)])
+    end
+  ])
+
+  component
+end
+```
+
+##### Key Differences from LiveView
+
+- **No hooks boilerplate** - LiveView hooks require defining a `Hooks` object, wiring it to elements with `phx-hook`, and implementing lifecycle callbacks (`mounted`, `updated`, `destroyed`). Hologram uses standard DOM APIs directly.
+- **No network round-trip** - LiveView's `pushEvent` and `push_event` communicate over WebSocket between browser and server. Hologram's interop runs entirely in the browser, so there's no latency.
+- **Beyond events** - LiveView hooks are limited to event passing. Hologram's low-level API lets you instantiate JS classes, read/write properties, chain method calls, and pass Elixir functions as JS callbacks - all from your Elixir action handlers.
+
+#### Server-Side Behaviour
+
+JS interop functions can only be used in functions reachable through action handlers. Since actions are not executed during SSR (only `init` runs server-side), JS interop code never runs on the server.
+
+On the server side, `JS.*` calls are no-ops - most return `:ok`, while `JS.set/3` and `JS.delete/2` return the receiver to preserve chaining. `js_import` is compile-time only and has no runtime effect.
+
+Since JS interop functions only work in the browser, functions that use them cannot be covered by Elixir unit tests. Use feature tests (browser-based integration tests) to verify JS interop behaviour.
+
+#### Best Practices
+
+- **Prefer Elixir over JS when possible** - Only reach for JS interop when you need browser APIs or JS libraries. Keep general logic in Elixir.
+- **Isolate JS interop behind facade modules** - Create dedicated Elixir modules that wrap the JavaScript interaction, rather than calling `JS.call` directly in your pages and components. This keeps your pages and components focused on UI logic and makes the JS dependency easy to swap.
+- **Keep JS files small and focused** - Each `.mjs` file should have a single responsibility rather than becoming a utility grab-bag.
+- **Prefer `JS.call` over `JS.exec` / `JS.eval`** - Structured calls to imported modules are easier to maintain and debug than inline string-based code.
+
+#### Publishing Packages
+
+Planning to publish a reusable package that wraps a JavaScript library, a Web API, or provides Hologram utilities? Check the Package Naming conventions to help distinguish official and community packages.
