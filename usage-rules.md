@@ -56,3 +56,15 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - A layout template **must** include `<slot />` where page content will be inserted.
 - The layout's component ID (cid) is always `"layout"`. Use `target: "layout"` to target actions at it.
 - Pass props to layouts via `layout MyApp.MainLayout, prop: value` or via `put_state/2` in the page's `init/3`.
+
+## Events
+
+- Bind events with `$` prefix: `$click`, `$change`, `$submit`, `$blur`, `$focus`, `$mouse_move`, `$pointer_down`, `$pointer_up`, `$pointer_move`, `$pointer_cancel`, `$select`, `$transition_end`, `$transition_start`, `$transition_run`, `$transition_cancel`. **Not** `phx-click` or `phx-change`.
+- Text syntax (actions only): `$click="my_action"`.
+- Shorthand with params (actions only): `$click={:my_action, key: value}`.
+- Longhand (actions or commands): `$click={action: :my_action, target: "cid", params: %{key: value}}`.
+- Trigger commands with longhand: `$click={command: :my_command, params: %{key: value}}`.
+- Delays (actions only): `$click={action: :my_action, delay: 1000}`.
+- Event data is available in `params.event` inside the action/command handler.
+- `$change` on an input fires on every keystroke (text inputs) or on selection change (checkboxes, radios, selects). On a form element, it fires on field blur.
+- Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
