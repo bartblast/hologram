@@ -3323,3 +3323,15 @@ If you have questions about porting, contribution process, or anything else:
 - **Bugs or problems** - Create a new GitHub issue
 
 Thank you for contributing to Hologram! Every function you port brings us closer to full Elixir standard library coverage in the browser and helps the entire Elixir community build better full-stack applications.
+
+### Package Naming
+
+When publishing a Hologram-related package, keep in mind the following reserved names. This helps the community distinguish official packages from community-maintained ones.
+
+#### Reserved Package Name Prefix: `hologram_`
+
+Hex package names starting with `hologram_` are reserved for official Hologram packages and extensions.
+
+#### Reserved Module Namespace: `Hologram.`
+
+The `Hologram.*` module namespace is reserved for the Hologram framework and official extensions.
