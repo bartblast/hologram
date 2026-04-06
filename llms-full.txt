@@ -2039,3 +2039,187 @@ Understanding when to use Hologram's session system versus direct cookie managem
 - **Use consistent keys** - Adopt a naming convention for session keys across your application
 - **Handle missing values** - Always provide defaults when reading session data that might not exist
 - **Clean up on logout** - Remove sensitive session data when users log out
+
+### Cookies
+
+Cookies in Hologram allow you to store and retrieve data that persists across page visits and browser sessions. While cookies are stored in the client browser, they are managed through server-side functions for security reasons. You can work with cookies in two main contexts:
+
+- During page or component initialization (`init/3` functions)
+- In page or component commands for dynamic cookie operations
+
+Hologram provides built-in functions for reading, writing, and deleting cookies, with support for both simple string values and complex Elixir data structures. For most authentication and session-related needs, consider using Hologram's Session abstraction instead.
+
+#### Cookie Functions
+
+Hologram provides the following functions for working with cookies:
+
+- `get_cookie(server, key)` - reads a cookie value
+- `get_cookie(server, key, default)` - reads a cookie value with a default if the cookie doesn't exist
+- `put_cookie(server, key, value)` - writes a cookie with default settings
+- `put_cookie(server, key, value, opts)` - writes a cookie with custom settings
+- `delete_cookie(server, key)` - deletes a cookie
+
+**Note:** Cookie keys must be strings. Using atoms or other data types as keys will result in an error.
+
+#### Reading Cookies
+
+You can read cookies using the `get_cookie/2` function or `get_cookie/3` with a default value. Hologram automatically handles decoding of both string values and Hologram-encoded Elixir data structures.
+
+##### Reading String-Encoded Cookies
+
+For simple string values stored in cookies:
+
+```elixir
+def init(_params, component, server) do
+  cookie_value = get_cookie(server, "my_cookie")
+  put_state(component, :cookie_value, cookie_value)
+end
+```
+
+##### Reading Hologram-Encoded Cookies
+
+Hologram can automatically encode and decode complex Elixir data structures (maps, lists, tuples, etc.) in cookies:
+
+```elixir
+def init(_params, component, server) do
+  user_data =
+    server
+    |> get_cookie("user_preferences")
+    |> Map.put(:theme, "dark")
+
+  put_state(component, :user_data, user_data)
+end
+```
+
+##### Reading with Default Values
+
+Use `get_cookie/3` to provide a default value when a cookie doesn't exist:
+
+```elixir
+def init(_params, component, server) do
+  # Set default theme if no cookie exists
+  theme = get_cookie(server, "theme", "light")
+
+  # Set default user preferences if no cookie exists
+  preferences = get_cookie(server, "user_prefs", %{language: "en", timezone: "UTC"})
+
+  component
+  |> put_state(:theme, theme)
+  |> put_state(:preferences, preferences)
+end
+```
+
+#### Writing Cookies
+
+You can write cookies using `put_cookie/3` for default settings or `put_cookie/4` for custom settings.
+
+##### Default Settings
+
+Writing a cookie with default security settings:
+
+```elixir
+def init(_params, _component, server) do
+  put_cookie(server, "username", "abc123")
+end
+```
+
+Default settings include:
+
+- `http_only: true` - Cookie is only accessible via HTTP(S), not JavaScript
+- `path: "/"` - Cookie is available for the entire domain
+- `same_site: :lax` - CSRF protection with reasonable usability
+- `secure: true` - Cookie only sent over HTTPS connections
+
+##### Custom Settings
+
+You can customize cookie behavior by providing options:
+
+```elixir
+def init(_params, _component, server) do
+  opts = [
+    http_only: false,
+    path: "/admin",
+    same_site: :strict,
+    secure: false
+  ]
+
+  put_cookie(server, "ui_preference", "sidebar_collapsed", opts)
+end
+```
+
+##### Available Options
+
+- `http_only` - boolean, whether cookie is accessible only via HTTP (not JavaScript)
+- `path` - string, URL path where cookie is available
+- `same_site` - `:strict`, `:lax`, or `:none` for CSRF protection among other security benefits
+- `secure` - boolean, whether cookie requires HTTPS
+- `max_age` - integer, cookie lifetime in seconds
+- `domain` - string, domain where cookie is available
+
+#### Deleting Cookies
+
+Remove cookies using the `delete_cookie/2` function:
+
+```elixir
+def init(_params, _component, server) do
+  delete_cookie(server, "temporary_data")
+end
+```
+
+#### Using Cookies in Commands
+
+Cookie operations can also be performed in server commands, allowing for dynamic cookie management in response to user interactions:
+
+##### Command Examples
+
+```elixir
+def command(:save_user_preferences, params, server) do
+  user_prefs = %{
+    theme: params.theme,
+    language: params.language,
+    timezone: params.timezone
+  }
+
+  server
+  |> put_cookie("user_preferences", user_prefs)
+  |> put_action(:show_success_message)
+end
+
+def command(:load_user_preferences, _params, server) do
+  preferences = get_cookie(server, "user_preferences")
+  put_action(server, :update_ui_preferences, preferences: preferences)
+end
+
+def command(:logout, _params, server) do
+  server
+  |> delete_cookie("session_id")
+  |> delete_cookie("user_preferences")
+  |> put_action(:redirect_to_login)
+end
+```
+
+#### Data Encoding
+
+Hologram automatically handles encoding and decoding of cookie values:
+
+- **Writing cookies** - All values (including strings) are encoded using Hologram's serialization format
+- **Reading cookies** - Hologram can read both Hologram-encoded cookies and plain string cookies (by detecting the encoding format)
+- **Data types** - Complex data structures (maps, lists, tuples, atoms, etc.) are automatically preserved through the encoding/decoding process
+
+#### Security Considerations
+
+When working with cookies, consider the following security best practices:
+
+- **Use HTTPS** - Keep `secure: true` in production to prevent cookie theft
+- **HTTP-only by default** - Use `http_only: true` unless you need JavaScript access
+- **Appropriate SameSite** - Use `:strict` for sensitive cookies, `:lax` for general use
+- **Minimal data** - Store only necessary data in cookies to keep them lightweight and secure
+- **Set expiration** - Use `max_age` to limit cookie lifetime
+
+#### Common Use Cases
+
+- **User preferences** - Theme, language, layout settings
+- **Custom authentication** - When implementing authentication outside of Hologram's session system
+- **Shopping cart** - Temporary cart contents for anonymous users
+- **Analytics** - User tracking (with appropriate consent)
+- **Feature flags** - User-specific feature toggles
