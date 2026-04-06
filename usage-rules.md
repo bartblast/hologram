@@ -68,3 +68,15 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Event data is available in `params.event` inside the action/command handler.
 - `$change` on an input fires on every keystroke (text inputs) or on selection change (checkboxes, radios, selects). On a form element, it fires on field blur.
 - Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
+
+## Actions
+
+- Actions are client-side. Define with `def action(name, params, component)`. **Not** `handle_event`.
+- Actions must return a `%Component{}` struct. Chain operations with `|>`.
+- Update state: `put_state(component, :key, value)` or `put_state(component, key: val1, key2: val2)`.
+- Nested state update: `put_state(component, [:path, :key], value)`.
+- Trigger a command: `put_command(component, :cmd_name)` or `put_command(component, :cmd_name, param: value)`.
+- Navigate: `put_page(component, PageModule)` or `put_page(component, PageModule, param: value)`.
+- Update context: `put_context(component, :key, value)`.
+- Chain another action: `put_action(component, :action_name)` or `put_action(component, :action_name, param: value)`.
+- Delays are available for actions only (not commands): `put_action(component, name: :my_action, delay: 750)`.
