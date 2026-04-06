@@ -2891,3 +2891,34 @@ Since JS interop functions only work in the browser, functions that use them can
 #### Publishing Packages
 
 Planning to publish a reusable package that wraps a JavaScript library, a Web API, or provides Hologram utilities? Check the Package Naming conventions to help distinguish official and community packages.
+
+## Reference
+
+### Client Runtime
+
+Hologram automatically compiles Elixir functions to JavaScript for browser execution. However, many Elixir standard library functions rely on underlying Erlang functions that must be manually ported to JavaScript. This reference tracks the implementation status of both Elixir and Erlang functions in the client runtime.
+
+#### Quick Stats
+
+The Client Runtime reference page on the website shows live statistics for the number of Elixir and Erlang functions that are done, in progress, todo, or deferred. Visit https://hologram.page/reference/client-runtime for current numbers.
+
+#### Understanding This Reference
+
+##### How Statistics Are Calculated
+
+A call graph of the Elixir standard library determines which Erlang functions each Elixir function depends on. Function progress is the percentage of its Erlang dependencies that have been ported to JavaScript. Module progress is the average of its functions' progress (including deferred ones). Overall Elixir progress is the average of all non-deferred function progresses. Overall Erlang progress is the percentage of non-deferred functions that are done.
+
+##### Status Meanings
+
+- **done** - Fully implemented and ready to use
+- **in progress** - Partially implemented; often works in typical scenarios, with missing parts only triggered in rare code branches or edge cases
+- **todo** - Not yet implemented
+- **deferred** - Implementation postponed to future development phases
+
+#### Implementation Scope
+
+Hologram development is divided into three phases: **Phase 1** (current focus) targets full-stack web and basic local-first applications; **Phase 2** will add Elixir's process model for advanced local-first and mobile development; **Phase 3** will introduce file system and OS operations for desktop applications.
+
+For Phase 1 use cases, you need robust functions for state management, data manipulation, dates/times, strings, and collections - but not processes, file system, or OS operations. JavaScript is single-threaded, and Hologram's architecture handles workflow orchestration automatically for typical web applications.
+
+Modules like Process, System, File, Port, Code, and Node are marked as deferred because they target Phases 2-3. This reference shows all dependencies comprehensively - even for deferred functionality. Many "in progress" functions, especially those with high completion percentages, already work fine for web development, with missing dependencies only affecting rare code branches or advanced scenarios you're unlikely to encounter.
