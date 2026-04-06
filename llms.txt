@@ -11,3 +11,7 @@
 - [Introduction](https://hologram.page/docs/introduction): Overview of Hologram, key features, framework philosophy, and inspirations
 - [Installation](https://hologram.page/docs/installation): Prerequisites (Elixir, OTP, Phoenix, Node.js) and step-by-step setup
 - [Quick Start](https://hologram.page/docs/quick-start): Build a simple blog app demonstrating layouts, pages, components, and interactions
+
+## Documentation
+
+- [Architecture](https://hologram.page/docs/architecture): Pages and components, code distribution, client-server communication
