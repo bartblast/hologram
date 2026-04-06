@@ -1794,3 +1794,57 @@ When working with forms in Hologram:
 - Use appropriate input types (`email`, `password`, etc.) for better UX and built-in validation
 - Keep form state minimal - only store what you need for validation and UI updates
 - Take advantage of isomorphic validation - use the same Elixir validation code client-side and server-side
+
+### Context
+
+Context in Hologram provides a way to share data between components without explicitly passing it through props. The main purpose of Context is to avoid prop drilling - the need to pass data through multiple layers of components that don't need the data themselves, just to make it available to deeply nested components that do need it. It's particularly useful for data that needs to be accessed by many components in your application, such as user authentication state, theme preferences, or global settings.
+
+#### Setting Context Values
+
+Context values can be set within actions or in init functions using the `put_context/3` function:
+
+```elixir
+put_context(component, :key, value)
+```
+
+When you set a context value, it becomes available to all child components in the component tree below the component that emitted it. This means you can set context at any level and access it in any descendant component, without having to pass it through intermediate components.
+
+##### Using Namespaced Context Keys
+
+To avoid naming conflicts between different components, you can use namespaced context keys:
+
+```elixir
+put_context(component, {MyModule, :key}, value)
+```
+
+This allows different components to use the same key name without conflicts.
+
+#### Accessing Context Values
+
+To access context values in your components, define a prop with the `from_context` option:
+
+```elixir
+prop :user, :map, from_context: :current_user
+```
+
+This will automatically set the `@user` prop to the value of `:current_user` from context.
+
+#### Common Use Cases
+
+Context is particularly useful for:
+
+- User authentication state
+- Theme preferences (light/dark mode)
+- Global application settings
+- Shared data between deeply nested components
+- Feature flags and configuration
+
+#### Best Practices
+
+When using Context, keep these best practices in mind:
+
+- Use context for truly global state that needs to be accessed by many components
+- Prefer props for component-specific data that only needs to be passed to direct children
+- Use namespaced keys to avoid naming conflicts
+- Keep context values as simple as possible - avoid storing complex objects or functions
+- Document the context keys your components expect to receive
