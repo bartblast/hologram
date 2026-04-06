@@ -2960,3 +2960,52 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 **Comprehensions:** Bitstring Generator (todo), Enumerable Generator (done), Filter (done), :into Option (done), :reduce Option (todo), :uniq Option (done)
 
 **Other:** Behaviours (done), Bitwise Module Operators (todo), Error Handling (todo), Processes (deferred), Protocols (done), Regular Expressions (todo)
+
+### Roadmap
+
+This roadmap outlines features that are either in progress or planned for upcoming releases. For currently available features, see the Features page. For details about Elixir standard library coverage and Erlang porting status, refer to the Client Runtime page.
+
+Our development roadmap is organized by timeline, with colors representing proximity: short-term goals focus on foundational features, medium-term goals expand capabilities and developer experience, and long-term goals represent transformative capabilities for the framework. Features are ordered alphabetically within each group.
+
+#### Short-Term Goals - Foundation & Core Features
+
+- **Client Error Handling** - Implement support for Elixir's error handling features (try/catch/rescue, etc.) on the client side.
+- **Comprehension Parity** - Bring comprehension support to full parity with the Elixir server runtime, including bitstring generators and the `:reduce` option.
+- **DOM Events Support** - Complete implementation of remaining DOM events including keyboard, touch, and window events to achieve full coverage.
+- **Essential Stdlib Functions** - Expand support for the most important Elixir standard library functions needed for Phase 1 use cases: state management, data manipulation, dates/times, strings, and collections.
+- **JS Interop** - Create a clean interface for JavaScript interoperability to leverage existing JavaScript libraries.
+- **Middleware** - Add middleware support with a pre-init hook for components and pages, including access to request headers before init.
+- **Regular Expressions** - Transpile Elixir's PCRE-based regexes to JavaScript runtime and support Regex-related functions such as `=~`.
+- **Server-Triggered Actions** - Enable triggering actions from server code outside of commands, such as background jobs (e.g. Oban) or scheduled tasks.
+- **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
+- **Template Engine Error Reporting** - Improve error reporting in the template engine to make debugging template issues more straightforward.
+- **Template Formatter** - Implement automatic formatting for templates to ensure consistent code style.
+- **VS Code Extension** - Develop a VS Code extension for template syntax highlighting to improve the developer experience.
+- **"with" Expression** - Complete the implementation of Elixir's `with` expression.
+
+#### Medium-Term Goals - Advanced Features & Enhanced DX
+
+- **Advanced Routing** - Add support for multi-tenant routing (subdomain-based) and catch-all (wildcard) routes for dynamic path segments of arbitrary depth.
+- **Auth** - Built-in authentication, authorization, and access control system for managing user identities and protecting resources.
+- **Bitstring UTF16 and UTF32 Encoding** - Add support for UTF16 and UTF32 encodings in bitstrings.
+- **Bitwise Module Operators** - Implement operators from the Bitwise module, enabling bit-level operations.
+- **Client Error Stacktraces** - Ensure error messages and stacktraces on the client match those on the server for easier debugging.
+- **Client MFAs Whitelisting** - Create a mechanism to explicitly whitelist Module-Function-Arity combinations that should be compiled for client-side execution when not automatically detected by the compiler.
+- **Command Failure Handling Control** - Add more granular control over how command failures are handled, allowing developers to customize error handling strategies, retry logic, and failure recovery mechanisms.
+- **Component-Level Rerendering** - Implement selective rerendering of only changed components instead of entire pages.
+- **Dynamic Components** - Support for dynamically loading and rendering components.
+- **Local-First Support** - Implement local-first architecture with offline-capable local database, auto-sync, and conflict resolution for resilient applications.
+- **Navigate Between Pages from Commands** - Enable navigation to another page from within a command.
+- **Props Validation** - Add a system for validating component props.
+- **Reactivity Layer** - Introduce derived values, prop watchers, and effects for a cohesive reactivity system.
+- **Secrets Protection** - Prevent sensitive information from leaking to the client side.
+- **Shorthand Prop Assignment Syntax** - Create an optional, more concise syntax for assigning props.
+- **Template Partials** - Add support for lightweight, reusable template snippets (similar to LiveView's function components) for reducing code duplication without the overhead of full components.
+
+#### Long-Term Goals - Transformative Capabilities
+
+- **Client Processes** - Port Elixir's process model to the client for concurrent and parallel programming patterns.
+- **Desktop Platform Support** - Enable packaging Hologram applications for desktop platforms with native integrations.
+- **Mobile Platform Support** - Enable building native-quality mobile applications from the same Hologram codebase.
+- **Structural Sharing** - Implement structural sharing for immutable data structures to reduce memory usage and improve performance.
+- **Time Travel Debugger** - Develop a debugging tool that allows stepping backward through state changes.
