@@ -1127,3 +1127,219 @@ When working with events in Hologram, consider these best practices:
 - Be mindful of event bubbling and use event targets appropriately
 - Use keyboard events for accessibility and keyboard navigation
 - Handle form events properly to ensure good user experience
+
+### Actions
+
+Actions in Hologram are client-side operations that allow you to:
+
+- Update component state
+- Trigger commands and other actions
+- Navigate to another page
+- Update emitted context
+
+They are typically executed in response to user interactions, enabling dynamic and interactive web applications.
+
+#### Defining Actions
+
+Actions are defined as functions in your page or component modules using the following syntax:
+
+```elixir
+def action(name, params, component) do
+  # Action logic here
+end
+```
+
+For example:
+
+```elixir
+def action(:update_count, params, component) do
+  put_state(component, :count, params.new_count)
+end
+```
+
+#### Action Parameters
+
+Actions receive three arguments:
+
+- `name` - the atom representing the action name
+- `params` - a map containing:
+  - Custom parameters from template event attributes, other actions via `put_action/3`, or commands via `put_action/3`
+  - Event data under the `:event` key (see Events for details about event data)
+- `component` - the current `%Component{}` struct
+
+#### Action Results
+
+Actions must return a `%Component{}` struct. This struct not only reflects changes to the component's state but also includes instructions for what happens next through functions that can be called on it. These functions are pure - they don't cause any side effects and simply return a new modified `%Component{}` struct. Since these functions return the modified `%Component{}` struct, they can be chained together using the pipe operator `|>`, allowing for a clean and composable way to combine multiple state changes and behaviors.
+
+Within an action, you can:
+
+##### Update Component State
+
+By setting the value for a single key:
+
+```elixir
+put_state(component, :key, value)
+```
+
+With multiple key-value pairs using a keyword list:
+
+```elixir
+put_state(component, key_1: value_1, key_2: value_2)
+```
+
+With multiple key-value pairs using a map:
+
+```elixir
+put_state(component, %{key_1: value_1, key_2: value_2})
+```
+
+Update a nested value by specifying a path of keys:
+
+```elixir
+put_state(component, [:path_key_1, :path_key_2], value)
+```
+
+##### Trigger a Server Command
+
+Command with the specified name without any parameters:
+
+```elixir
+put_command(component, :my_command)
+```
+
+Command with the specified name and additional parameters provided as a keyword list:
+
+```elixir
+put_command(component, :my_command, param_1: value_1, param_2: value_2)
+```
+
+Command with a specified name, target, and parameters using a map for the parameters (in this longhand version, both params and target are optional):
+
+```elixir
+put_command(component, name: :my_command, target: "other_component", params: %{key: value})
+```
+
+Command using a `%Command{}` struct:
+
+```elixir
+put_command(component, %Command{name: :my_command})
+```
+
+See also: Commands.
+
+##### Navigate to Another Page
+
+Page without params:
+
+```elixir
+put_page(component, ProductsPage)
+```
+
+Page with params:
+
+```elixir
+put_page(component, ProductPage, product_id: 123)
+```
+
+##### Update Emitted Context
+
+By setting a value for a single key:
+
+```elixir
+put_context(component, :key, value)
+```
+
+Using a tuple for namespacing, allowing different components to use the same key without conflict:
+
+```elixir
+put_context(component, {MyModule, :key}, value)
+```
+
+See also: Context.
+
+##### Chain Another Action
+
+Action with the specified name without any additional parameters:
+
+```elixir
+put_action(component, :my_action)
+```
+
+Action with the specified name and additional parameters provided as a keyword list:
+
+```elixir
+put_action(component, :my_action, param_1: value_1, param_2: value_2)
+```
+
+Action using the longhand syntax (where params, target, and delay are optional):
+
+```elixir
+put_action(component, name: :my_action, target: "other_component", params: %{key: value})
+```
+
+Using an `%Action{}` struct:
+
+```elixir
+put_action(component, %Action{name: :my_action})
+```
+
+#### Triggering Actions
+
+Actions can be triggered using event attributes in templates. For detailed information about event binding syntax and available event types, see the Events documentation.
+
+#### Action Targets
+
+By default, actions are executed on the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for execution using the target parameter. For more information about event targets, see the Events documentation.
+
+#### Action Delays
+
+Actions can be scheduled to execute after a specified delay using the delay parameter, which accepts a value in milliseconds.
+
+The delay can be specified in several ways:
+
+- In event bindings using the longhand syntax: `$click={action: :my_action, delay: 750}`
+- When chaining actions with put_action/2: `put_action(component, name: :my_action, delay: 750)`
+
+Common use cases include:
+
+- Creating smooth animations by scheduling the next frame
+- Implementing auto-hide notifications
+- Debouncing user interactions
+- Creating timed game mechanics
+
+Note: The delay parameter is only available for actions, not commands.
+
+#### Putting It All Together
+
+Here's a simple example that demonstrates how actions work in Hologram. The counter component shows:
+
+1. How to trigger an action from a template using event binding (see Events for details)
+2. How to pass parameters to the action
+3. How to chain multiple functions on the `%Component{}` struct using the pipe operator:
+   - Updating component state with `put_state/3`
+   - Sending an asynchronous server command with `put_command/3`
+
+```elixir
+defmodule MyApp.Components.Counter do
+  # ...
+
+  def template do
+    ~HOLO"""
+    <div>
+      <p>Count: {@count}</p>
+      <button $click={:increment, step: 1}> +1 </button>
+    </div>
+    """
+  end
+
+  def action(:increment, params, component) do
+    new_count = component.state.count + params.step
+
+    component
+    |> put_state(:count, new_count)
+    |> put_command(:save_count, new_count)
+  end
+
+  # ...
+end
+```
