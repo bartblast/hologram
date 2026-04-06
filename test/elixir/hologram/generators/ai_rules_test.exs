@@ -58,7 +58,12 @@ defmodule Hologram.Generators.AIRulesTest do
         AIRules.sync(@filename, source_path: source_path, target_dir: target_dir)
       end)
 
-      assert File.read!(target_path) == @expected_marked_content
+      result =
+        target_path
+        |> File.read!()
+        |> normalize_newlines()
+
+      assert result == @expected_marked_content
     end
 
     test "appends to existing file without markers", %{
@@ -89,7 +94,12 @@ defmodule Hologram.Generators.AIRulesTest do
       #{@marker_end}
       """
 
-      assert File.read!(target_path) == expected
+      result =
+        target_path
+        |> File.read!()
+        |> normalize_newlines()
+
+      assert result == expected
     end
 
     test "replaces content between existing markers", %{
@@ -120,7 +130,12 @@ defmodule Hologram.Generators.AIRulesTest do
       after
       """
 
-      assert File.read!(target_path) == expected
+      result =
+        target_path
+        |> File.read!()
+        |> normalize_newlines()
+
+      assert result == expected
     end
 
     test "prints 'Created' for new files", %{
@@ -159,13 +174,19 @@ defmodule Hologram.Generators.AIRulesTest do
         AIRules.sync(@filename, source_path: source_path, target_dir: target_dir)
       end)
 
-      first_result = File.read!(target_path)
+      first_result =
+        target_path
+        |> File.read!()
+        |> normalize_newlines()
 
       capture_io(fn ->
         AIRules.sync(@filename, source_path: source_path, target_dir: target_dir)
       end)
 
-      second_result = File.read!(target_path)
+      second_result =
+        target_path
+        |> File.read!()
+        |> normalize_newlines()
 
       assert first_result == second_result
     end
@@ -185,13 +206,19 @@ defmodule Hologram.Generators.AIRulesTest do
         AIRules.sync(@filename, source_path: source_path, target_dir: target_dir)
       end)
 
-      first_result = File.read!(target_path)
+      first_result =
+        target_path
+        |> File.read!()
+        |> normalize_newlines()
 
       capture_io(fn ->
         AIRules.sync(@filename, source_path: source_path, target_dir: target_dir)
       end)
 
-      second_result = File.read!(target_path)
+      second_result =
+        target_path
+        |> File.read!()
+        |> normalize_newlines()
 
       assert first_result == second_result
     end
