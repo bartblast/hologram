@@ -139,3 +139,19 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Default cookie options: `http_only: true`, `path: "/"`, `same_site: :lax`, `secure: true`.
 - Custom options: `http_only`, `path`, `same_site` (`:strict`, `:lax`, `:none`), `secure`, `max_age`, `domain`.
 - Use sessions for sensitive data. Use cookies when you need client-side access or specific cookie behavior.
+
+## JavaScript Interop
+
+- Add `use Hologram.JS` to any module that needs JS interop. **Not** Phoenix hooks or `phx-hook`.
+- Import JS modules: `js_import from: "decimal.js", as: :Decimal` (default export) or `js_import :multiply, from: "./helpers.mjs"` (named export).
+- Relative paths (`./`, `../`) resolve relative to the Elixir source file. Bare specifiers resolve as npm packages.
+- Call a function: `JS.call(:multiply, [4, 6])`. Call a method: `JS.call(:Math, :round, [3.7])`.
+- Instantiate a class: `JS.new(:Calculator, [10])`. Chain with `|>`: `:Calculator |> JS.new([10]) |> JS.call(:add, [5])`.
+- Get/set properties: `JS.get(obj, :value)`, `JS.set(obj, :value, 20)`.
+- Evaluate JS: `JS.eval("3 + 4")`. Execute JS: `JS.exec("const x = 2; return x + 3;")`. Inline JS: `~JS"""..."""`.
+- Async: JS Promises become Elixir Tasks. Use `Task.await/1` to get the result.
+- Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`.
+- Dispatch DOM events from Elixir: `JS.dispatch_event(target, "my:event", detail: %{value: 42})`.
+- Elixir anonymous functions can be passed as JS callbacks.
+- JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
+- Prefer `JS.call` over `JS.exec`/`JS.eval`. Isolate JS interop behind facade modules.
