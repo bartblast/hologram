@@ -325,3 +325,62 @@ end
 This example demonstrates the basic building blocks of a Hologram application. The framework handles the client-server communication and state management automatically, letting you focus on building features.
 
 Remember that Hologram keeps state on the client side for better performance while using commands for server-side operations when needed.
+
+## Documentation
+
+### Architecture
+
+Hologram's architecture is designed around simplicity and developer experience. Here's how it works:
+
+#### Pages and Components
+
+The framework breaks down web applications into two fundamental building blocks:
+
+- Pages: top-level components that represent different routes in your application
+- Components: reusable UI elements that can be composed together
+
+#### Code Distribution
+
+Hologram automatically analyzes your code and:
+
+1. Determines which parts should run on the client vs server
+2. Compiles necessary Elixir code to JavaScript for browser execution
+3. Sets up all required client-server communication
+
+#### Client-Side State
+
+State is maintained in the browser, which:
+
+- Enables immediate UI updates
+- Reduces server load
+- Simplifies the programming model
+
+#### Actions and Commands
+
+Code execution is organized into two types of operations:
+
+- Actions: client-side operations that run in the browser
+- Commands: server-side operations for tasks like database access
+
+Both can be triggered by user interactions, and they can trigger each other.
+
+#### HTTP/2 Communication
+
+Client-server communication happens automatically through HTTP/2 persistent connections:
+
+- No manual HTTP configuration needed
+- No boilerplate code required
+- Handles all action-command interactions
+- Practically as fast as WebSockets for real-time updates
+- Lower server resource consumption - no continuous connection overhead per user
+- Easier debugging with standard HTTP tools and browser DevTools
+- Works seamlessly through corporate proxies and firewalls
+
+#### Runtime Behavior
+
+The framework:
+
+1. Loads the initial page from the server
+2. Mounts the page in the browser
+3. Manages the virtual DOM for efficient updates
+4. Handles all client-server communication automatically
