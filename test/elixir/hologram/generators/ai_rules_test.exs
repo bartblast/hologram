@@ -6,15 +6,6 @@ defmodule Hologram.Generators.AIRulesTest do
   alias Hologram.Generators.AIRules
   alias Hologram.Reflection
 
-  @expected_marked_content """
-  <!-- hologram-start -->
-  ## Hologram
-
-  - Rule one
-  - Rule two
-  <!-- hologram-end -->
-  """
-
   @filename "TEST.md"
 
   @marker_start "<!-- hologram-start -->"
@@ -63,7 +54,17 @@ defmodule Hologram.Generators.AIRulesTest do
         |> File.read!()
         |> normalize_newlines()
 
-      assert result == normalize_newlines(@expected_marked_content)
+      expected =
+        normalize_newlines("""
+        <!-- hologram-start -->
+        ## Hologram
+
+        - Rule one
+        - Rule two
+        <!-- hologram-end -->
+        """)
+
+      assert result == expected
     end
 
     test "appends to existing file without markers", %{
