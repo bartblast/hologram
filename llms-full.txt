@@ -1471,3 +1471,66 @@ end
 #### Command Targets
 
 By default, commands are executed on the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for execution using the `target` parameter. For more information about event targets, see the Events documentation.
+
+### Navigation
+
+Hologram provides a seamless navigation experience by combining server-side rendering with client-side transitions. While each page is loaded fresh from the server, the framework uses the History PushState API and virtual DOM to ensure smooth transitions between pages.
+
+Note: For information about defining routes for pages, see the Pages documentation.
+
+#### Link Component
+
+The `Hologram.UI.Link` component is the primary way to add navigation links in your templates. It supports both simple page navigation and passing parameters to the target page.
+
+Basic usage:
+
+```holo
+<Link to={MyPage}>MyPage</Link>
+```
+
+With parameters:
+
+```holo
+<Link to={MyPage, a: 1, b: 2}>MyPage with params</Link>
+```
+
+#### Programmatic Navigation
+
+Besides using the `Hologram.UI.Link` component in templates, you can also navigate programmatically in your actions using the `put_page/2` and `put_page/3` functions.
+
+Basic navigation:
+
+```elixir
+put_page(component, MyPage)
+```
+
+Navigation with parameters:
+
+```elixir
+put_page(component, MyPage, a: 1, b: 2)
+```
+
+#### Navigation Behavior
+
+Hologram implements several optimizations to make page transitions feel instant:
+
+##### Prefetching
+
+When a user interacts with a link, Hologram starts prefetching the target page on the `$pointer_down` event. When the `$pointer_up` event occurs, the current page is replaced with the prefetched content, making the transition feel instantaneous.
+
+##### Browser History
+
+Hologram properly maintains the browser's history stack, ensuring that:
+
+- Back and forward navigation works as expected
+- URL changes are reflected in the browser's address bar
+- Each page is loaded fresh from the server, ensuring up-to-date content
+
+##### Benefits
+
+This navigation approach combines the best of both worlds:
+
+- Server-side rendering ensures SEO-friendly, up-to-date content
+- Client-side transitions provide a smooth, app-like experience
+- Fresh page loads guarantee content consistency
+- Proper history management enables natural browser navigation
