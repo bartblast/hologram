@@ -962,3 +962,168 @@ end
 #### Component ID
 
 The layout component is always assigned a component ID (cid) of `"layout"`. This is important to remember when targeting actions or commands at the layout component.
+
+### Events
+
+Events in Hologram are user interactions that can trigger actions or commands. They are the primary way to make your application interactive and responsive to user input.
+
+#### Event Types
+
+Hologram supports various event types that you can bind to elements in your templates (more are coming soon):
+
+- `$blur` - triggered when an element loses focus
+- `$change` - triggered when the value of an input element changes
+- `$click` - triggered when an element is clicked
+- `$focus` - triggered when an element receives focus
+- `$mouse_move` - triggered when the mouse cursor moves over an element
+- `$pointer_cancel` - triggered when a pointer event is cancelled (e.g., when the browser decides the pointer will no longer generate events)
+- `$pointer_down` - triggered when a pointer (mouse, touch, pen) is pressed down on an element
+- `$pointer_move` - triggered when a pointer moves while over an element
+- `$pointer_up` - triggered when a pointer (mouse, touch, pen) is released from an element
+- `$select` - triggered when text is selected in an input or textarea element
+- `$submit` - triggered when a form is submitted
+- `$transition_cancel` - triggered when a CSS transition is cancelled before it completes
+- `$transition_end` - triggered when a CSS transition has finished
+- `$transition_run` - triggered when a CSS transition is created
+- `$transition_start` - triggered when a CSS transition has started
+
+#### Event Data
+
+When an event occurs, Hologram provides event data that you can access in the action or command that was bound to handle that event. This data is available in the `params` argument under the `:event` key. The event data structure varies depending on the event type:
+
+##### Change Event
+
+The `$change` event data structure depends on where the event handler is placed:
+
+- **Input-level events:** include a `value` field with the specific element's value
+- **Form-level events:** include all form field values as a map, where keys are input names and values are current input values
+
+For detailed information about `$change` event behavior with forms, including synthetic event mapping, usage patterns, and data types for different input types, see the "Event Handling" section in the Forms documentation.
+
+##### Mouse Events
+
+Mouse events (like `$mouse_move`) include:
+
+- `client_x` - X coordinate relative to the client area (viewport)
+- `client_y` - Y coordinate relative to the client area (viewport)
+- `movement_x` - horizontal movement delta since the last mouse event
+- `movement_y` - vertical movement delta since the last mouse event
+- `offset_x` - X coordinate relative to the target element
+- `offset_y` - Y coordinate relative to the target element
+- `page_x` - X coordinate relative to the page
+- `page_y` - Y coordinate relative to the page
+- `screen_x` - X coordinate relative to the screen
+- `screen_y` - Y coordinate relative to the screen
+
+##### Pointer Events
+
+Pointer events (like `$click`, `$pointer_cancel`, `$pointer_down`, `$pointer_move`, `$pointer_up`) include:
+
+- `client_x` - X coordinate relative to the client area (viewport)
+- `client_y` - Y coordinate relative to the client area (viewport)
+- `movement_x` - horizontal movement delta since the last pointer event
+- `movement_y` - vertical movement delta since the last pointer event
+- `offset_x` - X coordinate relative to the target element
+- `offset_y` - Y coordinate relative to the target element
+- `page_x` - X coordinate relative to the page
+- `page_y` - Y coordinate relative to the page
+- `pointer_type` - the type of pointer that triggered the event, as an atom (`:mouse`, `:touch`, or `:pen`), or `nil` if the device type cannot be detected by the browser
+- `screen_x` - X coordinate relative to the screen
+- `screen_y` - Y coordinate relative to the screen
+
+###### Click Event
+
+Click events are ignored in the following cases:
+
+- When the Ctrl key is pressed
+- When the Command key is pressed
+- When the Shift key is pressed
+- When the middle mouse button is clicked
+
+This behavior prevents interference with browser's built-in functionality like opening links in new tabs, selecting text, or using browser extensions.
+
+##### Select Event
+
+The `$select` event includes:
+
+- `value` - the selected text value
+
+##### Submit Event
+
+The `$submit` event includes form field values directly under the `:event` key. For example, if your form has fields named "email" and "password", the event data will look like:
+
+```elixir
+%{email: "user@example.com", password: "secret"}
+```
+
+#### Event Binding Syntax
+
+When binding events to elements in your templates, prefix the event name with a dollar sign (`$`). You can bind events using several syntax options. Note that text and shorthand syntax are only available for actions. To trigger a command, you must use the longhand syntax with the `command:` key.
+
+##### Text Syntax (Actions Only)
+
+The simplest way to bind an event to an action:
+
+```holo
+<button $click="my_action">Click me</button>
+```
+
+##### Expression Shorthand Syntax (Actions Only)
+
+Use this syntax when you need to pass parameters to the action:
+
+```holo
+<button $click={:my_action, param_1: 1, param_2: 2}>Click me</button>
+```
+
+##### Expression Longhand Syntax
+
+For complete control, including targeting specific components, triggering commands, and scheduling delayed execution:
+
+```holo
+<button $click={action: :my_action, target: "other_component", params: %{key: value}}>Click me</button>
+```
+
+To trigger an action with a delay (in milliseconds), use the `delay:` key:
+
+```holo
+<button $click={action: :my_action, delay: 1000}>Click me</button>
+```
+
+To trigger a command, use the `command:` key instead of `action:` (note that delays are not supported for commands):
+
+```holo
+<button $click={command: :my_command, params: %{key: value}}>Click me</button>
+```
+
+#### Event Targets
+
+By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
+
+```holo
+<button $click={action: :my_action, target: "other_component"}>Click me</button>
+```
+
+Valid targets include:
+
+- `"page"` - targets the current page
+- `"layout"` - targets the current layout component
+- a string representing a component ID (CID) - targets a specific component by its unique identifier within the application
+
+#### Event Flow
+
+When an event occurs, it can trigger either an action or a command:
+
+- `Actions` - client-side operations that can update component state, trigger commands, and more. See Actions for more details.
+- `Commands` - server-side operations that can access server resources, trigger actions, and more. See Commands for more details.
+
+#### Best Practices
+
+When working with events in Hologram, consider these best practices:
+
+- Use meaningful action and command names that describe what they do
+- Keep event handlers focused on a single responsibility
+- Use the appropriate event type for the interaction you want to handle
+- Be mindful of event bubbling and use event targets appropriately
+- Use keyboard events for accessibility and keyboard navigation
+- Handle form events properly to ensure good user experience
