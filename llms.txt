@@ -1,0 +1,13 @@
+# Hologram
+
+> Full-stack isomorphic Elixir web framework that lets you build interactive web applications entirely in Elixir, without writing JavaScript.
+
+- [Website](https://hologram.page),
+- [GitHub](https://github.com/bartblast/hologram)
+- [HexDocs](https://hexdocs.pm/hologram)
+
+## Guides
+
+- [Introduction](https://hologram.page/docs/introduction): Overview of Hologram, key features, framework philosophy, and inspirations
+- [Installation](https://hologram.page/docs/installation): Prerequisites (Elixir, OTP, Phoenix, Node.js) and step-by-step setup
+- [Quick Start](https://hologram.page/docs/quick-start): Build a simple blog app demonstrating layouts, pages, components, and interactions
