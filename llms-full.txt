@@ -1534,3 +1534,263 @@ This navigation approach combines the best of both worlds:
 - Client-side transitions provide a smooth, app-like experience
 - Fresh page loads guarantee content consistency
 - Proper history management enables natural browser navigation
+
+### Forms
+
+Forms in Hologram work seamlessly with the framework's declarative architecture. Hologram provides two flexible approaches for handling form inputs, allowing you to choose the best strategy for your specific use case.
+
+#### Synchronized vs Non-synchronized Inputs
+
+Hologram supports two approaches for handling form inputs:
+
+- **Synchronized inputs** - input state is synchronized with component/page state through unidirectional data flow achieved with `$change` event handler on the input element level
+- **Non-synchronized inputs** - without the `$change` event handler on input element level. To get the values of such inputs, `$change` or `$submit` event handlers on a form element level can be used
+
+##### Synchronized Inputs
+
+Synchronized inputs maintain their displayed values in sync with your component's state through unidirectional data flow, ensuring the UI consistently reflects your application's data. This approach is similar to concepts like "controlled inputs" from React or "form input bindings" from Vue or Svelte, but maintains strict unidirectional flow - the component state is the single source of truth, and user input updates flow back to the state through event handlers.
+
+###### Basic Usage
+
+To create a synchronized input, you need three things: state initialization, the input element synchronized with the state, and an event handler:
+
+```elixir
+def init(_props, component, _server) do
+  put_state(component, :email, "")
+end
+```
+
+```holo
+<input type="email" name="email" value={@email} $change="email_changed" />
+```
+
+```elixir
+def action(:email_changed, params, component) do
+  put_state(component, :email, params.event.value)
+end
+```
+
+###### Value Synchronization
+
+Hologram synchronizes your application state with form inputs using different attributes depending on the input type:
+
+- **Text-based inputs (text, email, password, etc.), textareas, and selects** use the `value` attribute (similar to React)
+- **Checkboxes and radio buttons** use the `checked` attribute
+
+Hologram optimizes this synchronization process:
+
+- Efficient mechanisms update form values while preserving browser behavior
+- Redundant DOM updates are avoided to prevent interrupting user input
+
+##### Non-synchronized Inputs
+
+Non-synchronized inputs don't have `$change` event handlers on the input element level. Instead, you can access their values using form-level event handlers. This approach is useful when you don't need real-time state synchronization and prefer to handle form data as a whole.
+
+###### Accessing Form Data
+
+With non-synchronized inputs, you can access form data from `params.event` in both `$change` and `$submit` event handlers on the form level. The form data is provided as a map where keys are the input names and values are the current input values.
+
+```holo
+<form $change="form_changed" $submit="form_submitted">
+  <input type="text" name="username" />
+  <input type="email" name="email" />
+  <div class="error">{@validation_error}</div>
+  <button type="submit">Submit</button>
+</form>
+```
+
+```elixir
+def action(:form_changed, params, component) do
+  # params.event contains all form data: %{username: "...", email: "..."}
+  # Validate the form whenever any field changes
+  validation_error = cond do
+    params.event.username == "" -> "Username is required"
+    params.event.email == "" -> "Email is required"
+    true -> ""
+  end
+
+  put_state(component, :validation_error, validation_error)
+end
+
+def action(:form_submitted, params, component) do
+  # params.event contains all form data: %{username: "...", email: "..."}
+  username = params.event.username
+  email = params.event.email
+
+  # Process form submission...
+  component
+end
+```
+
+##### When to Use Each Approach
+
+- **Synchronized inputs** are ideal when you need real-time state updates, form validation as the user types, or dynamic UI updates based on input values
+- **Non-synchronized inputs** are useful for simple forms where data is only processed on submission, when minimizing state updates and re-renders, or when you don't need real-time access to individual field values
+
+**Note:** Form-level `$change` and `$submit` event handlers can also be used with synchronized inputs. This allows you to handle both individual input changes (via input-level `$change` handlers) and form-wide operations (via form-level handlers) in the same form.
+
+#### Event Handling
+
+Hologram uses synthetic events similar to React. The `$change` event behavior depends on both the input type and where you place the event handler:
+
+##### Input-level `$change` Events
+
+When you place `$change` directly on form inputs:
+
+- For text-based inputs and textareas, `$change` maps to the native `input` event, triggering on every keystroke
+- For checkboxes, radio buttons, and select elements, `$change` uses the native `change` event, triggering when the selection changes
+
+For input-level `$change` events, the event data contains a `value` field with the specific element's value.
+
+##### Form-level `$change` Events
+
+When you place `$change` on the form element itself, it behaves like the native `change` event - typically triggering when a field loses focus, regardless of the input type. This is useful for validation workflows where you want to validate after the user finishes editing a field.
+
+The event data contains all form field values as a map, where keys are the input names and values are the current input values.
+
+##### Event Data Types
+
+Regardless of whether you use input-level or form-level events, the values have different types depending on the input type:
+
+- For text-based inputs (text, email, password, etc.) and textareas: a string value
+- For checkboxes: a boolean value indicating if the element is checked
+- For radio buttons and select dropdowns: a string value of the selected option
+
+#### Input Types and Usage
+
+Hologram supports all standard HTML form elements, which can be used with either synchronized or non-synchronized approaches. Below are examples showing both approaches for each input type.
+
+##### Text-based Inputs
+
+Text-based inputs (text, email, password) are the most common form elements. They use the `value` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<input type="text" name="username" value={@username} $change="username_changed" />
+<input type="email" name="email" value={@email} $change="email_changed" />
+<input type="password" name="password" value={@password} $change="password_changed" />
+```
+
+**Non-synchronized:**
+
+```holo
+<input type="text" name="username" />
+<input type="email" name="email" />
+<input type="password" name="password" />
+```
+
+##### Textareas
+
+Textareas provide multi-line text input. They use the `value` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<textarea name="content" value={@content} $change="content_changed" />
+```
+
+**Non-synchronized:**
+
+```holo
+<textarea name="content"></textarea>
+```
+
+##### Checkboxes
+
+Checkboxes allow users to select or deselect options. They use the `checked` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<input type="checkbox" name="agreed" checked={@agreed} $change="agreement_changed" />
+<label for="agreed">I agree to the terms</label>
+```
+
+**Non-synchronized:**
+
+```holo
+<input type="checkbox" name="agreed" value="true" />
+<label for="agreed">I agree to the terms</label>
+```
+
+##### Radio Buttons
+
+Radio buttons allow users to select one option from a group. They use the `checked` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<input type="radio" name="size" id="size-small" value="small" checked={@size == "small"} $change="size_changed" />
+<label for="size-small">Small</label>
+
+<input type="radio" name="size" id="size-large" value="large" checked={@size == "large"} $change="size_changed" />
+<label for="size-large">Large</label>
+```
+
+**Non-synchronized:**
+
+```holo
+<input type="radio" name="size" id="size-small" value="small" />
+<label for="size-small">Small</label>
+
+<input type="radio" name="size" id="size-large" value="large" />
+<label for="size-large">Large</label>
+```
+
+##### Select Elements
+
+Select elements provide dropdown menus. They use the `value` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<select name="country" value={@country} $change="country_changed">
+  <option value="br">Brazil</option>
+  <option value="pl">Poland</option>
+  <option value="us">United States</option>
+</select>
+```
+
+**Non-synchronized:**
+
+```holo
+<select name="country">
+  <option value="br">Brazil</option>
+  <option value="pl">Poland</option>
+  <option value="us">United States</option>
+</select>
+```
+
+#### Client-side Validation
+
+One of Hologram's key architectural advantages is that it runs Elixir in the browser, enabling you to perform validation client-side using the same code you'd use server-side. This means you can provide immediate feedback to users without network round-trips.
+
+##### Isomorphic Validation
+
+Your validation logic can be truly isomorphic - the same Elixir validation code (including Ecto changesets) runs both client-side and server-side:
+
+- **Client-side:** Provides immediate user feedback and improves UX
+- **Server-side:** Ensures security, data integrity, and handles business rules that require server resources
+
+##### Recommended Validation Pattern
+
+For optimal user experience, consider this validation approach:
+
+- Use form-level `$change` events to trigger validation when fields lose focus
+- Run your validation logic client-side in the action handler for immediate feedback
+- Display validation errors immediately in the UI by updating component state
+- Re-validate server-side when actually persisting data for security and integrity
+
+This pattern provides the best of both worlds: immediate user feedback through client-side validation, with the security and reliability of server-side validation.
+
+#### Best Practices
+
+When working with forms in Hologram:
+
+- Use descriptive `name` attributes that match your data structure for easier form processing
+- Leverage form-level `$change` events for validation workflows that trigger when fields lose focus
+- Consider using commands for form submission when server-side processing is required
+- Use appropriate input types (`email`, `password`, etc.) for better UX and built-in validation
+- Keep form state minimal - only store what you need for validation and UI updates
+- Take advantage of isomorphic validation - use the same Elixir validation code client-side and server-side
