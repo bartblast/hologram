@@ -543,3 +543,262 @@ You can use standard HTML comments in your templates:
   <p>Content</p>
 </div>
 ```
+
+### Components
+
+Components are the building blocks of Hologram applications. They are reusable pieces of UI that can be composed together to create complex interfaces.
+
+#### Basic Example
+
+Here's a simple stateless component that displays a greeting:
+
+```elixir
+defmodule Greeting do
+  use Hologram.Component
+
+  prop :name, :string
+  prop :title, :string, default: "Mr."
+
+  def template do
+    ~HOLO"""
+    <p>Hello, {@title} {@name}!</p>
+    """
+  end
+end
+```
+
+Usage:
+
+```holo
+<Greeting name="Wick" title="Mr." />
+```
+
+#### Props
+
+Props are the primary way to pass data to components.
+
+They are defined using the `prop/2` macro receiving `name` and `type` params:
+
+```elixir
+prop :user_id, :integer
+```
+
+or `prop/3` macro that can receive the third `opts` param:
+
+```elixir
+prop :user_id, :integer, default: 123
+```
+
+##### Types
+
+Props can be typed using the following types:
+
+- `:any` - Any type (no type checking)
+- `:atom` - Atoms
+- `:boolean` - Booleans
+- `:bitstring` - Bitstrings
+- `:float` - Floats
+- `:function` - Functions
+- `:integer` - Integers
+- `:list` - Lists
+- `:map` - Maps
+- `:pid` - PIDs
+- `:port` - Ports
+- `:reference` - References
+- `:string` - Strings (UTF-8 encoded binaries)
+- `:tuple` - Tuples
+
+##### Options
+
+###### Default Value
+
+Set a default value for optional props using the `default` option:
+
+```elixir
+prop :count, :integer, default: 0
+```
+
+###### Context Source
+
+Props can be sourced from the Context using the `from_context` option. This is useful for accessing shared data across components:
+
+```elixir
+prop :user, :map, from_context: :current_user
+```
+
+For more information about Context, see the Context page.
+
+#### Stateful vs. Stateless Components
+
+Components can be either stateful or stateless:
+
+- **Stateless Components**: Don't maintain any internal state. They render based solely on their props.
+- **Stateful Components**: Maintain internal state and can update it over time. They are identified by a unique `cid` (component ID) and can have actions and commands. Stateful components can be initialized using either `init/3` (server-side) or `init/2` (client-side) functions.
+
+##### Component ID (cid)
+
+To make a component stateful, provide a `cid` when using it:
+
+```holo
+<Assassin cid="baba_yaga" name="John Wick" kill_count={439} />
+```
+
+The `cid` is used to target actions and commands at specific components using the `target` field:
+
+```holo
+<button $click={action: :increment_kills, target: "baba_yaga"}>Add Another One</button>
+```
+
+##### Initialization
+
+**Important:** Each stateful component instance is initialized **exactly once** during its lifetime. The initialization method depends on where the component's lifecycle starts:
+
+- `init/3`: When the component's lifecycle starts as part of server-side page rendering (pages are always first rendered on the server when you navigate to them)
+- `init/2`: When the component's lifecycle starts by being dynamically added to an already-loaded page
+
+A component module can define both functions since you may have multiple instances - some starting on the server and others starting directly on the client. Each instance has its own unique `cid` and separate state.
+
+###### Server-side Initialization (init/3)
+
+Called when the component starts its lifecycle on the server. Provides access to cookies and session data through the `Server` struct. It receives three parameters:
+
+- `props` - a map containing the component's props
+- `component` - a `Component` struct representing the client-side state container
+- `server` - a `Server` struct representing the server-side state container (with access to cookies and session)
+
+The function should return either:
+
+- A tuple containing `Component` and `Server` structs when modifying both client and server state
+- Just a `Component` struct when only modifying client state
+- Just a `Server` struct when only modifying server state
+
+Example:
+
+```elixir
+def init(_props, component, server) do
+  component = put_state(component, :kill_count, 439)
+  server = put_session(server, :name, "John Wick")
+
+  {component, server}
+end
+```
+
+###### Client-side Initialization (init/2)
+
+Called when the component starts its lifecycle directly on the client. No access to cookies or session data since they are managed through the `Server` struct. It receives two parameters:
+
+- `props` - a map containing the component's props
+- `component` - a `Component` struct representing the client-side state container
+
+The function should return a `Component` struct with any initial state.
+
+Example:
+
+```elixir
+def init(_props, component) do
+  put_state(component, kill_count: 439, name: "John Wick")
+end
+```
+
+###### Chaining Actions in Initialization
+
+In both `init/3` and `init/2` functions, you can chain actions that will be executed when the component is mounted on the client. This is useful for triggering setup logic, animations, or data loading after the component becomes available in the browser.
+
+Server-side initialization (`init/3`):
+
+```elixir
+def init(_props, component, _server) do
+  put_action(component, :setup_timer)
+end
+```
+
+Client-side initialization (`init/2`):
+
+```elixir
+def init(_props, component) do
+  put_action(component, :start_animation)
+end
+```
+
+###### Optional Initialization
+
+Both `init/3` and `init/2` functions are optional. If you don't need to initialize state or perform any preparation, you can omit them entirely - Hologram provides default implementations that simply return the `Component` and `Server` structs unchanged.
+
+#### Slots
+
+Slots allow components to accept and render child content. They are defined using the `<slot />` tag in the component's template:
+
+```elixir
+defmodule Card do
+  use Hologram.Component
+
+  def template do
+    ~HOLO"""
+    <div class="card">
+      <slot />
+    </div>
+    """
+  end
+end
+```
+
+Usage:
+
+```holo
+<Card>
+  <h1>Card Title</h1>
+  <p>Card content</p>
+</Card>
+```
+
+#### Templates
+
+##### Defining Templates
+
+Hologram components can be templated using either a template function within the component module or a separate `.holo` file. These methods offer the same features and syntax - your choice depends on your team's coding style and project structure.
+
+###### Template Function
+
+```elixir
+def template do
+  ~HOLO"""
+  <div>Hello, {@name}!</div>
+  """
+end
+```
+
+###### Colocated .holo File
+
+Create a file with the same name as your component's module file but with `.holo` extension (e.g., if your component is in `my_component.ex`, create `my_component.holo`). The `.holo` file must be located in the same directory as the module file.
+
+Unlike the template function approach, colocated `.holo` files contain only the template markup without the `~HOLO` sigil:
+
+```holo
+<div>Hello, {@name}!</div>
+```
+
+##### Template Syntax
+
+See the Template Syntax documentation for more details.
+
+#### Event Handling
+
+Stateful components can handle user interactions and business logic through two mechanisms:
+
+- Actions: client-side operations that update local state
+- Commands: server-side operations that can perform remote tasks
+
+Example:
+
+```elixir
+def action(:increment, params, component) do
+  put_state(component, :count, component.state.count + params.by)
+end
+
+def command(:insert_user, params, server) do
+  {:ok, user} = Repo.insert(%User{first_name: params.first_name})
+  put_action(server, :user_inserted, user: user)
+end
+```
+
+See the Actions and Commands documentation for more details.
