@@ -63,7 +63,7 @@ defmodule Hologram.Generators.AIRulesTest do
         |> File.read!()
         |> normalize_newlines()
 
-      assert result == @expected_marked_content
+      assert result == normalize_newlines(@expected_marked_content)
     end
 
     test "appends to existing file without markers", %{
@@ -99,7 +99,7 @@ defmodule Hologram.Generators.AIRulesTest do
         |> File.read!()
         |> normalize_newlines()
 
-      assert result == expected
+      assert result == normalize_newlines(expected)
     end
 
     test "replaces content between existing markers", %{
@@ -135,7 +135,7 @@ defmodule Hologram.Generators.AIRulesTest do
         |> File.read!()
         |> normalize_newlines()
 
-      assert result == expected
+      assert result == normalize_newlines(expected)
     end
 
     test "prints 'Created' for new files", %{

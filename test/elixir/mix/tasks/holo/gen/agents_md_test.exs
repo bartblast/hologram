@@ -44,12 +44,15 @@ defmodule Mix.Tasks.Holo.Gen.AgentsMdTest do
       |> File.read!()
       |> normalize_newlines()
 
-    assert result == """
-           <!-- hologram-start -->
-           ## Hologram
+    expected =
+      normalize_newlines("""
+      <!-- hologram-start -->
+      ## Hologram
 
-           - Rule one
-           <!-- hologram-end -->
-           """
+      - Rule one
+      <!-- hologram-end -->
+      """)
+
+    assert result == expected
   end
 end
