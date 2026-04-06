@@ -37,3 +37,14 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Use `<slot />` for child content. **Not** `<:slot>` or `inner_block`.
 - Templates can be defined as a `template/0` function with `~HOLO` sigil, or in a colocated `.holo` file (same name, same directory).
 - Colocated `.holo` files contain only markup, without the `~HOLO` sigil wrapper.
+
+## Pages
+
+- Pages use `use Hologram.Page`. **Not** `use Phoenix.LiveView`.
+- Every page must define a route: `route "/path"` or `route "/path/:param"`.
+- Every page must specify a layout: `layout MyApp.MainLayout` or `layout MyApp.MainLayout, prop: value`.
+- Pages are always stateful and always initialized server-side with `init/3` (params, component, server).
+- `init/3` receives URL params, not props. Use `param :name, :type` to declare typed route parameters.
+- Supported param types: `:atom`, `:float`, `:integer`, `:string`.
+- The page's component ID (cid) is always `"page"`. Use `target: "page"` to target actions at it.
+- Hologram uses a search tree router, not ordered routing. Static segments always match before parameterized ones. You cannot have two ambiguous parameterized routes at the same level (e.g. `/:username` and `/:post_slug`) - use distinct prefixes instead.
