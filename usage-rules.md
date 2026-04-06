@@ -80,3 +80,13 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Update context: `put_context(component, :key, value)`.
 - Chain another action: `put_action(component, :action_name)` or `put_action(component, :action_name, param: value)`.
 - Delays are available for actions only (not commands): `put_action(component, name: :my_action, delay: 750)`.
+
+## Commands
+
+- Commands are server-side. Define with `def command(name, params, server)`. **Not** `handle_event` or `handle_info`.
+- Commands must return a `%Server{}` struct. Chain operations with `|>`.
+- Commands are always executed asynchronously.
+- Trigger a client action from a command: `put_action(server, :action_name)` or `put_action(server, :action_name, param: value)`.
+- Manage session: `put_session(server, :key, value)`, `get_session(server, :key)`, `delete_session(server, :key)`.
+- Manage cookies: `put_cookie(server, "key", value)`, `get_cookie(server, "key")`, `delete_cookie(server, "key")`.
+- Commands can be triggered from templates via longhand event syntax or from actions via `put_command/2`/`put_command/3`.
