@@ -2922,3 +2922,41 @@ Hologram development is divided into three phases: **Phase 1** (current focus) t
 For Phase 1 use cases, you need robust functions for state management, data manipulation, dates/times, strings, and collections - but not processes, file system, or OS operations. JavaScript is single-threaded, and Hologram's architecture handles workflow orchestration automatically for typical web applications.
 
 Modules like Process, System, File, Port, Code, and Node are marked as deferred because they target Phases 2-3. This reference shows all dependencies comprehensively - even for deferred functionality. Many "in progress" functions, especially those with high completion percentages, already work fine for web development, with missing dependencies only affecting rare code branches or advanced scenarios you're unlikely to encounter.
+
+### Features
+
+Comprehensive overview of all Hologram features organized by area. Each feature shows implementation status, progress percentage, and category classification. Visit https://hologram.page/reference/features for the live, up-to-date version.
+
+#### Template Engine
+
+**UI:** Components (done), Context (done), Layouts (done), Navigation (done), Pages (done), Routing (done), Template Colocation (done)
+
+**Markup:** Component node (done), Element node (done), Interpolation (done), For Block (done), If Block (done), Public Comment (done), Raw Block (done), Text node (done)
+
+#### Framework Runtime
+
+**Client:** Actions (done), JS Interop (in progress, 40%), Synchronized Form Inputs (done)
+
+**Server:** Commands (done), Cookies (done), Session (done)
+
+**Events:** Blur (done), Change (done), Click (done), Click Away (todo), Focus (done), Key Down (todo), Key Press (todo), Key Up (todo), Mouse Move (done), Pointer Cancel (done), Pointer Down (done), Pointer Move (done), Pointer Up (done), Resize (todo), Scroll (todo), Select (done), Submit (done), Tap (todo), Touch Cancel (todo), Touch End (todo), Touch Move (todo), Touch Start (todo), Transition Cancel (done), Transition End (done), Transition Run (done), Transition Start (done)
+
+#### Tooling
+
+**Development:** Incremental Compilation (done), Live Reload (done), Standalone Mode (in progress, 70%), Template Formatter (in progress, 60%)
+
+#### Elixir Client Runtime
+
+**Data Types:** Atom (done), Bitstring (done), Float (done), Function (done), Integer (done), List (done), Map (done), PID (done), Port (done), Reference (done), Tuple (done)
+
+**Control Flow:** Case (done), Cond (done), If (done), Function (done), Unless (done), With (todo)
+
+**Functions:** Anonymous Function (done), Function Capture (done), Local Function (done), Remote Function (done)
+
+**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (in progress, 67%), Regex Match =~ (in progress, 61%)
+
+**Guards:** Guards in all contexts (done)
+
+**Comprehensions:** Bitstring Generator (todo), Enumerable Generator (done), Filter (done), :into Option (done), :reduce Option (todo), :uniq Option (done)
+
+**Other:** Behaviours (done), Bitwise Module Operators (todo), Error Handling (todo), Processes (deferred), Protocols (done), Regular Expressions (todo)
