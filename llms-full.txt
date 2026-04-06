@@ -3335,3 +3335,58 @@ Hex package names starting with `hologram_` are reserved for official Hologram p
 #### Reserved Module Namespace: `Hologram.`
 
 The `Hologram.*` module namespace is reserved for the Hologram framework and official extensions.
+
+### Sponsor Hologram
+
+Help us bring pure Elixir to the frontend and grow the ecosystem.
+
+I'm Bart Blast, the creator of Hologram. For over 5 years, I've been working on this full-stack Elixir web framework that automatically compiles Elixir to JavaScript, bringing the language to the browser. Nearly 3 of those years have been full-time Hologram development.
+
+Sponsorship keeps Hologram moving forward. Hologram is a full-time effort. Sponsorships allow me to focus on development, support the community, and push the roadmap forward. Every new sponsor helps expand what's possible.
+
+#### Endorsed by Jose Valim and Elixir Community
+
+Hologram has earned recognition and support from the highest levels of the Elixir ecosystem, including promotion by Jose Valim (Creator of Elixir), being featured on elixir-lang.org, ElixirConf EU 2025 speaker slot, active sponsorship from Zach Daniel (Ash Framework Creator), public endorsement from Adam Kirk (Jump.ai CTO), and production deployments.
+
+#### Hologram's Growing Impact
+
+**GitHub Activity (since project inception):** 1.1K+ GitHub Stars, 10K+ Commits, 1M+ Lines of Code, 50+ Contributors
+
+**Website & Social Media Engagement (last 11 months):** 50K+ Website Visits, 200K+ Pageviews, 250K+ Social Impressions, 3K+ Likes & Shares
+
+**Production Use:** While Hex downloads remain modest (2K+) due to the current involved installation process, developers are already experimenting with Hologram and even using it in production environments. The upcoming standalone mode will reduce installation to just 2 terminal commands.
+
+#### The Scope: Building an Entire Ecosystem
+
+Hologram is an ambitious project. This isn't just another framework - Hologram's scope essentially encompasses: Phoenix + Surface + ElixirScript + React + Local-First. Each of these components represents years of work by entire teams, yet Hologram aims to integrate all these capabilities into a unified, pure Elixir experience.
+
+#### Why This Matters
+
+Hologram represents a unique opportunity for the Elixir ecosystem. While LiveView revolutionized server-driven interactivity, Hologram brings Elixir to the client - enabling instant UI, offline apps, and modern frontend capabilities without JavaScript.
+
+This isn't just about avoiding JavaScript - it's about:
+
+- **Code Reuse** - Write your business logic once in Elixir and use it everywhere
+- **Consistent Language Guarantees** - Maintain Elixir's guarantees across the full stack
+- **Developer Experience** - Stay in the language you love for the entire application
+- **Performance** - Eliminate network round trips for UI interactions
+- **Local-First Applications** - Build offline-capable apps with Elixir
+- **Already Production-Ready** - In production use with growing adoption
+
+#### Sponsorship Opportunities
+
+Visit the GitHub Sponsors page to choose a tier and begin your sponsorship: https://github.com/sponsors/bartblast
+
+- **Early Adopter** ($14/mo) - Your name in the README.md pioneers section, GitHub Sponsor badge
+- **Framework Visionary** ($29/mo) - Recognition in release announcements, plus previous tier benefits
+- **Innovation Partner** ($250/mo) - Company logo on website homepage and README.md, plus previous tier benefits
+- **Strategic Ally** ($500/mo) - Prominent logo on each documentation page, large logo on homepage and README.md, plus previous tier benefits
+
+Custom amounts and creative sponsorship arrangements are also welcome.
+
+#### Other Ways to Help
+
+- **Share this page** - Help reach potential sponsors by sharing in your network, on social media, or at meetups
+- **Advocate for corporate sponsorship** - If your company is interested in Hologram, consider advocating within your organization
+- **Consider consulting** - I'm available for consulting to help explore Hologram's potential for your specific needs
+- **Spread the word** - Talk about Hologram at meetups, conferences, or in your local Elixir community
