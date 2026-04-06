@@ -108,3 +108,12 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Input-level `$change` on text inputs fires on every keystroke. Form-level `$change` fires on field blur.
 - `$submit` event data contains all form field values as a map: `params.event` => `%{field_name: value}`.
 - Elixir validation code (including Ecto changesets) runs both client-side and server-side since Hologram runs Elixir in the browser.
+
+## Context
+
+- Context shares data down the component tree without prop drilling. **Not** a global store.
+- Set context: `put_context(component, :key, value)` in actions or init functions.
+- Namespaced keys to avoid conflicts: `put_context(component, {MyModule, :key}, value)`.
+- Access context via props: `prop :user, :map, from_context: :current_user`.
+- Context values are available to all descendant components, not siblings or ancestors.
+- Prefer props for data passed to direct children. Use context for deeply nested data sharing.
