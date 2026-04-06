@@ -23,3 +23,17 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Raw output (no processing): `{%raw}...{/raw}`.
 - When an attribute expression evaluates to `nil` or `false`, the attribute is not rendered at all.
 - All interpolated expressions are automatically HTML-escaped to prevent XSS.
+
+## Components
+
+- Components use `use Hologram.Component`. **Not** `use Phoenix.Component` or `use Phoenix.LiveComponent`.
+- Define props with `prop :name, :type` or `prop :name, :type, default: value`.
+- Available prop types: `:any`, `:atom`, `:boolean`, `:bitstring`, `:float`, `:function`, `:integer`, `:list`, `:map`, `:pid`, `:port`, `:reference`, `:string`, `:tuple`.
+- Source props from context: `prop :user, :map, from_context: :current_user`.
+- Stateful components require a `cid` attribute: `<MyComponent cid="my_id" />`. Without `cid`, the component is stateless.
+- Server-side init uses `init/3` (props, component, server). Client-side init uses `init/2` (props, component).
+- `init/3` can return a `Component` struct, a `Server` struct, or a `{component, server}` tuple.
+- Both `init/3` and `init/2` are optional.
+- Use `<slot />` for child content. **Not** `<:slot>` or `inner_block`.
+- Templates can be defined as a `template/0` function with `~HOLO` sigil, or in a colocated `.holo` file (same name, same directory).
+- Colocated `.holo` files contain only markup, without the `~HOLO` sigil wrapper.
