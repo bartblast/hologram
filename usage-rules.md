@@ -117,3 +117,13 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Access context via props: `prop :user, :map, from_context: :current_user`.
 - Context values are available to all descendant components, not siblings or ancestors.
 - Prefer props for data passed to direct children. Use context for deeply nested data sharing.
+
+## Session
+
+- Session is server-side secure storage. Use it in `init/3` and commands only.
+- Read: `get_session(server, :key)` or `get_session(server, :key, default)`.
+- Write: `put_session(server, :key, value)`.
+- Delete: `delete_session(server, :key)`.
+- Session keys must be atoms or strings.
+- Sessions can store any Elixir data type (maps, lists, tuples, etc.).
+- Session data cannot be read by client-side code. Use cookies if you need client-side access.
