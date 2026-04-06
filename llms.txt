@@ -28,3 +28,12 @@
 - [Session](https://hologram.page/docs/session): Secure server-side storage persisting across page visits
 - [Cookies](https://hologram.page/docs/cookies): Client-side persistent storage managed through server-side functions
 - [JavaScript Interop](https://hologram.page/docs/javascript-interop): Calling JavaScript from Elixir, importing JS modules, async support
+
+## Reference
+
+- [Client Runtime](https://hologram.page/reference/client-runtime): Erlang-to-JavaScript porting status, Elixir standard library coverage
+- [Features](https://hologram.page/reference/features): Feature implementation status and progress tracking
+- [Roadmap](https://hologram.page/docs/roadmap): Short-term, medium-term, and long-term development goals
+- [Contributing](https://hologram.page/reference/contributing): How to contribute, Erlang function porting initiative
+- [Package Naming](https://hologram.page/reference/package-naming): Reserved prefixes and namespaces for Hologram packages
+- [Sponsor](https://hologram.page/reference/sponsor): Sponsorship information and project impact
