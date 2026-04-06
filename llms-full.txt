@@ -3009,3 +3009,317 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **Mobile Platform Support** - Enable building native-quality mobile applications from the same Hologram codebase.
 - **Structural Sharing** - Implement structural sharing for immutable data structures to reduce memory usage and improve performance.
 - **Time Travel Debugger** - Develop a debugging tool that allows stepping backward through state changes.
+
+### Contributing
+
+Thank you for your interest in contributing to Hologram! This guide will help you get started with contributing to the project.
+
+#### Current Focus: Porting Erlang Functions
+
+The most impactful way to contribute right now is by helping port Erlang functions to JavaScript. This work expands Elixir standard library coverage in the browser, enabling more of the Elixir you know and love to run client-side.
+
+Hologram automatically compiles Elixir code to JavaScript, but many Elixir standard library functions depend on underlying Erlang functions that must be manually ported. Currently we're focusing on functions that matter for web development: those supporting state management, data transformation, working with strings and collections, handling dates and times, and other common application needs. Modules like `Process`, `System`, `File`, `Port`, `Code`, and `Node` are deferred to later development phases.
+
+**Good news:** You don't need deep knowledge of Hologram internals or Erlang to contribute! You just need to understand what the Erlang function does and follow the patterns established in existing ports. This makes it an excellent opportunity whether you're new to open source or an experienced contributor.
+
+#### Prerequisites
+
+##### What You Need to Know
+
+- **Basic Elixir** - Ability to write Elixir code, especially for writing unit tests
+- **Basic JavaScript** - Ability to read and write ES6+ JavaScript
+- **Basic Git** - Familiarity with forking, cloning, branching, and creating pull requests
+- **How to read documentation** - You'll reference Erlang docs and use IEx help
+
+##### What You Need to Have
+
+- **GitHub account** - To create issues and submit pull requests
+- **Elixir development environment** - Elixir and Erlang installed on your system
+- **Node.js and npm** - Required for running JavaScript tests and the build process
+
+##### What You DON'T Need
+
+- Deep Erlang knowledge
+- Understanding of Hologram's compiler internals
+- Experience with transpilers
+
+#### Finding a Function to Port
+
+##### Step 1: Browse Available Functions
+
+Visit the Erlang Functions page (part of the Client Runtime reference) to see Erlang functions porting status. Look for functions marked as todo - these are ready to be ported.
+
+##### Step 2: Check GitHub Issues
+
+Before starting, search the Hologram GitHub issues (https://github.com/bartblast/hologram/issues) to make sure nobody is already working on your chosen function.
+
+##### Step 3: Create Your Issue
+
+Create a new GitHub issue with a clear title in this format: `Port :lists.filter/2 to JS`. This reserves the function and lets others know you're working on it.
+
+#### Setting Up Your Development Environment
+
+##### Fork and Clone
+
+First, fork the Hologram repository on GitHub, then clone your fork locally:
+
+```
+$ git clone https://github.com/YOUR-USERNAME/hologram.git
+$ cd hologram
+```
+
+##### Install Dependencies
+
+After cloning, install all required dependencies using the setup task. This single command will fetch Elixir dependencies for both the main project and the feature tests app, and install JavaScript dependencies:
+
+```
+$ mix setup
+```
+
+##### Create Your Branch
+
+**Important:** Branch from `dev`, not `master`. Ports are treated as enhancements, and all enhancements target the `dev` branch.
+
+```
+$ git checkout dev
+$ git checkout -b port-lists-filter-2
+```
+
+##### Scope Your Work
+
+**One function per pull request** (or functions that are directly related - same module/name, different arity). This allows for faster review and keeps the codebase moving forward efficiently.
+
+#### Understanding the Basics
+
+##### Boxed Types
+
+Hologram uses value boxing to maintain Elixir type information in JavaScript. Each compiled term is wrapped in an object with a `type` field that specifies its original type. For example, the integer `42` becomes `{type: "integer", value: 42n}`.
+
+You can explore the type system in assets/js/type.mjs in the Hologram repository. The `Type` class provides utilities like `Type.boolean()`, `Type.isTuple()`, and `Type.encodeMapKey()` that you'll use when porting functions.
+
+##### Function Structure
+
+Let's examine `:lists.keymember/3` as an example (from lists.mjs). All ported functions follow this pattern:
+
+```javascript
+// Start keymember/3
+"keymember/3": (value, index, tuples) => {
+  return Type.boolean(
+    Type.isTuple(Erlang_Lists["keyfind/3"](value, index, tuples))
+  );
+},
+// End keymember/3
+// Deps: [:lists.keyfind/3]
+```
+
+**Key components:**
+
+- **Start/End comments** - These allow the Hologram compiler to extract the source code during compilation. Always include them exactly as shown.
+- **Function signature** - Use the format `"function_name/arity"` as the key, with an arrow function as the value.
+- **Deps comment** - Lists dependencies on other Erlang functions. If your function has dependencies, see the Register Dependencies step below for how to register them.
+
+#### Step-by-Step Porting Process
+
+##### 1. Understand the Function Behavior
+
+Before writing any code, thoroughly understand what the Erlang function does. The Erlang Functions page lists all Erlang functions - click on a function to view its details page, which includes a link to the official Erlang documentation for that specific function. You can also use IEx:
+
+```
+iex> h :lists.filter/2
+```
+
+Or browse the official Erlang documentation directly: https://www.erlang.org/doc (navigate to the appropriate module).
+
+##### 2. Locate the Target File
+
+Manually ported Erlang functions are located in `assets/js/erlang/` directory, organized by module. For example, `:lists` functions go in `assets/js/erlang/lists.mjs`.
+
+##### 3. Look at Similar Functions
+
+Browse already-ported functions in the same module or similar modules. Use these as templates and follow the same conventions, even if they seem non-DRY or unusual. These patterns will be refactored later once common patterns are identified across all ports.
+
+##### 4. Implement Your Function
+
+Write your implementation following these principles:
+
+- **Never mutate parameters** - Always return new values or return parameters unchanged
+- **Use Type class utilities** - `Type.boolean()`, `Type.isTuple()`, etc.
+- **Use Interpreter class** - For function calls (`Interpreter.callFunction()`), error handling (`Interpreter.matchError()`), comparisons (`Interpreter.compare()`), and more
+- **Use Bitstring class** - For binary and bitstring operations when needed
+- **Handle boxed values** - Remember that values are wrapped in objects with type information
+
+##### 5. Validate Inputs
+
+Most ported functions need input validation. Follow existing validation patterns from other ported functions.
+
+**Type validation** (most common case) - Check that parameters have the expected types:
+
+```javascript
+if (!Type.isList(list)) {
+  Interpreter.raiseArgumentError(
+    Interpreter.buildArgumentErrorMsg(3, "not a list")
+  );
+}
+```
+
+**Value validation** - Check that parameter values are within acceptable ranges or match expected values:
+
+```javascript
+if (index.value < 1) {
+  Interpreter.raiseArgumentError(
+    Interpreter.buildArgumentErrorMsg(2, "out of range")
+  );
+}
+```
+
+**Deferred functionality** - If a particular option or code path doesn't make sense for Phase 1 (e.g., UTF16 encoding), add a clear error message or TODO comment explaining why it's deferred:
+
+```javascript
+// TODO: implement other encodings for inputEncoding param
+if (!Interpreter.isStrictlyEqual(inputEncoding, Type.atom("utf8"))) {
+  throw new HologramInterpreterError(
+    "encodings other than utf8 are not yet implemented in Hologram"
+  );
+}
+```
+
+##### 6. Register Dependencies
+
+If your function has dependencies on other Erlang functions, you need to register them in two places:
+
+- Add a `Deps` comment under your function in the JavaScript file (e.g., `// Deps: [:lists.keyfind/3]`)
+- Add the same dependencies to the `@erlang_mfa_edges` attribute in `lib/hologram/compiler/call_graph.ex`
+
+This duplication is temporary - both are required for now, but eventually there will be a single source of truth.
+
+#### Writing Tests
+
+Every ported function requires two types of tests to ensure correctness and consistency with OTP behavior.
+
+##### JavaScript Unit Tests
+
+Add comprehensive test cases in a dedicated test file for each ported module. For example, tests for `:lists` functions are in `test/javascript/erlang/lists_test.mjs`, while the implementation is in `assets/js/erlang/lists.mjs`.
+
+Your tests should:
+
+- Cover typical use cases
+- Test edge cases (empty collections, nil values, etc.)
+- Verify error conditions and error messages
+- Test input validation (type checks, value range checks, etc.)
+- Be thorough but not redundant - avoid overlapping test cases
+- Work with boxed types (remember to box your test values)
+
+##### Server-Side Consistency Tests
+
+Create matching tests in Elixir that verify your JavaScript implementation behaves identically to OTP. These go in `test/elixir/hologram/ex_js_consistency/erlang/`.
+
+For example, if you ported `:lists.filter/2`, create tests in `test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs` that mirror your JavaScript tests.
+
+#### Performance Considerations
+
+While the general rule is to never mutate parameters (see Implement Your Function above), you can use internal mutation for performance when building collections. This is an optimization that doesn't violate immutability from the caller's perspective:
+
+- You can mutate variables you create inside your function
+- Build the final boxed value in place rather than creating new objects each loop iteration
+- Use `Type.encodeMapKey()` and understand internal boxed value structures (see Type class)
+
+**Note:** These manual performance optimizations are temporary measures. Hologram will implement **Structural Sharing** in the future to automatically address performance issues related to immutability.
+
+#### Quality Checks Before Submitting
+
+Before submitting your pull request, make sure to run quality checks locally.
+
+##### Format Your Code
+
+Format all code (both Elixir and JavaScript):
+
+```
+$ mix f
+```
+
+##### Run All Quality Checks
+
+Run the same checks that CI runs:
+
+```
+$ mix check
+```
+
+This command runs compiler checks, formatters, linters (Credo, ESLint), tests, and other quality tools.
+
+##### Optional: Install Git Hooks
+
+You can optionally install git hooks that automatically run formatting checks before commits:
+
+```
+$ lefthook install
+```
+
+#### Code Review & Communication
+
+##### Pull Request Guidelines
+
+- **Focus on the function** - Keep your PR focused on porting the specific function(s)
+- **Don't refactor existing code** - Even if you see patterns that could be DRYed up, follow existing conventions
+- **Follow the exact commit message format** - Use: "Port :lists.filter/2 to JS"
+- **Ensure all CI checks pass** - Before requesting review, verify that all continuous integration checks have passed
+
+##### Communication Channels
+
+- **General questions about porting** - Ask on the Hologram Forum thread (https://elixirforum.com/t/elixir-javascript-porting-initiative/73335) dedicated to the porting initiative
+- **Function-specific questions** - Keep discussion in the GitHub issue you created for that function
+- **Convention or process suggestions** - Discuss in the Hologram Forum thread, not in PRs
+
+##### Review Process
+
+Once you submit your PR, we'll review it as quickly as possible. We may suggest:
+
+- Additional test cases for edge cases
+- Validation for options or parameters
+- Alternative implementations for better performance
+- Corrections to match OTP behavior exactly
+
+#### Tips & Best Practices
+
+##### Using AI Tools
+
+AI tools can be very helpful for porting! They're good at:
+
+- Translating Erlang logic to JavaScript
+- Understanding Erlang documentation
+- Generating test cases
+- Spotting edge cases you might have missed
+
+Just remember to verify the AI's output against actual OTP behavior and existing Hologram conventions!
+
+##### Common Pitfalls to Avoid
+
+- **Forgetting to box return values** - All values must be properly boxed
+- **Mutating parameters** - Never modify input parameters directly
+- **Skipping edge case tests** - Empty lists, nil values, and error conditions are important
+- **Inconsistent error messages** - Match OTP error formats exactly
+- **Missing Start/End comments** - The compiler needs these markers
+- **Forgetting to update CallGraph** - Dependencies must be declared in both places
+
+##### Alphabetical Ordering
+
+Order imports (including classes like `Type`, `Interpreter`, etc.) and functions alphabetically within each module file. Similarly, order test sections for each function alphabetically by function name within test files.
+
+#### Resources
+
+- **Client Runtime Reference** - https://hologram.page/reference/client-runtime
+- **Hologram Repository** - https://github.com/bartblast/hologram
+- **Ported Functions** - https://github.com/bartblast/hologram/tree/dev/assets/js/erlang
+- **JavaScript Tests** - https://github.com/bartblast/hologram/tree/dev/test/javascript/erlang
+- **Elixir Consistency Tests** - https://github.com/bartblast/hologram/tree/dev/test/elixir/hologram/ex_js_consistency/erlang
+- **Erlang Documentation** - https://www.erlang.org/doc
+
+#### Questions?
+
+If you have questions about porting, contribution process, or anything else:
+
+- **General porting questions** - Post in the Hologram Forum thread (https://elixirforum.com/t/elixir-javascript-porting-initiative/73335)
+- **Specific function questions** - Comment on the GitHub issue for that function
+- **Bugs or problems** - Create a new GitHub issue
+
+Thank you for contributing to Hologram! Every function you port brings us closer to full Elixir standard library coverage in the browser and helps the entire Elixir community build better full-stack applications.
