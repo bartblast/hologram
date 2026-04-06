@@ -19,6 +19,7 @@ defmodule Mix.Tasks.Holo.Gen.AgentsMd do
   @doc false
   @impl Mix.Task
   def run(opts \\ []) do
+    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     Hologram.Generators.AIRules.sync("AGENTS.md", opts)
   end
 end
