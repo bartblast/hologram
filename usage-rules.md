@@ -48,3 +48,11 @@ For full documentation, see deps/hologram/llms-full.txt or https://hologram.page
 - Supported param types: `:atom`, `:float`, `:integer`, `:string`.
 - The page's component ID (cid) is always `"page"`. Use `target: "page"` to target actions at it.
 - Hologram uses a search tree router, not ordered routing. Static segments always match before parameterized ones. You cannot have two ambiguous parameterized routes at the same level (e.g. `/:username` and `/:post_slug`) - use distinct prefixes instead.
+
+## Layouts
+
+- Layouts are regular components using `use Hologram.Component`. There is no special layout module or macro.
+- A layout template **must** include `<Hologram.UI.Runtime />` inside the `<head>` tag.
+- A layout template **must** include `<slot />` where page content will be inserted.
+- The layout's component ID (cid) is always `"layout"`. Use `target: "layout"` to target actions at it.
+- Pass props to layouts via `layout MyApp.MainLayout, prop: value` or via `put_state/2` in the page's `init/3`.
