@@ -81,8 +81,11 @@ defmodule Hologram.MixProject do
         "lib",
         ".formatter.exs",
         "LICENSE",
+        "llms.txt",
+        "llms-full.txt",
         "mix.exs",
-        "README.md"
+        "README.md",
+        "usage-rules.md"
       ],
       licenses: ["Apache-2.0"],
       links: %{
