@@ -49,6 +49,10 @@ defmodule Hologram.Compiler.Normalizer do
     {marker, meta_2, normalize(children)}
   end
 
+  def normalize({:with, meta, with_parts}) do
+    {:with, meta, normalize_with_parts(with_parts)}
+  end
+
   def normalize(ast) when is_atom(ast) do
     maybe_normalize_alias(ast, [alias: false], ast)
   end
@@ -109,6 +113,31 @@ defmodule Hologram.Compiler.Normalizer do
   end
 
   defp normalize_try_opt(opt), do: normalize(opt)
+
+  defp normalize_with_parts(nil), do: nil
+  defp normalize_with_parts([]), do: []
+
+  defp normalize_with_parts([[{:do, body} | optional_else]]) do
+    else_clauses =
+      case optional_else do
+        [] ->
+          # No else in the `with`
+          []
+
+        [{:else, {:__block__, [], []}}] ->
+          # `with` is included, but has no clauses
+          []
+
+        [{:else, non_empty_elses}] ->
+          non_empty_elses
+      end
+
+    [[{:do, normalize_block(body)}, {:else, Enum.map(else_clauses, &normalize/1)}]]
+  end
+
+  defp normalize_with_parts([head | tail]) do
+    [normalize(head) | normalize_with_parts(tail)]
+  end
 
   # Strips bare alias expressions from non-tail positions of a block.
   # The Elixir compiler stores function-body `import` statements as bare module atoms

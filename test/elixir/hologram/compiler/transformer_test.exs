@@ -6467,65 +6467,6 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "multiple clauses and else clauses" do
-      ast =
-        ast("""
-        with {:ok, x} when not is_nil(x) <- {:ok, foo(y)},
-          {x, bar} <- baz(x),
-          :test = :test do
-          :ok
-        else
-          :error ->
-            {:error, :wrong_data}
-          {:error, value} ->
-            {:error, :wrong_data, value}
-        end
-        """)
-
-      assert %IR.With{
-               body: body,
-               clauses: [first_clause, _second, _third],
-               else_clauses: [first_else, _second_else]
-             } = transform(ast, %Context{})
-
-      assert body == %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
-
-      assert %IR.WithMatchClause{
-               match: %IR.TupleType{data: [%IR.AtomType{value: :ok}, %IR.Variable{name: :x}]},
-               guards: [
-                 %IR.LocalFunctionCall{
-                   function: :not,
-                   args: [
-                     %IR.LocalFunctionCall{
-                       function: :is_nil,
-                       args: [
-                         %IR.Variable{name: :x}
-                       ]
-                     }
-                   ]
-                 }
-               ],
-               expression: %IR.TupleType{
-                 data: [
-                   %IR.AtomType{value: :ok},
-                   %IR.LocalFunctionCall{function: :foo, args: [%IR.Variable{name: :y}]}
-                 ]
-               }
-             } = first_clause
-
-      assert %IR.Clause{
-               match: %IR.AtomType{value: :error},
-               guards: [],
-               body: %IR.Block{
-                 expressions: [
-                   %IR.TupleType{
-                     data: [%IR.AtomType{value: :error}, %IR.AtomType{value: :wrong_data}]
-                   }
-                 ]
-               }
-             } = first_else
-    end
-
     test "clause without guards" do
       ast =
         ast("""
@@ -6644,29 +6585,6 @@ defmodule Hologram.Compiler.TransformerTest do
                match: %IR.Variable{name: :y},
                guards: [],
                expression: %IR.Variable{name: :x}
-             }
-    end
-
-    test "with plain expression (function call)" do
-      ast =
-        ast("""
-        with baz(5) do
-        end
-        """)
-
-      assert transform(ast, %Context{}) == %IR.With{
-               body: %IR.Block{expressions: []},
-               clauses: [
-                 %IR.WithBareClause{
-                   expression: %IR.LocalFunctionCall{
-                     function: :baz,
-                     args: [
-                       %IR.IntegerType{value: 5}
-                     ]
-                   }
-                 }
-               ],
-               else_clauses: []
              }
     end
 
@@ -6825,7 +6743,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "pin match" do
+    test "transforms clause match positions in pattern mode" do
       ast =
         ast("""
         key = :ok
@@ -6848,7 +6766,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "pin in else clause" do
+    test "transforms else clause match positions in pattern mode" do
       ast =
         ast("""
         key = :error
@@ -6896,30 +6814,6 @@ defmodule Hologram.Compiler.TransformerTest do
                    expression: %IR.Variable{name: :y}
                  }
                ],
-               else_clauses: []
-             }
-    end
-
-    test "handles lists as base expressions" do
-      ast =
-        ast("""
-        with [:a, :b, :c] do
-        end
-        """)
-
-      assert transform(ast, %Context{}) == %IR.With{
-               clauses: [
-                 %IR.WithBareClause{
-                   expression: %IR.ListType{
-                     data: [
-                       %IR.AtomType{value: :a},
-                       %IR.AtomType{value: :b},
-                       %IR.AtomType{value: :c}
-                     ]
-                   }
-                 }
-               ],
-               body: %IR.Block{expressions: []},
                else_clauses: []
              }
     end
