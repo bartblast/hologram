@@ -6559,6 +6559,53 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "multiple clauses with guards" do
+      ast =
+        ast("""
+        with i when is_integer(i) <- x,
+          s when is_binary(s) <- y do
+          :ok
+        end 
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :ok}
+                 ]
+               },
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :x},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [
+                         %IR.Variable{
+                           name: :i
+                         }
+                       ]
+                     }
+                   ],
+                   match: %IR.Variable{name: :i}
+                 },
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_binary,
+                       args: [
+                         %IR.Variable{name: :s}
+                       ]
+                     }
+                   ],
+                   match: %IR.Variable{name: :s}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
     test "with plain expressions" do
       ast =
         ast("""
@@ -6585,6 +6632,66 @@ defmodule Hologram.Compiler.TransformerTest do
                match: %IR.Variable{name: :y},
                guards: [],
                expression: %IR.Variable{name: :x}
+             }
+    end
+
+    test "with multiple plain expressions" do
+      ast =
+        ast("""
+        with a = 1,
+          b = 2 do
+          :ok
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :ok}
+                 ]
+               },
+               clauses: [
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :a},
+                     right: %IR.IntegerType{value: 1}
+                   }
+                 },
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :b},
+                     right: %IR.IntegerType{value: 2}
+                   }
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with empty do block" do
+      ast =
+        ast("""
+        with {:ok, x} <- y do
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :ok},
+                       %IR.Variable{name: :x}
+                     ]
+                   },
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [],
+               body: %IR.Block{
+                 expressions: []
+               }
              }
     end
 
@@ -6743,6 +6850,131 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "single else clause with guard" do
+      ast =
+        ast("""
+        with x <- y do
+        else
+          {:error, msg} when is_binary(msg) ->
+            msg
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   body: %IR.Block{expressions: [%IR.Variable{name: :msg}]},
+                   guards: [
+                     %IR.LocalFunctionCall{function: :is_binary, args: [%IR.Variable{name: :msg}]}
+                   ],
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :msg}]
+                   }
+                 }
+               ],
+               body: %IR.Block{
+                 expressions: []
+               }
+             }
+    end
+
+    test "multiple else clause with guard" do
+      ast =
+        ast("""
+        with x <- y do
+        else
+          {:error, msg} when is_binary(msg) ->
+            msg
+          {:error, code} when is_integer(code) ->
+            code
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   body: %IR.Block{expressions: [%IR.Variable{name: :msg}]},
+                   guards: [
+                     %IR.LocalFunctionCall{function: :is_binary, args: [%IR.Variable{name: :msg}]}
+                   ],
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :msg}]
+                   }
+                 },
+                 %IR.Clause{
+                   body: %IR.Block{expressions: [%IR.Variable{name: :code}]},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :code}]
+                     }
+                   ],
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :code}]
+                   }
+                 }
+               ],
+               body: %IR.Block{
+                 expressions: []
+               }
+             }
+    end
+
+    test "without else block" do
+      ast =
+        ast("""
+        with x <- y do
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "handles empty else blocks" do
+      ast =
+        ast("""
+        with x <- y do
+        else
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x, version: nil},
+                   guards: [],
+                   expression: %IR.Variable{name: :y, version: nil}
+                 }
+               ],
+               body: %IR.Block{expressions: []},
+               else_clauses: []
+             }
+    end
+
     test "transforms clause match positions in pattern mode" do
       ast =
         ast("""
@@ -6795,47 +7027,6 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{expressions: [%IR.AtomType{value: :clause}]}
                  }
                ]
-             }
-    end
-
-    test "without else block" do
-      ast =
-        ast("""
-        with x <- y do
-        end
-        """)
-
-      assert transform(ast, %Context{}) == %IR.With{
-               body: %IR.Block{expressions: []},
-               clauses: [
-                 %IR.WithMatchClause{
-                   match: %IR.Variable{name: :x},
-                   guards: [],
-                   expression: %IR.Variable{name: :y}
-                 }
-               ],
-               else_clauses: []
-             }
-    end
-
-    test "handles empty else blocks" do
-      ast =
-        ast("""
-        with x <- y do
-        else
-        end
-        """)
-
-      assert transform(ast, %Context{}) == %IR.With{
-               clauses: [
-                 %IR.WithMatchClause{
-                   match: %IR.Variable{name: :x, version: nil},
-                   guards: [],
-                   expression: %IR.Variable{name: :y, version: nil}
-                 }
-               ],
-               body: %IR.Block{expressions: []},
-               else_clauses: []
              }
     end
 
