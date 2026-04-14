@@ -90,6 +90,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module172
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module173
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module174
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module175
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
@@ -7099,6 +7100,98 @@ defmodule Hologram.Compiler.TransformerTest do
                        module: %IR.AtomType{value: :erlang},
                        function: :is_binary,
                        args: [%IR.Variable{name: :msg, version: 1}]
+                     }
+                   ],
+                   body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 1}]}
+                 }
+               ],
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+             }
+    end
+
+    test "single else clause with compound guard (AST from source code)" do
+      ast =
+        ast("""
+        with :ok <- y do
+        else
+          msg when is_binary(msg) and byte_size(msg) > 0 -> msg
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.AtomType{value: :ok},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.Variable{name: :msg},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :and,
+                       args: [
+                         %IR.LocalFunctionCall{
+                           function: :is_binary,
+                           args: [%IR.Variable{name: :msg}]
+                         },
+                         %IR.LocalFunctionCall{
+                           function: :>,
+                           args: [
+                             %IR.LocalFunctionCall{
+                               function: :byte_size,
+                               args: [%IR.Variable{name: :msg}]
+                             },
+                             %IR.IntegerType{value: 0}
+                           ]
+                         }
+                       ]
+                     }
+                   ],
+                   body: %IR.Block{expressions: [%IR.Variable{name: :msg}]}
+                 }
+               ],
+               body: %IR.Block{expressions: []}
+             }
+    end
+
+    test "single else clause with compound guard (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module175) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.AtomType{value: :ok},
+                   guards: [],
+                   expression: %IR.Variable{name: :y, version: 0}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.Variable{name: :msg, version: 1},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :andalso,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: :erlang},
+                           function: :is_binary,
+                           args: [%IR.Variable{name: :msg, version: 1}]
+                         },
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{value: :erlang},
+                           function: :>,
+                           args: [
+                             %IR.RemoteFunctionCall{
+                               module: %IR.AtomType{value: :erlang},
+                               function: :byte_size,
+                               args: [%IR.Variable{name: :msg, version: 1}]
+                             },
+                             %IR.IntegerType{value: 0}
+                           ]
+                         }
+                       ]
                      }
                    ],
                    body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 1}]}
