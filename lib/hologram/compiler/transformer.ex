@@ -442,9 +442,19 @@ defmodule Hologram.Compiler.Transformer do
     |> build_tuple_type_ir(context)
   end
 
-  # TODO: finish implementing
-  def transform({:with, _meta, parts}, _context) when is_list(parts) do
-    %IR.With{}
+  def transform({:with, _meta, parts}, context) when is_list(parts) do
+    [[{:do, do_part}, {:else, else_clauses}] | reversed_clauses] = Enum.reverse(parts)
+
+    clauses =
+      reversed_clauses
+      |> Enum.reverse()
+      |> Enum.map(&transform_with_clause(&1, context))
+
+    %IR.With{
+      clauses: clauses,
+      else_clauses: Enum.map(else_clauses, &transform_with_else_clause(&1, context)),
+      body: transform(do_part, context)
+    }
   end
 
   # --- PRESERVE ORDER (BEGIN) ---
@@ -919,5 +929,49 @@ defmodule Hologram.Compiler.Transformer do
       _fallback ->
         %IR.Variable{name: name, version: version}
     end
+  end
+
+  defp transform_with_clause(
+         {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, body]},
+         context
+       ) do
+    %IR.WithMatchClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: transform_guards(guards, context),
+      expression: transform(body, context)
+    }
+  end
+
+  defp transform_with_clause({:<-, _meta, [match, body]}, context) do
+    %IR.WithMatchClause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: [],
+      expression: transform(body, context)
+    }
+  end
+
+  defp transform_with_clause(clause, context) do
+    %IR.WithBareClause{
+      expression: transform(clause, context)
+    }
+  end
+
+  defp transform_with_else_clause(
+         {:->, _meta_1, [[{:when, _meta_2, [match, guards]}], body]},
+         context
+       ) do
+    %IR.Clause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: transform_guards(guards, context),
+      body: transform(body, context)
+    }
+  end
+
+  defp transform_with_else_clause({:->, _meta, [[match], body]}, context) do
+    %IR.Clause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: [],
+      body: transform(body, context)
+    }
   end
 end
