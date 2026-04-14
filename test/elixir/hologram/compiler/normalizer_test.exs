@@ -2799,24 +2799,24 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "with" do
-    test "does not error when with is used as a variable" do
-      # Technically you can use `with` in a way that isn't
-      #   the special form syntax, e.g. using `with` as a
-      #   variable name. This case should not error, and does not
-      #   need any normalization.
+    test "variable with" do
+      # with
       ast = {:with, [line: 1], nil}
 
-      assert normalize(ast) ==
-               {:with, [line: 1], nil}
+      assert normalize(ast) == ast
     end
 
-    test "with without any clauses or else clauses, empty body" do
+    test "no clauses, no else, empty body" do
+      # with do
+      # end
       ast = {:with, [line: 1], [[do: {:__block__, [], []}]]}
 
       assert normalize(ast) == {:with, [line: 1], [[do: {:__block__, [], []}, else: []]]}
     end
 
-    test "with single clause" do
+    test "single clause" do
+      # with x <- y do
+      # end
       ast =
         {:with, [line: 1],
          [
@@ -2832,7 +2832,10 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "with multiple clauses" do
+    test "multiple clauses" do
+      # with x <- y,
+      #      a <- b do
+      # end
       ast =
         {:with, [line: 1],
          [
@@ -2850,7 +2853,30 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "with else clause" do
+    test "empty else block" do
+      # with x <- y do
+      # else
+      # end
+      ast =
+        {:with, [line: 1],
+         [
+           {:<-, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
+           [do: {:__block__, [], []}, else: {:__block__, [], []}]
+         ]}
+
+      assert normalize(ast) ==
+               {:with, [line: 1],
+                [
+                  {:<-, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
+                  [do: {:__block__, [], []}, else: []]
+                ]}
+    end
+
+    test "single else clause" do
+      # with x <- y do
+      # else
+      #   error: msg -> msg
+      # end
       ast =
         {:with, [line: 1],
          [
@@ -2880,7 +2906,12 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "with multiple else clause" do
+    test "multiple else clauses" do
+      # with x <- y do
+      # else
+      #   error: msg -> msg
+      #   ok: result -> result
+      # end
       ast =
         {:with, [line: 1],
          [
@@ -2916,13 +2947,68 @@ defmodule Hologram.Compiler.NormalizerTest do
                 ]}
     end
 
-    test "with single expression body" do
+    test "else clause with multiple expressions body" do
+      # with x <- y do
+      # else
+      #   error: msg ->
+      #     a
+      #     b
+      # end
+      ast =
+        {:with, [line: 1],
+         [
+           {:<-, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
+           [
+             do: {:__block__, [], []},
+             else: [
+               {:->, [line: 3],
+                [
+                  [error: {:msg, [line: 3], nil}],
+                  {:__block__, [],
+                   [
+                     {:a, [line: 4], nil},
+                     {:b, [line: 5], nil}
+                   ]}
+                ]}
+             ]
+           ]
+         ]}
+
+      assert normalize(ast) ==
+               {:with, [line: 1],
+                [
+                  {:<-, [line: 1], [{:x, [line: 1], nil}, {:y, [line: 1], nil}]},
+                  [
+                    do: {:__block__, [], []},
+                    else: [
+                      {:->, [line: 3],
+                       [
+                         [error: {:msg, [line: 3], nil}],
+                         {:__block__, [],
+                          [
+                            {:a, [line: 4], nil},
+                            {:b, [line: 5], nil}
+                          ]}
+                       ]}
+                    ]
+                  ]
+                ]}
+    end
+
+    test "single expression body" do
+      # with do
+      #   :ok
+      # end
       ast = {:with, [line: 1], [[do: :ok]]}
 
       assert normalize(ast) == {:with, [line: 1], [[do: {:__block__, [], [:ok]}, else: []]]}
     end
 
-    test "with multiple expression body" do
+    test "multiple expressions body" do
+      # with do
+      #   a = 1
+      #   b = 2
+      # end
       ast =
         {:with, [line: 1],
          [
