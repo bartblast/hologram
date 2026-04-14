@@ -133,8 +133,8 @@ defmodule Hologram.Compiler.Normalizer do
     [[{:do, normalize_block(body)}, {:else, Enum.map(else_clauses, &normalize/1)}]]
   end
 
-  defp normalize_with_parts([clause | rest]) do
-    [normalize(clause) | normalize_with_parts(rest)]
+  defp normalize_with_parts([part | rest]) do
+    [normalize(part) | normalize_with_parts(rest)]
   end
 
   # Strips bare alias expressions from non-tail positions of a block.
