@@ -955,8 +955,11 @@ defmodule Hologram.Compiler.Transformer do
       expression: transform(clause, context)
     }
   end
-  
-  def transform_with_else_clause({:->, _meta_1, [[{:when, _meta_2, [match, guards]}], body]}, context) do
+
+  defp transform_with_else_clause(
+         {:->, _meta_1, [[{:when, _meta_2, [match, guards]}], body]},
+         context
+       ) do
     %IR.Clause{
       match: transform(match, %{context | pattern?: true}),
       guards: transform_guards(guards, context),
@@ -964,7 +967,7 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform_with_else_clause({:->, _meta, [[match], body]}, context) do
+  defp transform_with_else_clause({:->, _meta, [[match], body]}, context) do
     %IR.Clause{
       match: transform(match, %{context | pattern?: true}),
       guards: [],
