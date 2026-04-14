@@ -452,7 +452,7 @@ defmodule Hologram.Compiler.Transformer do
 
     %IR.With{
       clauses: clauses,
-      else_clauses: transform_list(else_clauses, context),
+      else_clauses: Enum.map(else_clauses, &transform_with_else_clause(&1, context)),
       body: transform(do_part, context)
     }
   end
@@ -953,6 +953,22 @@ defmodule Hologram.Compiler.Transformer do
   defp transform_with_clause(clause, context) do
     %IR.WithBareClause{
       expression: transform(clause, context)
+    }
+  end
+  
+  def transform_with_else_clause({:->, _meta_1, [[{:when, _meta_2, [match, guards]}], body]}, context) do
+    %IR.Clause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: transform_guards(guards, context),
+      body: transform(body, context)
+    }
+  end
+
+  def transform_with_else_clause({:->, _meta, [[match], body]}, context) do
+    %IR.Clause{
+      match: transform(match, %{context | pattern?: true}),
+      guards: [],
+      body: transform(body, context)
     }
   end
 end
