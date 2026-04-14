@@ -193,7 +193,7 @@ defmodule Hologram.Compiler.Digraph do
       visited = MapSet.new(existing_vertices)
 
       queue
-      |> bfs_reachable(visited, outgoing_edges)
+      |> bfs_reachable(visited, outgoing_edges, [])
       |> MapSet.to_list()
     end
   end
@@ -203,9 +203,18 @@ defmodule Hologram.Compiler.Digraph do
   Uses breadth-first search traversing incoming edges.
   If none of the target vertices exist in the graph, returns an empty list.
   Non-existent target vertices are ignored.
+
+  ## Options
+    * `:opaque_vertex?` - a one-arity function that receives a vertex and returns a boolean.
+      When it returns `true`, the vertex is included in the result but its incoming edges
+      are not traversed. Defaults to `nil`.
+
+    * `:opaque_vertices` - a `MapSet` of vertices whose incoming edges should not be
+      traversed. The vertices themselves are still included in the result when reached,
+      but the BFS does not follow their incoming edges. Defaults to `nil`.
   """
-  @spec reaching(t, [vertex]) :: [vertex]
-  def reaching(graph, target_vertices) do
+  @spec reaching(t, [vertex], keyword) :: [vertex]
+  def reaching(graph, target_vertices, opts \\ []) do
     %Digraph{vertices: vertices, incoming_edges: incoming_edges} = graph
 
     existing_vertices = Enum.filter(target_vertices, &Map.has_key?(vertices, &1))
@@ -218,7 +227,7 @@ defmodule Hologram.Compiler.Digraph do
       visited = MapSet.new(existing_vertices)
 
       queue
-      |> bfs_reachable(visited, incoming_edges)
+      |> bfs_reachable(visited, incoming_edges, opts)
       |> MapSet.to_list()
     end
   end
@@ -442,29 +451,40 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   # BFS traversal for reachable vertices
-  # credo:disable-for-lines:27 Credo.Check.Refactor.Nesting
+  # credo:disable-for-lines:37 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
-  defp bfs_reachable(queue, visited, outgoing_edges) do
+  defp bfs_reachable(queue, visited, edges, opts) do
     case :queue.out(queue) do
       {{:value, current}, rest_queue} ->
-        # Get neighbors of current vertex
-        neighbors = Map.get(outgoing_edges, current, %{})
+        opaque_vertex? = opts[:opaque_vertex?]
+        opaque_vertices = opts[:opaque_vertices]
 
-        # Add unvisited neighbors to queue and visited set
-        {new_queue, new_visited} =
-          Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
-                                                           {acc_queue, acc_visited} ->
-            if MapSet.member?(acc_visited, neighbor) do
-              {acc_queue, acc_visited}
-            else
-              {
-                :queue.in(neighbor, acc_queue),
-                MapSet.put(acc_visited, neighbor)
-              }
-            end
-          end)
+        skip? =
+          (opaque_vertex? && opaque_vertex?.(current)) ||
+            (opaque_vertices && MapSet.member?(opaque_vertices, current))
 
-        bfs_reachable(new_queue, new_visited, outgoing_edges)
+        if skip? do
+          bfs_reachable(rest_queue, visited, edges, opts)
+        else
+          # Get neighbors of current vertex
+          neighbors = Map.get(edges, current, %{})
+
+          # Add unvisited neighbors to queue and visited set
+          {new_queue, new_visited} =
+            Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
+                                                             {acc_queue, acc_visited} ->
+              if MapSet.member?(acc_visited, neighbor) do
+                {acc_queue, acc_visited}
+              else
+                {
+                  :queue.in(neighbor, acc_queue),
+                  MapSet.put(acc_visited, neighbor)
+                }
+              end
+            end)
+
+          bfs_reachable(new_queue, new_visited, edges, opts)
+        end
 
       {:empty, _queue} ->
         visited

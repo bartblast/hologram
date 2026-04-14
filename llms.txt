@@ -1,0 +1,45 @@
+# Hologram
+
+> Full-stack isomorphic Elixir web framework that lets you build interactive web applications entirely in Elixir, without writing JavaScript.
+
+- [Website](https://hologram.page)
+- [GitHub](https://github.com/bartblast/hologram)
+- [HexDocs](https://hexdocs.pm/hologram)
+
+## Guides
+
+- [Introduction](https://hologram.page/docs/introduction): Overview of Hologram, key features, framework philosophy, and inspirations
+- [Installation](https://hologram.page/docs/installation): Prerequisites (Elixir, OTP, Phoenix, Node.js) and step-by-step setup
+- [Quick Start](https://hologram.page/docs/quick-start): Build a simple blog app demonstrating layouts, pages, components, and interactions
+
+## Documentation
+
+- [Architecture](https://hologram.page/docs/architecture): Pages and components, code distribution, client-server communication
+- [Template Syntax](https://hologram.page/docs/template-syntax): ~HOLO sigil, HTML markup, @var access, component nodes, interpolation, control flow blocks
+- [Components](https://hologram.page/docs/components): Reusable UI building blocks, props, stateful vs stateless, slots, templates
+- [Pages](https://hologram.page/docs/pages): Route entry points, routing and parameters, differences from regular components
+- [Layouts](https://hologram.page/docs/layouts): Root components that wrap page content, specifying layouts, layout templates
+- [Events](https://hologram.page/docs/events): User interaction handling, event types, event data, binding syntax, event targets
+- [Actions](https://hologram.page/docs/actions): Client-side operations, state updates, action parameters, targets, delays
+- [Commands](https://hologram.page/docs/commands): Server-side operations, database/API access, async execution, command targets
+- [Navigation](https://hologram.page/docs/navigation): Link component, programmatic navigation, History PushState transitions
+- [Forms](https://hologram.page/docs/forms): Synchronized vs non-synchronized inputs, event handling, input types
+- [Context](https://hologram.page/docs/context): Sharing data between components without prop drilling
+- [Session](https://hologram.page/docs/session): Secure server-side storage persisting across page visits
+- [Cookies](https://hologram.page/docs/cookies): Client-side persistent storage managed through server-side functions
+- [JavaScript Interop](https://hologram.page/docs/javascript-interop): Calling JavaScript from Elixir, importing JS modules, async support
+
+## Reference
+
+- [Client Runtime](https://hologram.page/reference/client-runtime): Erlang-to-JavaScript porting status, Elixir standard library coverage
+- [Features](https://hologram.page/reference/features): Feature implementation status and progress tracking
+- [Roadmap](https://hologram.page/docs/roadmap): Short-term, medium-term, and long-term development goals
+- [Contributing](https://hologram.page/reference/contributing): How to contribute, Erlang function porting initiative
+- [Package Naming](https://hologram.page/reference/package-naming): Reserved prefixes and namespaces for Hologram packages
+- [Sponsor](https://hologram.page/reference/sponsor): Sponsorship information and project impact
+
+## Resources
+
+- [Community](https://hologram.page/community): Elixir Forum, Discord, Slack, and Twitter/X links
+- [Courses](https://hologram.page/courses): Video courses for building real-world applications with Hologram
+- [Newsletter](https://hologram.page/newsletter): Monthly updates on development milestones and ecosystem news

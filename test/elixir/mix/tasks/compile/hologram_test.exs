@@ -83,6 +83,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     CallGraph.load(call_graph, call_graph_dump_path)
 
     assert CallGraph.has_vertex?(call_graph, Module2)
+
+    # Erlang MFA edges are added during compilation
+    assert CallGraph.has_edge?(call_graph, {:binary, :match, 2}, {:binary, :match, 3})
+
+    # Dynamic dispatch edges are added during compilation
+    assert CallGraph.has_edge?(call_graph, {Date, :new, 4}, {Calendar.ISO, :valid_date?, 3})
   end
 
   defp test_dirs(opts) do
@@ -197,6 +203,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup_all do
+    original_hologram_start_flag = System.get_env("HOLOGRAM_START")
+    System.put_env("HOLOGRAM_START", "1")
+
+    on_exit(fn ->
+      if original_hologram_start_flag do
+        System.put_env("HOLOGRAM_START", original_hologram_start_flag)
+      else
+        System.delete_env("HOLOGRAM_START")
+      end
+    end)
+
     clean_dir(@test_dir)
     File.mkdir!(@assets_dir)
     File.mkdir!(@build_dir)
@@ -227,6 +244,30 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     clean_dir(@static_dir)
     clean_dir(@tmp_dir)
+  end
+
+  describe "compiler skipping" do
+    setup do
+      on_exit(fn -> System.put_env("HOLOGRAM_START", "1") end)
+    end
+
+    test "skips compilation when HOLOGRAM_START env var is not set", %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
+
+      assert run(opts) == :noop
+    end
+
+    test "skips compilation for language server builds", %{opts: opts} do
+      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+
+      assert run(ls_opts) == :noop
+    end
+
+    test "runs compilation when HOLOGRAM_START env var is set to 1", %{opts: opts} do
+      System.put_env("HOLOGRAM_START", "1")
+
+      assert run(opts) == :ok
+    end
   end
 
   test "compilation artifacts", %{opts: initial_opts} do
