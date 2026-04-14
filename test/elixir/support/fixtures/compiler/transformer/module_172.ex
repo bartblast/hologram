@@ -6,8 +6,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module172 do
 
     with :ok <- y do
     else
-      ^key ->
-        :error
+      ^key -> :error
     end
   end
 end

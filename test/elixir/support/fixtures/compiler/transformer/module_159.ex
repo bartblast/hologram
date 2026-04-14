@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module159 do
-  def test(x) do
-    with i when is_integer(i) and x > 5 <- x, do: x
+  def test(y) do
+    with x when is_integer(x) and x > 5 <- y, do: nil
   end
 end
