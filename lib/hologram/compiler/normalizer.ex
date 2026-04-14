@@ -114,9 +114,6 @@ defmodule Hologram.Compiler.Normalizer do
 
   defp normalize_try_opt(opt), do: normalize(opt)
 
-  # `with` used as a variable name, e.g. {:with, meta, nil}
-  defp normalize_with_parts(nil), do: nil
-
   defp normalize_with_parts([[{:do, body} | rest]]) do
     else_clauses =
       case rest do
@@ -133,9 +130,14 @@ defmodule Hologram.Compiler.Normalizer do
     [[{:do, normalize_block(body)}, {:else, Enum.map(else_clauses, &normalize/1)}]]
   end
 
+  defp normalize_with_parts([]), do: []
+
   defp normalize_with_parts([part | rest]) do
     [normalize(part) | normalize_with_parts(rest)]
   end
+
+  # `with` used as a variable name, e.g. {:with, meta, nil}
+  defp normalize_with_parts(nil), do: nil
 
   # Strips bare alias expressions from non-tail positions of a block.
   # The Elixir compiler stores function-body `import` statements as bare module atoms
