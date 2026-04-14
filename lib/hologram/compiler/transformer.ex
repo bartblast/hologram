@@ -432,6 +432,16 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  def transform({:with, _meta, parts}, context) when is_list(parts) do
+    {clauses_ast, [[{:do, do_part}, {:else, else_clauses}]]} = Enum.split(parts, -1)
+
+    %IR.With{
+      clauses: Enum.map(clauses_ast, &transform_with_clause(&1, context)),
+      else_clauses: Enum.map(else_clauses, &transform_with_else_clause(&1, context)),
+      body: transform(do_part, context)
+    }
+  end
+
   def transform({:{}, _meta, data}, context) do
     build_tuple_type_ir(data, context)
   end
@@ -440,21 +450,6 @@ defmodule Hologram.Compiler.Transformer do
     data
     |> Tuple.to_list()
     |> build_tuple_type_ir(context)
-  end
-
-  def transform({:with, _meta, parts}, context) when is_list(parts) do
-    [[{:do, do_part}, {:else, else_clauses}] | reversed_clauses] = Enum.reverse(parts)
-
-    clauses =
-      reversed_clauses
-      |> Enum.reverse()
-      |> Enum.map(&transform_with_clause(&1, context))
-
-    %IR.With{
-      clauses: clauses,
-      else_clauses: Enum.map(else_clauses, &transform_with_else_clause(&1, context)),
-      body: transform(do_part, context)
-    }
   end
 
   # --- PRESERVE ORDER (BEGIN) ---
@@ -932,21 +927,21 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_with_clause(
-         {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, body]},
+         {:<-, _meta_1, [{:when, _meta_2, [match, guards]}, expr]},
          context
        ) do
     %IR.WithMatchClause{
       match: transform(match, %{context | pattern?: true}),
       guards: transform_guards(guards, context),
-      expression: transform(body, context)
+      expression: transform(expr, context)
     }
   end
 
-  defp transform_with_clause({:<-, _meta, [match, body]}, context) do
+  defp transform_with_clause({:<-, _meta, [match, expr]}, context) do
     %IR.WithMatchClause{
       match: transform(match, %{context | pattern?: true}),
       guards: [],
-      expression: transform(body, context)
+      expression: transform(expr, context)
     }
   end
 
