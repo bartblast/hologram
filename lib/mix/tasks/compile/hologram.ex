@@ -79,103 +79,105 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp compile(opts) do
-    Logger.info("Hologram: compiler started")
+    in_isolated_process(fn ->
+      Logger.info("Hologram: compiler started")
 
-    assets_dir = opts[:assets_dir]
-    build_dir = opts[:build_dir]
+      assets_dir = opts[:assets_dir]
+      build_dir = opts[:build_dir]
 
-    File.mkdir_p!(build_dir)
-    File.mkdir_p!(opts[:static_dir])
-    File.mkdir_p!(opts[:tmp_dir])
+      File.mkdir_p!(build_dir)
+      File.mkdir_p!(opts[:static_dir])
+      File.mkdir_p!(opts[:tmp_dir])
 
-    Compiler.maybe_install_js_deps(assets_dir, build_dir)
+      Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
-    opts = maybe_adjust_formatter_bin_path(opts)
+      opts = maybe_adjust_formatter_bin_path(opts)
 
-    {old_module_digest_plt, module_digest_plt_dump_path} =
-      Compiler.maybe_load_module_digest_plt(build_dir)
+      {old_module_digest_plt, module_digest_plt_dump_path} =
+        Compiler.maybe_load_module_digest_plt(build_dir)
 
-    new_module_digest_plt = Compiler.build_module_digest_plt!()
+      new_module_digest_plt = Compiler.build_module_digest_plt!()
 
-    module_digests_diff =
-      Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
+      module_digests_diff =
+        Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
-    # Building IR PLT from scratch is faster that dumping it to a file,
-    # and then loading and patching it (benchmarked on an app with 1628 modules):
-    # build: ~310 ms
-    # dump: ~350 ms
-    # load: ~465 ms
-    # patch: not benchmarked
-    ir_plt = Compiler.build_ir_plt()
+      # Building IR PLT from scratch is faster that dumping it to a file,
+      # and then loading and patching it (benchmarked on an app with 1628 modules):
+      # build: ~310 ms
+      # dump: ~350 ms
+      # load: ~465 ms
+      # patch: not benchmarked
+      ir_plt = Compiler.build_ir_plt()
 
-    {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
+      {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
 
-    call_graph
-    |> CallGraph.patch(ir_plt, module_digests_diff)
-    |> CallGraph.add_non_discoverable_edges()
-
-    # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
-    async_mfas = CallGraph.list_async_mfas(call_graph)
-
-    call_graph_for_runtime =
       call_graph
-      |> CallGraph.clone()
-      # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
-      # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
-      # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
-      |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.patch(ir_plt, module_digests_diff)
+      |> CallGraph.add_non_discoverable_edges()
 
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
+      # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
+      async_mfas = CallGraph.list_async_mfas(call_graph)
 
-    runtime_entry_file_path =
-      Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
+      call_graph_for_runtime =
+        call_graph
+        |> CallGraph.clone()
+        # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
+        # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
+        # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
+        |> CallGraph.remove_manually_ported_mfas()
 
-    page_modules = Reflection.list_pages()
+      runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
 
-    Compiler.validate_page_modules(page_modules)
+      runtime_entry_file_path =
+        Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
 
-    call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+      page_modules = Reflection.list_pages()
 
-    page_entry_files_info =
-      page_modules
-      |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, async_mfas, opts)
-      |> Enum.map(fn {entry_name, entry_file_path} ->
-        {entry_name, entry_file_path, "page"}
-      end)
+      Compiler.validate_page_modules(page_modules)
 
-    page_entry_file_paths =
-      Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path, _bundle_name} ->
-        entry_file_path
-      end)
+      call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
-    Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
+      page_entry_files_info =
+        page_modules
+        |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, async_mfas, opts)
+        |> Enum.map(fn {entry_name, entry_file_path} ->
+          {entry_name, entry_file_path, "page"}
+        end)
 
-    entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
+      page_entry_file_paths =
+        Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path, _bundle_name} ->
+          entry_file_path
+        end)
 
-    old_build_static_artifacts =
-      opts[:static_dir]
-      |> File.ls!()
-      |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
+      Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
 
-    bundles_info = Compiler.bundle(entry_files_info, opts)
+      entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
 
-    new_build_static_artifacts =
-      Enum.reduce(bundles_info, [], fn bundle_info, acc ->
-        [bundle_info.static_bundle_path, bundle_info.static_source_map_path | acc]
-      end)
+      old_build_static_artifacts =
+        opts[:static_dir]
+        |> File.ls!()
+        |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
 
-    {page_digest_plt, page_digest_plt_dump_path} =
-      Compiler.build_page_digest_plt(bundles_info, opts)
+      bundles_info = Compiler.bundle(entry_files_info, opts)
 
-    PLT.dump(page_digest_plt, page_digest_plt_dump_path)
-    CallGraph.dump(call_graph, call_graph_dump_path)
-    PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
+      new_build_static_artifacts =
+        Enum.reduce(bundles_info, [], fn bundle_info, acc ->
+          [bundle_info.static_bundle_path, bundle_info.static_source_map_path | acc]
+        end)
 
-    Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
+      {page_digest_plt, page_digest_plt_dump_path} =
+        Compiler.build_page_digest_plt(bundles_info, opts)
 
-    Logger.info("Hologram: compiler finished")
+      PLT.dump(page_digest_plt, page_digest_plt_dump_path)
+      CallGraph.dump(call_graph, call_graph_dump_path)
+      PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
 
-    :ok
+      Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
+
+      Logger.info("Hologram: compiler finished")
+
+      :ok
+    end)
   end
 
   defp language_server_build?(opts) do
@@ -286,6 +288,38 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       {:error, reason} ->
         raise "Hologram: failed to acquire compiler lock: #{inspect(reason)}"
+    end
+  end
+
+  defp in_isolated_process(fun) do
+    caller = self()
+    ref = make_ref()
+
+    {pid, monitor_ref} =
+      spawn_monitor(fn ->
+        try do
+          send(caller, {ref, {:ok, fun.()}})
+        catch
+          kind, reason ->
+            send(caller, {ref, {:error, kind, reason, __STACKTRACE__}})
+        end
+
+        Process.sleep(:infinity)
+      end)
+
+    receive do
+      {^ref, {:ok, result}} ->
+        Process.exit(pid, :shutdown)
+        receive do: ({:DOWN, ^monitor_ref, :process, ^pid, _} -> result)
+
+      {^ref, {:error, kind, reason, stacktrace}} ->
+        Process.exit(pid, :shutdown)
+
+        receive do: ({:DOWN, ^monitor_ref, :process, ^pid, _} ->
+                       :erlang.raise(kind, reason, stacktrace))
+
+      {:DOWN, ^monitor_ref, :process, ^pid, reason} ->
+        exit(reason)
     end
   end
 end
