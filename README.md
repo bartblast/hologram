@@ -40,6 +40,7 @@ Website: https://hologram.page
 * Oban, [@oban-bg](https://github.com/oban-bg)
 * Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 * Robert Urbańczyk, [@robertu](https://github.com/robertu)
+* Moss Piglet [@moss-piglet](https://github.com/moss-piglet)
 
 ### Early Adopter Tier
 
