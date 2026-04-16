@@ -2800,6 +2800,11 @@ defmodule Hologram.Compiler.EncoderTest do
           match: %IR.Variable{name: :x},
           expression: %IR.Variable{name: :y},
           guards: []
+        },
+        error_else: %IR.Clause{
+          match: %IR.AtomType{value: :error},
+          guards: [],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
         }
       ]
     end
@@ -2823,17 +2828,11 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) === expected
     end
 
-    test "with body, clause, and else clause", %{basic_match_clause: basic_match_clause} do
+    test "with body, clause, and else clause", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
       ir = %IR.With{
         body: %IR.AtomType{value: :ok},
         clauses: [basic_match_clause],
-        else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          }
-        ]
+        else_clauses: [error_clause]
       }
 
       expected =
@@ -2846,17 +2845,11 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with empty body", %{basic_match_clause: basic_match_clause} do
+    test "with empty body", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
       ir = %IR.With{
         body: %IR.Block{expressions: []},
         clauses: [basic_match_clause],
-        else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          }
-        ]
+        else_clauses: [error_clause]
       }
 
       expected =
@@ -2871,7 +2864,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with single expression body", %{basic_match_clause: basic_match_clause} do
+    test "with single expression body", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
       ir = %IR.With{
         body: %IR.Block{
           expressions: [
@@ -2884,13 +2877,7 @@ defmodule Hologram.Compiler.EncoderTest do
           ]
         },
         clauses: [basic_match_clause],
-        else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          }
-        ]
+        else_clauses: [error_clause]
       }
 
       expected =
@@ -2945,17 +2932,11 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with single clause", %{basic_match_clause: basic_match_clause} do
+    test "with single clause", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
       ir = %IR.With{
         body: %IR.Block{expressions: []},
         clauses: [basic_match_clause],
-        else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          }
-        ]
+        else_clauses: [error_clause]
       }
 
       expected =
@@ -2970,7 +2951,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with multiple clause", %{basic_match_clause: basic_match_clause} do
+    test "with multiple clause", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
       ir = %IR.With{
         body: %IR.Block{expressions: []},
         clauses: [
@@ -2988,13 +2969,7 @@ defmodule Hologram.Compiler.EncoderTest do
             }
           }
         ],
-        else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          }
-        ]
+        else_clauses: [error_clause]
       }
 
       expected =
@@ -3009,7 +2984,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with single clause with guards" do
+    test "with single clause with guards", %{error_else: error_clause} do
       ir = %IR.With{
         body: %IR.Block{expressions: []},
         clauses: [
@@ -3024,13 +2999,7 @@ defmodule Hologram.Compiler.EncoderTest do
             ]
           }
         ],
-        else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          }
-        ]
+        else_clauses: [error_clause]
       }
 
       expected =
@@ -3045,7 +3014,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with multiple clauses with guards" do
+    test "with multiple clauses with guards", %{error_else: error_clause} do
       ir = %IR.With{
         body: %IR.Block{expressions: []},
         clauses: [
@@ -3070,13 +3039,7 @@ defmodule Hologram.Compiler.EncoderTest do
             ]
           }
         ],
-        else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          }
-        ]
+        else_clauses: [error_clause]
       }
 
       expected =
@@ -3091,7 +3054,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "without else clauses" do
+    test "without else clauses", %{basic_match_clause: basic_match_clause} do
       ir = %IR.With{
         body: %IR.Block{
           expressions: [
@@ -3107,13 +3070,7 @@ defmodule Hologram.Compiler.EncoderTest do
             }
           ]
         },
-        clauses: [
-          %IR.WithMatchClause{
-            match: %IR.Variable{name: :x},
-            expression: %IR.Variable{name: :y},
-            guards: []
-          }
-        ],
+        clauses: [basic_match_clause],
         else_clauses: []
       }
 
@@ -3158,7 +3115,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with multiple else clauses" do
+    test "with multiple else clauses", %{error_else: error_clause} do
       ir = %IR.With{
         body: %IR.AtomType{value: :ok},
         clauses: [
@@ -3169,11 +3126,7 @@ defmodule Hologram.Compiler.EncoderTest do
           }
         ],
         else_clauses: [
-          %IR.Clause{
-            match: %IR.AtomType{value: :error},
-            guards: [],
-            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
-          },
+          error_clause,
           %IR.Clause{
             match: %IR.AtomType{value: :timeout},
             guards: [],
