@@ -3243,7 +3243,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with multiple guard else clause" do
+    test "with multiple else clauses with guards" do
       ir = %IR.With{
         body: %IR.AtomType{value: :ok},
         clauses: [
