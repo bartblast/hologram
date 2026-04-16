@@ -2825,7 +2825,7 @@ defmodule Hologram.Compiler.EncoderTest do
         }, [], [], context)\
         """)
 
-      assert encode_ir(ir) === expected
+      assert encode_ir(ir) == expected
     end
 
     test "with body, clause, and else clause", %{
@@ -2957,7 +2957,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with multiple clause", %{
+    test "with multiple clauses", %{
       basic_match_clause: basic_match_clause,
       error_else: error_clause
     } do
@@ -2971,8 +2971,8 @@ defmodule Hologram.Compiler.EncoderTest do
               right: %IR.LocalFunctionCall{
                 function: :+,
                 args: [
-                  %Hologram.Compiler.IR.Variable{name: :x, version: nil},
-                  %Hologram.Compiler.IR.IntegerType{value: 1}
+                  %IR.Variable{name: :x, version: nil},
+                  %IR.IntegerType{value: 1}
                 ]
               }
             }
@@ -3116,7 +3116,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern(\"x\"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("timeout"), guards: [], body: (context) => {
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("timeout"), guards: [], body: (context) => {
         return Type.atom("error");
         }}], context)\
         """)
@@ -3146,7 +3146,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom(\"error\"), guards: [], body: (context) => {\nreturn Type.atom(\"error\");\n}}, {match: Type.atom("timeout"), guards: [], body: (context) => {
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {\nreturn Type.atom("error");\n}}, {match: Type.atom("timeout"), guards: [], body: (context) => {
         return Type.atom("error");
         }}], context)\
         """)
@@ -3207,7 +3207,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with single guard else clause" do
+    test "with single else clause with guard" do
       ir = %IR.With{
         body: %IR.AtomType{value: :ok},
         clauses: [
@@ -3235,7 +3235,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern(\"x\"), guards: [], expression: (context) => context.vars.y}], [{match: Type.variablePattern(\"status\"), guards: [(context) => Erlang_[\"is_atom/1\"](context.vars.status)], body: (context) => {
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.variablePattern("status"), guards: [(context) => Erlang_["is_atom/1"](context.vars.status)], body: (context) => {
         return Type.atom("error");
         }}], context)\
         """)
@@ -3283,9 +3283,9 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected =
         normalize_newlines("""
-        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern(\"x\"), guards: [], expression: (context) => context.vars.y}], [{match: Type.variablePattern(\"status\"), guards: [(context) => Erlang_[\"is_atom/1\"](context.vars.status)], body: (context) => {
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.variablePattern("status"), guards: [(context) => Erlang_["is_atom/1"](context.vars.status)], body: (context) => {
         return Type.atom("error");
-        }}, {match: Type.variablePattern(\"code\"), guards: [(context) => Erlang_[\"is_integer/1\"](context.vars.code)], body: (context) => {
+        }}, {match: Type.variablePattern("code"), guards: [(context) => Erlang_["is_integer/1"](context.vars.code)], body: (context) => {
         return Type.atom("error");
         }}], context)\
         """)
@@ -3402,7 +3402,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s|{expression: (context) => Interpreter.matchOperator(Erlang_[\"foo/1\"](Type.integer(5n)), Type.variablePattern(\"x\"), context)}|
+               ~s|{expression: (context) => Interpreter.matchOperator(Erlang_["foo/1"](Type.integer(5n)), Type.variablePattern("x"), context)}|
     end
 
     test "with plain expression (function call)" do
