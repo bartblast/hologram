@@ -2828,7 +2828,10 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) === expected
     end
 
-    test "with body, clause, and else clause", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
+    test "with body, clause, and else clause", %{
+      basic_match_clause: basic_match_clause,
+      error_else: error_clause
+    } do
       ir = %IR.With{
         body: %IR.AtomType{value: :ok},
         clauses: [basic_match_clause],
@@ -2864,7 +2867,10 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with single expression body", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
+    test "with single expression body", %{
+      basic_match_clause: basic_match_clause,
+      error_else: error_clause
+    } do
       ir = %IR.With{
         body: %IR.Block{
           expressions: [
@@ -2951,7 +2957,10 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == expected
     end
 
-    test "with multiple clause", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
+    test "with multiple clause", %{
+      basic_match_clause: basic_match_clause,
+      error_else: error_clause
+    } do
       ir = %IR.With{
         body: %IR.Block{expressions: []},
         clauses: [
