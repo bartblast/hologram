@@ -70,8 +70,26 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module153
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module154
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module155
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module156
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module157
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module158
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module159
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module160
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module161
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module162
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module163
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module164
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module165
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module166
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module167
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module168
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module169
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module170
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module171
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module172
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module173
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
@@ -6453,7 +6471,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "with" do
-    test "empty with" do
+    test "empty with (AST from source code)" do
       ast =
         ast("""
         with do
@@ -6467,66 +6485,11 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "multiple clauses and else clauses" do
-      ast =
-        ast("""
-        with {:ok, x} when not is_nil(x) <- {:ok, foo(y)},
-          {x, bar} <- baz(x),
-          :test = :test do
-          :ok
-        else
-          :error ->
-            {:error, :wrong_data}
-          {:error, value} ->
-            {:error, :wrong_data, value}
-        end
-        """)
-
-      assert %Hologram.Compiler.IR.With{
-               body: body,
-               clauses: [first_clause, _second, _third],
-               else_clauses: [first_else, _second_else]
-             } = transform(ast, %Context{})
-
-      assert body == %IR.AtomType{value: :ok}
-
-      assert %IR.WithClause{
-               match: %IR.TupleType{data: [%IR.AtomType{value: :ok}, %IR.Variable{name: :x}]},
-               guards: [
-                 %IR.LocalFunctionCall{
-                   function: :not,
-                   args: [
-                     %IR.LocalFunctionCall{
-                       function: :is_nil,
-                       args: [
-                         %IR.Variable{name: :x}
-                       ]
-                     }
-                   ]
-                 }
-               ],
-               expression: %IR.TupleType{
-                 data: [
-                   %IR.AtomType{value: :ok},
-                   %IR.LocalFunctionCall{function: :foo, args: [%IR.Variable{name: :y}]}
-                 ]
-               }
-             } = first_clause
-
-      assert %IR.Clause{
-               match: %IR.AtomType{value: :error},
-               guards: [],
-               body: %IR.Block{
-                 expressions: [
-                   %IR.TupleType{
-                     data: [%IR.AtomType{value: :error}, %IR.AtomType{value: :wrong_data}]
-                   }
-                 ]
-               }
-             } = first_else
+    test "with used as variable name (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module156) == %IR.Variable{name: :with, version: 0}
     end
 
-    test "clause without guards" do
+    test "clause without guards (AST from source code)" do
       ast =
         ast("""
         with :ok <- y  do
@@ -6541,14 +6504,32 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert body == %IR.Block{expressions: []}
 
-      assert clause == %IR.WithClause{
+      assert clause == %IR.WithMatchClause{
                match: %IR.AtomType{value: :ok},
                guards: [],
                expression: %IR.Variable{name: :y}
              }
     end
 
-    test "clause with guards" do
+    test "single clause without guards (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module157) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :ok}
+                 ]
+               },
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y, version: 0},
+                   guards: [],
+                   match: %IR.AtomType{value: :ok}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "clause with guards (AST from source code)" do
       ast =
         ast("""
         with i when is_integer(i) <- x, do: x
@@ -6556,7 +6537,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %{clauses: [clause], body: body} = transform(ast, %Context{})
 
-      assert clause == %IR.WithClause{
+      assert clause == %IR.WithMatchClause{
                match: %IR.Variable{
                  name: :i
                },
@@ -6569,20 +6550,42 @@ defmodule Hologram.Compiler.TransformerTest do
                expression: %IR.Variable{name: :x}
              }
 
-      assert body == %IR.Variable{name: :x}
+      assert body == %IR.Block{expressions: [%IR.Variable{name: :x}]}
     end
 
-    test "with compound guard calls" do
+    test "clause with guards (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module158) == %IR.With{
+               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :x, version: 0},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       function: :is_integer,
+                       args: [
+                         %IR.Variable{name: :i, version: 1}
+                       ],
+                       module: %IR.AtomType{value: :erlang}
+                     }
+                   ],
+                   match: %IR.Variable{name: :i, version: 1}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with compound guard calls (AST from source code)" do
       ast =
         ast("""
         with x when is_integer(x) and x > 5 <- y, do: nil
         """)
 
       assert transform(ast, %Context{}) == %IR.With{
-               body: %IR.AtomType{value: nil},
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
                else_clauses: [],
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.Variable{
                      name: :x
                    },
@@ -6618,7 +6621,134 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "with plain expressions" do
+    test "with compound guard calls (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module159) == %IR.With{
+               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :x, version: 0},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       function: :andalso,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           function: :is_integer,
+                           args: [
+                             %IR.Variable{name: :i, version: 1}
+                           ],
+                           module: %IR.AtomType{value: :erlang}
+                         },
+                         %IR.RemoteFunctionCall{
+                           function: :>,
+                           args: [
+                             %IR.Variable{name: :x, version: 0},
+                             %IR.IntegerType{value: 5}
+                           ],
+                           module: %IR.AtomType{value: :erlang}
+                         }
+                       ],
+                       module: %IR.AtomType{value: :erlang}
+                     }
+                   ],
+                   match: %IR.Variable{name: :i, version: 1}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "multiple clauses with guards (AST from source code)" do
+      ast =
+        ast("""
+        with i when is_integer(i) <- x,
+          s when is_binary(s) <- y do
+          :ok
+        end 
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :ok}
+                 ]
+               },
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :x},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [
+                         %IR.Variable{
+                           name: :i
+                         }
+                       ]
+                     }
+                   ],
+                   match: %IR.Variable{name: :i}
+                 },
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_binary,
+                       args: [
+                         %IR.Variable{name: :s}
+                       ]
+                     }
+                   ],
+                   match: %IR.Variable{name: :s}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "multiple clauses with guards (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module160) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.TupleType{
+                     data: [
+                       %IR.Variable{name: :s, version: 2},
+                       %IR.Variable{name: :i, version: 3}
+                     ]
+                   }
+                 ]
+               },
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :x, version: 0},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       function: :is_binary,
+                       args: [
+                         %IR.Variable{name: :s, version: 2}
+                       ],
+                       module: %IR.AtomType{value: :erlang}
+                     }
+                   ],
+                   match: %IR.Variable{name: :s, version: 2}
+                 },
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y, version: 1},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       function: :is_integer,
+                       args: [
+                         %IR.Variable{name: :i, version: 3}
+                       ],
+                       module: %IR.AtomType{value: :erlang}
+                     }
+                   ],
+                   match: %IR.Variable{name: :i, version: 3}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with single plain expression (AST from source)" do
       ast =
         ast("""
         with x = foo(5),
@@ -6628,9 +6758,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert %{clauses: [plain_clause, arrow_clause]} = transform(ast, %Context{})
 
-      assert plain_clause == %IR.WithClause{
-               match: %IR.MatchPlaceholder{},
-               guards: [],
+      assert plain_clause == %IR.WithBareClause{
                expression: %IR.MatchOperator{
                  left: %IR.Variable{name: :x},
                  right: %IR.LocalFunctionCall{
@@ -6642,31 +6770,25 @@ defmodule Hologram.Compiler.TransformerTest do
                }
              }
 
-      assert arrow_clause == %IR.WithClause{
+      assert arrow_clause == %IR.WithMatchClause{
                match: %IR.Variable{name: :y},
                guards: [],
                expression: %IR.Variable{name: :x}
              }
     end
 
-    test "with plain expression (function call)" do
-      ast =
-        ast("""
-        with baz(5) do
-        end
-        """)
-
-      assert transform(ast, %Context{}) == %IR.With{
-               body: %IR.Block{expressions: []},
+    test "with single plain expression (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module161) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.Variable{name: :a, version: 0}
+                 ]
+               },
                clauses: [
-                 %IR.WithClause{
-                   match: %IR.MatchPlaceholder{},
-                   guards: [],
-                   expression: %IR.LocalFunctionCall{
-                     function: :baz,
-                     args: [
-                       %IR.IntegerType{value: 5}
-                     ]
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :a, version: 0},
+                     right: %IR.IntegerType{value: 1}
                    }
                  }
                ],
@@ -6674,17 +6796,79 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "with single expression do block" do
+    test "with multiple plain expressions (AST from source code)" do
+      ast =
+        ast("""
+        with a = 1,
+          b = 2 do
+          :ok
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :ok}
+                 ]
+               },
+               clauses: [
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :a},
+                     right: %IR.IntegerType{value: 1}
+                   }
+                 },
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :b},
+                     right: %IR.IntegerType{value: 2}
+                   }
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with multiple plain expressions (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module162) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.TupleType{
+                     data: [
+                       %IR.Variable{name: :a, version: 0},
+                       %IR.Variable{name: :b, version: 1}
+                     ]
+                   }
+                 ]
+               },
+               clauses: [
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :a, version: 0},
+                     right: %IR.IntegerType{value: 1}
+                   }
+                 },
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :b, version: 1},
+                     right: %IR.IntegerType{value: 2}
+                   }
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with empty do block (AST from source code)" do
       ast =
         ast("""
         with {:ok, x} <- y do
-          foo(x)
         end
         """)
 
       assert transform(ast, %Context{}) == %IR.With{
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.TupleType{
                      data: [
                        %IR.AtomType{value: :ok},
@@ -6696,16 +6880,80 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                else_clauses: [],
-               body: %IR.LocalFunctionCall{
-                 function: :foo,
-                 args: [
-                   %IR.Variable{name: :x}
+               body: %IR.Block{
+                 expressions: []
+               }
+             }
+    end
+
+    test "with empty do block (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module163) == %IR.With{
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y, version: 0},
+                   guards: [],
+                   match: %IR.MatchPlaceholder{}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with single expression do block (AST from source code)" do
+      ast =
+        ast("""
+        with {:ok, x} <- y do
+          foo(x)
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.AtomType{value: :ok},
+                       %IR.Variable{name: :x}
+                     ]
+                   },
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [],
+               body: %IR.Block{
+                 expressions: [
+                   %IR.LocalFunctionCall{
+                     function: :foo,
+                     args: [
+                       %IR.Variable{name: :x}
+                     ]
+                   }
                  ]
                }
              }
     end
 
-    test "with multi-expression do block" do
+    test "with single expression do block (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module164) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :ok}
+                 ]
+               },
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y, version: 0},
+                   guards: [],
+                   match: %IR.AtomType{value: :ok}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "with multi-expression do block (AST from source code)" do
       ast =
         ast("""
         with x <- y do
@@ -6716,7 +6964,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.With{
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.Variable{name: :x},
                    guards: [],
                    expression: %IR.Variable{name: :y}
@@ -6740,7 +6988,29 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "single clause else block" do
+    test "with multi-expression do block (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module165) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.MatchOperator{
+                     left: %IR.Variable{name: :a, version: 2},
+                     right: %IR.Variable{name: :x, version: 1}
+                   },
+                   %IR.Variable{name: :a, version: 2}
+                 ]
+               },
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y, version: 0},
+                   guards: [],
+                   match: %IR.Variable{name: :x, version: 1}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "single clause else block (AST from source code)" do
       ast =
         ast("""
         with do
@@ -6768,7 +7038,39 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "multi clause else block" do
+    test "single clause else block (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module166) == %IR.With{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{
+                     value: nil
+                   }
+                 ]
+               },
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :x, version: 0},
+                   guards: [],
+                   match: %IR.AtomType{value: :ok}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.MatchPlaceholder{},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.TupleType{
+                         data: [%IR.AtomType{value: :error}, %IR.AtomType{value: :not_ok}]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multi clause else block (AST from source code)" do
       ast =
         ast("""
         with do
@@ -6825,7 +7127,241 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "pin match" do
+    test "multi clause else block (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module167) == %IR.With{
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.AtomType{value: :ok},
+                   guards: [],
+                   expression: %IR.Variable{name: :y, version: 0}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :error},
+                   body: %IR.Block{expressions: [%IR.AtomType{value: :error}]},
+                   guards: []
+                 },
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :timeout},
+                   body: %IR.Block{expressions: [%IR.AtomType{value: :timeout}]},
+                   guards: []
+                 }
+               ]
+             }
+    end
+
+    test "single else clause with guard (AST from source code)" do
+      ast =
+        ast("""
+        with x <- y do
+        else
+          {:error, msg} when is_binary(msg) ->
+            msg
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   body: %IR.Block{expressions: [%IR.Variable{name: :msg}]},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_binary,
+                       args: [%IR.Variable{name: :msg}]
+                     }
+                   ],
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :msg}]
+                   }
+                 }
+               ],
+               body: %IR.Block{
+                 expressions: []
+               }
+             }
+    end
+
+    test "single else clause with guard (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module168) == %IR.With{
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :i, version: 1},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :i, version: 1}]
+                     }
+                   ],
+                   expression: %IR.Variable{name: :y, version: 0}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.Variable{name: :s, version: 2},
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.TupleType{
+                         data: [%IR.AtomType{value: :error}, %IR.AtomType{value: :binary}]
+                       }
+                     ]
+                   },
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_binary,
+                       args: [%IR.Variable{name: :s, version: 2}]
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "multiple else clause with guard (AST from source code)" do
+      ast =
+        ast("""
+        with x <- y do
+        else
+          {:error, msg} when is_binary(msg) ->
+            msg
+          {:error, code} when is_integer(code) ->
+            code
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   body: %IR.Block{expressions: [%IR.Variable{name: :msg}]},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_binary,
+                       args: [%IR.Variable{name: :msg}]
+                     }
+                   ],
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :msg}]
+                   }
+                 },
+                 %IR.Clause{
+                   body: %IR.Block{expressions: [%IR.Variable{name: :code}]},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :code}]
+                     }
+                   ],
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :code}]
+                   }
+                 }
+               ],
+               body: %IR.Block{
+                 expressions: []
+               }
+             }
+    end
+
+    test "multiple else clause with guards (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module169) == %IR.With{
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.TupleType{data: [%IR.AtomType{value: :ok}, %IR.MatchPlaceholder{}]},
+                   guards: [],
+                   expression: %IR.Variable{name: :y, version: 0}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :msg, version: 2}]
+                   },
+                   body: %IR.Block{expressions: [%IR.Variable{name: :msg, version: 2}]},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_binary,
+                       args: [%IR.Variable{name: :msg, version: 2}]
+                     }
+                   ]
+                 },
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [%IR.AtomType{value: :error}, %IR.Variable{name: :code, version: 3}]
+                   },
+                   body: %IR.Block{expressions: [%IR.Variable{name: :code, version: 3}]},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :code, version: 3}]
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "without else block (AST from source code)" do
+      ast =
+        ast("""
+        with x <- y do
+        end
+        """)
+
+      assert transform(ast, %Context{}) == %IR.With{
+               body: %IR.Block{expressions: []},
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :x},
+                   guards: [],
+                   expression: %IR.Variable{name: :y}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "without else block (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module170) == %IR.With{
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.Variable{name: :s, version: 1},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_binary,
+                       args: [%IR.Variable{name: :s, version: 1}]
+                     }
+                   ],
+                   expression: %IR.Variable{name: :y, version: 0}
+                 }
+               ],
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               else_clauses: []
+             }
+    end
+
+    test "transforms clause match positions in pattern mode (AST from source code)" do
       ast =
         ast("""
         key = :ok
@@ -6838,7 +7374,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert with_ir == %IR.With{
                body: %IR.Block{expressions: []},
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.PinOperator{variable: %IR.Variable{name: :key, version: nil}},
                    expression: %IR.Variable{name: :y},
                    guards: []
@@ -6848,7 +7384,24 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "pin in else clause" do
+    test "transforms clause match positions in pattern mode (AST from BEAM file)" do
+      %{clause: %{body: %{expressions: [_match, with_ast]}}} =
+        transform_module_and_fetch_def(Module171)
+
+      assert with_ast == %IR.With{
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   match: %IR.PinOperator{variable: %IR.Variable{name: :key, version: 1}},
+                   guards: [],
+                   expression: %IR.Variable{name: :y, version: 0}
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "transforms else clause match positions in pattern mode (AST from source code)" do
       ast =
         ast("""
         key = :error
@@ -6864,7 +7417,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert with_ir == %IR.With{
                body: %IR.Block{expressions: []},
                clauses: [
-                 %IR.WithClause{
+                 %IR.WithMatchClause{
                    match: %IR.Variable{name: :x},
                    expression: %IR.Variable{name: :y},
                    guards: []
@@ -6880,20 +7433,75 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "without else block" do
+    test "transforms else clause match positions in pattern mode (AST from BEAM file)" do
+      %{clause: %{body: %{expressions: [_match, with_ast]}}} =
+        transform_module_and_fetch_def(Module172)
+
+      assert with_ast == %IR.With{
+               body: %IR.Block{expressions: [%IR.AtomType{value: nil}]},
+               clauses: [
+                 %IR.WithMatchClause{
+                   expression: %IR.Variable{name: :y, version: 0},
+                   guards: [],
+                   match: %IR.AtomType{value: :ok}
+                 }
+               ],
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.PinOperator{variable: %IR.Variable{name: :key, version: 1}},
+                   body: %IR.Block{expressions: [%IR.AtomType{value: :error}]},
+                   guards: []
+                 }
+               ]
+             }
+    end
+
+    test "handles bare clauses that are keyword lists containing do (AST from source code)" do
       ast =
         ast("""
-        with x <- y do
+        with [do: 1] do
+          :ok
         end
         """)
 
       assert transform(ast, %Context{}) == %IR.With{
-               body: %IR.Block{expressions: []},
+               body: %IR.Block{
+                 expressions: [%IR.AtomType{value: :ok}]
+               },
                clauses: [
-                 %IR.WithClause{
-                   match: %IR.Variable{name: :x},
-                   guards: [],
-                   expression: %IR.Variable{name: :y}
+                 %IR.WithBareClause{
+                   expression: %IR.ListType{
+                     data: [
+                       %IR.TupleType{
+                         data: [
+                           %IR.AtomType{value: :do},
+                           %IR.IntegerType{value: 1}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ],
+               else_clauses: []
+             }
+    end
+
+    test "handles bare clauses that are keyword lists containing do (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module173) == %IR.With{
+               body: %IR.Block{expressions: [%IR.Variable{name: :x, version: 0}]},
+               clauses: [
+                 %IR.WithBareClause{
+                   expression: %IR.ListType{
+                     data: [
+                       %IR.TupleType{data: [%IR.AtomType{value: :do}, %IR.IntegerType{value: 1}]}
+                     ]
+                   }
+                 },
+                 %IR.WithBareClause{
+                   expression: %IR.MatchOperator{
+                     left: %IR.Variable{name: :x, version: 0},
+                     right: %IR.IntegerType{value: 1}
+                   }
                  }
                ],
                else_clauses: []

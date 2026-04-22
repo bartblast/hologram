@@ -9,6 +9,13 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = Type.map();
   }
 
+  // Optimized (mutates next_action field in-place)
+  static clearNextAction(cid) {
+    const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];
+    const componentStruct = entry.data["atom(struct)"][1];
+    componentStruct.data["atom(next_action)"][1] = Type.nil();
+  }
+
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
   // Deps: [:maps.get/2]
   static getComponentEmittedContext(cid) {
@@ -64,14 +71,14 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = entries;
   }
 
-  // Optimized (mutates entries/struct field)
+  // Optimized (mutates entries/struct field in-place)
   static putComponentStruct(cid, componentStruct) {
     ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1].data[
       "atom(struct)"
     ][1] = componentStruct;
   }
 
-  // Optimized (mutates entries field)
+  // Optimized (mutates entries field in-place)
   static putEntry(cid, entry) {
     ComponentRegistry.entries.data[Type.encodeMapKey(cid)] = [cid, entry];
   }

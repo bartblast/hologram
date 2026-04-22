@@ -2,7 +2,7 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @version "0.8.0"
+  @version "0.8.3"
 
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
@@ -81,8 +81,11 @@ defmodule Hologram.MixProject do
         "lib",
         ".formatter.exs",
         "LICENSE",
+        "llms.txt",
+        "llms-full.txt",
         "mix.exs",
-        "README.md"
+        "README.md",
+        "usage-rules.md"
       ],
       licenses: ["Apache-2.0"],
       links: %{

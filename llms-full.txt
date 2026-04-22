@@ -1,0 +1,3425 @@
+# Hologram
+
+> Full-stack isomorphic Elixir web framework that lets you build interactive web applications entirely in Elixir, without writing JavaScript.
+
+- [Website](https://hologram.page)
+- [GitHub](https://github.com/bartblast/hologram)
+- [HexDocs](https://hexdocs.pm/hologram)
+
+## Guides
+
+### Introduction
+
+Hologram is a full-stack isomorphic Elixir web framework that runs on top of Phoenix. It lets developers create dynamic, interactive web applications entirely in Elixir. Through intelligent code analysis and transformation, Hologram compiles the necessary parts of your Elixir code to JavaScript, delivering modern frontend functionality without requiring any JavaScript frameworks or direct JavaScript coding.
+
+#### Key Features
+
+- Pure Elixir development: write your entire web application in Elixir without needing to write JavaScript code
+- Client-side state: state management happens in the browser for snappy user interfaces
+- Automatic code distribution: Hologram automatically handles the separation and conversion of client/server code
+- Seamless communication: client-server interaction happens automatically through HTTP/2 persistent connections - no manual setup needed, with the speed of WebSockets and better scalability
+
+#### Framework Philosophy
+
+Hologram was created with several key principles in mind:
+
+- Developer experience: focus on writing features instead of boilerplate code
+- Convention over configuration: follow established patterns while maintaining flexibility
+- Unified language: use Elixir for both client and server-side logic
+- Component-based architecture: build applications using reusable building blocks
+
+#### Inspiration
+
+Hologram draws inspiration from several successful web technologies: Elm, Phoenix LiveView, Surface and Ruby on Rails.
+
+### Installation
+
+This guide will walk you through the installation process step by step.
+
+#### Prerequisites
+
+- `Elixir` version 1.15 or higher
+- `OTP` version 24 or higher
+- A working `Phoenix` application (see Phoenix installation guide: https://hexdocs.pm/phoenix/installation.html#phoenix)
+- `Node.js` version 20 or higher and `npm`, if not already installed, you can get them via `asdf`:
+
+```
+$ asdf plugin add nodejs
+$ asdf install nodejs latest
+$ asdf global nodejs latest
+```
+
+See asdf installation guide (https://asdf-vm.com/guide/getting-started.html) if you need to install asdf first.
+
+#### 1. Add Hologram Package
+
+Add the Hologram package to your dependencies list in `mix.exs`:
+
+```elixir
+{:hologram, "~> 0.8"},
+```
+
+#### 2. Fetch Dependencies
+
+Run the following command to fetch the Hologram package:
+
+```
+$ mix deps.get
+```
+
+#### 3. Configure Compiler
+
+Add the Hologram compiler to your project configuration in `mix.exs`:
+
+```elixir
+def project do
+  [
+    # ...
+    compilers: Mix.compilers() ++ [:hologram],
+    # ...
+  ]
+end
+```
+
+#### 4. Configure Router
+
+Add the Hologram router plug before your Phoenix router plug in your endpoint:
+
+```elixir
+defmodule MyAppWeb.Endpoint do
+  # ...
+
+  plug Hologram.Router
+  plug MyAppWeb.Router
+end
+```
+
+#### 5. Configure Static Asset Serving
+
+Add the Hologram directory to the list of served static directories in your endpoint:
+
+```elixir
+plug Plug.Static,
+  # ...
+  only: ["hologram" | MyAppWeb.static_paths()]
+```
+
+#### 6. Configure Formatter
+
+Import Hologram formatter rules in `.formatter.exs`:
+
+```elixir
+[
+  # ...
+  import_deps: [..., :hologram]
+  # ...
+]
+```
+
+#### 7. Update GitIgnore
+
+Add the following line to your `.gitignore` file to exclude Hologram generated JavaScript bundles:
+
+```
+# Hologram generated JavaScript bundles.
+/priv/static/hologram/
+```
+
+#### 8. Optional: Configure App Directory
+
+Many developers prefer to organize their Hologram pages and components in an `app` directory outside of `lib` for better project structure. If you want to use this approach, modify your existing `elixirc_paths/1` functions in `mix.exs` to include the `app` directory:
+
+```elixir
+defp elixirc_paths(:test), do: ["app", "lib", "test/support"]
+defp elixirc_paths(_env), do: ["app", "lib"]
+```
+
+This allows you to organize your code like `app/pages/`, `app/components/`, etc., which many developers find cleaner than keeping everything in `lib/`.
+
+#### Next Steps
+
+After completing the installation, you can start building your isomorphic web application with Hologram. For more information on how to use Hologram's features, please refer to the website's Documentation section.
+
+#### Notes
+
+- Make sure all dependencies are properly installed and configured
+- Verify that your Phoenix application is properly set up before installing Hologram
+
+### Quick Start
+
+Before starting, make sure you have installed Hologram correctly by following the Installation Guide.
+
+Let's build a simple blog application to demonstrate Hologram's key features. Our blog will have:
+
+- A home page listing blog posts
+- Individual post pages
+- A layout with navigation
+- The ability to like posts
+
+#### Creating the Layout
+
+First, let's create a layout that will be shared across all pages:
+
+```elixir
+defmodule Blog.MainLayout do
+  use Hologram.Component
+
+  alias Hologram.UI.Link
+  alias Hologram.UI.Runtime
+
+  def template do
+    ~HOLO"""
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <title>My Blog</title>
+        <Runtime />
+      </head>
+      <body>
+        <nav>
+          <Link to={Blog.HomePage}>Home</Link>
+        </nav>
+        <main>
+          <slot />
+        </main>
+      </body>
+    </html>
+    """
+  end
+end
+```
+
+#### Creating the Home Page
+
+Now let's create the home page that lists blog posts:
+
+```elixir
+defmodule Blog.HomePage do
+  use Hologram.Page
+  alias Blog.Components.PostPreview
+
+  route "/"
+
+  layout Blog.MainLayout
+
+  def init(_params, component, _server) do
+    # In real app, fetch from database
+    posts = [
+      %{id: 1, title: "First Post", excerpt: "This is my first post"},
+      %{id: 2, title: "Second Post", excerpt: nil}
+    ]
+
+    put_state(component, :posts, posts)
+  end
+
+  def template do
+    ~HOLO"""
+    <h1>Welcome to my Blog</h1>
+
+    <div class="posts">
+      {%for post <- @posts}
+        <PostPreview post={post} />
+      {/for}
+    </div>
+    """
+  end
+end
+```
+
+#### Creating a Post Preview Component
+
+Let's create a reusable component for displaying post previews:
+
+```elixir
+defmodule Blog.Components.PostPreview do
+  use Hologram.Component
+  alias Hologram.UI.Link
+
+  prop :post, :map
+
+  def template do
+    ~HOLO"""
+    <article class="post-preview">
+      <h2>{@post.title}</h2>
+      <p>{@post.excerpt}</p>
+      <Link to={Blog.PostPage, id: @post.id}>Read more</Link>
+    </article>
+    """
+  end
+end
+```
+
+#### Creating the Post Page
+
+Now let's create a page for individual posts with a like button:
+
+```elixir
+defmodule Blog.PostPage do
+  use Hologram.Page
+
+  route "/posts/:id"
+
+  param :id, :integer
+
+  layout Blog.MainLayout
+
+  def init(params, component, _server) do
+    # In real app, fetch from database
+    post = %{
+      id: params.id,
+      title: "Example Post",
+      content: "This is the full content...",
+      likes: 0
+    }
+
+    put_state(component, :post, post)
+  end
+
+  def template do
+    ~HOLO"""
+    <article>
+      <h1>{@post.title}</h1>
+      <p>{@post.content}</p>
+
+      <div class="likes">
+        Likes: {@post.likes}
+        <button $click="like_post">Like</button>
+      </div>
+    </article>
+    """
+  end
+
+  def action(:like_post, _params, component) do
+    # Update likes locally first for instant feedback
+    component
+    |> put_state([:post, :likes], component.state.post.likes + 1)
+    |> put_command(:save_like, post_id: component.state.post.id)
+  end
+
+  def command(:save_like, params, server) do
+    # In real app, save to database
+    IO.puts("Liked post #{params.post_id}")
+    server
+  end
+end
+```
+
+#### Key Concepts Demonstrated
+
+1. Pages: both `HomePage` and `PostPage` are Hologram pages with their own routes
+2. Components: the `PostPreview` component shows how to create reusable UI elements
+3. Layout: the `MainLayout` provides a consistent structure across pages
+4. Template Syntax:
+   - Using `{%for}` loops
+   - Interpolating values with `{@var}`
+   - Event binding with `$click`
+5. Navigation: using `Link` component to navigate between pages
+6. State Management: using `put_state/3` to manage component state
+7. Actions & Commands: the like button demonstrates:
+   - Client-side action for immediate UI update
+   - Server-side command for persistence
+8. Props: component properties with the `prop/2` macro
+9. Parameters: route parameters with the `param/2` macro
+
+This example demonstrates the basic building blocks of a Hologram application. The framework handles the client-server communication and state management automatically, letting you focus on building features.
+
+Remember that Hologram keeps state on the client side for better performance while using commands for server-side operations when needed.
+
+## Documentation
+
+### Architecture
+
+Hologram's architecture is designed around simplicity and developer experience. Here's how it works:
+
+#### Pages and Components
+
+The framework breaks down web applications into two fundamental building blocks:
+
+- Pages: top-level components that represent different routes in your application
+- Components: reusable UI elements that can be composed together
+
+#### Code Distribution
+
+Hologram automatically analyzes your code and:
+
+1. Determines which parts should run on the client vs server
+2. Compiles necessary Elixir code to JavaScript for browser execution
+3. Sets up all required client-server communication
+
+#### Client-Side State
+
+State is maintained in the browser, which:
+
+- Enables immediate UI updates
+- Reduces server load
+- Simplifies the programming model
+
+#### Actions and Commands
+
+Code execution is organized into two types of operations:
+
+- Actions: client-side operations that run in the browser
+- Commands: server-side operations for tasks like database access
+
+Both can be triggered by user interactions, and they can trigger each other.
+
+#### HTTP/2 Communication
+
+Client-server communication happens automatically through HTTP/2 persistent connections:
+
+- No manual HTTP configuration needed
+- No boilerplate code required
+- Handles all action-command interactions
+- Practically as fast as WebSockets for real-time updates
+- Lower server resource consumption - no continuous connection overhead per user
+- Easier debugging with standard HTTP tools and browser DevTools
+- Works seamlessly through corporate proxies and firewalls
+
+#### Runtime Behavior
+
+The framework:
+
+1. Loads the initial page from the server
+2. Mounts the page in the browser
+3. Manages the virtual DOM for efficient updates
+4. Handles all client-server communication automatically
+
+### Template Syntax
+
+Hologram templates use a custom syntax called "HOLO" that combines HTML with Elixir expressions.
+
+#### Regular HTML Markup
+
+You can use standard HTML elements and attributes in your templates:
+
+```holo
+<div class="container">
+  <h1>Hello World</h1>
+  <p>This is a paragraph.</p>
+</div>
+```
+
+#### Accessing Props and State
+
+Props and state are accessible in templates using the `@var` syntax. This provides a convenient way to reference component data. For example, if you have a prop or state variable named `count`, you can access it as `@count` in your template.
+
+In the following sections, you'll see how to use these variables in Elixir expressions for interpolation and control flow blocks.
+
+#### Component Nodes
+
+Components can be used as custom elements in your templates. They can receive props (properties) as attributes. String props can be given as regular double-quoted attributes, while other Elixir values (like numbers, booleans, or expressions) are given using curly braces syntax:
+
+```holo
+<MyComponent title="Hello" count={42} />
+```
+
+For more information about components and their props, see the Components documentation.
+
+#### Elixir Expression Interpolation
+
+You can embed Elixir expressions in your templates using curly braces:
+
+##### Inside Text
+
+```holo
+<p>Hello, {@name}!</p>
+```
+
+##### Inside Attributes and Props
+
+You can interpolate Elixir expressions in attributes and props in two ways.
+
+First, you can interpolate the entire attribute value:
+
+```holo
+<div class={@class_name}>Content</div>
+```
+
+Or you can interpolate part of the attribute value within double quotes:
+
+```holo
+<div class="base-class {@dynamic_class}">Content</div>
+```
+
+Both approaches work for regular HTML attributes and component props:
+
+```holo
+<MyComponent count={Enum.count(@items)} label="Welcome, {@count}" />
+```
+
+###### Conditional Attributes
+
+When an attribute expression evaluates to a falsy value (`nil` or `false`), the attribute is not rendered at all. This is useful for conditional attributes:
+
+```holo
+<button disabled={@loading?}>Submit</button>
+<div class={if @active? do "active" else nil end}>Content</div>
+```
+
+In this example, when `@loading?` is `false`, the `disabled` attribute won't appear in the HTML. Similarly, when `@active?` is `false`, the `class` attribute will be omitted entirely.
+
+##### Security: Automatic HTML Escaping
+
+For security purposes, all interpolated expressions are automatically HTML-escaped to prevent XSS (Cross-Site Scripting) attacks. This means that potentially dangerous characters like `<`, `>`, `&`, and quotes are converted to their HTML entity equivalents (`&lt;`, `&gt;`, `&amp;`, etc.).
+
+```holo
+<p>User input: {@user_input}</p>
+```
+
+If `@user_input` contains `"<script>alert('XSS')</script>"`, it will be safely rendered as escaped text rather than executed as JavaScript. This escaping happens automatically for all values interpolated in text content and HTML attributes.
+
+#### Control Flow Blocks
+
+##### If Block
+
+Use `{%if}` blocks for conditional rendering. The condition follows Elixir's truthiness rules - only `nil` and `false` are considered falsy, while any other value is considered truthy. You can optionally include an `{%else}` branch.
+
+Simple if block without else:
+
+```holo
+<div>
+  {%if @show_message?}
+    <p>Message is visible</p>
+  {/if}
+</div>
+```
+
+If block with else branch:
+
+```holo
+<div>
+  {%if @show_message?}
+    <p>Message is visible</p>
+  {%else}
+    <p>Message is hidden</p>
+  {/if}
+</div>
+```
+
+##### For Block
+
+Use `{%for}` blocks to iterate over collections. The syntax follows Elixir's comprehension rules, allowing you to use the same pattern matching and filtering capabilities as regular Elixir comprehensions.
+
+```holo
+<ul>
+  {%for item <- @items}
+    <li>{item.name}</li>
+  {/for}
+</ul>
+```
+
+#### Event Binding
+
+You can bind events to elements using event attributes. For detailed information about event binding syntax and available event types, see the Events documentation.
+
+#### Escaping Curly Braces
+
+To output literal curly braces in your template, escape them with a backslash:
+
+```holo
+<p>\{@literal\} {@variable}</p>
+```
+
+#### Raw Block
+
+Use `{%raw}` blocks to output content without processing:
+
+```holo
+<div>
+  {%raw}
+    This content will be output as-is, including any \{curly braces\} or \{%control\}...\{/flow\} syntax.
+  {/raw}
+</div>
+```
+
+#### HTML Comments
+
+You can use standard HTML comments in your templates:
+
+```holo
+<div>
+  <!-- This is a comment that will be visible in the HTML output -->
+  <p>Content</p>
+</div>
+```
+
+### Components
+
+Components are the building blocks of Hologram applications. They are reusable pieces of UI that can be composed together to create complex interfaces.
+
+#### Basic Example
+
+Here's a simple stateless component that displays a greeting:
+
+```elixir
+defmodule Greeting do
+  use Hologram.Component
+
+  prop :name, :string
+  prop :title, :string, default: "Mr."
+
+  def template do
+    ~HOLO"""
+    <p>Hello, {@title} {@name}!</p>
+    """
+  end
+end
+```
+
+Usage:
+
+```holo
+<Greeting name="Wick" title="Mr." />
+```
+
+#### Props
+
+Props are the primary way to pass data to components.
+
+They are defined using the `prop/2` macro receiving `name` and `type` params:
+
+```elixir
+prop :user_id, :integer
+```
+
+or `prop/3` macro that can receive the third `opts` param:
+
+```elixir
+prop :user_id, :integer, default: 123
+```
+
+##### Types
+
+Props can be typed using the following types:
+
+- `:any` - Any type (no type checking)
+- `:atom` - Atoms
+- `:boolean` - Booleans
+- `:bitstring` - Bitstrings
+- `:float` - Floats
+- `:function` - Functions
+- `:integer` - Integers
+- `:list` - Lists
+- `:map` - Maps
+- `:pid` - PIDs
+- `:port` - Ports
+- `:reference` - References
+- `:string` - Strings (UTF-8 encoded binaries)
+- `:tuple` - Tuples
+
+##### Options
+
+###### Default Value
+
+Set a default value for optional props using the `default` option:
+
+```elixir
+prop :count, :integer, default: 0
+```
+
+###### Context Source
+
+Props can be sourced from the Context using the `from_context` option. This is useful for accessing shared data across components:
+
+```elixir
+prop :user, :map, from_context: :current_user
+```
+
+For more information about Context, see the Context page.
+
+#### Stateful vs. Stateless Components
+
+Components can be either stateful or stateless:
+
+- **Stateless Components**: Don't maintain any internal state. They render based solely on their props.
+- **Stateful Components**: Maintain internal state and can update it over time. They are identified by a unique `cid` (component ID) and can have actions and commands. Stateful components can be initialized using either `init/3` (server-side) or `init/2` (client-side) functions.
+
+##### Component ID (cid)
+
+To make a component stateful, provide a `cid` when using it:
+
+```holo
+<Assassin cid="baba_yaga" name="John Wick" kill_count={439} />
+```
+
+The `cid` is used to target actions and commands at specific components using the `target` field:
+
+```holo
+<button $click={action: :increment_kills, target: "baba_yaga"}>Add Another One</button>
+```
+
+##### Initialization
+
+**Important:** Each stateful component instance is initialized **exactly once** during its lifetime. The initialization method depends on where the component's lifecycle starts:
+
+- `init/3`: When the component's lifecycle starts as part of server-side page rendering (pages are always first rendered on the server when you navigate to them)
+- `init/2`: When the component's lifecycle starts by being dynamically added to an already-loaded page
+
+A component module can define both functions since you may have multiple instances - some starting on the server and others starting directly on the client. Each instance has its own unique `cid` and separate state.
+
+###### Server-side Initialization (init/3)
+
+Called when the component starts its lifecycle on the server. Provides access to cookies and session data through the `Server` struct. It receives three parameters:
+
+- `props` - a map containing the component's props
+- `component` - a `Component` struct representing the client-side state container
+- `server` - a `Server` struct representing the server-side state container (with access to cookies and session)
+
+The function should return either:
+
+- A tuple containing `Component` and `Server` structs when modifying both client and server state
+- Just a `Component` struct when only modifying client state
+- Just a `Server` struct when only modifying server state
+
+Example:
+
+```elixir
+def init(_props, component, server) do
+  component = put_state(component, :kill_count, 439)
+  server = put_session(server, :name, "John Wick")
+
+  {component, server}
+end
+```
+
+###### Client-side Initialization (init/2)
+
+Called when the component starts its lifecycle directly on the client. No access to cookies or session data since they are managed through the `Server` struct. It receives two parameters:
+
+- `props` - a map containing the component's props
+- `component` - a `Component` struct representing the client-side state container
+
+The function should return a `Component` struct with any initial state.
+
+Example:
+
+```elixir
+def init(_props, component) do
+  put_state(component, kill_count: 439, name: "John Wick")
+end
+```
+
+###### Chaining Actions in Initialization
+
+In both `init/3` and `init/2` functions, you can chain actions that will be executed when the component is mounted on the client. This is useful for triggering setup logic, animations, or data loading after the component becomes available in the browser.
+
+Server-side initialization (`init/3`):
+
+```elixir
+def init(_props, component, _server) do
+  put_action(component, :setup_timer)
+end
+```
+
+Client-side initialization (`init/2`):
+
+```elixir
+def init(_props, component) do
+  put_action(component, :start_animation)
+end
+```
+
+###### Optional Initialization
+
+Both `init/3` and `init/2` functions are optional. If you don't need to initialize state or perform any preparation, you can omit them entirely - Hologram provides default implementations that simply return the `Component` and `Server` structs unchanged.
+
+#### Slots
+
+Slots allow components to accept and render child content. They are defined using the `<slot />` tag in the component's template:
+
+```elixir
+defmodule Card do
+  use Hologram.Component
+
+  def template do
+    ~HOLO"""
+    <div class="card">
+      <slot />
+    </div>
+    """
+  end
+end
+```
+
+Usage:
+
+```holo
+<Card>
+  <h1>Card Title</h1>
+  <p>Card content</p>
+</Card>
+```
+
+#### Templates
+
+##### Defining Templates
+
+Hologram components can be templated using either a template function within the component module or a separate `.holo` file. These methods offer the same features and syntax - your choice depends on your team's coding style and project structure.
+
+###### Template Function
+
+```elixir
+def template do
+  ~HOLO"""
+  <div>Hello, {@name}!</div>
+  """
+end
+```
+
+###### Colocated .holo File
+
+Create a file with the same name as your component's module file but with `.holo` extension (e.g., if your component is in `my_component.ex`, create `my_component.holo`). The `.holo` file must be located in the same directory as the module file.
+
+Unlike the template function approach, colocated `.holo` files contain only the template markup without the `~HOLO` sigil:
+
+```holo
+<div>Hello, {@name}!</div>
+```
+
+##### Template Syntax
+
+See the Template Syntax documentation for more details.
+
+#### Event Handling
+
+Stateful components can handle user interactions and business logic through two mechanisms:
+
+- Actions: client-side operations that update local state
+- Commands: server-side operations that can perform remote tasks
+
+Example:
+
+```elixir
+def action(:increment, params, component) do
+  put_state(component, :count, component.state.count + params.by)
+end
+
+def command(:insert_user, params, server) do
+  {:ok, user} = Repo.insert(%User{first_name: params.first_name})
+  put_action(server, :user_inserted, user: user)
+end
+```
+
+See the Actions and Commands documentation for more details.
+
+### Pages
+
+Pages are specialized components that serve as entry points for different routes in your Hologram application. Together with regular components, they form the fundamental building blocks of Hologram applications. They inherit all the capabilities of components, including templates, state management, actions, commands, and event handling. For detailed information about these shared features, see the Components documentation.
+
+#### Key Differences from Regular Components
+
+While pages are built on top of components, they have some unique characteristics:
+
+- They must define a route using the `route/1` macro
+- They must specify a layout component using either `layout/1` or `layout/2` macro, which serves as the root of the component tree and wraps the page's content (see Layouts for more information)
+- They use URL parameters instead of props
+- They are always stateful
+- They are always initialized on the server-side using `init/3`, unlike regular components which can be initialized on either client or server
+- Their `init/3` function receives URL parameters (`params`) instead of component props (`props`)
+
+#### Basic Example
+
+Here's a simple page implementation:
+
+```elixir
+defmodule MyApp.GreetingPage do
+  use Hologram.Page
+
+  route "/hello/:username"
+
+  layout MyApp.MainLayout
+
+  def init(params, component, _server) do
+    put_state(component, :username, params.username)
+  end
+
+  def template do
+    ~HOLO"""
+    <div>Hello, {@username}!</div>
+    """
+  end
+end
+```
+
+##### Chaining Actions in Initialization
+
+You can chain actions that will be executed when the page is mounted on the client:
+
+```elixir
+def init(_params, component, _server) do
+  put_action(component, :load_user_data)
+end
+```
+
+##### Optional Initialization
+
+The `init/3` function is optional. If you don't need to initialize state or perform any preparation, you can omit it entirely - Hologram provides a default implementation that simply returns the `Component` and `Server` structs unchanged.
+
+#### Routing and Parameters
+
+Pages must define their URL route using the `route/1` macro.
+
+Routes can be static:
+
+```elixir
+route "/products"
+```
+
+or contain dynamic parameters:
+
+```elixir
+route "/users/:username/posts/:post_id/comments"
+```
+
+For routes with parameters, use the `param/2` macro to specify how string parameters should be converted:
+
+```elixir
+param :username, :string
+param :post_id, :integer
+```
+
+Supported parameter types:
+
+- `:atom` - converts to atom
+- `:float` - converts to float
+- `:integer` - converts to integer
+- `:string` - keeps the parameter as string
+
+##### Route Resolution
+
+Hologram's router uses a search tree rather than ordered routing (like Phoenix or Rails). Static segments are always prioritized over parameterized ones automatically - so `/users` will always match before `/:username`, regardless of the order pages are defined. This eliminates a whole class of route shadowing bugs that are common in ordered routers, where adding a route in the wrong position can silently break another.
+
+The tradeoff is that you can't have two ambiguous parameterized routes at the same level (e.g. `/:username` and `/:post_slug`). In practice, this is a design smell in any framework - the fix is always to give them distinct prefixes, such as `/users/:username` and `/posts/:post_slug`.
+
+#### Component ID
+
+The page is always assigned a component ID (cid) of `"page"`. This is important to remember when targeting actions or commands at the page.
+
+### Layouts
+
+Layouts are regular components that serve as the root of the component tree for pages. They don't have any specialized features - they are just components that wrap the page's content. For detailed information about components, see the Components documentation.
+
+#### Specifying a Layout for a Page
+
+Each page must specify which layout component to use. This can be done in one of the following ways.
+
+Using the `layout/1` macro to specify just the layout component:
+
+```elixir
+layout MyApp.MainLayout
+```
+
+Using the `layout/2` macro to specify the layout component and its props:
+
+```elixir
+layout MyApp.MainLayout, page_title: "My Page", show_sidebar?: true
+```
+
+Using the `layout/1` macro and setting props through the page's `init/3` function:
+
+```elixir
+layout MyApp.MainLayout
+
+def init(_params, component, _server) do
+  put_state(component, page_title: "My Page", show_sidebar?: true)
+end
+```
+
+#### Layout Template
+
+A layout template must include:
+
+- The `Hologram.UI.Runtime` component inside the `head` tag - it contains Hologram runtime and page JS bundles
+- The `<slot />` tag where the page content will be inserted
+
+#### Basic Example
+
+Here's a complete layout component implementation:
+
+```elixir
+defmodule MyApp.MainLayout do
+  use Hologram.Component
+
+  prop :page_title, :string
+
+  def template do
+    ~HOLO"""
+    <html>
+      <head>
+        <title>{@page_title}</title>
+        <Hologram.UI.Runtime />
+      </head>
+      <body>
+        <slot />
+      </body>
+    </html>
+    """
+  end
+end
+```
+
+#### Component ID
+
+The layout component is always assigned a component ID (cid) of `"layout"`. This is important to remember when targeting actions or commands at the layout component.
+
+### Events
+
+Events in Hologram are user interactions that can trigger actions or commands. They are the primary way to make your application interactive and responsive to user input.
+
+#### Event Types
+
+Hologram supports various event types that you can bind to elements in your templates (more are coming soon):
+
+- `$blur` - triggered when an element loses focus
+- `$change` - triggered when the value of an input element changes
+- `$click` - triggered when an element is clicked
+- `$focus` - triggered when an element receives focus
+- `$mouse_move` - triggered when the mouse cursor moves over an element
+- `$pointer_cancel` - triggered when a pointer event is cancelled (e.g., when the browser decides the pointer will no longer generate events)
+- `$pointer_down` - triggered when a pointer (mouse, touch, pen) is pressed down on an element
+- `$pointer_move` - triggered when a pointer moves while over an element
+- `$pointer_up` - triggered when a pointer (mouse, touch, pen) is released from an element
+- `$select` - triggered when text is selected in an input or textarea element
+- `$submit` - triggered when a form is submitted
+- `$transition_cancel` - triggered when a CSS transition is cancelled before it completes
+- `$transition_end` - triggered when a CSS transition has finished
+- `$transition_run` - triggered when a CSS transition is created
+- `$transition_start` - triggered when a CSS transition has started
+
+#### Event Data
+
+When an event occurs, Hologram provides event data that you can access in the action or command that was bound to handle that event. This data is available in the `params` argument under the `:event` key. The event data structure varies depending on the event type:
+
+##### Change Event
+
+The `$change` event data structure depends on where the event handler is placed:
+
+- **Input-level events:** include a `value` field with the specific element's value
+- **Form-level events:** include all form field values as a map, where keys are input names and values are current input values
+
+For detailed information about `$change` event behavior with forms, including synthetic event mapping, usage patterns, and data types for different input types, see the "Event Handling" section in the Forms documentation.
+
+##### Mouse Events
+
+Mouse events (like `$mouse_move`) include:
+
+- `client_x` - X coordinate relative to the client area (viewport)
+- `client_y` - Y coordinate relative to the client area (viewport)
+- `movement_x` - horizontal movement delta since the last mouse event
+- `movement_y` - vertical movement delta since the last mouse event
+- `offset_x` - X coordinate relative to the target element
+- `offset_y` - Y coordinate relative to the target element
+- `page_x` - X coordinate relative to the page
+- `page_y` - Y coordinate relative to the page
+- `screen_x` - X coordinate relative to the screen
+- `screen_y` - Y coordinate relative to the screen
+
+##### Pointer Events
+
+Pointer events (like `$click`, `$pointer_cancel`, `$pointer_down`, `$pointer_move`, `$pointer_up`) include:
+
+- `client_x` - X coordinate relative to the client area (viewport)
+- `client_y` - Y coordinate relative to the client area (viewport)
+- `movement_x` - horizontal movement delta since the last pointer event
+- `movement_y` - vertical movement delta since the last pointer event
+- `offset_x` - X coordinate relative to the target element
+- `offset_y` - Y coordinate relative to the target element
+- `page_x` - X coordinate relative to the page
+- `page_y` - Y coordinate relative to the page
+- `pointer_type` - the type of pointer that triggered the event, as an atom (`:mouse`, `:touch`, or `:pen`), or `nil` if the device type cannot be detected by the browser
+- `screen_x` - X coordinate relative to the screen
+- `screen_y` - Y coordinate relative to the screen
+
+###### Click Event
+
+Click events are ignored in the following cases:
+
+- When the Ctrl key is pressed
+- When the Command key is pressed
+- When the Shift key is pressed
+- When the middle mouse button is clicked
+
+This behavior prevents interference with browser's built-in functionality like opening links in new tabs, selecting text, or using browser extensions.
+
+##### Select Event
+
+The `$select` event includes:
+
+- `value` - the selected text value
+
+##### Submit Event
+
+The `$submit` event includes form field values directly under the `:event` key. For example, if your form has fields named "email" and "password", the event data will look like:
+
+```elixir
+%{email: "user@example.com", password: "secret"}
+```
+
+#### Event Binding Syntax
+
+When binding events to elements in your templates, prefix the event name with a dollar sign (`$`). You can bind events using several syntax options. Note that text and shorthand syntax are only available for actions. To trigger a command, you must use the longhand syntax with the `command:` key.
+
+##### Text Syntax (Actions Only)
+
+The simplest way to bind an event to an action:
+
+```holo
+<button $click="my_action">Click me</button>
+```
+
+##### Expression Shorthand Syntax (Actions Only)
+
+Use this syntax when you need to pass parameters to the action:
+
+```holo
+<button $click={:my_action, param_1: 1, param_2: 2}>Click me</button>
+```
+
+##### Expression Longhand Syntax
+
+For complete control, including targeting specific components, triggering commands, and scheduling delayed execution:
+
+```holo
+<button $click={action: :my_action, target: "other_component", params: %{key: value}}>Click me</button>
+```
+
+To trigger an action with a delay (in milliseconds), use the `delay:` key:
+
+```holo
+<button $click={action: :my_action, delay: 1000}>Click me</button>
+```
+
+To trigger a command, use the `command:` key instead of `action:` (note that delays are not supported for commands):
+
+```holo
+<button $click={command: :my_command, params: %{key: value}}>Click me</button>
+```
+
+#### Event Targets
+
+By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
+
+```holo
+<button $click={action: :my_action, target: "other_component"}>Click me</button>
+```
+
+Valid targets include:
+
+- `"page"` - targets the current page
+- `"layout"` - targets the current layout component
+- a string representing a component ID (CID) - targets a specific component by its unique identifier within the application
+
+#### Event Flow
+
+When an event occurs, it can trigger either an action or a command:
+
+- `Actions` - client-side operations that can update component state, trigger commands, and more. See Actions for more details.
+- `Commands` - server-side operations that can access server resources, trigger actions, and more. See Commands for more details.
+
+#### Best Practices
+
+When working with events in Hologram, consider these best practices:
+
+- Use meaningful action and command names that describe what they do
+- Keep event handlers focused on a single responsibility
+- Use the appropriate event type for the interaction you want to handle
+- Be mindful of event bubbling and use event targets appropriately
+- Use keyboard events for accessibility and keyboard navigation
+- Handle form events properly to ensure good user experience
+
+### Actions
+
+Actions in Hologram are client-side operations that allow you to:
+
+- Update component state
+- Trigger commands and other actions
+- Navigate to another page
+- Update emitted context
+
+They are typically executed in response to user interactions, enabling dynamic and interactive web applications.
+
+#### Defining Actions
+
+Actions are defined as functions in your page or component modules using the following syntax:
+
+```elixir
+def action(name, params, component) do
+  # Action logic here
+end
+```
+
+For example:
+
+```elixir
+def action(:update_count, params, component) do
+  put_state(component, :count, params.new_count)
+end
+```
+
+#### Action Parameters
+
+Actions receive three arguments:
+
+- `name` - the atom representing the action name
+- `params` - a map containing:
+  - Custom parameters from template event attributes, other actions via `put_action/3`, or commands via `put_action/3`
+  - Event data under the `:event` key (see Events for details about event data)
+- `component` - the current `%Component{}` struct
+
+#### Action Results
+
+Actions must return a `%Component{}` struct. This struct not only reflects changes to the component's state but also includes instructions for what happens next through functions that can be called on it. These functions are pure - they don't cause any side effects and simply return a new modified `%Component{}` struct. Since these functions return the modified `%Component{}` struct, they can be chained together using the pipe operator `|>`, allowing for a clean and composable way to combine multiple state changes and behaviors.
+
+Within an action, you can:
+
+##### Update Component State
+
+By setting the value for a single key:
+
+```elixir
+put_state(component, :key, value)
+```
+
+With multiple key-value pairs using a keyword list:
+
+```elixir
+put_state(component, key_1: value_1, key_2: value_2)
+```
+
+With multiple key-value pairs using a map:
+
+```elixir
+put_state(component, %{key_1: value_1, key_2: value_2})
+```
+
+Update a nested value by specifying a path of keys:
+
+```elixir
+put_state(component, [:path_key_1, :path_key_2], value)
+```
+
+##### Trigger a Server Command
+
+Command with the specified name without any parameters:
+
+```elixir
+put_command(component, :my_command)
+```
+
+Command with the specified name and additional parameters provided as a keyword list:
+
+```elixir
+put_command(component, :my_command, param_1: value_1, param_2: value_2)
+```
+
+Command with a specified name, target, and parameters using a map for the parameters (in this longhand version, both params and target are optional):
+
+```elixir
+put_command(component, name: :my_command, target: "other_component", params: %{key: value})
+```
+
+Command using a `%Command{}` struct:
+
+```elixir
+put_command(component, %Command{name: :my_command})
+```
+
+See also: Commands.
+
+##### Navigate to Another Page
+
+Page without params:
+
+```elixir
+put_page(component, ProductsPage)
+```
+
+Page with params:
+
+```elixir
+put_page(component, ProductPage, product_id: 123)
+```
+
+##### Update Emitted Context
+
+By setting a value for a single key:
+
+```elixir
+put_context(component, :key, value)
+```
+
+Using a tuple for namespacing, allowing different components to use the same key without conflict:
+
+```elixir
+put_context(component, {MyModule, :key}, value)
+```
+
+See also: Context.
+
+##### Chain Another Action
+
+Action with the specified name without any additional parameters:
+
+```elixir
+put_action(component, :my_action)
+```
+
+Action with the specified name and additional parameters provided as a keyword list:
+
+```elixir
+put_action(component, :my_action, param_1: value_1, param_2: value_2)
+```
+
+Action using the longhand syntax (where params, target, and delay are optional):
+
+```elixir
+put_action(component, name: :my_action, target: "other_component", params: %{key: value})
+```
+
+Using an `%Action{}` struct:
+
+```elixir
+put_action(component, %Action{name: :my_action})
+```
+
+#### Triggering Actions
+
+Actions can be triggered using event attributes in templates. For detailed information about event binding syntax and available event types, see the Events documentation.
+
+#### Action Targets
+
+By default, actions are executed on the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for execution using the target parameter. For more information about event targets, see the Events documentation.
+
+#### Action Delays
+
+Actions can be scheduled to execute after a specified delay using the delay parameter, which accepts a value in milliseconds.
+
+The delay can be specified in several ways:
+
+- In event bindings using the longhand syntax: `$click={action: :my_action, delay: 750}`
+- When chaining actions with put_action/2: `put_action(component, name: :my_action, delay: 750)`
+
+Common use cases include:
+
+- Creating smooth animations by scheduling the next frame
+- Implementing auto-hide notifications
+- Debouncing user interactions
+- Creating timed game mechanics
+
+Note: The delay parameter is only available for actions, not commands.
+
+#### Putting It All Together
+
+Here's a simple example that demonstrates how actions work in Hologram. The counter component shows:
+
+1. How to trigger an action from a template using event binding (see Events for details)
+2. How to pass parameters to the action
+3. How to chain multiple functions on the `%Component{}` struct using the pipe operator:
+   - Updating component state with `put_state/3`
+   - Sending an asynchronous server command with `put_command/3`
+
+```elixir
+defmodule MyApp.Components.Counter do
+  # ...
+
+  def template do
+    ~HOLO"""
+    <div>
+      <p>Count: {@count}</p>
+      <button $click={:increment, step: 1}> +1 </button>
+    </div>
+    """
+  end
+
+  def action(:increment, params, component) do
+    new_count = component.state.count + params.step
+
+    component
+    |> put_state(:count, new_count)
+    |> put_command(:save_count, new_count)
+  end
+
+  # ...
+end
+```
+
+### Commands
+
+Commands in Hologram are server-side operations that allow you to:
+
+- Execute server-side logic
+- Access server-only resources (like databases, files, or APIs)
+- Manage server-side state (cookies and session)
+- Perform privileged operations
+- Trigger client-side actions (like updating UI state)
+
+They are typically used for operations that require server processing, and are always executed asynchronously.
+
+#### Defining Commands
+
+Commands are defined as functions in your page or component modules using the following syntax:
+
+```elixir
+def command(name, params, server) do
+  # Command logic here
+end
+```
+
+For example:
+
+```elixir
+def command(:save_user, params, server) do
+  case MyApp.Users.create(params) do
+    {:ok, user} ->
+      put_action(server, :user_saved, user: user)
+
+    {:error, changeset} ->
+      put_action(server, :validation_failed, errors: changeset.errors)
+  end
+end
+```
+
+#### Command Parameters
+
+Commands receive three arguments:
+
+- `name` - the atom representing the command name
+- `params` - a map containing:
+  - Custom parameters that can come from:
+    - Template event attributes
+    - Actions via `put_command/3`
+  - Event data under the `:event` key (see Events for details about event data)
+- `server` - the current `%Server{}` struct
+
+#### Command Results
+
+Commands must return a `%Server{}` struct. This struct not only manages server-side state (session and cookies) but also includes instructions for what happens next through functions that can be called on it. These functions are pure - they don't cause any side effects and simply return a new modified `%Server{}` struct. Since these functions return the modified `%Server{}` struct, they can be chained together using the pipe operator `|>`, allowing for a clean and composable way to combine multiple state changes and behaviors.
+
+Within a command, you can:
+
+##### Trigger a Client Action
+
+Action with the specified name without any additional parameters:
+
+```elixir
+put_action(server, :my_action)
+```
+
+Action with the specified name and additional parameters provided as a keyword list:
+
+```elixir
+put_action(server, :my_action, param_1: value_1, param_2: value_2)
+```
+
+Action using the longhand syntax (where `params`, `target`, and `delay` are optional):
+
+```elixir
+put_action(server, name: :my_action, target: "other_component", params: %{key: value})
+```
+
+Using an `%Action{}` struct:
+
+```elixir
+put_action(server, %Action{name: :my_action})
+```
+
+##### Update Session Data
+
+Session data can be managed using the session functions. For example, using `put_session/3`:
+
+```elixir
+put_session(server, :user_id, user.id)
+```
+
+See the Session documentation for more details on managing session data.
+
+##### Update Cookies
+
+Browser cookies can be managed using the cookie functions. For example, using `put_cookie/3`:
+
+```elixir
+put_cookie(server, "remember_token", token)
+```
+
+See the Cookies documentation for more details on managing cookies.
+
+##### Navigate to Another Page (coming soon)
+
+Future versions of Hologram will support server-side navigation, for example using `put_page/3`:
+
+```elixir
+put_page(server, ProductPage, id: product.id)
+```
+
+#### Triggering Commands
+
+Commands can be triggered using event attributes in templates or from actions. For detailed information about event binding syntax and available event types, see the Events documentation.
+
+##### From Actions
+
+Commands can also be triggered from actions using `put_command/3`:
+
+```elixir
+def action(:save_form, params, component) do
+  component
+  |> put_state(:saving, true)
+  |> put_command(:save_user, user: params.user)
+end
+```
+
+#### Command Targets
+
+By default, commands are executed on the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for execution using the `target` parameter. For more information about event targets, see the Events documentation.
+
+### Navigation
+
+Hologram provides a seamless navigation experience by combining server-side rendering with client-side transitions. While each page is loaded fresh from the server, the framework uses the History PushState API and virtual DOM to ensure smooth transitions between pages.
+
+Note: For information about defining routes for pages, see the Pages documentation.
+
+#### Link Component
+
+The `Hologram.UI.Link` component is the primary way to add navigation links in your templates. It supports both simple page navigation and passing parameters to the target page.
+
+Basic usage:
+
+```holo
+<Link to={MyPage}>MyPage</Link>
+```
+
+With parameters:
+
+```holo
+<Link to={MyPage, a: 1, b: 2}>MyPage with params</Link>
+```
+
+#### Programmatic Navigation
+
+Besides using the `Hologram.UI.Link` component in templates, you can also navigate programmatically in your actions using the `put_page/2` and `put_page/3` functions.
+
+Basic navigation:
+
+```elixir
+put_page(component, MyPage)
+```
+
+Navigation with parameters:
+
+```elixir
+put_page(component, MyPage, a: 1, b: 2)
+```
+
+#### Navigation Behavior
+
+Hologram implements several optimizations to make page transitions feel instant:
+
+##### Prefetching
+
+When a user interacts with a link, Hologram starts prefetching the target page on the `$pointer_down` event. When the `$pointer_up` event occurs, the current page is replaced with the prefetched content, making the transition feel instantaneous.
+
+##### Browser History
+
+Hologram properly maintains the browser's history stack, ensuring that:
+
+- Back and forward navigation works as expected
+- URL changes are reflected in the browser's address bar
+- Each page is loaded fresh from the server, ensuring up-to-date content
+
+##### Benefits
+
+This navigation approach combines the best of both worlds:
+
+- Server-side rendering ensures SEO-friendly, up-to-date content
+- Client-side transitions provide a smooth, app-like experience
+- Fresh page loads guarantee content consistency
+- Proper history management enables natural browser navigation
+
+### Forms
+
+Forms in Hologram work seamlessly with the framework's declarative architecture. Hologram provides two flexible approaches for handling form inputs, allowing you to choose the best strategy for your specific use case.
+
+#### Synchronized vs Non-synchronized Inputs
+
+Hologram supports two approaches for handling form inputs:
+
+- **Synchronized inputs** - input state is synchronized with component/page state through unidirectional data flow achieved with `$change` event handler on the input element level
+- **Non-synchronized inputs** - without the `$change` event handler on input element level. To get the values of such inputs, `$change` or `$submit` event handlers on a form element level can be used
+
+##### Synchronized Inputs
+
+Synchronized inputs maintain their displayed values in sync with your component's state through unidirectional data flow, ensuring the UI consistently reflects your application's data. This approach is similar to concepts like "controlled inputs" from React or "form input bindings" from Vue or Svelte, but maintains strict unidirectional flow - the component state is the single source of truth, and user input updates flow back to the state through event handlers.
+
+###### Basic Usage
+
+To create a synchronized input, you need three things: state initialization, the input element synchronized with the state, and an event handler:
+
+```elixir
+def init(_props, component, _server) do
+  put_state(component, :email, "")
+end
+```
+
+```holo
+<input type="email" name="email" value={@email} $change="email_changed" />
+```
+
+```elixir
+def action(:email_changed, params, component) do
+  put_state(component, :email, params.event.value)
+end
+```
+
+###### Value Synchronization
+
+Hologram synchronizes your application state with form inputs using different attributes depending on the input type:
+
+- **Text-based inputs (text, email, password, etc.), textareas, and selects** use the `value` attribute (similar to React)
+- **Checkboxes and radio buttons** use the `checked` attribute
+
+Hologram optimizes this synchronization process:
+
+- Efficient mechanisms update form values while preserving browser behavior
+- Redundant DOM updates are avoided to prevent interrupting user input
+
+##### Non-synchronized Inputs
+
+Non-synchronized inputs don't have `$change` event handlers on the input element level. Instead, you can access their values using form-level event handlers. This approach is useful when you don't need real-time state synchronization and prefer to handle form data as a whole.
+
+###### Accessing Form Data
+
+With non-synchronized inputs, you can access form data from `params.event` in both `$change` and `$submit` event handlers on the form level. The form data is provided as a map where keys are the input names and values are the current input values.
+
+```holo
+<form $change="form_changed" $submit="form_submitted">
+  <input type="text" name="username" />
+  <input type="email" name="email" />
+  <div class="error">{@validation_error}</div>
+  <button type="submit">Submit</button>
+</form>
+```
+
+```elixir
+def action(:form_changed, params, component) do
+  # params.event contains all form data: %{username: "...", email: "..."}
+  # Validate the form whenever any field changes
+  validation_error = cond do
+    params.event.username == "" -> "Username is required"
+    params.event.email == "" -> "Email is required"
+    true -> ""
+  end
+
+  put_state(component, :validation_error, validation_error)
+end
+
+def action(:form_submitted, params, component) do
+  # params.event contains all form data: %{username: "...", email: "..."}
+  username = params.event.username
+  email = params.event.email
+
+  # Process form submission...
+  component
+end
+```
+
+##### When to Use Each Approach
+
+- **Synchronized inputs** are ideal when you need real-time state updates, form validation as the user types, or dynamic UI updates based on input values
+- **Non-synchronized inputs** are useful for simple forms where data is only processed on submission, when minimizing state updates and re-renders, or when you don't need real-time access to individual field values
+
+**Note:** Form-level `$change` and `$submit` event handlers can also be used with synchronized inputs. This allows you to handle both individual input changes (via input-level `$change` handlers) and form-wide operations (via form-level handlers) in the same form.
+
+#### Event Handling
+
+Hologram uses synthetic events similar to React. The `$change` event behavior depends on both the input type and where you place the event handler:
+
+##### Input-level `$change` Events
+
+When you place `$change` directly on form inputs:
+
+- For text-based inputs and textareas, `$change` maps to the native `input` event, triggering on every keystroke
+- For checkboxes, radio buttons, and select elements, `$change` uses the native `change` event, triggering when the selection changes
+
+For input-level `$change` events, the event data contains a `value` field with the specific element's value.
+
+##### Form-level `$change` Events
+
+When you place `$change` on the form element itself, it behaves like the native `change` event - typically triggering when a field loses focus, regardless of the input type. This is useful for validation workflows where you want to validate after the user finishes editing a field.
+
+The event data contains all form field values as a map, where keys are the input names and values are the current input values.
+
+##### Event Data Types
+
+Regardless of whether you use input-level or form-level events, the values have different types depending on the input type:
+
+- For text-based inputs (text, email, password, etc.) and textareas: a string value
+- For checkboxes: a boolean value indicating if the element is checked
+- For radio buttons and select dropdowns: a string value of the selected option
+
+#### Input Types and Usage
+
+Hologram supports all standard HTML form elements, which can be used with either synchronized or non-synchronized approaches. Below are examples showing both approaches for each input type.
+
+##### Text-based Inputs
+
+Text-based inputs (text, email, password) are the most common form elements. They use the `value` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<input type="text" name="username" value={@username} $change="username_changed" />
+<input type="email" name="email" value={@email} $change="email_changed" />
+<input type="password" name="password" value={@password} $change="password_changed" />
+```
+
+**Non-synchronized:**
+
+```holo
+<input type="text" name="username" />
+<input type="email" name="email" />
+<input type="password" name="password" />
+```
+
+##### Textareas
+
+Textareas provide multi-line text input. They use the `value` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<textarea name="content" value={@content} $change="content_changed" />
+```
+
+**Non-synchronized:**
+
+```holo
+<textarea name="content"></textarea>
+```
+
+##### Checkboxes
+
+Checkboxes allow users to select or deselect options. They use the `checked` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<input type="checkbox" name="agreed" checked={@agreed} $change="agreement_changed" />
+<label for="agreed">I agree to the terms</label>
+```
+
+**Non-synchronized:**
+
+```holo
+<input type="checkbox" name="agreed" value="true" />
+<label for="agreed">I agree to the terms</label>
+```
+
+##### Radio Buttons
+
+Radio buttons allow users to select one option from a group. They use the `checked` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<input type="radio" name="size" id="size-small" value="small" checked={@size == "small"} $change="size_changed" />
+<label for="size-small">Small</label>
+
+<input type="radio" name="size" id="size-large" value="large" checked={@size == "large"} $change="size_changed" />
+<label for="size-large">Large</label>
+```
+
+**Non-synchronized:**
+
+```holo
+<input type="radio" name="size" id="size-small" value="small" />
+<label for="size-small">Small</label>
+
+<input type="radio" name="size" id="size-large" value="large" />
+<label for="size-large">Large</label>
+```
+
+##### Select Elements
+
+Select elements provide dropdown menus. They use the `value` attribute for state synchronization:
+
+**Synchronized:**
+
+```holo
+<select name="country" value={@country} $change="country_changed">
+  <option value="br">Brazil</option>
+  <option value="pl">Poland</option>
+  <option value="us">United States</option>
+</select>
+```
+
+**Non-synchronized:**
+
+```holo
+<select name="country">
+  <option value="br">Brazil</option>
+  <option value="pl">Poland</option>
+  <option value="us">United States</option>
+</select>
+```
+
+#### Client-side Validation
+
+One of Hologram's key architectural advantages is that it runs Elixir in the browser, enabling you to perform validation client-side using the same code you'd use server-side. This means you can provide immediate feedback to users without network round-trips.
+
+##### Isomorphic Validation
+
+Your validation logic can be truly isomorphic - the same Elixir validation code (including Ecto changesets) runs both client-side and server-side:
+
+- **Client-side:** Provides immediate user feedback and improves UX
+- **Server-side:** Ensures security, data integrity, and handles business rules that require server resources
+
+##### Recommended Validation Pattern
+
+For optimal user experience, consider this validation approach:
+
+- Use form-level `$change` events to trigger validation when fields lose focus
+- Run your validation logic client-side in the action handler for immediate feedback
+- Display validation errors immediately in the UI by updating component state
+- Re-validate server-side when actually persisting data for security and integrity
+
+This pattern provides the best of both worlds: immediate user feedback through client-side validation, with the security and reliability of server-side validation.
+
+#### Best Practices
+
+When working with forms in Hologram:
+
+- Use descriptive `name` attributes that match your data structure for easier form processing
+- Leverage form-level `$change` events for validation workflows that trigger when fields lose focus
+- Consider using commands for form submission when server-side processing is required
+- Use appropriate input types (`email`, `password`, etc.) for better UX and built-in validation
+- Keep form state minimal - only store what you need for validation and UI updates
+- Take advantage of isomorphic validation - use the same Elixir validation code client-side and server-side
+
+### Context
+
+Context in Hologram provides a way to share data between components without explicitly passing it through props. The main purpose of Context is to avoid prop drilling - the need to pass data through multiple layers of components that don't need the data themselves, just to make it available to deeply nested components that do need it. It's particularly useful for data that needs to be accessed by many components in your application, such as user authentication state, theme preferences, or global settings.
+
+#### Setting Context Values
+
+Context values can be set within actions or in init functions using the `put_context/3` function:
+
+```elixir
+put_context(component, :key, value)
+```
+
+When you set a context value, it becomes available to all child components in the component tree below the component that emitted it. This means you can set context at any level and access it in any descendant component, without having to pass it through intermediate components.
+
+##### Using Namespaced Context Keys
+
+To avoid naming conflicts between different components, you can use namespaced context keys:
+
+```elixir
+put_context(component, {MyModule, :key}, value)
+```
+
+This allows different components to use the same key name without conflicts.
+
+#### Accessing Context Values
+
+To access context values in your components, define a prop with the `from_context` option:
+
+```elixir
+prop :user, :map, from_context: :current_user
+```
+
+This will automatically set the `@user` prop to the value of `:current_user` from context.
+
+#### Common Use Cases
+
+Context is particularly useful for:
+
+- User authentication state
+- Theme preferences (light/dark mode)
+- Global application settings
+- Shared data between deeply nested components
+- Feature flags and configuration
+
+#### Best Practices
+
+When using Context, keep these best practices in mind:
+
+- Use context for truly global state that needs to be accessed by many components
+- Prefer props for component-specific data that only needs to be passed to direct children
+- Use namespaced keys to avoid naming conflicts
+- Keep context values as simple as possible - avoid storing complex objects or functions
+- Document the context keys your components expect to receive
+
+### Session
+
+Session in Hologram provides secure storage that persists across page visits within a user's browsing session. Session data is stored in a secure session cookie that ensures data integrity and security. You can work with session data in two main contexts:
+
+- During page or component initialization (`init/3` functions)
+- In page or component commands for dynamic session operations
+
+Sessions are ideal for storing user authentication data, temporary state, and sensitive information. The data is automatically secured by the server through the session system. Hologram also provides functions for managing regular Cookies outside of the session system. See the "Session vs Direct Cookie Management" section below for guidance on when to use which approach.
+
+#### Session Functions
+
+Hologram provides the following functions for working with sessions:
+
+- `get_session(server, key)` - reads a session value
+- `get_session(server, key, default)` - reads a session value with a default if the key doesn't exist
+- `put_session(server, key, value)` - writes a session value
+- `delete_session(server, key)` - deletes a session value
+
+**Note:** Session keys must be either atoms or strings. Using other data types as keys will result in an error.
+
+#### Reading Session Data
+
+You can read session values using the `get_session/2` and `get_session/3` functions.
+
+##### Reading Simple Values
+
+For simple values stored in the session:
+
+```elixir
+def init(_params, component, server) do
+  user_id = get_session(server, :user_id)
+  put_state(component, :user_id, user_id)
+end
+```
+
+##### Reading Complex Data Structures
+
+Sessions can store any Elixir data type, including complex data structures like maps, lists, and tuples. You can work with these structures directly:
+
+```elixir
+def init(_params, component, server) do
+  preferences =
+    server
+    |> get_session(:user_profile)
+    |> Map.get(:preferences, %{})
+
+  put_state(component, :user_preferences, preferences)
+end
+```
+
+##### Handling Missing Session Values
+
+When a session key doesn't exist, `get_session/2` returns `nil`. You can provide default values using `get_session/3`:
+
+```elixir
+def init(_params, component, server) do
+  cart_items = get_session(server, :cart, [])
+  put_state(component, :cart_items, cart_items)
+end
+```
+
+#### Writing Session Data
+
+You can write session values using the `put_session/3` function. Session data is automatically persisted and will be available across page visits within the same session.
+
+##### Storing Simple Values
+
+Writing simple values to the session:
+
+```elixir
+def init(_params, _component, server) do
+  put_session(server, :user_id, 123)
+end
+```
+
+##### Storing Complex Data Structures
+
+Sessions can store complex Elixir data structures:
+
+```elixir
+def init(_params, _component, server) do
+  user_profile = %{
+    id: 123,
+    email: "user@example.com",
+    role: :admin,
+    preferences: %{
+      theme: "dark",
+      notifications: true
+    }
+  }
+
+  put_session(server, :user_profile, user_profile)
+end
+```
+
+##### Updating Session Data
+
+To update existing session data, retrieve it, modify it, and store it back:
+
+```elixir
+def init(_params, _component, server) do
+  cart = get_session(server, :cart, [])
+  updated_cart = [%{id: 456, quantity: 1} | cart]
+
+  put_session(server, :cart, updated_cart)
+end
+```
+
+#### Deleting Session Data
+
+Remove session values using the `delete_session/2` function:
+
+```elixir
+def init(_params, _component, server) do
+  delete_session(server, :temporary_data)
+end
+```
+
+#### Using Sessions in Commands
+
+Session operations can also be performed in server commands, allowing for dynamic session management in response to user interactions:
+
+##### Authentication Example
+
+```elixir
+def command(:login, params, server) do
+  case authenticate_user(params.email, params.password) do
+    {:ok, user} ->
+      server
+      |> put_session(:user_id, user.id)
+      |> put_session(:user_role, user.role)
+      |> put_action(:redirect_to_dashboard)
+
+    {:error, _reason} ->
+      put_action(server, :show_error_message, message: "Invalid credentials")
+  end
+end
+```
+
+##### Shopping Cart Example
+
+```elixir
+def command(:add_to_cart, params, server) do
+  cart = get_session(server, :cart, [])
+  item = %{product_id: params.product_id, quantity: params.quantity}
+  updated_cart = [item | cart]
+
+  server
+  |> put_session(:cart, updated_cart)
+  |> put_action(:update_cart_display, cart: updated_cart)
+end
+```
+
+##### Logout Example
+
+```elixir
+def command(:logout, _params, server) do
+  server
+  |> delete_session(:user_id)
+  |> delete_session(:user_role)
+  |> delete_session(:cart)
+  |> put_action(:redirect_to_home)
+end
+```
+
+#### Session vs Direct Cookie Management
+
+Understanding when to use Hologram's session system versus direct cookie management:
+
+- **Session System** - Automatic security handling, data is opaque to clients, managed through session functions
+- **Direct Cookie Management** - Full control over cookie behavior, data encoding, and security settings
+- **Data Access** - Session data cannot be read by client-side code; direct cookies can be configured for client access
+- **Security** - Sessions provide automatic security; direct cookies require manual security configuration
+- **Use Cases** - Sessions for sensitive/private data; direct cookies when you need client-side access or specific cookie behavior
+
+#### Common Use Cases
+
+- **User authentication** - Store user ID, role, and authentication status
+- **Shopping cart** - Temporary cart contents for logged-in users
+- **Multi-page form data** - Form progress and temporary state that spans multiple pages
+- **Flash messages** - Temporary success/error messages that persist across redirects
+- **User preferences** - Temporary UI state and user-specific settings
+- **CSRF protection** - Store anti-CSRF tokens securely on the server
+
+#### Best Practices
+
+- **Minimize session data** - Store only necessary information to keep memory usage low
+- **Use consistent keys** - Adopt a naming convention for session keys across your application
+- **Handle missing values** - Always provide defaults when reading session data that might not exist
+- **Clean up on logout** - Remove sensitive session data when users log out
+
+### Cookies
+
+Cookies in Hologram allow you to store and retrieve data that persists across page visits and browser sessions. While cookies are stored in the client browser, they are managed through server-side functions for security reasons. You can work with cookies in two main contexts:
+
+- During page or component initialization (`init/3` functions)
+- In page or component commands for dynamic cookie operations
+
+Hologram provides built-in functions for reading, writing, and deleting cookies, with support for both simple string values and complex Elixir data structures. For most authentication and session-related needs, consider using Hologram's Session abstraction instead.
+
+#### Cookie Functions
+
+Hologram provides the following functions for working with cookies:
+
+- `get_cookie(server, key)` - reads a cookie value
+- `get_cookie(server, key, default)` - reads a cookie value with a default if the cookie doesn't exist
+- `put_cookie(server, key, value)` - writes a cookie with default settings
+- `put_cookie(server, key, value, opts)` - writes a cookie with custom settings
+- `delete_cookie(server, key)` - deletes a cookie
+
+**Note:** Cookie keys must be strings. Using atoms or other data types as keys will result in an error.
+
+#### Reading Cookies
+
+You can read cookies using the `get_cookie/2` function or `get_cookie/3` with a default value. Hologram automatically handles decoding of both string values and Hologram-encoded Elixir data structures.
+
+##### Reading String-Encoded Cookies
+
+For simple string values stored in cookies:
+
+```elixir
+def init(_params, component, server) do
+  cookie_value = get_cookie(server, "my_cookie")
+  put_state(component, :cookie_value, cookie_value)
+end
+```
+
+##### Reading Hologram-Encoded Cookies
+
+Hologram can automatically encode and decode complex Elixir data structures (maps, lists, tuples, etc.) in cookies:
+
+```elixir
+def init(_params, component, server) do
+  user_data =
+    server
+    |> get_cookie("user_preferences")
+    |> Map.put(:theme, "dark")
+
+  put_state(component, :user_data, user_data)
+end
+```
+
+##### Reading with Default Values
+
+Use `get_cookie/3` to provide a default value when a cookie doesn't exist:
+
+```elixir
+def init(_params, component, server) do
+  # Set default theme if no cookie exists
+  theme = get_cookie(server, "theme", "light")
+
+  # Set default user preferences if no cookie exists
+  preferences = get_cookie(server, "user_prefs", %{language: "en", timezone: "UTC"})
+
+  component
+  |> put_state(:theme, theme)
+  |> put_state(:preferences, preferences)
+end
+```
+
+#### Writing Cookies
+
+You can write cookies using `put_cookie/3` for default settings or `put_cookie/4` for custom settings.
+
+##### Default Settings
+
+Writing a cookie with default security settings:
+
+```elixir
+def init(_params, _component, server) do
+  put_cookie(server, "username", "abc123")
+end
+```
+
+Default settings include:
+
+- `http_only: true` - Cookie is only accessible via HTTP(S), not JavaScript
+- `path: "/"` - Cookie is available for the entire domain
+- `same_site: :lax` - CSRF protection with reasonable usability
+- `secure: true` - Cookie only sent over HTTPS connections
+
+##### Custom Settings
+
+You can customize cookie behavior by providing options:
+
+```elixir
+def init(_params, _component, server) do
+  opts = [
+    http_only: false,
+    path: "/admin",
+    same_site: :strict,
+    secure: false
+  ]
+
+  put_cookie(server, "ui_preference", "sidebar_collapsed", opts)
+end
+```
+
+##### Available Options
+
+- `http_only` - boolean, whether cookie is accessible only via HTTP (not JavaScript)
+- `path` - string, URL path where cookie is available
+- `same_site` - `:strict`, `:lax`, or `:none` for CSRF protection among other security benefits
+- `secure` - boolean, whether cookie requires HTTPS
+- `max_age` - integer, cookie lifetime in seconds
+- `domain` - string, domain where cookie is available
+
+#### Deleting Cookies
+
+Remove cookies using the `delete_cookie/2` function:
+
+```elixir
+def init(_params, _component, server) do
+  delete_cookie(server, "temporary_data")
+end
+```
+
+#### Using Cookies in Commands
+
+Cookie operations can also be performed in server commands, allowing for dynamic cookie management in response to user interactions:
+
+##### Command Examples
+
+```elixir
+def command(:save_user_preferences, params, server) do
+  user_prefs = %{
+    theme: params.theme,
+    language: params.language,
+    timezone: params.timezone
+  }
+
+  server
+  |> put_cookie("user_preferences", user_prefs)
+  |> put_action(:show_success_message)
+end
+
+def command(:load_user_preferences, _params, server) do
+  preferences = get_cookie(server, "user_preferences")
+  put_action(server, :update_ui_preferences, preferences: preferences)
+end
+
+def command(:logout, _params, server) do
+  server
+  |> delete_cookie("session_id")
+  |> delete_cookie("user_preferences")
+  |> put_action(:redirect_to_login)
+end
+```
+
+#### Data Encoding
+
+Hologram automatically handles encoding and decoding of cookie values:
+
+- **Writing cookies** - All values (including strings) are encoded using Hologram's serialization format
+- **Reading cookies** - Hologram can read both Hologram-encoded cookies and plain string cookies (by detecting the encoding format)
+- **Data types** - Complex data structures (maps, lists, tuples, atoms, etc.) are automatically preserved through the encoding/decoding process
+
+#### Security Considerations
+
+When working with cookies, consider the following security best practices:
+
+- **Use HTTPS** - Keep `secure: true` in production to prevent cookie theft
+- **HTTP-only by default** - Use `http_only: true` unless you need JavaScript access
+- **Appropriate SameSite** - Use `:strict` for sensitive cookies, `:lax` for general use
+- **Minimal data** - Store only necessary data in cookies to keep them lightweight and secure
+- **Set expiration** - Use `max_age` to limit cookie lifetime
+
+#### Common Use Cases
+
+- **User preferences** - Theme, language, layout settings
+- **Custom authentication** - When implementing authentication outside of Hologram's session system
+- **Shopping cart** - Temporary cart contents for anonymous users
+- **Analytics** - User tracking (with appropriate consent)
+- **Feature flags** - User-specific feature toggles
+
+### JavaScript Interop
+
+Hologram lets you call JavaScript from your Elixir client-side code, and vice versa. You can import JS modules, call functions, manipulate objects, dispatch DOM events, and work with async code.
+
+JS interop is useful when you need to:
+
+- **Use JavaScript libraries** - integrate npm packages or your own JS modules (e.g. charting libraries, rich text editors, payment SDKs)
+- **Interact with existing JavaScript code** - call into JS code that's already part of your project
+- **Access Web APIs** - as an escape hatch, use browser APIs that Hologram doesn't wrap yet (e.g. Web Audio, WebGL, Geolocation, Clipboard, etc.)
+- **Manipulate the DOM directly** - for cases where you need fine-grained DOM control beyond what Hologram templates provide
+
+Here is a quick example showing a page that imports an npm package and uses it via JS interop:
+
+```elixir
+defmodule MyApp.CalculatorPage do
+  use Hologram.Page
+  use Hologram.JS
+
+  js_import from: "decimal.js", as: :Decimal
+
+  route "/calculator"
+
+  layout MyApp.DefaultLayout
+
+  def init(_params, component, _server) do
+    put_state(component, :result, nil)
+  end
+
+  def template do
+    ~HOLO"""
+    <button $click={:calculate}>Calculate</button>
+    <p>Result: {@result}</p>
+    """
+  end
+
+  def action(:calculate, _params, component) do
+    result =
+      :Decimal
+      |> JS.new([100])
+      |> JS.call(:plus, [23])
+      |> JS.call(:toNumber, [])  # 123
+
+    put_state(component, :result, result)
+  end
+end
+```
+
+Hologram JS interop works in both directions:
+
+1. **Elixir to JavaScript** - `JS.call`, `JS.new`, `JS.get`, `JS.set`, and friends give you direct, fine-grained control over JavaScript objects from Elixir. Calls work synchronously in event loop lock-step with your action handlers (unless you deliberately use async calls), integrate with state management, type conversion, and async handling, and keep your JS integration logic inside your Elixir modules.
+2. **JavaScript to Elixir** - `Hologram.dispatchAction()` triggers Elixir action handlers from JS code.
+
+Migrating from Phoenix LiveView? The `JS.dispatch_event` function maps closely to the LiveView hooks pattern for a quick migration path. See the "Coming from LiveView" section below.
+
+#### Setup
+
+Add `use Hologram.JS` to any module that runs on the client side where you need JS interop:
+
+```elixir
+defmodule MyApp.DashboardPage do
+  use Hologram.Page
+  use Hologram.JS
+
+  # ...
+end
+```
+
+This imports the `js_import` macro, the `~JS` sigil, and aliases the `Hologram.JS` module as `JS`.
+
+#### Importing JavaScript Modules
+
+Use `js_import` at the top of your module to make JavaScript exports available as named bindings. Bindings are scoped to the Elixir module where they are declared, and can be used as receivers or function references in `JS.*` calls within that module.
+
+Each `js_import` maps directly to a JavaScript `import` statement:
+
+| Elixir | Resolves To |
+|--------|-------------|
+| `js_import from: "decimal.js", as: :Decimal` | `import Decimal from "decimal.js"` |
+| `js_import :multiply, from: "./helpers.mjs"` | `import { multiply } from "./helpers.mjs"` |
+| `js_import :Chart, from: "chart.js", as: :MyChart` | `import { Chart as MyChart } from "chart.js"` |
+
+##### Default Export
+
+Import the default export of a JS module using the `:from` and `:as` options. Given this JavaScript file:
+
+```javascript
+// calculator.mjs
+
+export default class Calculator {
+  constructor(initial) {
+    this.value = initial;
+  }
+
+  add(n) {
+    this.value += n;
+    return this.value;
+  }
+}
+```
+
+You can import it in Elixir like this:
+
+```elixir
+js_import from: "./calculator.mjs", as: :Calculator
+```
+
+Both `:from` and `:as` are required for default imports.
+
+##### Named Export
+
+Import a specific named export. Given this JavaScript file:
+
+```javascript
+// helpers.mjs
+
+export function multiply(a, b) {
+  return a * b;
+}
+```
+
+You can import it in Elixir like this:
+
+```elixir
+js_import :multiply, from: "./helpers.mjs"
+```
+
+The binding name defaults to the export name. Use `:as` to alias it:
+
+```elixir
+js_import :Chart, from: "chart.js", as: :MyChart
+```
+
+##### Path Resolution
+
+Import paths are resolved as follows:
+
+- **Relative paths** (`./` or `../`) are resolved relative to the Elixir source file that contains the `js_import`. This means you can colocate JS files next to your Elixir modules.
+- **Bare specifiers** (no `./` or `../` prefix) are resolved as npm packages. Make sure the package is installed in your `assets/package.json`.
+- **Paths from the assets directory** work with relative paths from the caller.
+
+##### Duplicate Binding Names
+
+Each binding name must be unique within a module. Declaring two imports with the same `:as` name will raise a compile-time error.
+
+#### API Reference
+
+##### JS.call/2 - Call a Function
+
+Calls a function without a receiver. The function is resolved from your `js_import` bindings first, then from `window`.
+
+```elixir
+js_import :multiply, from: "./helpers.mjs"
+
+# Call an imported function
+JS.call(:multiply, [4, 6])  # 24
+
+# Call a global function
+JS.call(:parseInt, ["42abc"])  # 42
+```
+
+##### JS.call/3 - Call a Method
+
+Calls a method on a receiver. The receiver can be:
+
+- An **atom** referencing an imported binding or a global object (e.g. `:Math`, `:document`)
+- A **native value** returned by a previous JS interop call (e.g. an object from `JS.new/2`)
+
+```elixir
+js_import from: "./helpers.mjs", as: :helpers
+
+# Call a method on an imported module
+JS.call(:helpers, :sum, [1, 2])  # 3
+
+# Call a method on a global object
+JS.call(:Math, :round, [3.7])  # 4
+
+# Call a method on a native object reference
+:Calculator
+|> JS.new([10])
+|> JS.call(:add, [5])  # 15
+```
+
+##### Callback Interop
+
+Elixir anonymous functions can be passed as callbacks to JavaScript functions. They are automatically converted to JavaScript functions and their return values are converted back. Given this JavaScript file:
+
+```javascript
+// helpers.mjs
+
+const helpers = {
+  mapArray(arr, fn) {
+    return arr.map(fn);
+  },
+};
+
+export default helpers;
+```
+
+You can pass an Elixir anonymous function as a callback:
+
+```elixir
+callback = fn x -> x * 2 end
+JS.call(:helpers, :mapArray, [[1, 2, 3], callback])  # [2, 4, 6]
+```
+
+##### JS.new/2 - Instantiate a Class
+
+Creates a new instance of a JavaScript class:
+
+```elixir
+js_import from: "./calculator.mjs", as: :Calculator
+
+:Calculator
+|> JS.new([10])
+|> JS.call(:add, [5])  # 15
+```
+
+The class can be an imported binding or a global constructor.
+
+##### JS.get/2 - Get a Property
+
+Reads a property from a JavaScript object:
+
+```elixir
+value =
+  :Calculator
+  |> JS.new([10])
+  |> JS.get(:value)  # 10
+```
+
+##### JS.set/3 - Set a Property
+
+Sets a property on a JavaScript object. Returns the receiver (for chaining):
+
+```elixir
+value =
+  :Calculator
+  |> JS.new([10])
+  |> JS.set(:value, 20)
+  |> JS.get(:value)  # 20
+```
+
+##### JS.delete/2 - Delete a Property
+
+Deletes a property from a JavaScript object. Returns the receiver (for chaining):
+
+```elixir
+result =
+  :Calculator
+  |> JS.new([42])
+  |> JS.delete(:value)
+  |> JS.get(:value)
+  |> JS.typeof()  # "undefined"
+```
+
+##### JS.typeof/1 - Get Type
+
+Returns the JavaScript `typeof` result as a string:
+
+```elixir
+:Calculator
+|> JS.new([10])
+|> JS.typeof()  # "object"
+```
+
+##### JS.instanceof/2 - Check Instance
+
+Checks if a value is an instance of a JavaScript class. Returns a boolean:
+
+```elixir
+:Calculator
+|> JS.new([10])
+|> JS.instanceof(:Calculator)  # true
+```
+
+##### JS.eval/1 - Evaluate an Expression
+
+Evaluates a JavaScript expression and returns the result:
+
+```elixir
+JS.eval("3 + 4")  # 7
+```
+
+The expression is evaluated as a single expression (not statements). For multi-line code, use `JS.exec/1`.
+
+##### JS.exec/1 - Execute Code
+
+Executes arbitrary JavaScript code. You can optionally use `return` to produce a value:
+
+```elixir
+JS.exec("""
+const x = 2;
+return x + 3;
+""")  # 5
+```
+
+##### ~JS Sigil - Inline JavaScript
+
+The `~JS` sigil is a shorthand for `JS.exec/1`. It is convenient for DOM manipulation and fire-and-forget code:
+
+```elixir
+~JS"""
+const el = document.getElementById('my-element');
+el.textContent = 'Updated!';
+"""
+```
+
+The `~JS` sigil can also return a value:
+
+```elixir
+~JS"""
+const x = 7;
+return x + 4;
+"""  # 11
+```
+
+##### JS.dispatch_event - Dispatch Events
+
+Dispatches an event on a target. There are several variants:
+
+###### dispatch_event/2 - CustomEvent, No Options
+
+```elixir
+target = JS.call(:document, :getElementById, ["my-element"])
+JS.dispatch_event(target, "my:event")
+```
+
+###### dispatch_event/3 - CustomEvent with Options
+
+```elixir
+JS.dispatch_event(target, "my:event", detail: %{value: 99})
+```
+
+###### dispatch_event/3 - Specific Event Type
+
+```elixir
+JS.dispatch_event(target, :MouseEvent, "click")
+```
+
+###### dispatch_event/4 - Specific Event Type with Options
+
+```elixir
+JS.dispatch_event(target, :CustomEvent, "my:event", cancelable: true)
+```
+
+###### Dispatching on Global Objects
+
+Use atoms like `:document` or `:window` as the target:
+
+```elixir
+JS.dispatch_event(:document, "my:event")
+```
+
+###### Using Event Listeners with Callbacks
+
+You can combine `dispatch_event` with callback interop to set up listeners:
+
+```elixir
+target = JS.call(:document, :getElementById, ["my-element"])
+
+JS.call(target, :addEventListener, [
+  "my:event",
+  fn event ->
+    detail = JS.get(event, :detail)
+    JS.set(:window, :__captured__, JS.get(detail, :value))
+  end
+])
+
+JS.dispatch_event(target, "my:event", detail: %{value: 42})
+
+JS.get(:window, :__captured__)  # 42
+```
+
+#### Async / Promises
+
+In Hologram's client-side Elixir runtime, JavaScript Promises become Elixir `Task`s. Use `Task.await/1` to get the result, just like you would with any other Task in Elixir.
+
+##### Async Methods and Promise-Returning Functions
+
+If a JavaScript function is `async` or returns a Promise, `JS.call/3` returns a Task:
+
+```elixir
+# Async function
+result =
+  :helpers
+  |> JS.call(:asyncSum, [10, 20])
+  |> Task.await()  # 30
+
+# Promise-returning function
+result =
+  :helpers
+  |> JS.call(:promiseSum, [100, 200])
+  |> Task.await()  # 300
+```
+
+##### Async eval and exec
+
+If the evaluated expression or executed code returns a Promise, `JS.eval/1` and `JS.exec/1` return a Task:
+
+```elixir
+result =
+  "fetch('/api/data').then(r => r.json())"
+  |> JS.eval()
+  |> Task.await()
+```
+
+##### Async get
+
+If a property value is a Promise, `JS.get/2` returns a Task:
+
+```elixir
+result =
+  :promiseValue
+  |> JS.get(:data)
+  |> Task.await()  # 77
+```
+
+##### Async new
+
+If a constructor returns a Promise (e.g. for async initialization), `JS.new/2` returns a Task:
+
+```elixir
+obj =
+  :AsyncCounter
+  |> JS.new([50])
+  |> Task.await()
+
+result = JS.get(obj, :value)  # 51
+```
+
+#### Dispatching Actions from JavaScript
+
+You can dispatch Hologram actions directly from JavaScript code using `Hologram.dispatchAction()`. This is useful for integrating third-party JS libraries or handling events outside of Hologram's template system.
+
+```javascript
+Hologram.dispatchAction("my_action", "page", { amount: 42, label: "test" });
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `actionName` | string | The action name (e.g. `"my_action"` maps to `def action(:my_action, ...)`) |
+| `target` | string | `"page"` for page actions, `"layout"` for layout actions, or a component CID for component actions |
+| `params` | object | (Optional) A plain JS object. Keys become atom keys in the `params` map |
+
+**Corresponding action in your page, layout, or component:**
+
+```elixir
+def action(:my_action, params, component) do
+  # params.amount => 42 (integer)
+  # params.label  => "test" (string)
+  put_state(component, :result, {params.amount, params.label})
+end
+```
+
+##### Dispatching Before Runtime Loads
+
+`Hologram.dispatchAction()` is available immediately - even before the Hologram runtime has fully loaded. Actions dispatched before initialization are queued and replayed once the page mounts. This is useful for inline `<script>` tags in templates:
+
+```holo
+<script>
+  Hologram.dispatchAction("init_from_js", "page", {value: 99});
+</script>
+```
+
+Note: Escape curly braces with backslashes (`\{`, `\}`) inside `~HOLO` templates to prevent them from being interpreted as Hologram expressions. Alternatively, wrap the script body in a `{%raw}...{/raw}` block to disable template syntax entirely.
+
+#### Type Conversion
+
+Values are automatically converted when crossing the Elixir/JavaScript boundary.
+
+##### Elixir to JavaScript
+
+| Elixir Type | JavaScript Type |
+|-------------|-----------------|
+| integer | number / bigint* |
+| float | number |
+| boolean | boolean |
+| nil | null |
+| string | string |
+| list | Array |
+| tuple | Array |
+| map | Object |
+| anonymous function | Function |
+| atom | JS binding** / string |
+
+\* Integers outside the safe integer range (`Number.MIN_SAFE_INTEGER` to `Number.MAX_SAFE_INTEGER`) are passed as `bigint`.
+
+\*\* Atoms are resolved in order: `js_import` binding, then `window` property, then string fallback. Exception: atom keys in maps are always converted to strings.
+
+##### JavaScript to Elixir
+
+| JavaScript Type | Elixir Type |
+|-----------------|-------------|
+| number | integer / float* |
+| boolean | boolean |
+| null | nil |
+| undefined | opaque native value |
+| string | string (bitstring) |
+| Array | list |
+| Plain Object | map (string keys) |
+| Promise | Task (await with Task.await/1) |
+| Class instance / other object | opaque native value |
+| bigint | opaque native value |
+| Function | opaque native value |
+| Symbol | opaque native value |
+
+\* Determined by `Number.isInteger()`: values like `42` or `3.0` become `integer`, values like `3.14` become `float`.
+
+**Opaque native values** are JavaScript values that don't have a direct Elixir equivalent. They are represented as `Hologram.JS.NativeValue` structs and can be passed back to JS interop functions. You can pattern match on the `type` field (`:bigint`, `:function`, `:object`, `:symbol`, `:undefined`).
+
+#### DOM Patching
+
+Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
+
+```elixir
+def template do
+  ~HOLO"""
+  <button $click={:populate}>Populate JS subtree</button>
+  <button $click={:increment}>Increment counter</button>
+  <p>Counter: {@counter}</p>
+  <div id="js_managed"></div>
+  """
+end
+
+def action(:populate, _params, component) do
+  ~JS"""
+  const container = document.getElementById('js_managed');
+  const span = document.createElement('span');
+  span.textContent = 'JS managed content';
+  container.appendChild(span);
+  """
+
+  put_state(component, :counter, component.state.counter + 1)
+end
+
+def action(:increment, _params, component) do
+  put_state(component, :counter, component.state.counter + 1)
+end
+```
+
+In this example, clicking "Populate JS subtree" adds a span via JavaScript and increments the counter. Clicking "Increment counter" afterwards will update the counter display without removing the JS-managed span.
+
+#### Coming from LiveView
+
+If you're migrating from Phoenix LiveView, Hologram offers two paths for JS interop. The event-based dispatching API (`JS.dispatch_event` and `Hologram.dispatchAction()`) maps directly to LiveView hooks patterns and is provided as a convenience for faster migration - it lets you port existing hook-based integrations with minimal changes.
+
+However, for new code the **low-level API is the recommended approach**. Functions like `JS.call`, `JS.new`, `JS.get`, and `JS.set` are tightly integrated with the Hologram runtime - they work synchronously in event loop lock-step with your action handlers, interact naturally with component state management, support automatic type conversion, and handle async results through `Task.await/1`. This keeps your JS integration logic inside your Elixir modules rather than split across separate hook files, and avoids the indirection of passing data through events. The low-level API has no LiveView equivalent - it's a new capability unique to Hologram.
+
+##### JS to Elixir: pushEvent to Hologram.dispatchAction
+
+In LiveView, you use `this.pushEvent()` inside a hook to send a message to the server:
+
+```javascript
+// LiveView hook
+Hooks.MyChart = {
+  mounted() {
+    this.pushEvent("chart_clicked", { point: 42 });
+  }
+};
+```
+
+```elixir
+# LiveView handler (server-side)
+def handle_event("chart_clicked", %{"point" => point}, socket) do
+  {:noreply, assign(socket, :selected, point)}
+end
+```
+
+In Hologram, use `Hologram.dispatchAction()` - no hook boilerplate needed:
+
+```javascript
+// Anywhere in your JavaScript
+Hologram.dispatchAction("chart_clicked", "page", { point: 42 });
+```
+
+```elixir
+# Hologram handler (runs in the browser)
+def action(:chart_clicked, params, component) do
+  put_state(component, :selected, params.point)
+end
+```
+
+##### Elixir to JS: push_event + handleEvent to JS.dispatch_event + addEventListener
+
+In LiveView, you push events from the server to a hook's `handleEvent` callback:
+
+```elixir
+# LiveView (server-side)
+def handle_event("refresh", _params, socket) do
+  {:noreply, push_event(socket, "data_updated", %{value: 99})}
+end
+```
+
+```javascript
+// LiveView hook
+Hooks.MyChart = {
+  mounted() {
+    this.handleEvent("data_updated", ({ value }) => {
+      this.chart.update(value);
+    });
+  }
+};
+```
+
+In Hologram, dispatch an event and listen for it with `addEventListener`:
+
+```elixir
+# Hologram action (runs in the browser)
+def action(:refresh, _params, component) do
+  target = JS.call(:document, :getElementById, ["my-chart"])
+  JS.dispatch_event(target, "data_updated", detail: %{value: 99})
+
+  component
+end
+```
+
+```javascript
+// Standard listener (no hook needed)
+document.getElementById("my-chart").addEventListener("data_updated", (event) => {
+  chart.update(event.detail.value);
+});
+```
+
+Alternatively, you can set up the listener entirely from Elixir using the low-level API:
+
+```elixir
+def action(:setup_chart, _params, component) do
+  target = JS.call(:document, :getElementById, ["my-chart"])
+
+  JS.call(target, :addEventListener, [
+    "data_updated",
+    fn event ->
+      detail = JS.get(event, :detail)
+      JS.call(:chart, :update, [JS.get(detail, :value)])
+    end
+  ])
+
+  component
+end
+```
+
+##### Key Differences from LiveView
+
+- **No hooks boilerplate** - LiveView hooks require defining a `Hooks` object, wiring it to elements with `phx-hook`, and implementing lifecycle callbacks (`mounted`, `updated`, `destroyed`). Hologram uses standard DOM APIs directly.
+- **No network round-trip** - LiveView's `pushEvent` and `push_event` communicate over WebSocket between browser and server. Hologram's interop runs entirely in the browser, so there's no latency.
+- **Beyond events** - LiveView hooks are limited to event passing. Hologram's low-level API lets you instantiate JS classes, read/write properties, chain method calls, and pass Elixir functions as JS callbacks - all from your Elixir action handlers.
+
+#### Server-Side Behaviour
+
+JS interop functions can only be used in functions reachable through action handlers. Since actions are not executed during SSR (only `init` runs server-side), JS interop code never runs on the server.
+
+On the server side, `JS.*` calls are no-ops - most return `:ok`, while `JS.set/3` and `JS.delete/2` return the receiver to preserve chaining. `js_import` is compile-time only and has no runtime effect.
+
+Since JS interop functions only work in the browser, functions that use them cannot be covered by Elixir unit tests. Use feature tests (browser-based integration tests) to verify JS interop behaviour.
+
+#### Best Practices
+
+- **Prefer Elixir over JS when possible** - Only reach for JS interop when you need browser APIs or JS libraries. Keep general logic in Elixir.
+- **Isolate JS interop behind facade modules** - Create dedicated Elixir modules that wrap the JavaScript interaction, rather than calling `JS.call` directly in your pages and components. This keeps your pages and components focused on UI logic and makes the JS dependency easy to swap.
+- **Keep JS files small and focused** - Each `.mjs` file should have a single responsibility rather than becoming a utility grab-bag.
+- **Prefer `JS.call` over `JS.exec` / `JS.eval`** - Structured calls to imported modules are easier to maintain and debug than inline string-based code.
+
+#### Publishing Packages
+
+Planning to publish a reusable package that wraps a JavaScript library, a Web API, or provides Hologram utilities? Check the Package Naming conventions to help distinguish official and community packages.
+
+## Reference
+
+### Client Runtime
+
+Hologram automatically compiles Elixir functions to JavaScript for browser execution. However, many Elixir standard library functions rely on underlying Erlang functions that must be manually ported to JavaScript. This reference tracks the implementation status of both Elixir and Erlang functions in the client runtime.
+
+#### Quick Stats
+
+The Client Runtime reference page on the website shows live statistics for the number of Elixir and Erlang functions that are done, in progress, todo, or deferred. Visit https://hologram.page/reference/client-runtime for current numbers.
+
+#### Understanding This Reference
+
+##### How Statistics Are Calculated
+
+A call graph of the Elixir standard library determines which Erlang functions each Elixir function depends on. Function progress is the percentage of its Erlang dependencies that have been ported to JavaScript. Module progress is the average of its functions' progress (including deferred ones). Overall Elixir progress is the average of all non-deferred function progresses. Overall Erlang progress is the percentage of non-deferred functions that are done.
+
+##### Status Meanings
+
+- **done** - Fully implemented and ready to use
+- **in progress** - Partially implemented; often works in typical scenarios, with missing parts only triggered in rare code branches or edge cases
+- **todo** - Not yet implemented
+- **deferred** - Implementation postponed to future development phases
+
+#### Implementation Scope
+
+Hologram development is divided into three phases: **Phase 1** (current focus) targets full-stack web and basic local-first applications; **Phase 2** will add Elixir's process model for advanced local-first and mobile development; **Phase 3** will introduce file system and OS operations for desktop applications.
+
+For Phase 1 use cases, you need robust functions for state management, data manipulation, dates/times, strings, and collections - but not processes, file system, or OS operations. JavaScript is single-threaded, and Hologram's architecture handles workflow orchestration automatically for typical web applications.
+
+Modules like Process, System, File, Port, Code, and Node are marked as deferred because they target Phases 2-3. This reference shows all dependencies comprehensively - even for deferred functionality. Many "in progress" functions, especially those with high completion percentages, already work fine for web development, with missing dependencies only affecting rare code branches or advanced scenarios you're unlikely to encounter.
+
+### Features
+
+Comprehensive overview of all Hologram features organized by area. Each feature shows implementation status, progress percentage, and category classification. Visit https://hologram.page/reference/features for the live, up-to-date version.
+
+#### Template Engine
+
+**UI:** Components (done), Context (done), Layouts (done), Navigation (done), Pages (done), Routing (done), Template Colocation (done)
+
+**Markup:** Component node (done), Element node (done), Interpolation (done), For Block (done), If Block (done), Public Comment (done), Raw Block (done), Text node (done)
+
+#### Framework Runtime
+
+**Client:** Actions (done), JS Interop (in progress, 40%), Synchronized Form Inputs (done)
+
+**Server:** Commands (done), Cookies (done), Session (done)
+
+**Events:** Blur (done), Change (done), Click (done), Click Away (todo), Focus (done), Key Down (todo), Key Press (todo), Key Up (todo), Mouse Move (done), Pointer Cancel (done), Pointer Down (done), Pointer Move (done), Pointer Up (done), Resize (todo), Scroll (todo), Select (done), Submit (done), Tap (todo), Touch Cancel (todo), Touch End (todo), Touch Move (todo), Touch Start (todo), Transition Cancel (done), Transition End (done), Transition Run (done), Transition Start (done)
+
+#### Tooling
+
+**Development:** Incremental Compilation (done), Live Reload (done), Standalone Mode (in progress, 70%), Template Formatter (in progress, 60%)
+
+#### Elixir Client Runtime
+
+**Data Types:** Atom (done), Bitstring (done), Float (done), Function (done), Integer (done), List (done), Map (done), PID (done), Port (done), Reference (done), Tuple (done)
+
+**Control Flow:** Case (done), Cond (done), If (done), Function (done), Unless (done), With (todo)
+
+**Functions:** Anonymous Function (done), Function Capture (done), Local Function (done), Remote Function (done)
+
+**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (in progress, 67%), Regex Match =~ (in progress, 61%)
+
+**Guards:** Guards in all contexts (done)
+
+**Comprehensions:** Bitstring Generator (todo), Enumerable Generator (done), Filter (done), :into Option (done), :reduce Option (todo), :uniq Option (done)
+
+**Other:** Behaviours (done), Bitwise Module Operators (todo), Error Handling (todo), Processes (deferred), Protocols (done), Regular Expressions (todo)
+
+### Roadmap
+
+This roadmap outlines features that are either in progress or planned for upcoming releases. For currently available features, see the Features page. For details about Elixir standard library coverage and Erlang porting status, refer to the Client Runtime page.
+
+Our development roadmap is organized by timeline, with colors representing proximity: short-term goals focus on foundational features, medium-term goals expand capabilities and developer experience, and long-term goals represent transformative capabilities for the framework. Features are ordered alphabetically within each group.
+
+#### Short-Term Goals - Foundation & Core Features
+
+- **Client Error Handling** - Implement support for Elixir's error handling features (try/catch/rescue, etc.) on the client side.
+- **Comprehension Parity** - Bring comprehension support to full parity with the Elixir server runtime, including bitstring generators and the `:reduce` option.
+- **DOM Events Support** - Complete implementation of remaining DOM events including keyboard, touch, and window events to achieve full coverage.
+- **Essential Stdlib Functions** - Expand support for the most important Elixir standard library functions needed for Phase 1 use cases: state management, data manipulation, dates/times, strings, and collections.
+- **JS Interop** - Create a clean interface for JavaScript interoperability to leverage existing JavaScript libraries.
+- **Middleware** - Add middleware support with a pre-init hook for components and pages, including access to request headers before init.
+- **Regular Expressions** - Transpile Elixir's PCRE-based regexes to JavaScript runtime and support Regex-related functions such as `=~`.
+- **Server-Triggered Actions** - Enable triggering actions from server code outside of commands, such as background jobs (e.g. Oban) or scheduled tasks.
+- **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
+- **Template Engine Error Reporting** - Improve error reporting in the template engine to make debugging template issues more straightforward.
+- **Template Formatter** - Implement automatic formatting for templates to ensure consistent code style.
+- **VS Code Extension** - Develop a VS Code extension for template syntax highlighting to improve the developer experience.
+- **"with" Expression** - Complete the implementation of Elixir's `with` expression.
+
+#### Medium-Term Goals - Advanced Features & Enhanced DX
+
+- **Advanced Routing** - Add support for multi-tenant routing (subdomain-based) and catch-all (wildcard) routes for dynamic path segments of arbitrary depth.
+- **Auth** - Built-in authentication, authorization, and access control system for managing user identities and protecting resources.
+- **Bitstring UTF16 and UTF32 Encoding** - Add support for UTF16 and UTF32 encodings in bitstrings.
+- **Bitwise Module Operators** - Implement operators from the Bitwise module, enabling bit-level operations.
+- **Client Error Stacktraces** - Ensure error messages and stacktraces on the client match those on the server for easier debugging.
+- **Client MFAs Whitelisting** - Create a mechanism to explicitly whitelist Module-Function-Arity combinations that should be compiled for client-side execution when not automatically detected by the compiler.
+- **Command Failure Handling Control** - Add more granular control over how command failures are handled, allowing developers to customize error handling strategies, retry logic, and failure recovery mechanisms.
+- **Component-Level Rerendering** - Implement selective rerendering of only changed components instead of entire pages.
+- **Dynamic Components** - Support for dynamically loading and rendering components.
+- **Local-First Support** - Implement local-first architecture with offline-capable local database, auto-sync, and conflict resolution for resilient applications.
+- **Navigate Between Pages from Commands** - Enable navigation to another page from within a command.
+- **Props Validation** - Add a system for validating component props.
+- **Reactivity Layer** - Introduce derived values, prop watchers, and effects for a cohesive reactivity system.
+- **Secrets Protection** - Prevent sensitive information from leaking to the client side.
+- **Shorthand Prop Assignment Syntax** - Create an optional, more concise syntax for assigning props.
+- **Template Partials** - Add support for lightweight, reusable template snippets (similar to LiveView's function components) for reducing code duplication without the overhead of full components.
+
+#### Long-Term Goals - Transformative Capabilities
+
+- **Client Processes** - Port Elixir's process model to the client for concurrent and parallel programming patterns.
+- **Desktop Platform Support** - Enable packaging Hologram applications for desktop platforms with native integrations.
+- **Mobile Platform Support** - Enable building native-quality mobile applications from the same Hologram codebase.
+- **Structural Sharing** - Implement structural sharing for immutable data structures to reduce memory usage and improve performance.
+- **Time Travel Debugger** - Develop a debugging tool that allows stepping backward through state changes.
+
+### Contributing
+
+Thank you for your interest in contributing to Hologram! This guide will help you get started with contributing to the project.
+
+#### Current Focus: Porting Erlang Functions
+
+The most impactful way to contribute right now is by helping port Erlang functions to JavaScript. This work expands Elixir standard library coverage in the browser, enabling more of the Elixir you know and love to run client-side.
+
+Hologram automatically compiles Elixir code to JavaScript, but many Elixir standard library functions depend on underlying Erlang functions that must be manually ported. Currently we're focusing on functions that matter for web development: those supporting state management, data transformation, working with strings and collections, handling dates and times, and other common application needs. Modules like `Process`, `System`, `File`, `Port`, `Code`, and `Node` are deferred to later development phases.
+
+**Good news:** You don't need deep knowledge of Hologram internals or Erlang to contribute! You just need to understand what the Erlang function does and follow the patterns established in existing ports. This makes it an excellent opportunity whether you're new to open source or an experienced contributor.
+
+#### Prerequisites
+
+##### What You Need to Know
+
+- **Basic Elixir** - Ability to write Elixir code, especially for writing unit tests
+- **Basic JavaScript** - Ability to read and write ES6+ JavaScript
+- **Basic Git** - Familiarity with forking, cloning, branching, and creating pull requests
+- **How to read documentation** - You'll reference Erlang docs and use IEx help
+
+##### What You Need to Have
+
+- **GitHub account** - To create issues and submit pull requests
+- **Elixir development environment** - Elixir and Erlang installed on your system
+- **Node.js and npm** - Required for running JavaScript tests and the build process
+
+##### What You DON'T Need
+
+- Deep Erlang knowledge
+- Understanding of Hologram's compiler internals
+- Experience with transpilers
+
+#### Finding a Function to Port
+
+##### Step 1: Browse Available Functions
+
+Visit the Erlang Functions page (part of the Client Runtime reference) to see Erlang functions porting status. Look for functions marked as todo - these are ready to be ported.
+
+##### Step 2: Check GitHub Issues
+
+Before starting, search the Hologram GitHub issues (https://github.com/bartblast/hologram/issues) to make sure nobody is already working on your chosen function.
+
+##### Step 3: Create Your Issue
+
+Create a new GitHub issue with a clear title in this format: `Port :lists.filter/2 to JS`. This reserves the function and lets others know you're working on it.
+
+#### Setting Up Your Development Environment
+
+##### Fork and Clone
+
+First, fork the Hologram repository on GitHub, then clone your fork locally:
+
+```
+$ git clone https://github.com/YOUR-USERNAME/hologram.git
+$ cd hologram
+```
+
+##### Install Dependencies
+
+After cloning, install all required dependencies using the setup task. This single command will fetch Elixir dependencies for both the main project and the feature tests app, and install JavaScript dependencies:
+
+```
+$ mix setup
+```
+
+##### Create Your Branch
+
+**Important:** Branch from `dev`, not `master`. Ports are treated as enhancements, and all enhancements target the `dev` branch.
+
+```
+$ git checkout dev
+$ git checkout -b port-lists-filter-2
+```
+
+##### Scope Your Work
+
+**One function per pull request** (or functions that are directly related - same module/name, different arity). This allows for faster review and keeps the codebase moving forward efficiently.
+
+#### Understanding the Basics
+
+##### Boxed Types
+
+Hologram uses value boxing to maintain Elixir type information in JavaScript. Each compiled term is wrapped in an object with a `type` field that specifies its original type. For example, the integer `42` becomes `{type: "integer", value: 42n}`.
+
+You can explore the type system in assets/js/type.mjs in the Hologram repository. The `Type` class provides utilities like `Type.boolean()`, `Type.isTuple()`, and `Type.encodeMapKey()` that you'll use when porting functions.
+
+##### Function Structure
+
+Let's examine `:lists.keymember/3` as an example (from lists.mjs). All ported functions follow this pattern:
+
+```javascript
+// Start keymember/3
+"keymember/3": (value, index, tuples) => {
+  return Type.boolean(
+    Type.isTuple(Erlang_Lists["keyfind/3"](value, index, tuples))
+  );
+},
+// End keymember/3
+// Deps: [:lists.keyfind/3]
+```
+
+**Key components:**
+
+- **Start/End comments** - These allow the Hologram compiler to extract the source code during compilation. Always include them exactly as shown.
+- **Function signature** - Use the format `"function_name/arity"` as the key, with an arrow function as the value.
+- **Deps comment** - Lists dependencies on other Erlang functions. If your function has dependencies, see the Register Dependencies step below for how to register them.
+
+#### Step-by-Step Porting Process
+
+##### 1. Understand the Function Behavior
+
+Before writing any code, thoroughly understand what the Erlang function does. The Erlang Functions page lists all Erlang functions - click on a function to view its details page, which includes a link to the official Erlang documentation for that specific function. You can also use IEx:
+
+```
+iex> h :lists.filter/2
+```
+
+Or browse the official Erlang documentation directly: https://www.erlang.org/doc (navigate to the appropriate module).
+
+##### 2. Locate the Target File
+
+Manually ported Erlang functions are located in `assets/js/erlang/` directory, organized by module. For example, `:lists` functions go in `assets/js/erlang/lists.mjs`.
+
+##### 3. Look at Similar Functions
+
+Browse already-ported functions in the same module or similar modules. Use these as templates and follow the same conventions, even if they seem non-DRY or unusual. These patterns will be refactored later once common patterns are identified across all ports.
+
+##### 4. Implement Your Function
+
+Write your implementation following these principles:
+
+- **Never mutate parameters** - Always return new values or return parameters unchanged
+- **Use Type class utilities** - `Type.boolean()`, `Type.isTuple()`, etc.
+- **Use Interpreter class** - For function calls (`Interpreter.callFunction()`), error handling (`Interpreter.matchError()`), comparisons (`Interpreter.compare()`), and more
+- **Use Bitstring class** - For binary and bitstring operations when needed
+- **Handle boxed values** - Remember that values are wrapped in objects with type information
+
+##### 5. Validate Inputs
+
+Most ported functions need input validation. Follow existing validation patterns from other ported functions.
+
+**Type validation** (most common case) - Check that parameters have the expected types:
+
+```javascript
+if (!Type.isList(list)) {
+  Interpreter.raiseArgumentError(
+    Interpreter.buildArgumentErrorMsg(3, "not a list")
+  );
+}
+```
+
+**Value validation** - Check that parameter values are within acceptable ranges or match expected values:
+
+```javascript
+if (index.value < 1) {
+  Interpreter.raiseArgumentError(
+    Interpreter.buildArgumentErrorMsg(2, "out of range")
+  );
+}
+```
+
+**Deferred functionality** - If a particular option or code path doesn't make sense for Phase 1 (e.g., UTF16 encoding), add a clear error message or TODO comment explaining why it's deferred:
+
+```javascript
+// TODO: implement other encodings for inputEncoding param
+if (!Interpreter.isStrictlyEqual(inputEncoding, Type.atom("utf8"))) {
+  throw new HologramInterpreterError(
+    "encodings other than utf8 are not yet implemented in Hologram"
+  );
+}
+```
+
+##### 6. Register Dependencies
+
+If your function has dependencies on other Erlang functions, you need to register them in two places:
+
+- Add a `Deps` comment under your function in the JavaScript file (e.g., `// Deps: [:lists.keyfind/3]`)
+- Add the same dependencies to the `@erlang_mfa_edges` attribute in `lib/hologram/compiler/call_graph.ex`
+
+This duplication is temporary - both are required for now, but eventually there will be a single source of truth.
+
+#### Writing Tests
+
+Every ported function requires two types of tests to ensure correctness and consistency with OTP behavior.
+
+##### JavaScript Unit Tests
+
+Add comprehensive test cases in a dedicated test file for each ported module. For example, tests for `:lists` functions are in `test/javascript/erlang/lists_test.mjs`, while the implementation is in `assets/js/erlang/lists.mjs`.
+
+Your tests should:
+
+- Cover typical use cases
+- Test edge cases (empty collections, nil values, etc.)
+- Verify error conditions and error messages
+- Test input validation (type checks, value range checks, etc.)
+- Be thorough but not redundant - avoid overlapping test cases
+- Work with boxed types (remember to box your test values)
+
+##### Server-Side Consistency Tests
+
+Create matching tests in Elixir that verify your JavaScript implementation behaves identically to OTP. These go in `test/elixir/hologram/ex_js_consistency/erlang/`.
+
+For example, if you ported `:lists.filter/2`, create tests in `test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs` that mirror your JavaScript tests.
+
+#### Performance Considerations
+
+While the general rule is to never mutate parameters (see Implement Your Function above), you can use internal mutation for performance when building collections. This is an optimization that doesn't violate immutability from the caller's perspective:
+
+- You can mutate variables you create inside your function
+- Build the final boxed value in place rather than creating new objects each loop iteration
+- Use `Type.encodeMapKey()` and understand internal boxed value structures (see Type class)
+
+**Note:** These manual performance optimizations are temporary measures. Hologram will implement **Structural Sharing** in the future to automatically address performance issues related to immutability.
+
+#### Quality Checks Before Submitting
+
+Before submitting your pull request, make sure to run quality checks locally.
+
+##### Format Your Code
+
+Format all code (both Elixir and JavaScript):
+
+```
+$ mix f
+```
+
+##### Run All Quality Checks
+
+Run the same checks that CI runs:
+
+```
+$ mix check
+```
+
+This command runs compiler checks, formatters, linters (Credo, ESLint), tests, and other quality tools.
+
+##### Optional: Install Git Hooks
+
+You can optionally install git hooks that automatically run formatting checks before commits:
+
+```
+$ lefthook install
+```
+
+#### Code Review & Communication
+
+##### Pull Request Guidelines
+
+- **Focus on the function** - Keep your PR focused on porting the specific function(s)
+- **Don't refactor existing code** - Even if you see patterns that could be DRYed up, follow existing conventions
+- **Follow the exact commit message format** - Use: "Port :lists.filter/2 to JS"
+- **Ensure all CI checks pass** - Before requesting review, verify that all continuous integration checks have passed
+
+##### Communication Channels
+
+- **General questions about porting** - Ask on the Hologram Forum thread (https://elixirforum.com/t/elixir-javascript-porting-initiative/73335) dedicated to the porting initiative
+- **Function-specific questions** - Keep discussion in the GitHub issue you created for that function
+- **Convention or process suggestions** - Discuss in the Hologram Forum thread, not in PRs
+
+##### Review Process
+
+Once you submit your PR, we'll review it as quickly as possible. We may suggest:
+
+- Additional test cases for edge cases
+- Validation for options or parameters
+- Alternative implementations for better performance
+- Corrections to match OTP behavior exactly
+
+#### Tips & Best Practices
+
+##### Using AI Tools
+
+AI tools can be very helpful for porting! They're good at:
+
+- Translating Erlang logic to JavaScript
+- Understanding Erlang documentation
+- Generating test cases
+- Spotting edge cases you might have missed
+
+Just remember to verify the AI's output against actual OTP behavior and existing Hologram conventions!
+
+##### Common Pitfalls to Avoid
+
+- **Forgetting to box return values** - All values must be properly boxed
+- **Mutating parameters** - Never modify input parameters directly
+- **Skipping edge case tests** - Empty lists, nil values, and error conditions are important
+- **Inconsistent error messages** - Match OTP error formats exactly
+- **Missing Start/End comments** - The compiler needs these markers
+- **Forgetting to update CallGraph** - Dependencies must be declared in both places
+
+##### Alphabetical Ordering
+
+Order imports (including classes like `Type`, `Interpreter`, etc.) and functions alphabetically within each module file. Similarly, order test sections for each function alphabetically by function name within test files.
+
+#### Resources
+
+- **Client Runtime Reference** - https://hologram.page/reference/client-runtime
+- **Hologram Repository** - https://github.com/bartblast/hologram
+- **Ported Functions** - https://github.com/bartblast/hologram/tree/dev/assets/js/erlang
+- **JavaScript Tests** - https://github.com/bartblast/hologram/tree/dev/test/javascript/erlang
+- **Elixir Consistency Tests** - https://github.com/bartblast/hologram/tree/dev/test/elixir/hologram/ex_js_consistency/erlang
+- **Erlang Documentation** - https://www.erlang.org/doc
+
+#### Questions?
+
+If you have questions about porting, contribution process, or anything else:
+
+- **General porting questions** - Post in the Hologram Forum thread (https://elixirforum.com/t/elixir-javascript-porting-initiative/73335)
+- **Specific function questions** - Comment on the GitHub issue for that function
+- **Bugs or problems** - Create a new GitHub issue
+
+Thank you for contributing to Hologram! Every function you port brings us closer to full Elixir standard library coverage in the browser and helps the entire Elixir community build better full-stack applications.
+
+### Package Naming
+
+When publishing a Hologram-related package, keep in mind the following reserved names. This helps the community distinguish official packages from community-maintained ones.
+
+#### Reserved Package Name Prefix: `hologram_`
+
+Hex package names starting with `hologram_` are reserved for official Hologram packages and extensions.
+
+#### Reserved Module Namespace: `Hologram.`
+
+The `Hologram.*` module namespace is reserved for the Hologram framework and official extensions.
+
+### Sponsor Hologram
+
+Help us bring pure Elixir to the frontend and grow the ecosystem.
+
+I'm Bart Blast, the creator of Hologram. For over 5 years, I've been working on this full-stack Elixir web framework that automatically compiles Elixir to JavaScript, bringing the language to the browser. Nearly 3 of those years have been full-time Hologram development.
+
+Sponsorship keeps Hologram moving forward. Hologram is a full-time effort. Sponsorships allow me to focus on development, support the community, and push the roadmap forward. Every new sponsor helps expand what's possible.
+
+#### Endorsed by Jose Valim and Elixir Community
+
+Hologram has earned recognition and support from the highest levels of the Elixir ecosystem, including promotion by Jose Valim (Creator of Elixir), being featured on elixir-lang.org, ElixirConf EU 2025 speaker slot, active sponsorship from Zach Daniel (Ash Framework Creator), public endorsement from Adam Kirk (Jump.ai CTO), and production deployments.
+
+#### Hologram's Growing Impact
+
+**GitHub Activity (since project inception):** 1.1K+ GitHub Stars, 10K+ Commits, 1M+ Lines of Code, 50+ Contributors
+
+**Website & Social Media Engagement (last 11 months):** 50K+ Website Visits, 200K+ Pageviews, 250K+ Social Impressions, 3K+ Likes & Shares
+
+**Production Use:** While Hex downloads remain modest (2K+) due to the current involved installation process, developers are already experimenting with Hologram and even using it in production environments. The upcoming standalone mode will reduce installation to just 2 terminal commands.
+
+#### The Scope: Building an Entire Ecosystem
+
+Hologram is an ambitious project. This isn't just another framework - Hologram's scope essentially encompasses: Phoenix + Surface + ElixirScript + React + Local-First. Each of these components represents years of work by entire teams, yet Hologram aims to integrate all these capabilities into a unified, pure Elixir experience.
+
+#### Why This Matters
+
+Hologram represents a unique opportunity for the Elixir ecosystem. While LiveView revolutionized server-driven interactivity, Hologram brings Elixir to the client - enabling instant UI, offline apps, and modern frontend capabilities without JavaScript.
+
+This isn't just about avoiding JavaScript - it's about:
+
+- **Code Reuse** - Write your business logic once in Elixir and use it everywhere
+- **Consistent Language Guarantees** - Maintain Elixir's guarantees across the full stack
+- **Developer Experience** - Stay in the language you love for the entire application
+- **Performance** - Eliminate network round trips for UI interactions
+- **Local-First Applications** - Build offline-capable apps with Elixir
+- **Already Production-Ready** - In production use with growing adoption
+
+#### Sponsorship Opportunities
+
+Visit the GitHub Sponsors page to choose a tier and begin your sponsorship: https://github.com/sponsors/bartblast
+
+- **Early Adopter** ($14/mo) - Your name in the README.md pioneers section, GitHub Sponsor badge
+- **Framework Visionary** ($29/mo) - Recognition in release announcements, plus previous tier benefits
+- **Innovation Partner** ($250/mo) - Company logo on website homepage and README.md, plus previous tier benefits
+- **Strategic Ally** ($500/mo) - Prominent logo on each documentation page, large logo on homepage and README.md, plus previous tier benefits
+
+Custom amounts and creative sponsorship arrangements are also welcome.
+
+#### Other Ways to Help
+
+- **Share this page** - Help reach potential sponsors by sharing in your network, on social media, or at meetups
+- **Advocate for corporate sponsorship** - If your company is interested in Hologram, consider advocating within your organization
+- **Consider consulting** - I'm available for consulting to help explore Hologram's potential for your specific needs
+- **Spread the word** - Talk about Hologram at meetups, conferences, or in your local Elixir community
+
+## Resources
+
+### Community
+
+Connect with other Hologram developers, ask questions, share your projects, and stay up to date with the latest developments.
+
+- **Elixir Forum** (https://elixirforum.com/hologram) - In-depth discussions, questions, and announcements
+- **Discord** (https://discord.gg/huJWNuqt8J) - Real-time conversations, quick questions, and community chat
+- **Slack** (https://elixir-lang.slack.com/channels/hologram) - Chat in the #hologram channel on the Elixir Slack workspace
+- **X / Twitter** (https://x.com/Bart_Blast) - Release announcements and project updates
+- **Bluesky** (https://bsky.app/profile/bartblast.com) - Release announcements and project updates
+- **LinkedIn** (https://www.linkedin.com/in/bartblast/) - Release announcements and project updates
+
+### Courses
+
+Get early access to comprehensive Hologram video courses.
+
+Learn to build real-world applications through step-by-step video tutorials that start with the Hologram basics and progress to recreating popular applications like Slack, Figma, and Spotify, as well as games like Tetris. You'll gain hands-on experience with different types of interfaces and functionality while learning frontend development patterns, component architecture, and state management.
+
+Beyond Hologram itself, you'll learn how to integrate with popular Elixir libraries like Ash, Ecto, Oban, and many others. Each course includes practical projects you can use as templates for your own work.
+
+The courses will be offered at an affordable price, with all proceeds going directly toward sustaining the Hologram project and supporting its ongoing development.
+
+Join the waiting list at https://hologram.page/courses.
+
+### Newsletter
+
+Join the growing community following Hologram's journey.
+
+Every month, you'll get updates on development milestones, ecosystem news, and insights from the Hologram world. Think of it as your monthly check-in with everything Hologram-related. Whether it's new features being worked on, interesting discussions in the community, or updates on the framework's direction, you'll get a nice overview of what's been happening.
+
+Subscribe at https://hologram.page/newsletter.

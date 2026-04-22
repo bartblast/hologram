@@ -102,6 +102,34 @@ describe("ComponentRegistry", () => {
     assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
   });
 
+  describe("clearNextAction()", () => {
+    it("clears next_action from the component struct in the registry", () => {
+      const action = Type.actionStruct({
+        name: Type.atom("my_action"),
+        params: Type.map(),
+        target: Type.bitstring("my_target"),
+      });
+
+      const struct = Type.componentStruct({nextAction: action});
+
+      const entry = Type.map([
+        [Type.atom("module"), Type.alias("MyModule")],
+        [Type.atom("struct"), struct],
+      ]);
+
+      ComponentRegistry.entries = Type.map([[cid3, entry]]);
+
+      ComponentRegistry.clearNextAction(cid3);
+
+      const updatedStruct = ComponentRegistry.getComponentStruct(cid3);
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("next_action"), updatedStruct),
+        Type.nil(),
+      );
+    });
+  });
+
   describe("getComponentEmittedContext()", () => {
     it("entry exists", () => {
       const result = ComponentRegistry.getComponentEmittedContext(cid2);

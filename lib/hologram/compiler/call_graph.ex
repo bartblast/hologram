@@ -16,6 +16,53 @@ defmodule Hologram.Compiler.CallGraph do
   @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
 
+  # These edges can't be discovered from static IR analysis.
+  @dynamic_dispatch_edges [
+    {{Date, :day_of_era, 1}, {Calendar.ISO, :day_of_era, 3}},
+    {{Date, :day_of_week, 2}, {Calendar.ISO, :day_of_week, 4}},
+    {{Date, :day_of_year, 1}, {Calendar.ISO, :day_of_year, 3}},
+    {{Date, :days_in_month, 1}, {Calendar.ISO, :days_in_month, 2}},
+    {{Date, :leap_year?, 1}, {Calendar.ISO, :leap_year?, 1}},
+    {{Date, :months_in_year, 1}, {Calendar.ISO, :months_in_year, 1}},
+    {{Date, :new, 4}, {Calendar.ISO, :valid_date?, 3}},
+    {{Date, :quarter_of_year, 1}, {Calendar.ISO, :quarter_of_year, 3}},
+    {{Date, :shift, 2}, {Calendar.ISO, :shift_date, 4}},
+    {{Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}},
+    {{Date, :year_of_era, 1}, {Calendar.ISO, :year_of_era, 3}},
+    {{DateTime, :from_gregorian_seconds, 3}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :from_iso_days, 4}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :shift, 3}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{DateTime, :shift, 3}, {Calendar.ISO, :shift_naive_datetime, 8}},
+    {{DateTime, :shift_by_offset, 2}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :shift_zone_for_iso_days_utc, 5},
+     {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{DateTime, :to_iso_days, 1}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{DateTime, :to_string, 1}, {Calendar.ISO, :datetime_to_string, 11}},
+    {{Inspect.Date, :inspect, 2}, {Calendar.ISO, :date_to_string, 3}},
+    {{Inspect.DateTime, :inspect, 2}, {Calendar.ISO, :datetime_to_string, 11}},
+    {{Inspect.NaiveDateTime, :inspect, 2}, {Calendar.ISO, :naive_datetime_to_string, 7}},
+    {{Inspect.Time, :inspect, 2}, {Calendar.ISO, :time_to_string, 4}},
+    {{NaiveDateTime, :beginning_of_day, 1}, {Calendar.ISO, :iso_days_to_beginning_of_day, 1}},
+    {{NaiveDateTime, :end_of_day, 1}, {Calendar.ISO, :iso_days_to_end_of_day, 1}},
+    {{NaiveDateTime, :from_iso_days, 3}, {Calendar.ISO, :naive_datetime_from_iso_days, 1}},
+    {{NaiveDateTime, :new, 8}, {Calendar.ISO, :valid_date?, 3}},
+    {{NaiveDateTime, :new, 8}, {Calendar.ISO, :valid_time?, 4}},
+    {{NaiveDateTime, :shift, 2}, {Calendar.ISO, :shift_naive_datetime, 8}},
+    {{NaiveDateTime, :to_gregorian_seconds, 1}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{NaiveDateTime, :to_iso_days, 1}, {Calendar.ISO, :naive_datetime_to_iso_days, 7}},
+    {{NaiveDateTime, :to_string, 1}, {Calendar.ISO, :naive_datetime_to_string, 7}},
+    {{String.Chars.Date, :to_string, 1}, {Calendar.ISO, :date_to_string, 3}},
+    {{String.Chars.DateTime, :to_string, 1}, {Calendar.ISO, :datetime_to_string, 11}},
+    {{String.Chars.NaiveDateTime, :to_string, 1}, {Calendar.ISO, :naive_datetime_to_string, 7}},
+    {{String.Chars.Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}},
+    {{Time, :convert, 2}, {Calendar.ISO, :time_from_day_fraction, 1}},
+    {{Time, :from_seconds_after_midnight, 3}, {Calendar.ISO, :time_from_day_fraction, 1}},
+    {{Time, :new, 5}, {Calendar.ISO, :valid_time?, 4}},
+    {{Time, :shift, 2}, {Calendar.ISO, :shift_time, 5}},
+    {{Time, :to_day_fraction, 1}, {Calendar.ISO, :time_to_day_fraction, 4}},
+    {{Time, :to_string, 1}, {Calendar.ISO, :time_to_string, 4}}
+  ]
+
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
     {{:binary, :compile_pattern, 1}, {:erlang, :make_ref, 0}},
@@ -55,7 +102,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :fun_info, 2}, {:erlang, :fun_info, 1}},
     {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
     {{:erlang, :integer_to_list, 1}, {:erlang, :integer_to_list, 2}},
-    {{:erlang, :iolist_to_binary, 1}, {:lists, :flatten, 1}},
+    {{:erlang, :iolist_to_binary, 1}, {:erlang, :list_to_binary, 1}},
     {{:erlang, :is_map_key, 2}, {:maps, :is_key, 2}},
     {{:erlang, :list_to_existing_atom, 1}, {:erlang, :list_to_atom, 1}},
     {{:erlang, :list_to_integer, 1}, {:erlang, :list_to_integer, 2}},
@@ -172,6 +219,7 @@ defmodule Hologram.Compiler.CallGraph do
   # * the function must access the Hologram client runtime
   # * the function has only a client-side implementation
   @manually_ported_elixir_mfas [
+    {Application, :get_env, 3},
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
@@ -189,6 +237,9 @@ defmodule Hologram.Compiler.CallGraph do
     {IO, :inspect, 1},
     {IO, :inspect, 2},
     {IO, :inspect, 3},
+    {IO, :warn, 1},
+    {IO, :warn, 2},
+    {IO, :warn_once, 3},
     {Kernel, :inspect, 1},
     {Kernel, :inspect, 2},
     {String, :contains?, 2},
@@ -247,6 +298,9 @@ defmodule Hologram.Compiler.CallGraph do
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
     ],
+    manually_ported_io_module: [
+      {:erlang, :iolist_to_binary, 1}
+    ],
     operation_class: [
       {:maps, :from_list, 1},
       {:maps, :get, 2},
@@ -292,6 +346,22 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Adds call graph edges that can't be discovered from static IR analysis:
+  Erlang functions depending on other Erlang functions, and dynamic dispatch
+  patterns in Elixir stdlib (e.g. behaviour callbacks called via variable with known default).
+  """
+  @spec add_non_discoverable_edges(t) :: t
+  def add_non_discoverable_edges(%{pid: pid} = call_graph) do
+    Agent.cast(pid, fn graph ->
+      graph
+      |> Digraph.add_edges(@erlang_mfa_edges)
+      |> Digraph.add_edges(@dynamic_dispatch_edges)
+    end)
+
+    call_graph
+  end
+
+  @doc """
   Adds the vertex to the call graph.
   """
   @spec add_vertex(t, vertex) :: t
@@ -303,7 +373,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Builds a call graph from IR.
   """
-  @spec build(t, IR.t(), vertex | nil) :: t
+  @spec build(t, IR.t() | list | map | tuple, vertex | nil) :: t
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
@@ -515,7 +585,7 @@ defmodule Hologram.Compiler.CallGraph do
     graph = get_graph(call_graph)
 
     graph
-    |> Digraph.reaching([{Task, :await, 1}])
+    |> Digraph.reaching([{Task, :await, 1}], opaque_vertex?: &is_atom/1)
     # Excludes bare module atom vertices, keeping only MFA tuples.
     # No Reflection.module?/1 guard needed in the filter (unlike reachable_mfas/2) because
     # the result is only used for MapSet.member? lookups against already-included MFAs.
@@ -597,7 +667,6 @@ defmodule Hologram.Compiler.CallGraph do
 
     call_graph
     |> get_graph()
-    |> add_edges_for_erlang_functions()
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
   end
@@ -676,6 +745,8 @@ defmodule Hologram.Compiler.CallGraph do
     Task.await_many(remove_tasks, :infinity)
     Task.await_many(update_tasks, :infinity)
     Task.await_many(add_tasks, :infinity)
+
+    refresh_protocol_dispatch_edges(call_graph, diff.added_modules ++ diff.edited_modules)
 
     call_graph
   end
@@ -859,11 +930,6 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Digraph.vertices/1, :infinity)
   end
 
-  # Add call graph edges for Erlang functions depending on other Erlang functions.
-  defp add_edges_for_erlang_functions(graph) do
-    Digraph.add_edges(graph, @erlang_mfa_edges)
-  end
-
   # TODO: think how to avoid this
   # A component module can be passed as a prop to another component, allowing dynamic usage.
   # In such cases, when this scenario is identified, it becomes necessary
@@ -986,6 +1052,20 @@ defmodule Hologram.Compiler.CallGraph do
     end
 
     call_graph
+  end
+
+  # When modules that are protocol implementations are added or edited, the protocol
+  # module itself (e.g. Enumerable) is unchanged and not re-processed by patch. Its
+  # dispatch edges remain stale. This function re-runs add_protocol_call_graph_edges
+  # for each affected protocol so dispatch edges reflect the current set of implementations.
+  # Removed modules are excluded because add_protocol_call_graph_edges auto-creates vertices,
+  # which would re-introduce vertices that remove_module_vertices already cleaned up.
+  defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
+    added_or_edited_modules
+    |> Enum.map(&Reflection.protocol_impl/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
   end
 
   defp remove_module_vertices(call_graph, module) do

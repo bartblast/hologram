@@ -129,4 +129,115 @@ describe("Elixir_IO", () => {
       });
     });
   });
+
+  describe("warn/1", () => {
+    let consoleWarnStub;
+
+    beforeEach(() => {
+      consoleWarnStub = sinon
+        .stub(console, "warn")
+        .callsFake((_msg) => undefined);
+    });
+
+    afterEach(() => {
+      console.warn.restore();
+    });
+
+    const warn = Elixir_IO["warn/1"];
+
+    it("handles string message", () => {
+      const result = warn(Type.bitstring("my warning"));
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "my warning");
+    });
+
+    it("handles iodata message", () => {
+      const message = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring(" "),
+        Type.bitstring("world"),
+      ]);
+
+      const result = warn(message);
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "hello world");
+    });
+  });
+
+  describe("warn/2", () => {
+    let consoleWarnStub;
+
+    beforeEach(() => {
+      consoleWarnStub = sinon
+        .stub(console, "warn")
+        .callsFake((_msg) => undefined);
+    });
+
+    afterEach(() => {
+      console.warn.restore();
+    });
+
+    const warn = Elixir_IO["warn/2"];
+
+    it("handles string message", () => {
+      const result = warn(Type.bitstring("my warning"), Type.list());
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "my warning");
+    });
+
+    it("handles iodata message", () => {
+      const message = Type.list([
+        Type.bitstring("hello"),
+        Type.bitstring(" "),
+        Type.bitstring("world"),
+      ]);
+
+      const result = warn(message, Type.list());
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "hello world");
+    });
+  });
+
+  describe("warn_once/3", () => {
+    let consoleWarnStub;
+
+    beforeEach(() => {
+      consoleWarnStub = sinon
+        .stub(console, "warn")
+        .callsFake((_msg) => undefined);
+    });
+
+    afterEach(() => {
+      console.warn.restore();
+    });
+
+    const warn_once = Elixir_IO["warn_once/3"];
+
+    it("evaluates message function and warns", () => {
+      const messageFun = Type.anonymousFunction(
+        0,
+        [
+          {
+            params: () => [],
+            guards: [],
+            body: () => Type.bitstring("my warning"),
+          },
+        ],
+        {},
+      );
+
+      const result = warn_once(
+        Type.atom("my_key"),
+        messageFun,
+        Type.integer(0),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      sinon.assert.calledOnceWithExactly(consoleWarnStub, "my warning");
+    });
+  });
 });

@@ -1,5 +1,6 @@
 "use strict";
 
+import ApplicationEnv from "./erts/application_env.mjs";
 import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
 import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
@@ -28,6 +29,7 @@ export default class ERTS {
     return $.#initPid;
   }
 
+  static applicationEnv = ApplicationEnv;
   static binaryPatternRegistry = BinaryPatternRegistry;
   static ets = {};
 

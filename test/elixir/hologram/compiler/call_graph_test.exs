@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Design.DuplicatedCode
 defmodule Hologram.Compiler.CallGraphTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.CallGraph
@@ -43,6 +44,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
+  alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
+
   @tmp_dir Reflection.tmp_dir()
 
   setup_all do
@@ -77,6 +80,20 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     graph = get_graph(call_graph)
     assert Digraph.sorted_edges(graph) == edges
+  end
+
+  describe "add_non_discoverable_edges/1" do
+    test "adds @erlang_mfa_edges to the call graph", %{empty_call_graph: call_graph} do
+      add_non_discoverable_edges(call_graph)
+
+      assert has_edge?(call_graph, {:binary, :match, 2}, {:binary, :match, 3})
+    end
+
+    test "adds @dynamic_dispatch_edges to the call graph", %{empty_call_graph: call_graph} do
+      add_non_discoverable_edges(call_graph)
+
+      assert has_edge?(call_graph, {Date, :new, 4}, {Calendar.ISO, :valid_date?, 3})
+    end
   end
 
   test "add_vertex/2", %{empty_call_graph: call_graph} do
@@ -384,13 +401,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(
                call_graph,
                from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 1}
+               {StringCharsModule12, :__impl__, 1}
              )
 
       assert has_edge?(
                call_graph,
                from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
+               {StringCharsModule12, :to_string, 1}
              )
     end
 
@@ -601,7 +618,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  # credo:disable-for-lines:50 Credo.Check.Design.DuplicatedCode
   test "build_for_module/3", %{empty_call_graph: call_graph} do
     ir = %IR.ModuleDefinition{
       module: %IR.AtomType{value: Module11},
@@ -762,6 +778,17 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_async_mfas()
 
       assert result == MapSet.new([{MyModule, :action, 3}, {Task, :await, 1}])
+    end
+
+    test "does not mark MFAs as async when they only reach Task.await/1 through a module vertex" do
+      result =
+        start()
+        |> add_edge({MyModule, :my_fun, 1}, OtherModule)
+        |> add_edge(OtherModule, {OtherModule, :fetch_data, 1})
+        |> add_edge({OtherModule, :fetch_data, 1}, {Task, :await, 1})
+        |> list_async_mfas()
+
+      assert result == MapSet.new([{OtherModule, :fetch_data, 1}, {Task, :await, 1}])
     end
   end
 
@@ -968,13 +995,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {:lists, :reverse, 1} in result
     end
 
-    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{
-      runtime_mfas: result
-    } do
-      assert {:erlang, :==, 2} in result
-      assert {:erlang, :error, 2} in result
-    end
-
     test "excludes MFAs with non-existing modules", %{full_call_graph: call_graph} do
       call_graph_clone = CallGraph.clone(call_graph)
 
@@ -1169,6 +1189,68 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == [
                {{:module_5, :fun_h, :arity_h}, :module_6}
              ]
+    end
+
+    test "adds protocol dispatch edges when an added module is a protocol implementation", %{
+      empty_call_graph: call_graph
+    } do
+      impl_module = StringCharsModule12
+      impl_ir = IR.for_module(impl_module)
+      from_vertex = {String.Chars, :to_string, 1}
+
+      # Simulate a previous build that had String.Chars but not Module12:
+      # manually add the protocol function vertex without the dispatch edge to Module12.
+      add_vertex(call_graph, from_vertex)
+
+      refute has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      refute has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+
+      # Now patch with Module12 (which has defimpl String.Chars) as an added module
+      ir_plt = PLT.put(PLT.start(), impl_module, impl_ir)
+
+      diff = %{
+        added_modules: [impl_module],
+        removed_modules: [],
+        edited_modules: []
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      assert has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+    end
+
+    test "adds protocol dispatch edges when an edited module is a protocol implementation", %{
+      empty_call_graph: call_graph
+    } do
+      impl_module = StringCharsModule12
+      impl_ir = IR.for_module(impl_module)
+      from_vertex = {String.Chars, :to_string, 1}
+
+      # Simulate a previous build: the protocol function vertex exists and the
+      # implementation module was already built (has its own internal edges).
+      call_graph
+      |> add_vertex(from_vertex)
+      |> build(impl_ir)
+
+      # The impl's internal edges exist, but there are no dispatch edges
+      # from the protocol to the implementation.
+      assert has_vertex?(call_graph, {impl_module, :to_string, 1})
+      refute has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      refute has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
+
+      ir_plt = PLT.put(PLT.start(), impl_module, impl_ir)
+
+      diff = %{
+        added_modules: [],
+        removed_modules: [],
+        edited_modules: [impl_module]
+      }
+
+      patch(call_graph, ir_plt, diff)
+
+      assert has_edge?(call_graph, from_vertex, {impl_module, :__impl__, 1})
+      assert has_edge?(call_graph, from_vertex, {impl_module, :to_string, 1})
     end
 
     test "updates modules", %{empty_call_graph: call_graph} do
@@ -1469,5 +1551,2007 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert :vertex_3 in result
     assert :vertex_4 in result
     assert :vertex_5 in result
+  end
+
+  # Consistency tests verifying that the Elixir stdlib IR patterns
+  # assumed by the call graph still hold. If these fail after an
+  # Elixir upgrade, the corresponding call graph code needs updating.
+  describe "Elixir stdlib IR pattern assumptions" do
+    defp find_fun_defs(ir_plt, module, name, arity) do
+      %IR.ModuleDefinition{body: %IR.Block{expressions: expressions}} =
+        PLT.get!(ir_plt, module)
+
+      Enum.filter(expressions, &match?(%IR.FunctionDefinition{name: ^name, arity: ^arity}, &1))
+    end
+
+    # Dynamic dispatch assumption: Date.day_of_era/1 extracts calendar from the struct
+    # and calls `calendar.day_of_era(year, month, day)`.
+    #
+    # Original source:
+    #   def day_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.day_of_era(year, month, day)
+    #   end
+    test "Date.day_of_era/1 dynamically dispatches calendar.day_of_era/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :day_of_era, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :day_of_era,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.day_of_week/2 extracts calendar from the struct
+    # and calls `calendar.day_of_week(year, month, day, starting_on)`.
+    #
+    # Original source:
+    #   def day_of_week(%{calendar: calendar, year: year, month: month, day: day}, starting_on) do
+    #     {day_of_week, _first, _last} = calendar.day_of_week(year, month, day, starting_on)
+    #     day_of_week
+    #   end
+    test "Date.day_of_week/2 dynamically dispatches calendar.day_of_week/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :day_of_week, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   },
+                   _starting_on
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :day_of_week,
+                         args: [_year_arg, _month_arg, _day_arg, _starting_on_arg]
+                       }
+                     },
+                     _result
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.day_of_year/1 extracts calendar from the struct
+    # and calls `calendar.day_of_year(year, month, day)`.
+    #
+    # Original source:
+    #   def day_of_year(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.day_of_year(year, month, day)
+    #   end
+    test "Date.day_of_year/1 dynamically dispatches calendar.day_of_year/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :day_of_year, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :day_of_year,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.days_in_month/1 extracts calendar from the struct
+    # and calls `calendar.days_in_month(year, month)`.
+    #
+    # Original source:
+    #   def days_in_month(%{calendar: calendar, year: year, month: month}) do
+    #     calendar.days_in_month(year, month)
+    #   end
+    test "Date.days_in_month/1 dynamically dispatches calendar.days_in_month/2",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :days_in_month, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :days_in_month,
+                       args: [_year_arg, _month_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.leap_year?/1 extracts calendar from the struct
+    # and calls `calendar.leap_year?(year)`.
+    #
+    # Original source:
+    #   def leap_year?(%{calendar: calendar, year: year}) do
+    #     calendar.leap_year?(year)
+    #   end
+    test "Date.leap_year?/1 dynamically dispatches calendar.leap_year?/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :leap_year?, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :leap_year?,
+                       args: [_year_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.months_in_year/1 extracts calendar from the struct
+    # and calls `calendar.months_in_year(year)`.
+    #
+    # Original source:
+    #   def months_in_year(%{calendar: calendar, year: year}) do
+    #     calendar.months_in_year(year)
+    #   end
+    test "Date.months_in_year/1 dynamically dispatches calendar.months_in_year/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :months_in_year, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :months_in_year,
+                       args: [_year_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Default param assumption: Date.new/3 is the generated clause that fills in the
+    # Calendar.ISO default and calls Date.new/4. The Calendar.ISO atom appears in the body
+    # as data (not a dispatch target).
+    #
+    # Generated from: def new(year, month, day, calendar \\ Calendar.ISO)
+    #
+    # Expanded:
+    #   def new(x0, x1, x2), do: new(x0, x1, x2, Calendar.ISO)
+    test "Date.new/3 fills in Calendar.ISO default and calls Date.new/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 3)
+
+      assert fun_def == %IR.FunctionDefinition{
+               name: :new,
+               arity: 3,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :x0, version: 0},
+                   %IR.Variable{name: :x1, version: 1},
+                   %IR.Variable{name: :x2, version: 2}
+                 ],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :new,
+                       args: [
+                         %IR.Variable{name: :x0, version: 0},
+                         %IR.Variable{name: :x1, version: 1},
+                         %IR.Variable{name: :x2, version: 2},
+                         %IR.AtomType{value: Calendar.ISO}
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Dynamic dispatch assumption: Date.new/4 has `calendar \\ Calendar.ISO` and calls
+    # `calendar.valid_date?(year, month, day)` where calendar is a variable, not a literal
+    # module atom. This call can't be discovered from static IR analysis, so we add a
+    # manual edge in @dynamic_dispatch_edges.
+    #
+    # Original source:
+    #   def new(year, month, day, calendar \\ Calendar.ISO) do
+    #     if calendar.valid_date?(year, month, day) do
+    #       {:ok, %Date{year: year, month: month, day: day, calendar: calendar}}
+    #     else
+    #       {:error, :invalid_date}
+    #     end
+    #   end
+    test "Date.new/4 dynamically dispatches calendar.valid_date?/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :new, 4)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_year, _month, _day, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :valid_date?,
+                         args: [_year_arg, _month_arg, _day_arg]
+                       }
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.quarter_of_year/1 extracts calendar from the struct
+    # and calls `calendar.quarter_of_year(year, month, day)`.
+    #
+    # Original source:
+    #   def quarter_of_year(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.quarter_of_year(year, month, day)
+    #   end
+    test "Date.quarter_of_year/1 dynamically dispatches calendar.quarter_of_year/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :quarter_of_year, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :quarter_of_year,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_date(year, month, day, duration)`.
+    # Date.shift/2 was added in Elixir 1.17.0.
+    #
+    # Original source:
+    #   def shift(%{calendar: calendar} = date, duration) do
+    #     %{year: year, month: month, day: day} = date
+    #     {year, month, day} = calendar.shift_date(year, month, day, __duration__!(duration))
+    #     %Date{calendar: calendar, year: year, month: month, day: day}
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "Date.shift/2 dynamically dispatches calendar.shift_date/4",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, Date, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_date,
+                           args: [_year, _month, _day, _duration_arg]
+                         }
+                       },
+                       _result
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: Date.to_string/1 extracts calendar from the struct
+    # and calls `calendar.date_to_string(year, month, day)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.date_to_string(year, month, day)
+    #   end
+    test "Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :date_to_string,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Date.year_of_era/1 extracts calendar from the struct
+    # and calls `calendar.year_of_era(year, month, day)`.
+    #
+    # Original source (Elixir >= 1.18):
+    #   def year_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.year_of_era(year, month, day)
+    #   end
+    #
+    # Original source (Elixir < 1.18):
+    #   def year_of_era(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     if function_exported?(calendar, :year_of_era, 3) do
+    #       calendar.year_of_era(year, month, day)
+    #     else
+    #       calendar.year_of_era(year)
+    #     end
+    #   end
+    test "Date.year_of_era/1 dynamically dispatches calendar.year_of_era/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Date, :year_of_era, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ]
+               }
+             } = fun_def
+
+      if Version.match?(System.version(), ">= 1.18.0") do
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :year_of_era,
+                         args: [_year_arg, _month_arg, _day_arg]
+                       }
+                     ]
+                   }
+                 }
+               } = fun_def
+      else
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.Case{
+                         condition: %IR.RemoteFunctionCall{
+                           function: :function_exported,
+                           args: [
+                             %IR.Variable{name: :calendar},
+                             %IR.AtomType{value: :year_of_era},
+                             %IR.IntegerType{value: 3}
+                           ]
+                         }
+                       }
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: DateTime.from_gregorian_seconds/3 receives calendar
+    # as a parameter (default Calendar.ISO) and calls
+    # `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   def from_gregorian_seconds(seconds, {microsecond, precision} \\ {0, 0},
+    #         calendar \\ Calendar.ISO) when is_integer(seconds) do
+    #     iso_days = Calendar.ISO.gregorian_seconds_to_iso_days(seconds, microsecond)
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "DateTime.from_gregorian_seconds/3 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :from_gregorian_seconds, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_seconds, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     _iso_days_assignment,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.from_iso_days/4 (private) receives calendar
+    # as a parameter and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp from_iso_days(iso_days, datetime, calendar, precision) do
+    #     %{time_zone: time_zone, zone_abbr: zone_abbr, utc_offset: utc_offset,
+    #       std_offset: std_offset} = datetime
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "DateTime.from_iso_days/4 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :from_iso_days, 4)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_iso_days, _datetime, %IR.Variable{name: :calendar}, _precision],
+                 body: %IR.Block{
+                   expressions: [
+                     _datetime_destructure,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days_arg]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.shift/3 extracts calendar from the struct and
+    # calls `calendar.shift_naive_datetime(...)` (both clauses) and
+    # `calendar.naive_datetime_to_iso_days(...)` (non-UTC clause).
+    # DateTime.shift/3 was added in Elixir 1.17.0.
+    #
+    # Original source (UTC clause):
+    #   def shift(%{calendar: calendar, time_zone: "Etc/UTC"} = datetime, duration, _) do
+    #     ...
+    #     {year, month, day, hour, minute, second, microsecond} =
+    #       calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    #         microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    #
+    # Original source (non-UTC clause):
+    #   def shift(%{calendar: calendar} = datetime, duration, time_zone_database) do
+    #     ...
+    #     {year, month, day, hour, minute, second, {_, precision} = microsecond} =
+    #       calendar.shift_naive_datetime(...)
+    #     result =
+    #       calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
+    #       |> ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "DateTime.shift/3 dynamically dispatches calendar.shift_naive_datetime/8 and calendar.naive_datetime_to_iso_days/7",
+           %{ir_plt: ir_plt} do
+        fun_defs = find_fun_defs(ir_plt, DateTime, :shift, 3)
+        assert [utc_clause, non_utc_clause] = fun_defs
+
+        # UTC clause: calendar.shift_naive_datetime(...)
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year,
+                             _month,
+                             _day,
+                             _hour,
+                             _minute,
+                             _second,
+                             _microsecond,
+                             _duration
+                           ]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = utc_clause
+
+        # Non-UTC clause: calendar.shift_naive_datetime(...) and
+        # calendar.naive_datetime_to_iso_days(...) piped through apply_tz_offset
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure2,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year2,
+                             _month2,
+                             _day2,
+                             _hour2,
+                             _minute2,
+                             _second2,
+                             _microsecond2,
+                             _duration2
+                           ]
+                         }
+                       },
+                       %IR.MatchOperator{
+                         right: %IR.LocalFunctionCall{
+                           function: :shift_zone_for_iso_days_utc,
+                           args: [
+                             %IR.LocalFunctionCall{
+                               function: :apply_tz_offset,
+                               args: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.Variable{name: :calendar},
+                                   function: :naive_datetime_to_iso_days,
+                                   args: [
+                                     _year3,
+                                     _month3,
+                                     _day3,
+                                     _hour3,
+                                     _minute3,
+                                     _second3,
+                                     _microsecond3
+                                   ]
+                                 },
+                                 _offset
+                               ]
+                             }
+                             | _shift_zone_args
+                           ]
+                         }
+                       }
+                       | _rest2
+                     ]
+                   }
+                 }
+               } = non_utc_clause
+      end
+    end
+
+    # Dynamic dispatch assumption: DateTime.shift_by_offset/2 (private) extracts calendar
+    # from the struct and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp shift_by_offset(%{calendar: calendar} = datetime, offset) do
+    #     total_offset = datetime.utc_offset + datetime.std_offset
+    #     datetime
+    #     |> to_iso_days()
+    #     |> Calendar.ISO.add_day_fraction_to_iso_days(offset - total_offset, 86400)
+    #     |> calendar.naive_datetime_from_iso_days()
+    #   end
+    test "DateTime.shift_by_offset/2 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :shift_by_offset, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   },
+                   _offset
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _total_offset,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_from_iso_days,
+                       args: [_iso_days]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.shift_zone_for_iso_days_utc/5 (private) receives
+    # calendar as a parameter and calls `calendar.naive_datetime_from_iso_days(iso_days)`
+    # inside the :ok clause of a case on time_zone_db.time_zone_period_from_utc_iso_days/2.
+    #
+    # Original source:
+    #   defp shift_zone_for_iso_days_utc(iso_days_utc, calendar, precision, time_zone, time_zone_db) do
+    #     case time_zone_db.time_zone_period_from_utc_iso_days(iso_days_utc, time_zone) do
+    #       {:ok, %{std_offset: std_offset, utc_offset: utc_offset, zone_abbr: zone_abbr}} ->
+    #         {year, month, day, hour, minute, second, {microsecond_without_precision, _}} =
+    #           iso_days_utc
+    #           |> apply_tz_offset(-(utc_offset + std_offset))
+    #           |> calendar.naive_datetime_from_iso_days()
+    #         ...
+    #     end
+    #   end
+    test "DateTime.shift_zone_for_iso_days_utc/5 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :shift_zone_for_iso_days_utc, 5)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   _iso_days_utc,
+                   %IR.Variable{name: :calendar},
+                   _precision,
+                   _time_zone,
+                   _time_zone_db
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       clauses: [
+                         %IR.Clause{
+                           body: %IR.Block{
+                             expressions: [
+                               %IR.MatchOperator{
+                                 right: %IR.RemoteFunctionCall{
+                                   module: %IR.Variable{name: :calendar},
+                                   function: :naive_datetime_from_iso_days,
+                                   args: [_iso_days_arg]
+                                 }
+                               }
+                               | _rest
+                             ]
+                           }
+                         }
+                         | _other_clauses
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.to_iso_days/1 (private) extracts calendar
+    # from the struct and calls `calendar.naive_datetime_to_iso_days(year, month, day,
+    # hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   defp to_iso_days(%{calendar: calendar, year: year, month: month, day: day,
+    #          hour: hour, minute: minute, second: second, microsecond: microsecond}) do
+    #     calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "DateTime.to_iso_days/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :to_iso_days, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day},
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_iso_days,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: DateTime.to_string/1 extracts calendar from the struct
+    # and calls `calendar.datetime_to_string(year, month, day, hour, minute, second,
+    # microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar} = datetime) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset} = datetime
+    #     calendar.datetime_to_string(year, month, day, hour, minute, second,
+    #       microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #   end
+    test "DateTime.to_string/1 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, DateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _destructure,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :datetime_to_string,
+                       args: [
+                         _year,
+                         _month,
+                         _day,
+                         _hour,
+                         _minute,
+                         _second,
+                         _microsecond,
+                         _time_zone,
+                         _zone_abbr,
+                         _utc_offset,
+                         _std_offset
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Inspect.Date.inspect/2 extracts calendar from the struct
+    # and calls `calendar.date_to_string(year, month, day)`. Calendar.ISO dates with normal
+    # years reach this clause in all Elixir versions:
+    # - Elixir >= 1.18: guard `when calendar != Calendar.ISO or year in -9999..9999`
+    # - Elixir 1.17: guard `when year in -9999..9999`
+    # - Elixir < 1.17: no guard (single clause handles all dates)
+    #
+    # Original source (Elixir >= 1.18):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
+    #       when calendar != Calendar.ISO or year in -9999..9999 do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    #
+    # Original source (Elixir 1.17):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _)
+    #       when year in -9999..9999 do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    #
+    # Original source (Elixir < 1.17):
+    #   def inspect(%{calendar: calendar, year: year, month: month, day: day}, _) do
+    #     "~D[" <> calendar.date_to_string(year, month, day) <> suffix(calendar) <> "]"
+    #   end
+    test "Inspect.Date.inspect/2 dynamically dispatches calendar.date_to_string/3",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Inspect.Date, :inspect, 2)
+      assert [first_clause | _rest] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   },
+                   _opts
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.BitstringType{
+                       segments: [
+                         _prefix,
+                         %IR.BitstringSegment{
+                           value: %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :date_to_string,
+                             args: [_year_arg, _month_arg, _day_arg]
+                           }
+                         },
+                         _suffix,
+                         _closing
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = first_clause
+
+      cond do
+        Version.match?(System.version(), ">= 1.18.0") ->
+          assert [
+                   %IR.RemoteFunctionCall{
+                     function: :orelse,
+                     args: [
+                       %IR.RemoteFunctionCall{
+                         function: :"/=",
+                         args: [%IR.Variable{name: :calendar}, %IR.AtomType{value: Calendar.ISO}]
+                       },
+                       _year_range_check
+                     ]
+                   }
+                 ] = first_clause.clause.guards
+
+        Version.match?(System.version(), ">= 1.17.0") ->
+          assert [
+                   %IR.RemoteFunctionCall{
+                     function: :andalso,
+                     args: [
+                       %IR.RemoteFunctionCall{
+                         function: :is_integer,
+                         args: [%IR.Variable{name: :year}]
+                       },
+                       _year_range_check
+                     ]
+                   }
+                 ] = first_clause.clause.guards
+
+        true ->
+          assert [] = first_clause.clause.guards
+      end
+    end
+
+    # Dynamic dispatch assumption: Inspect.DateTime.inspect/2 destructures calendar from
+    # the struct in the body and calls `calendar.datetime_to_string(year, month, day, hour,
+    # minute, second, microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def inspect(datetime, _) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset,
+    #       calendar: calendar} = datetime
+    #     formatted = calendar.datetime_to_string(year, month, day, hour, minute,
+    #       second, microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #     ...
+    #   end
+    test "Inspect.DateTime.inspect/2 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.DateTime, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :datetime}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :time_zone}, _time_zone},
+                           {%IR.AtomType{value: :zone_abbr}, _zone_abbr},
+                           {%IR.AtomType{value: :utc_offset}, _utc_offset},
+                           {%IR.AtomType{value: :std_offset}, _std_offset},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.MatchOperator{
+                       left: %IR.Variable{name: :formatted},
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :datetime_to_string,
+                         args: [
+                           _year_arg,
+                           _month_arg,
+                           _day_arg,
+                           _hour_arg,
+                           _minute_arg,
+                           _second_arg,
+                           _microsecond_arg,
+                           _time_zone_arg,
+                           _zone_abbr_arg,
+                           _utc_offset_arg,
+                           _std_offset_arg
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Inspect.NaiveDateTime.inspect/2 destructures calendar
+    # from the struct in the body and calls `calendar.naive_datetime_to_string(...)`.
+    # In Elixir >= 1.18 the call is guarded by `if calendar != Calendar.ISO or year in -9999..9999`;
+    # in Elixir < 1.18 the call is unconditional. Calendar.ISO dates reach the dispatch in both.
+    #
+    # Original source (Elixir >= 1.18):
+    #   def inspect(naive_datetime, _) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond, calendar: calendar} = naive_datetime
+    #     if calendar != Calendar.ISO or year in -9999..9999 do
+    #       formatted = calendar.naive_datetime_to_string(...)
+    #       ...
+    #
+    # Original source (Elixir < 1.18):
+    #   def inspect(naive_datetime, _) do
+    #     %{...calendar: calendar} = naive_datetime
+    #     formatted = calendar.naive_datetime_to_string(...)
+    #     ...
+    test "Inspect.NaiveDateTime.inspect/2 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.NaiveDateTime, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :naive_datetime}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+
+      # The dispatch `formatted = calendar.naive_datetime_to_string(...)` is in different
+      # IR locations:
+      # - Elixir >= 1.18: inside `if` true branch (compiled to nested Case)
+      # - Elixir < 1.18: directly in body as second expression
+      dispatch_expressions =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          [_destructure, %IR.Case{clauses: [_false_clause, true_clause]}] =
+            fun_def.clause.body.expressions
+
+          assert %IR.Clause{match: %IR.AtomType{value: true}} = true_clause
+          true_clause.body.expressions
+        else
+          [_destructure | rest] = fun_def.clause.body.expressions
+          rest
+        end
+
+      assert [
+               %IR.MatchOperator{
+                 left: %IR.Variable{name: :formatted},
+                 right: %IR.RemoteFunctionCall{
+                   module: %IR.Variable{name: :calendar},
+                   function: :naive_datetime_to_string,
+                   args: [
+                     _year_arg,
+                     _month_arg,
+                     _day_arg,
+                     _hour_arg,
+                     _minute_arg,
+                     _second_arg,
+                     _microsecond_arg
+                   ]
+                 }
+               }
+               | _rest_exprs
+             ] = dispatch_expressions
+    end
+
+    # Dynamic dispatch assumption: Inspect.Time.inspect/2 destructures calendar from the
+    # struct in the body and calls `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def inspect(time, _) do
+    #     %{hour: hour, minute: minute, second: second,
+    #       microsecond: microsecond, calendar: calendar} = time
+    #     "~T[" <> calendar.time_to_string(hour, minute, second, microsecond) <>
+    #       suffix(calendar) <> "]"
+    #   end
+    test "Inspect.Time.inspect/2 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Inspect.Time, :inspect, 2)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :time}, _opts],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.BitstringType{
+                       segments: [
+                         _prefix,
+                         %IR.BitstringSegment{
+                           value: %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :time_to_string,
+                             args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                           }
+                         },
+                         _suffix,
+                         _closing
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.beginning_of_day/1 extracts calendar from
+    # the struct and calls `calendar.iso_days_to_beginning_of_day(iso_days)`.
+    #
+    # Original source:
+    #   def beginning_of_day(%{calendar: calendar, microsecond: {_, precision}} = naive_datetime) do
+    #     naive_datetime
+    #     |> to_iso_days()
+    #     |> calendar.iso_days_to_beginning_of_day()
+    #     |> from_iso_days(calendar, precision)
+    #   end
+    test "NaiveDateTime.beginning_of_day/1 dynamically dispatches calendar.iso_days_to_beginning_of_day/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :beginning_of_day, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                         {%IR.AtomType{value: :microsecond}, _microsecond}
+                       ]
+                     }
+                   }
+                 ]
+               }
+             } = fun_def
+
+      # The pipe chain compiles to:
+      # from_iso_days(calendar.iso_days_to_beginning_of_day(to_iso_days(ndt)), calendar, precision)
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :from_iso_days,
+                       args: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :iso_days_to_beginning_of_day,
+                           args: [_iso_days]
+                         },
+                         %IR.Variable{name: :calendar},
+                         _precision
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.end_of_day/1 extracts calendar from
+    # the struct and calls `calendar.iso_days_to_end_of_day(iso_days)`.
+    #
+    # Original source:
+    #   def end_of_day(%{calendar: calendar, microsecond: {_, precision}} = naive_datetime) do
+    #     end_of_day =
+    #       naive_datetime
+    #       |> to_iso_days()
+    #       |> calendar.iso_days_to_end_of_day()
+    #       |> from_iso_days(calendar, precision)
+    #     ...
+    #   end
+    test "NaiveDateTime.end_of_day/1 dynamically dispatches calendar.iso_days_to_end_of_day/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :end_of_day, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                         {%IR.AtomType{value: :microsecond}, _microsecond}
+                       ]
+                     }
+                   }
+                 ]
+               }
+             } = fun_def
+
+      # The pipe chain compiles to:
+      # from_iso_days(calendar.iso_days_to_end_of_day(to_iso_days(ndt)), calendar, precision)
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.LocalFunctionCall{
+                         function: :from_iso_days,
+                         args: [
+                           %IR.RemoteFunctionCall{
+                             module: %IR.Variable{name: :calendar},
+                             function: :iso_days_to_end_of_day,
+                             args: [_iso_days]
+                           },
+                           %IR.Variable{name: :calendar},
+                           _precision
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.from_iso_days/3 (private) receives calendar
+    # as a parameter and calls `calendar.naive_datetime_from_iso_days(iso_days)`.
+    #
+    # Original source:
+    #   defp from_iso_days(iso_days, calendar, precision) do
+    #     {year, month, day, hour, minute, second, {microsecond, _}} =
+    #       calendar.naive_datetime_from_iso_days(iso_days)
+    #     ...
+    #   end
+    test "NaiveDateTime.from_iso_days/3 dynamically dispatches calendar.naive_datetime_from_iso_days/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :from_iso_days, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_iso_days, %IR.Variable{name: :calendar}, _precision],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_from_iso_days,
+                         args: [_iso_days_arg]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.new/8 receives calendar as a parameter
+    # (default Calendar.ISO) and calls both `calendar.valid_date?(year, month, day)` and
+    # `calendar.valid_time?(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def new(year, month, day, hour, minute, second, microsecond, calendar) do
+    #     cond do
+    #       not calendar.valid_date?(year, month, day) -> {:error, :invalid_date}
+    #       not calendar.valid_time?(hour, minute, second, microsecond) -> {:error, :invalid_time}
+    #       true -> ...
+    #     end
+    #   end
+    test "NaiveDateTime.new/8 dynamically dispatches calendar.valid_date?/3 and calendar.valid_time?/4",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, NaiveDateTime, :new, 8)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   _year,
+                   _month,
+                   _day,
+                   _hour,
+                   _minute,
+                   _second,
+                   _microsecond,
+                   %IR.Variable{name: :calendar}
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Cond{
+                       clauses: [
+                         %IR.CondClause{
+                           condition: %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :not,
+                             args: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.Variable{name: :calendar},
+                                 function: :valid_date?,
+                                 args: [_year_arg, _month_arg, _day_arg]
+                               }
+                             ]
+                           }
+                         },
+                         %IR.CondClause{
+                           condition: %IR.RemoteFunctionCall{
+                             module: %IR.AtomType{value: :erlang},
+                             function: :not,
+                             args: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.Variable{name: :calendar},
+                                 function: :valid_time?,
+                                 args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                               }
+                             ]
+                           }
+                         },
+                         _true_clause
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = clause_2
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    # microsecond, duration)`. NaiveDateTime.shift/2 was added in Elixir 1.17.0.
+    #
+    # Original source:
+    #   def shift(%{calendar: calendar} = naive_datetime, duration) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond} = naive_datetime
+    #     {year, month, day, hour, minute, second, microsecond} =
+    #       calendar.shift_naive_datetime(year, month, day, hour, minute, second,
+    #         microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "NaiveDateTime.shift/2 dynamically dispatches calendar.shift_naive_datetime/8",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_naive_datetime,
+                           args: [
+                             _year,
+                             _month,
+                             _day,
+                             _hour,
+                             _minute,
+                             _second,
+                             _microsecond,
+                             _duration_arg
+                           ]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.to_gregorian_seconds/1 extracts calendar
+    # from the struct and calls `calendar.naive_datetime_to_iso_days(year, month, day,
+    # hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_gregorian_seconds(%{calendar: calendar, year: year, month: month, day: day,
+    #         hour: hour, minute: minute, second: second, microsecond: {microsecond, precision}}) do
+    #     {days, day_fraction} =
+    #       calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second,
+    #         {microsecond, precision})
+    #     ...
+    #   end
+    test "NaiveDateTime.to_gregorian_seconds/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_gregorian_seconds, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day},
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :naive_datetime_to_iso_days,
+                         args: [
+                           _year_arg,
+                           _month_arg,
+                           _day_arg,
+                           _hour_arg,
+                           _minute_arg,
+                           _second_arg,
+                           _microsecond_arg
+                         ]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.to_iso_days/1 (private) extracts calendar
+    # from the struct and calls `calendar.naive_datetime_to_iso_days(year, month, day,
+    # hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   defp to_iso_days(%{calendar: calendar, year: year, month: month, day: day,
+    #          hour: hour, minute: minute, second: second, microsecond: microsecond}) do
+    #     calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second, microsecond)
+    #   end
+    # credo:disable-for-lines:32 Credo.Check.Design.DuplicatedCode
+    test "NaiveDateTime.to_iso_days/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_iso_days, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day},
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_iso_days,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: NaiveDateTime.to_string/1 extracts calendar from the
+    # struct and calls `calendar.naive_datetime_to_string(year, month, day, hour, minute,
+    # second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar} = naive_datetime) do
+    #     %{year: year, month: month, day: day, hour: hour, minute: minute,
+    #       second: second, microsecond: microsecond} = naive_datetime
+    #     calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "NaiveDateTime.to_string/1 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MatchOperator{
+                     left: %IR.MapType{
+                       data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                     }
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     _destructure,
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_string,
+                       args: [
+                         _year,
+                         _month,
+                         _day,
+                         _hour,
+                         _minute,
+                         _second,
+                         _microsecond
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.Date.to_string/1 extracts calendar from
+    # the struct and calls `calendar.date_to_string(year, month, day)`.
+    #
+    # Original source:
+    #   def to_string(%{calendar: calendar, year: year, month: month, day: day}) do
+    #     calendar.date_to_string(year, month, day)
+    #   end
+    test "String.Chars.Date.to_string/1 dynamically dispatches calendar.date_to_string/3",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Date, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                       {%IR.AtomType{value: :year}, _year},
+                       {%IR.AtomType{value: :month}, _month},
+                       {%IR.AtomType{value: :day}, _day}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :date_to_string,
+                       args: [_year_arg, _month_arg, _day_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.DateTime.to_string/1 destructures calendar
+    # from the struct in the body and calls `calendar.datetime_to_string(year, month, day,
+    # hour, minute, second, microsecond, time_zone, zone_abbr, utc_offset, std_offset)`.
+    #
+    # Original source:
+    #   def to_string(datetime) do
+    #     %{calendar: calendar, year: year, month: month, day: day, hour: hour,
+    #       minute: minute, second: second, microsecond: microsecond, time_zone: time_zone,
+    #       zone_abbr: zone_abbr, utc_offset: utc_offset, std_offset: std_offset} = datetime
+    #     calendar.datetime_to_string(year, month, day, hour, minute, second,
+    #       microsecond, time_zone, zone_abbr, utc_offset, std_offset)
+    #   end
+    test "String.Chars.DateTime.to_string/1 dynamically dispatches calendar.datetime_to_string/11",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.DateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :datetime}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :time_zone}, _time_zone},
+                           {%IR.AtomType{value: :zone_abbr}, _zone_abbr},
+                           {%IR.AtomType{value: :utc_offset}, _utc_offset},
+                           {%IR.AtomType{value: :std_offset}, _std_offset}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :datetime_to_string,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg,
+                         _time_zone_arg,
+                         _zone_abbr_arg,
+                         _utc_offset_arg,
+                         _std_offset_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.NaiveDateTime.to_string/1 destructures
+    # calendar from the struct in the body and calls
+    # `calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(naive_datetime) do
+    #     %{calendar: calendar, year: year, month: month, day: day, hour: hour,
+    #       minute: minute, second: second, microsecond: microsecond} = naive_datetime
+    #     calendar.naive_datetime_to_string(year, month, day, hour, minute, second, microsecond)
+    #   end
+    test "String.Chars.NaiveDateTime.to_string/1 dynamically dispatches calendar.naive_datetime_to_string/7",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.NaiveDateTime, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :naive_datetime}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                           {%IR.AtomType{value: :year}, _year},
+                           {%IR.AtomType{value: :month}, _month},
+                           {%IR.AtomType{value: :day}, _day},
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :naive_datetime_to_string,
+                       args: [
+                         _year_arg,
+                         _month_arg,
+                         _day_arg,
+                         _hour_arg,
+                         _minute_arg,
+                         _second_arg,
+                         _microsecond_arg
+                       ]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: String.Chars.Time.to_string/1 destructures calendar
+    # from the struct in the body and calls
+    # `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(time) do
+    #     %{hour: hour, minute: minute, second: second,
+    #       microsecond: microsecond, calendar: calendar} = time
+    #     calendar.time_to_string(hour, minute, second, microsecond)
+    #   end
+    test "String.Chars.Time.to_string/1 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, String.Chars.Time, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :time}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [
+                           {%IR.AtomType{value: :hour}, _hour},
+                           {%IR.AtomType{value: :minute}, _minute},
+                           {%IR.AtomType{value: :second}, _second},
+                           {%IR.AtomType{value: :microsecond}, _microsecond},
+                           {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                         ]
+                       }
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_string,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Time.convert/2 receives calendar as a parameter and
+    # calls `calendar.time_from_day_fraction(day_fraction)`.
+    #
+    # Original source:
+    #   def convert(%{microsecond: {_, precision}} = time, calendar) do
+    #     {hour, minute, second, {microsecond, _}} =
+    #       time
+    #       |> to_day_fraction()
+    #       |> calendar.time_from_day_fraction()
+    #     ...
+    #   end
+    test "Time.convert/2 dynamically dispatches calendar.time_from_day_fraction/1",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Time, :convert, 2)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_time, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :time_from_day_fraction,
+                         args: [_day_fraction]
+                       }
+                     },
+                     _struct_assignment,
+                     _ok_tuple
+                   ]
+                 }
+               }
+             } = clause_2
+    end
+
+    # Dynamic dispatch assumption: Time.from_seconds_after_midnight/3 receives calendar
+    # as a parameter (default Calendar.ISO) and calls
+    # `calendar.time_from_day_fraction({seconds_in_day, @seconds_per_day})`.
+    #
+    # Original source:
+    #   def from_seconds_after_midnight(seconds, microsecond \\ {0, 0}, calendar \\ Calendar.ISO)
+    #       when is_integer(seconds) do
+    #     seconds_in_day = Integer.mod(seconds, @seconds_per_day)
+    #     {hour, minute, second, {_, _}} =
+    #       calendar.time_from_day_fraction({seconds_in_day, @seconds_per_day})
+    #     ...
+    #   end
+    test "Time.from_seconds_after_midnight/3 dynamically dispatches calendar.time_from_day_fraction/1",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :from_seconds_after_midnight, 3)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_seconds, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     _seconds_in_day,
+                     %IR.MatchOperator{
+                       right: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :time_from_day_fraction,
+                         args: [_day_fraction]
+                       }
+                     }
+                     | _rest
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Time.new/5 receives calendar as a parameter
+    # (default Calendar.ISO) and calls `calendar.valid_time?(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def new(hour, minute, second, {microsecond, precision}, calendar)
+    #       when is_integer(hour) and ... do
+    #     case calendar.valid_time?(hour, minute, second, {microsecond, precision}) do
+    #       ...
+    #     end
+    #   end
+    test "Time.new/5 dynamically dispatches calendar.valid_time?/4",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Time, :new, 5)
+      assert [_clause_1, clause_2] = fun_defs
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [_hour, _minute, _second, _microsecond, %IR.Variable{name: :calendar}],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :calendar},
+                         function: :valid_time?,
+                         args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                       }
+                     }
+                   ]
+                 }
+               }
+             } = clause_2
+    end
+
+    # Dynamic dispatch assumption: Time.shift/2 extracts calendar from the struct
+    # and calls `calendar.shift_time(hour, minute, second, microsecond, duration)`.
+    # Time.shift/2 was added in Elixir 1.17.0.
+    #
+    # Original source:
+    #   def shift(%{calendar: calendar} = time, duration) do
+    #     %{hour: hour, minute: minute, second: second, microsecond: microsecond} = time
+    #     {hour, minute, second, microsecond} =
+    #       calendar.shift_time(hour, minute, second, microsecond, __duration__!(duration))
+    #     ...
+    #   end
+    if Version.match?(System.version(), ">= 1.17.0") do
+      test "Time.shift/2 dynamically dispatches calendar.shift_time/5",
+           %{ir_plt: ir_plt} do
+        assert [fun_def] = find_fun_defs(ir_plt, Time, :shift, 2)
+
+        assert %IR.FunctionDefinition{
+                 clause: %IR.FunctionClause{
+                   params: [
+                     %IR.MatchOperator{
+                       left: %IR.MapType{
+                         data: [{%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}]
+                       }
+                     },
+                     _duration
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       _destructure,
+                       %IR.MatchOperator{
+                         right: %IR.RemoteFunctionCall{
+                           module: %IR.Variable{name: :calendar},
+                           function: :shift_time,
+                           args: [_hour, _minute, _second, _microsecond, _duration_arg]
+                         }
+                       }
+                       | _rest
+                     ]
+                   }
+                 }
+               } = fun_def
+      end
+    end
+
+    # Dynamic dispatch assumption: Time.to_day_fraction/1 (private) extracts calendar
+    # from the struct and calls `calendar.time_to_day_fraction(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   defp to_day_fraction(%{hour: hour, minute: minute, second: second,
+    #          microsecond: {_, _} = microsecond, calendar: calendar}) do
+    #     calendar.time_to_day_fraction(hour, minute, second, microsecond)
+    #   end
+    test "Time.to_day_fraction/1 dynamically dispatches calendar.time_to_day_fraction/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :to_day_fraction, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond},
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_day_fraction,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
+
+    # Dynamic dispatch assumption: Time.to_string/1 extracts calendar from the struct
+    # and calls `calendar.time_to_string(hour, minute, second, microsecond)`.
+    #
+    # Original source:
+    #   def to_string(%{hour: hour, minute: minute, second: second,
+    #         microsecond: microsecond, calendar: calendar}) do
+    #     calendar.time_to_string(hour, minute, second, microsecond)
+    #   end
+    test "Time.to_string/1 dynamically dispatches calendar.time_to_string/4",
+         %{ir_plt: ir_plt} do
+      assert [fun_def] = find_fun_defs(ir_plt, Time, :to_string, 1)
+
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :hour}, _hour},
+                       {%IR.AtomType{value: :minute}, _minute},
+                       {%IR.AtomType{value: :second}, _second},
+                       {%IR.AtomType{value: :microsecond}, _microsecond},
+                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}}
+                     ]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.Variable{name: :calendar},
+                       function: :time_to_string,
+                       args: [_hour_arg, _minute_arg, _second_arg, _microsecond_arg]
+                     }
+                   ]
+                 }
+               }
+             } = fun_def
+    end
   end
 end
