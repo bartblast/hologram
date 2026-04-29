@@ -980,8 +980,9 @@ const Erlang = {
       }
       const atomBytes = bytes.slice(offset + 1, offset + 1 + length);
 
-      const decoder = new TextDecoder(isUtf8 ? "utf-8" : "latin1");
-      const atomString = decoder.decode(atomBytes);
+      const atomString = isUtf8
+        ? ERTS.utf8Decoder.decode(atomBytes)
+        : String.fromCharCode(...atomBytes);
 
       return {
         term: Type.atom(atomString),
