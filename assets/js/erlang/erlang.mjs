@@ -614,6 +614,876 @@ const Erlang = {
   // End binary_to_list/1
   // Deps: []
 
+  // Start binary_to_term/1
+  "binary_to_term/1": async (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    // ETF tag constants
+    const NEW_FLOAT_EXT = 70;
+    const BIT_BINARY_EXT = 77;
+    const COMPRESSED = 80;
+    const NEW_PID_EXT = 88;
+    const NEW_PORT_EXT = 89;
+    const NEWER_REFERENCE_EXT = 90;
+    const SMALL_INTEGER_EXT = 97;
+    const INTEGER_EXT = 98;
+    const FLOAT_EXT = 99;
+    const ATOM_EXT = 100;
+    const REFERENCE_EXT = 101;
+    const PORT_EXT = 102;
+    const PID_EXT = 103;
+    const SMALL_TUPLE_EXT = 104;
+    const LARGE_TUPLE_EXT = 105;
+    const NIL_EXT = 106;
+    const STRING_EXT = 107;
+    const LIST_EXT = 108;
+    const BINARY_EXT = 109;
+    const SMALL_BIG_EXT = 110;
+    const LARGE_BIG_EXT = 111;
+    const EXPORT_EXT = 113;
+    const NEW_REFERENCE_EXT = 114;
+    const SMALL_ATOM_EXT = 115;
+    const MAP_EXT = 116;
+    const ATOM_UTF8_EXT = 118;
+    const SMALL_ATOM_UTF8_EXT = 119;
+    const V4_PORT_EXT = 120;
+
+    // Decompresses zlib-compressed data using native DecompressionStream API
+    // Returns a Promise that resolves to {data: Uint8Array, bytesRead: number}
+    // Throws an error if decompression fails
+    const zlibInflate = async (compressedData) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          // Ensure we are passing a standard Uint8Array to the stream
+          // This solves the Buffer/Uint8Array mismatch in Node.js
+          const data =
+            compressedData instanceof Uint8Array
+              ? compressedData
+              : new Uint8Array(compressedData);
+
+          controller.enqueue(data);
+          controller.close();
+        },
+      });
+
+      const decompressedStream = stream.pipeThrough(
+        new DecompressionStream("deflate"),
+      );
+
+      const reader = decompressedStream.getReader();
+      const chunks = [];
+
+      try {
+        while (true) {
+          const {done, value} = await reader.read();
+          if (done) break;
+          chunks.push(value);
+        }
+      } catch (err) {
+        // In Node, stream errors often need to be caught during the read loop
+        throw new Error(`Decompression failed: ${err.message}`);
+      }
+
+      // NOTE: This is a simplified approach - in a full implementation,
+      // we would need to parse the zlib stream to determine exact bytes consumed
+      return {
+        data: Utils.concatUint8Arrays(chunks),
+        bytesRead: compressedData.length,
+      };
+    };
+
+    const decodeTerm = async (dataView, bytes, offset) => {
+      if (offset >= bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      const tag = dataView.getUint8(offset);
+
+      switch (tag) {
+        case COMPRESSED:
+          return await decodeCompressed(dataView, bytes, offset + 1);
+
+        case SMALL_INTEGER_EXT:
+          return decodeSmallInteger(dataView, offset + 1);
+
+        case INTEGER_EXT:
+          return decodeInteger(dataView, offset + 1);
+
+        case SMALL_BIG_EXT:
+          return decodeSmallBig(dataView, bytes, offset + 1);
+
+        case LARGE_BIG_EXT:
+          return decodeLargeBig(dataView, bytes, offset + 1);
+
+        case ATOM_EXT:
+          return decodeAtom(dataView, bytes, offset + 1, false);
+
+        case SMALL_ATOM_EXT:
+          return decodeSmallAtom(dataView, bytes, offset + 1, false);
+
+        case ATOM_UTF8_EXT:
+          return decodeAtom(dataView, bytes, offset + 1, true);
+
+        case SMALL_ATOM_UTF8_EXT:
+          return decodeSmallAtom(dataView, bytes, offset + 1, true);
+
+        case BINARY_EXT:
+          return decodeBinary(dataView, bytes, offset + 1);
+
+        case SMALL_TUPLE_EXT:
+          return await decodeSmallTuple(dataView, bytes, offset + 1);
+
+        case LARGE_TUPLE_EXT:
+          return await decodeLargeTuple(dataView, bytes, offset + 1);
+
+        case NIL_EXT:
+          return {term: Type.list(), newOffset: offset + 1};
+
+        case STRING_EXT:
+          return decodeString(dataView, bytes, offset + 1);
+
+        case LIST_EXT:
+          return await decodeList(dataView, bytes, offset + 1);
+
+        case MAP_EXT:
+          return await decodeMap(dataView, bytes, offset + 1);
+
+        case NEW_FLOAT_EXT:
+          return decodeNewFloat(dataView, offset + 1);
+
+        case FLOAT_EXT:
+          return decodeFloatExt(dataView, bytes, offset + 1);
+
+        case BIT_BINARY_EXT:
+          return decodeBitBinary(dataView, bytes, offset + 1);
+
+        case REFERENCE_EXT:
+          return await decodeReference(dataView, bytes, offset + 1);
+
+        case NEW_REFERENCE_EXT:
+          return await decodeNewReference(dataView, bytes, offset + 1);
+
+        case NEWER_REFERENCE_EXT:
+          return await decodeNewerReference(dataView, bytes, offset + 1);
+
+        case PID_EXT:
+          return await decodePid(dataView, bytes, offset + 1);
+
+        case NEW_PID_EXT:
+          return await decodeNewPid(dataView, bytes, offset + 1);
+
+        case PORT_EXT:
+          return await decodePort(dataView, bytes, offset + 1);
+
+        case NEW_PORT_EXT:
+          return await decodeNewPort(dataView, bytes, offset + 1);
+
+        case V4_PORT_EXT:
+          return await decodeV4Port(dataView, bytes, offset + 1);
+
+        case EXPORT_EXT:
+          return await decodeExport(dataView, bytes, offset + 1);
+
+        default:
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+      }
+    };
+
+    // Compressed term decoder
+    // Format: COMPRESSED (80) | UncompressedSize (4 bytes, big-endian) | ZlibCompressedData
+    // The decompressed data contains the ETF representation of the term without the version byte
+
+    const decodeCompressed = async (dataView, bytes, offset) => {
+      if (offset + 4 > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      const uncompressedSize = dataView.getUint32(offset, false);
+      const compressedData = bytes.slice(offset + 4);
+
+      try {
+        // Use native DecompressionStream for zlib decompression
+        const {data: decompressed, bytesRead} =
+          await zlibInflate(compressedData);
+
+        if (decompressed.length !== uncompressedSize) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
+        const decompressedView = new DataView(
+          decompressed.buffer,
+          decompressed.byteOffset,
+          decompressed.byteLength,
+        );
+
+        const result = await decodeTerm(decompressedView, decompressed, 0);
+
+        if (result.newOffset !== decompressed.length) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
+        // Compute newOffset relative to the original bytes buffer
+        const newOffset = offset + 4 + bytesRead;
+
+        return {
+          term: result.term,
+          newOffset: newOffset,
+        };
+      } catch {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+    };
+
+    // Integer decoders
+
+    const decodeSmallInteger = (dataView, offset) => {
+      const value = dataView.getUint8(offset);
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 1,
+      };
+    };
+
+    const decodeInteger = (dataView, offset) => {
+      const value = dataView.getInt32(offset);
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 4,
+      };
+    };
+
+    const decodeSmallBig = (dataView, bytes, offset) => {
+      const n = dataView.getUint8(offset);
+      const sign = dataView.getUint8(offset + 1);
+
+      if (sign !== 0 && sign !== 1) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      let value = 0n;
+      for (let i = 0; i < n; i++) {
+        const byte = BigInt(bytes[offset + 2 + i]);
+        value += byte << BigInt(i * 8);
+      }
+
+      if (sign === 1) {
+        value = -value;
+      }
+
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 2 + n,
+      };
+    };
+
+    const decodeLargeBig = (dataView, bytes, offset) => {
+      const n = dataView.getUint32(offset);
+      const sign = dataView.getUint8(offset + 4);
+
+      if (sign !== 0 && sign !== 1) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      let value = 0n;
+      for (let i = 0; i < n; i++) {
+        const byte = BigInt(bytes[offset + 5 + i]);
+        value += byte << BigInt(i * 8);
+      }
+
+      if (sign === 1) {
+        value = -value;
+      }
+
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 5 + n,
+      };
+    };
+
+    // Atom decoders
+
+    const decodeAtom = (dataView, bytes, offset, isUtf8) => {
+      const length = dataView.getUint16(offset);
+      if (offset + 2 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
+
+      const atomString = isUtf8
+        ? new TextDecoder("utf-8").decode(atomBytes)
+        : String.fromCharCode(...atomBytes);
+
+      return {
+        term: Type.atom(atomString),
+        newOffset: offset + 2 + length,
+      };
+    };
+
+    const decodeSmallAtom = (dataView, bytes, offset, isUtf8) => {
+      const length = dataView.getUint8(offset);
+      if (offset + 1 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      const atomBytes = bytes.slice(offset + 1, offset + 1 + length);
+
+      const decoder = new TextDecoder(isUtf8 ? "utf-8" : "latin1");
+      const atomString = decoder.decode(atomBytes);
+
+      return {
+        term: Type.atom(atomString),
+        newOffset: offset + 1 + length,
+      };
+    };
+
+    // Binary decoder
+
+    const decodeBinary = (dataView, bytes, offset) => {
+      const length = dataView.getUint32(offset);
+      if (offset + 4 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      const binaryBytes = bytes.slice(offset + 4, offset + 4 + length);
+
+      return {
+        term: Bitstring.fromBytes(new Uint8Array(binaryBytes)),
+        newOffset: offset + 4 + length,
+      };
+    };
+
+    // Tuple decoders
+
+    const decodeSmallTuple = async (dataView, bytes, offset) => {
+      const arity = dataView.getUint8(offset);
+      const elements = [];
+      let currentOffset = offset + 1;
+
+      for (let i = 0; i < arity; i++) {
+        const result = await decodeTerm(dataView, bytes, currentOffset);
+        elements.push(result.term);
+        currentOffset = result.newOffset;
+      }
+
+      return {
+        term: Type.tuple(elements),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeLargeTuple = async (dataView, bytes, offset) => {
+      const arity = dataView.getUint32(offset);
+      const elements = [];
+      let currentOffset = offset + 4;
+
+      for (let i = 0; i < arity; i++) {
+        const result = await decodeTerm(dataView, bytes, currentOffset);
+        elements.push(result.term);
+        currentOffset = result.newOffset;
+      }
+
+      return {
+        term: Type.tuple(elements),
+        newOffset: currentOffset,
+      };
+    };
+
+    // List decoders
+
+    const decodeString = (dataView, bytes, offset) => {
+      const length = dataView.getUint16(offset);
+      if (offset + 2 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      const elements = [];
+
+      for (let i = 0; i < length; i++) {
+        const byte = bytes[offset + 2 + i];
+        elements.push(Type.integer(byte));
+      }
+
+      return {
+        term: Type.list(elements),
+        newOffset: offset + 2 + length,
+      };
+    };
+
+    const decodeList = async (dataView, bytes, offset) => {
+      const length = dataView.getUint32(offset);
+      const elements = [];
+      let currentOffset = offset + 4;
+
+      for (let i = 0; i < length; i++) {
+        const result = await decodeTerm(dataView, bytes, currentOffset);
+        elements.push(result.term);
+        currentOffset = result.newOffset;
+      }
+
+      // Decode the tail
+      const tailResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = tailResult.newOffset;
+
+      // If tail is a list, merge it to preserve proper list semantics
+      if (Type.isList(tailResult.term)) {
+        const merged = elements.concat(tailResult.term.data);
+
+        return Type.isProperList(tailResult.term)
+          ? {term: Type.list(merged), newOffset: currentOffset}
+          : {term: Type.improperList(merged), newOffset: currentOffset};
+      }
+
+      // Otherwise, it's an improper list
+      elements.push(tailResult.term);
+      return {
+        term: Type.improperList(elements),
+        newOffset: currentOffset,
+      };
+    };
+
+    // Map decoder
+
+    const decodeMap = async (dataView, bytes, offset) => {
+      const arity = dataView.getUint32(offset);
+      const entries = [];
+      let currentOffset = offset + 4;
+
+      for (let i = 0; i < arity; i++) {
+        const keyResult = await decodeTerm(dataView, bytes, currentOffset);
+        const valueResult = await decodeTerm(
+          dataView,
+          bytes,
+          keyResult.newOffset,
+        );
+
+        entries.push([keyResult.term, valueResult.term]);
+        currentOffset = valueResult.newOffset;
+      }
+
+      return {
+        term: Type.map(entries),
+        newOffset: currentOffset,
+      };
+    };
+
+    // Float decoders
+
+    const decodeNewFloat = (dataView, offset) => {
+      const value = dataView.getFloat64(offset);
+      return {
+        term: Type.float(value),
+        newOffset: offset + 8,
+      };
+    };
+
+    const decodeFloatExt = (dataView, bytes, offset) => {
+      // FLOAT_EXT: 31-byte null-terminated string (deprecated format)
+      if (offset + 31 > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      const floatBytes = bytes.slice(offset, offset + 31);
+      const decoder = new TextDecoder("latin1");
+      const floatString = decoder.decode(floatBytes).replace(/\0.*$/, "");
+      const value = parseFloat(floatString);
+
+      if (Number.isNaN(value)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      return {
+        term: Type.float(value),
+        newOffset: offset + 31,
+      };
+    };
+
+    // Bitstring decoder
+
+    const decodeBitBinary = (dataView, bytes, offset) => {
+      const length = dataView.getUint32(offset);
+      const bits = dataView.getUint8(offset + 4);
+
+      if (bits < 1 || bits > 8) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      if (offset + 5 + length > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      const binaryBytes = bytes.slice(offset + 5, offset + 5 + length);
+      const bitstring = Bitstring.fromBytes(new Uint8Array(binaryBytes));
+
+      // Adjust leftoverBitCount based on the bits field
+      // If bits is 8, all bytes are full (leftoverBitCount = 0)
+      // If bits is 1-7, the last byte is partial (leftoverBitCount = bits)
+      if (bits > 0 && bits < 8) {
+        bitstring.leftoverBitCount = bits;
+      }
+      // If bits is 0 or 8, leftoverBitCount is already 0 (all full bytes)
+
+      return {
+        term: bitstring,
+        newOffset: offset + 5 + length,
+      };
+    };
+
+    // Reference decoders
+    //
+    // REFERENCE_EXT (tag 101) - Deprecated format for backward compatibility
+    // Format: Node | ID | Creation
+    // Where:
+    // - Node: atom (encoded with various atom formats)
+    // - ID: single 32-bit word
+    // - Creation: 8-bit value (only 2 bits significant)
+    //
+    // This format was used in older Erlang versions and is kept for
+    // compatibility with legacy external term format data.
+
+    // Common reference decoder helper
+    const decodeReferenceWithOptions = async (
+      dataView,
+      bytes,
+      offset,
+      options,
+    ) => {
+      let currentOffset = offset;
+
+      // Read length prefix if present
+      let idWordCount = 1; // Default for REFERENCE_EXT
+      if (options.hasLengthPrefix) {
+        idWordCount = dataView.getUint16(currentOffset);
+        currentOffset += 2;
+      }
+
+      // Decode node name (atom)
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // For REFERENCE_EXT: read ID words first, then creation
+      // For NEW/NEWER_REFERENCE_EXT: read creation first, then ID words
+      let creation, idWords;
+
+      if (options.hasLengthPrefix) {
+        // NEW_REFERENCE_EXT and NEWER_REFERENCE_EXT: Creation | ID words
+        creation =
+          options.creationSize === 4
+            ? dataView.getUint32(currentOffset)
+            : dataView.getUint8(currentOffset);
+        currentOffset += options.creationSize;
+
+        idWords = [];
+        for (let i = 0; i < idWordCount; i++) {
+          idWords.push(dataView.getUint32(currentOffset));
+          currentOffset += 4;
+        }
+      } else {
+        // REFERENCE_EXT: ID | Creation
+        idWords = [];
+        for (let i = 0; i < idWordCount; i++) {
+          idWords.push(dataView.getUint32(currentOffset));
+          currentOffset += 4;
+        }
+
+        creation = dataView.getUint8(currentOffset);
+        currentOffset += 1;
+      }
+
+      return {
+        term: Type.reference(nodeResult.term, creation, idWords),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeReference = async (dataView, bytes, offset) => {
+      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: false,
+        creationSize: 1,
+      });
+    };
+
+    const decodeNewReference = async (dataView, bytes, offset) => {
+      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: true,
+        creationSize: 1,
+      });
+    };
+
+    const decodeNewerReference = async (dataView, bytes, offset) => {
+      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: true,
+        creationSize: 4,
+      });
+    };
+
+    // PID decoders
+
+    const decodePid = async (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Serial (4 bytes), Creation (1 byte)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const serial = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint8(currentOffset);
+      currentOffset += 1;
+
+      return {
+        term: Type.pid(nodeResult.term, [id, serial, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewPid = async (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Serial (4 bytes), Creation (4 bytes)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const serial = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.pid(nodeResult.term, [id, serial, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    // Port decoders
+
+    const decodePort = async (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Creation (1 byte)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint8(currentOffset);
+      currentOffset += 1;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewPort = async (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Creation (4 bytes)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeV4Port = async (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode node name (atom)
+      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (8 bytes as BigUint64), Creation (4 bytes)
+      const id = dataView.getBigUint64(currentOffset);
+      currentOffset += 8;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    // EXPORT_EXT decoder (function capture)
+    const decodeExport = async (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      // Decode module (atom)
+      const moduleResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = moduleResult.newOffset;
+
+      // Decode function (atom)
+      const functionResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = functionResult.newOffset;
+
+      // Decode arity (small integer)
+      const arityResult = await decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = arityResult.newOffset;
+
+      const context = Interpreter.buildContext();
+
+      // Convert arity from BigInt to Number
+      const arity = Number(arityResult.term.value);
+
+      return {
+        term: Type.functionCapture(
+          moduleResult.term.value,
+          functionResult.term.value,
+          arity,
+          [],
+          context,
+        ),
+        newOffset: currentOffset,
+      };
+    };
+
+    try {
+      Bitstring.maybeSetBytesFromText(binary);
+
+      const bytes = binary.bytes;
+      const dataView = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength,
+      );
+
+      // Check ETF version byte (must be 131)
+      if (dataView.getUint8(0) !== 131) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
+      const result = await decodeTerm(dataView, bytes, 1);
+      if (result.newOffset !== bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      return result.term;
+    } catch (err) {
+      if (err instanceof RangeError || err instanceof TypeError) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+      throw err;
+    }
+  },
+  // End binary_to_term/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
