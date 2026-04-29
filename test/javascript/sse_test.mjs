@@ -19,6 +19,15 @@ describe("Sse", () => {
     sinon.restore();
   });
 
+  describe("handleError()", () => {
+    it("sets status to error", () => {
+      sinon.stub(console, "warn");
+      Sse.handleError({});
+
+      assert.equal(Sse.status, "error");
+    });
+  });
+
   describe("handleOpen()", () => {
     it("sets status to connected", () => {
       sinon.stub(console, "log");
