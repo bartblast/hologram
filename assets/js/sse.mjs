@@ -19,6 +19,15 @@ export default class Sse {
     $.eventSource.onmessage = $.handleMessage;
   }
 
+  static disconnect() {
+    if (!$.eventSource) return;
+
+    $.eventSource.close();
+    $.eventSource = null;
+
+    $.status = "disconnected";
+  }
+
   static handleError(_event) {
     // EventSource auto-reconnects on transient errors; status flips back
     // to "connected" on the next onopen.

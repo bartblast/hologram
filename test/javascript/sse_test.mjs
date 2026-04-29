@@ -67,6 +67,37 @@ describe("Sse", () => {
     });
   });
 
+  describe("disconnect()", () => {
+    it("closes the EventSource", () => {
+      Sse.eventSource = mockEventSource;
+      Sse.disconnect();
+
+      sinon.assert.calledOnce(mockEventSource.close);
+    });
+
+    it("clears the eventSource field", () => {
+      Sse.eventSource = mockEventSource;
+      Sse.disconnect();
+
+      assert.isNull(Sse.eventSource);
+    });
+
+    it("resets status to disconnected", () => {
+      Sse.eventSource = mockEventSource;
+      Sse.status = "connected";
+      Sse.disconnect();
+
+      assert.equal(Sse.status, "disconnected");
+    });
+
+    it("does nothing when eventSource is null", () => {
+      Sse.eventSource = null;
+      Sse.disconnect();
+
+      assert.isNull(Sse.eventSource);
+    });
+  });
+
   describe("handleError()", () => {
     it("sets status to error", () => {
       sinon.stub(console, "warn");
