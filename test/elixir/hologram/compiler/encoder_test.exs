@@ -2793,9 +2793,631 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  # TODO: finish implementing
-  test "with" do
-    assert encode_ir(%IR.With{}) == "Interpreter.with()"
+  describe "with" do
+    setup do
+      [
+        basic_match_clause: %IR.WithMatchClause{
+          match: %IR.Variable{name: :x},
+          expression: %IR.Variable{name: :y},
+          guards: []
+        },
+        error_else: %IR.Clause{
+          match: %IR.AtomType{value: :error},
+          guards: [],
+          body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+        }
+      ]
+    end
+
+    test "minimal with" do
+      ir = %IR.With{
+        body: %IR.Block{
+          expressions: []
+        },
+        clauses: [],
+        else_clauses: []
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        return Type.atom("nil");
+        }, [], [], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with body, clause, and else clause", %{
+      basic_match_clause: basic_match_clause,
+      error_else: error_clause
+    } do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [basic_match_clause],
+        else_clauses: [error_clause]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with empty body", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
+      ir = %IR.With{
+        body: %IR.Block{expressions: []},
+        clauses: [basic_match_clause],
+        else_clauses: [error_clause]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        return Type.atom("nil");
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with single expression body", %{
+      basic_match_clause: basic_match_clause,
+      error_else: error_clause
+    } do
+      ir = %IR.With{
+        body: %IR.Block{
+          expressions: [
+            %IR.LocalFunctionCall{
+              function: :foo,
+              args: [
+                %IR.Variable{name: :x}
+              ]
+            }
+          ]
+        },
+        clauses: [basic_match_clause],
+        else_clauses: [error_clause]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        return Erlang_["foo/1"](context.vars.x);
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with multi expression body", %{basic_match_clause: basic_match_clause} do
+      ir = %IR.With{
+        body: %IR.Block{
+          expressions: [
+            %IR.MatchOperator{
+              left: %IR.Variable{name: :x},
+              right: %IR.IntegerType{value: 5}
+            },
+            %IR.LocalFunctionCall{
+              function: :foo,
+              args: [
+                %IR.Variable{name: :x}
+              ]
+            }
+          ]
+        },
+        clauses: [basic_match_clause],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.AtomType{value: :error},
+            guards: [],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        Interpreter.matchOperator(Type.integer(5n), Type.variablePattern("x"), context);
+        Interpreter.updateVarsToMatchedValues(context);
+        return Erlang_["foo/1"](context.vars.x);
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with single clause", %{basic_match_clause: basic_match_clause, error_else: error_clause} do
+      ir = %IR.With{
+        body: %IR.Block{expressions: []},
+        clauses: [basic_match_clause],
+        else_clauses: [error_clause]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        return Type.atom("nil");
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with multiple clauses", %{
+      basic_match_clause: basic_match_clause,
+      error_else: error_clause
+    } do
+      ir = %IR.With{
+        body: %IR.Block{expressions: []},
+        clauses: [
+          basic_match_clause,
+          %IR.WithBareClause{
+            expression: %IR.MatchOperator{
+              left: %IR.Variable{name: :b},
+              right: %IR.LocalFunctionCall{
+                function: :+,
+                args: [
+                  %IR.Variable{name: :x, version: nil},
+                  %IR.IntegerType{value: 1}
+                ]
+              }
+            }
+          }
+        ],
+        else_clauses: [error_clause]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        return Type.atom("nil");
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}, {expression: (context) => Interpreter.matchOperator(Erlang_["+/2"](context.vars.x, Type.integer(1n)), Type.variablePattern(\"b\"), context)}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with single clause with guards", %{error_else: error_clause} do
+      ir = %IR.With{
+        body: %IR.Block{expressions: []},
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :x},
+            expression: %IR.Variable{name: :y},
+            guards: [
+              %IR.LocalFunctionCall{
+                args: [%IR.Variable{name: :x}],
+                function: :is_integer
+              }
+            ]
+          }
+        ],
+        else_clauses: [error_clause]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        return Type.atom("nil");
+        }, [{match: Type.variablePattern("x"), guards: [(context) => Erlang_["is_integer/1"](context.vars.x)], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with multiple clauses with guards", %{error_else: error_clause} do
+      ir = %IR.With{
+        body: %IR.Block{expressions: []},
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :x},
+            expression: %IR.Variable{name: :y},
+            guards: [
+              %IR.LocalFunctionCall{
+                args: [%IR.Variable{name: :x}],
+                function: :is_integer
+              }
+            ]
+          },
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :z},
+            expression: %IR.Variable{name: :x},
+            guards: [
+              %IR.LocalFunctionCall{
+                args: [%IR.Variable{name: :z}],
+                function: :is_integer
+              }
+            ]
+          }
+        ],
+        else_clauses: [error_clause]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        return Type.atom("nil");
+        }, [{match: Type.variablePattern("x"), guards: [(context) => Erlang_["is_integer/1"](context.vars.x)], expression: (context) => context.vars.y}, {match: Type.variablePattern("z"), guards: [(context) => Erlang_["is_integer/1"](context.vars.z)], expression: (context) => context.vars.x}], [{match: Type.atom("error"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "without else clauses", %{basic_match_clause: basic_match_clause} do
+      ir = %IR.With{
+        body: %IR.Block{
+          expressions: [
+            %IR.MatchOperator{
+              left: %IR.Variable{name: :x},
+              right: %IR.IntegerType{value: 5}
+            },
+            %IR.LocalFunctionCall{
+              function: :foo,
+              args: [
+                %IR.Variable{name: :x}
+              ]
+            }
+          ]
+        },
+        clauses: [basic_match_clause],
+        else_clauses: []
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => {
+        Interpreter.matchOperator(Type.integer(5n), Type.variablePattern("x"), context);
+        Interpreter.updateVarsToMatchedValues(context);
+        return Erlang_["foo/1"](context.vars.x);
+        }, [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with single else clause" do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :x},
+            expression: %IR.Variable{name: :y},
+            guards: []
+          }
+        ],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.AtomType{value: :timeout},
+            guards: [],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("timeout"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with multiple else clauses", %{error_else: error_clause} do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :x},
+            expression: %IR.Variable{name: :y},
+            guards: []
+          }
+        ],
+        else_clauses: [
+          error_clause,
+          %IR.Clause{
+            match: %IR.AtomType{value: :timeout},
+            guards: [],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.atom("error"), guards: [], body: (context) => {\nreturn Type.atom("error");\n}}, {match: Type.atom("timeout"), guards: [], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with pin in else clauses" do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.PinOperator{variable: %IR.Variable{name: :key}},
+            guards: [],
+            body: %IR.Block{expressions: []}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [], [{match: context.vars.key, guards: [], body: (context) => {
+        return Type.atom("nil");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with multiple pin else clauses" do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.PinOperator{variable: %IR.Variable{name: :key}},
+            guards: [],
+            body: %IR.Block{expressions: []}
+          },
+          %IR.Clause{
+            match: %IR.PinOperator{variable: %IR.Variable{name: :second_key}},
+            guards: [],
+            body: %IR.Block{expressions: []}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [], [{match: context.vars.key, guards: [], body: (context) => {
+        return Type.atom("nil");
+        }}, {match: context.vars.second_key, guards: [], body: (context) => {
+        return Type.atom("nil");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with single else clause with guard" do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :x},
+            expression: %IR.Variable{name: :y},
+            guards: []
+          }
+        ],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :status},
+            guards: [
+              %IR.LocalFunctionCall{
+                function: :is_atom,
+                args: [
+                  %IR.Variable{name: :status}
+                ]
+              }
+            ],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.variablePattern("status"), guards: [(context) => Erlang_["is_atom/1"](context.vars.status)], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with multiple else clauses with guards" do
+      ir = %IR.With{
+        body: %IR.AtomType{value: :ok},
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :x},
+            expression: %IR.Variable{name: :y},
+            guards: []
+          }
+        ],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.Variable{name: :status},
+            guards: [
+              %IR.LocalFunctionCall{
+                function: :is_atom,
+                args: [
+                  %IR.Variable{name: :status}
+                ]
+              }
+            ],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+          },
+          %IR.Clause{
+            match: %IR.Variable{name: :code},
+            guards: [
+              %IR.LocalFunctionCall{
+                function: :is_integer,
+                args: [
+                  %IR.Variable{name: :code}
+                ]
+              }
+            ],
+            body: %IR.Block{expressions: [%IR.AtomType{value: :error}]}
+          }
+        ]
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Type.atom("ok"), [{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}], [{match: Type.variablePattern("status"), guards: [(context) => Erlang_["is_atom/1"](context.vars.status)], body: (context) => {
+        return Type.atom("error");
+        }}, {match: Type.variablePattern("code"), guards: [(context) => Erlang_["is_integer/1"](context.vars.code)], body: (context) => {
+        return Type.atom("error");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "shadowing" do
+      ir = %IR.With{
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :a, version: nil},
+            guards: [],
+            expression: %IR.Block{
+              expressions: [
+                %IR.MatchOperator{
+                  left: %IR.Variable{name: :b, version: nil},
+                  right: %IR.IntegerType{value: 1}
+                },
+                %IR.MatchOperator{
+                  left: %IR.MatchPlaceholder{},
+                  right: %IR.Variable{name: :b, version: nil}
+                },
+                %IR.IntegerType{value: 1}
+              ]
+            }
+          },
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :b, version: nil},
+            guards: [],
+            expression: %IR.IntegerType{value: 2}
+          }
+        ],
+        body: %IR.RemoteFunctionCall{
+          module: %IR.AtomType{value: :erlang},
+          function: :+,
+          args: [
+            %IR.Variable{name: :a, version: nil},
+            %IR.Variable{name: :b, version: nil}
+          ]
+        },
+        else_clauses: []
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.with((context) => Erlang["+/2"](context.vars.a, context.vars.b), [{match: Type.variablePattern("a"), guards: [], expression: (context) => {
+        Interpreter.matchOperator(Type.integer(1n), Type.variablePattern("b"), context);
+        Interpreter.updateVarsToMatchedValues(context);
+        Interpreter.matchOperator(context.vars.b, Type.matchPlaceholder(), context);
+        Interpreter.updateVarsToMatchedValues(context);
+        return Type.integer(1n);
+        }}, {match: Type.variablePattern("b"), guards: [], expression: (context) => Type.integer(2n)}], [], context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+  end
+
+  describe "WithMatchClause" do
+    test "clause without guard" do
+      ir = %IR.WithMatchClause{
+        match: %IR.Variable{name: :x},
+        guards: [],
+        expression: %IR.Variable{name: :y}
+      }
+
+      assert encode_ir(ir) ==
+               ~s|{match: Type.variablePattern("x"), guards: [], expression: (context) => context.vars.y}|
+    end
+
+    test "clause with guard" do
+      ir = %IR.WithMatchClause{
+        match: %IR.Variable{
+          name: :i
+        },
+        guards: [
+          %IR.LocalFunctionCall{
+            args: [%IR.Variable{name: :i}],
+            function: :is_integer
+          }
+        ],
+        expression: %IR.Variable{name: :x}
+      }
+
+      assert encode_ir(ir) ==
+               ~s|{match: Type.variablePattern("i"), guards: [(context) => Erlang_["is_integer/1"](context.vars.i)], expression: (context) => context.vars.x}|
+    end
+
+    test "with pin match" do
+      ir = %IR.WithMatchClause{
+        match: %IR.PinOperator{variable: %IR.Variable{name: :key}},
+        guards: [],
+        expression: %IR.Variable{name: :y}
+      }
+
+      assert encode_ir(ir) ==
+               ~s|{match: context.vars.key, guards: [], expression: (context) => context.vars.y}|
+    end
+  end
+
+  describe "WithBareClause" do
+    test "with plain expression" do
+      ir = %IR.WithBareClause{
+        expression: %IR.MatchOperator{
+          left: %IR.Variable{name: :x},
+          right: %IR.LocalFunctionCall{
+            function: :foo,
+            args: [
+              %IR.IntegerType{value: 5}
+            ]
+          }
+        }
+      }
+
+      assert encode_ir(ir) ==
+               ~s|{expression: (context) => Interpreter.matchOperator(Erlang_["foo/1"](Type.integer(5n)), Type.variablePattern("x"), context)}|
+    end
+
+    test "with plain expression (function call)" do
+      ir = %IR.WithBareClause{
+        expression: %IR.LocalFunctionCall{
+          function: :baz,
+          args: [
+            %IR.IntegerType{value: 5}
+          ]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               ~s|{expression: (context) => Erlang_["baz/1"](Type.integer(5n))}|
+    end
   end
 
   describe "encode_as_class_name/1" do
