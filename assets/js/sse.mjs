@@ -1,8 +1,23 @@
 "use strict";
 
 export default class Sse {
+  static EVENTSOURCE_PATH = "/hologram/sse";
+
+  static eventSource = null;
+
   // disconnected, connecting, connected, error
   static status = "disconnected";
+
+  static connect() {
+    if ($.status === "connected" || $.status === "connecting") return;
+
+    $.status = "connecting";
+
+    $.eventSource = new EventSource($.EVENTSOURCE_PATH);
+    $.eventSource.onopen = $.handleOpen;
+    $.eventSource.onerror = $.handleError;
+    $.eventSource.onmessage = $.handleMessage;
+  }
 
   static handleError(_event) {
     // EventSource auto-reconnects on transient errors; status flips back

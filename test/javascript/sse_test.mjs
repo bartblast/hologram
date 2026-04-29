@@ -11,12 +11,60 @@ import Sse from "../../assets/js/sse.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("Sse", () => {
+  let mockEventSource;
+
   beforeEach(() => {
+    Sse.eventSource = null;
     Sse.status = "disconnected";
+
+    mockEventSource = {
+      onopen: null,
+      onerror: null,
+      onmessage: null,
+      close: sinon.spy(),
+    };
+
+    globalThis.EventSource = sinon.stub().returns(mockEventSource);
   });
 
   afterEach(() => {
     sinon.restore();
+  });
+
+  describe("connect()", () => {
+    it("creates an EventSource at the SSE path", () => {
+      Sse.connect();
+
+      sinon.assert.calledWith(globalThis.EventSource, "/hologram/sse");
+    });
+
+    it("wires onopen, onerror and onmessage handlers", () => {
+      Sse.connect();
+
+      assert.equal(mockEventSource.onopen, Sse.handleOpen);
+      assert.equal(mockEventSource.onerror, Sse.handleError);
+      assert.equal(mockEventSource.onmessage, Sse.handleMessage);
+    });
+
+    it("sets status to connecting", () => {
+      Sse.connect();
+
+      assert.equal(Sse.status, "connecting");
+    });
+
+    it("returns early when already connected", () => {
+      Sse.status = "connected";
+      Sse.connect();
+
+      sinon.assert.notCalled(globalThis.EventSource);
+    });
+
+    it("returns early when already connecting", () => {
+      Sse.status = "connecting";
+      Sse.connect();
+
+      sinon.assert.notCalled(globalThis.EventSource);
+    });
   });
 
   describe("handleError()", () => {
