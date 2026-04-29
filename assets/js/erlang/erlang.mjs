@@ -1198,12 +1198,11 @@ const Erlang = {
       const bitstring = Bitstring.fromBytes(new Uint8Array(binaryBytes));
 
       // Adjust leftoverBitCount based on the bits field
-      // If bits is 8, all bytes are full (leftoverBitCount = 0)
+      // If bits is 8, all bytes are full (leftoverBitCount = 0, already set by fromBytes)
       // If bits is 1-7, the last byte is partial (leftoverBitCount = bits)
-      if (bits > 0 && bits < 8) {
+      if (bits < 8) {
         bitstring.leftoverBitCount = bits;
       }
-      // If bits is 0 or 8, leftoverBitCount is already 0 (all full bytes)
 
       return {
         term: bitstring,
