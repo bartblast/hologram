@@ -87,6 +87,22 @@ defmodule Hologram.RouterTest do
     end
   end
 
+  describe "/hologram/sse" do
+    test "routes GET SSE request" do
+      task =
+        Task.async(fn ->
+          :get
+          |> Plug.Test.conn("/hologram/sse")
+          |> call([])
+        end)
+
+      send(task.pid, :hologram_sse_close)
+      conn = Task.await(task, 100)
+
+      assert conn.state == :chunked
+    end
+  end
+
   describe "/hologram/websocket" do
     test "upgrades websocket connection" do
       conn =

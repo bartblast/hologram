@@ -4,6 +4,7 @@ defmodule Hologram.Router do
   alias Hologram.Controller
   alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.Connection
+  alias Hologram.Runtime.SSE
 
   plug :match
   plug :dispatch
@@ -19,6 +20,10 @@ defmodule Hologram.Router do
 
   get "/hologram/ping" do
     Controller.handle_ping_request(conn)
+  end
+
+  get "/hologram/sse" do
+    SSE.stream(conn)
   end
 
   get "/hologram/websocket" do
