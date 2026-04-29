@@ -959,7 +959,7 @@ const Erlang = {
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
 
       const atomString = isUtf8
-        ? new TextDecoder("utf-8").decode(atomBytes)
+        ? ERTS.utf8Decoder.decode(atomBytes)
         : String.fromCharCode(...atomBytes);
 
       return {
