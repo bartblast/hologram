@@ -473,21 +473,25 @@ defmodule Hologram.Compiler.Encoder do
     body_js = encode_closure(body, context)
     clauses_js = encode_as_array(clauses, context)
     else_clauses_js = encode_as_array(else_clauses, context)
+
     "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
   end
 
-  def encode_ir(%IR.WithMatchClause{} = clause, context) do
-    match = encode_ir(clause.match, %{context | pattern?: true})
-    guards = encode_as_array(clause.guards, context, &encode_closure/2)
-    expression = encode_closure(clause.expression, context)
+  def encode_ir(%IR.WithBareClause{expression: expression}, context) do
+    expression_js = encode_closure(expression, context)
 
-    "{match: #{match}, guards: #{guards}, expression: #{expression}}"
+    "{expression: #{expression_js}}"
   end
 
-  def encode_ir(%IR.WithBareClause{} = clause, context) do
-    expression = encode_closure(clause.expression, context)
+  def encode_ir(
+        %IR.WithMatchClause{match: match, guards: guards, expression: expression},
+        context
+      ) do
+    match_js = encode_ir(match, %{context | pattern?: true})
+    guards_js = encode_as_array(guards, context, &encode_closure/2)
+    expression_js = encode_closure(expression, context)
 
-    "{expression: #{expression}}"
+    "{match: #{match_js}, guards: #{guards_js}, expression: #{expression_js}}"
   end
 
   @doc """
