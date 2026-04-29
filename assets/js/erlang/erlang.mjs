@@ -1149,8 +1149,10 @@ const Erlang = {
         );
       }
       const floatBytes = bytes.slice(offset, offset + 31);
-      const decoder = new TextDecoder("latin1");
-      const floatString = decoder.decode(floatBytes).replace(/\0.*$/, "");
+      const floatString = String.fromCharCode(...floatBytes).replace(
+        /\0.*$/,
+        "",
+      );
       const value = parseFloat(floatString);
 
       if (Number.isNaN(value)) {
