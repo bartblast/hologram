@@ -3,6 +3,7 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  sinon,
 } from "./support/helpers.mjs";
 
 import Sse from "../../assets/js/sse.mjs";
@@ -12,6 +13,19 @@ defineGlobalErlangAndElixirModules();
 describe("Sse", () => {
   beforeEach(() => {
     Sse.status = "disconnected";
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
+  describe("handleOpen()", () => {
+    it("sets status to connected", () => {
+      sinon.stub(console, "log");
+      Sse.handleOpen({});
+
+      assert.equal(Sse.status, "connected");
+    });
   });
 
   describe("isConnected()", () => {
