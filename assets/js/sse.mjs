@@ -7,8 +7,9 @@ export default class Sse {
   static handleError(_event) {
     // EventSource auto-reconnects on transient errors; status flips back
     // to "connected" on the next onopen.
-    console.warn("Hologram: SSE error");
     $.status = "error";
+
+    console.warn("Hologram: SSE error");
   }
 
   static handleMessage(event) {
@@ -18,8 +19,9 @@ export default class Sse {
   }
 
   static handleOpen(_event) {
-    console.log("Hologram: SSE connected");
     $.status = "connected";
+
+    console.log("Hologram: SSE connected");
   }
 
   static isConnected() {
