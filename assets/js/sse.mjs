@@ -11,6 +11,12 @@ export default class Sse {
     $.status = "error";
   }
 
+  static handleMessage(event) {
+    // TODO: decode the SSE event payload and dispatch the resulting
+    // action through the existing client-side action pipeline.
+    console.log("Hologram: SSE message", event.data);
+  }
+
   static handleOpen(_event) {
     console.log("Hologram: SSE connected");
     $.status = "connected";

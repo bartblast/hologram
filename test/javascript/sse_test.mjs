@@ -28,6 +28,15 @@ describe("Sse", () => {
     });
   });
 
+  describe("handleMessage()", () => {
+    it("logs the message data", () => {
+      const consoleLog = sinon.stub(console, "log");
+      Sse.handleMessage({data: "test-data"});
+
+      sinon.assert.calledWith(consoleLog, "Hologram: SSE message", "test-data");
+    });
+  });
+
   describe("handleOpen()", () => {
     it("sets status to connected", () => {
       sinon.stub(console, "log");
