@@ -2557,6 +2557,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for INTEGER_EXT boundary - value truncated" do
+      # INTEGER_EXT (98) but only 2 bytes instead of 4
+      binary = <<131, 98, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     # Consistency tests for specific external term formats
 
     test "STRING_EXT format with various byte values" do
