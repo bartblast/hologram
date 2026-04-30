@@ -622,6 +622,9 @@ const Erlang = {
       );
     }
 
+    // ETF version byte (precedes every top-level term).
+    const VERSION_MAGIC = 131;
+
     // ETF tag constants
     const NEW_FLOAT_EXT = 70;
     const BIT_BINARY_EXT = 77;
@@ -1369,7 +1372,7 @@ const Erlang = {
         bytes.byteLength,
       );
 
-      if (dataView.getUint8(0) !== 131) raiseInvalid();
+      if (dataView.getUint8(0) !== VERSION_MAGIC) raiseInvalid();
 
       // COMPRESSED is only valid immediately after the version byte. OTP
       // rejects nested COMPRESSED tags, so handling it here (rather than as
