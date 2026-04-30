@@ -994,10 +994,13 @@ const Erlang = {
           ),
         );
       }
+      // Uint8Array.slice already returns a fresh Uint8Array, so passing it
+      // straight into Bitstring.fromBytes avoids the extra copy that
+      // `new Uint8Array(binaryBytes)` would do.
       const binaryBytes = bytes.slice(offset + 4, offset + 4 + length);
 
       return {
-        term: Bitstring.fromBytes(new Uint8Array(binaryBytes)),
+        term: Bitstring.fromBytes(binaryBytes),
         newOffset: offset + 4 + length,
       };
     };
@@ -1225,8 +1228,10 @@ const Erlang = {
         );
       }
 
+      // bytes.slice already returns a fresh Uint8Array; no need to copy
+      // again via `new Uint8Array(...)`.
       const binaryBytes = bytes.slice(offset + 5, offset + 5 + length);
-      const bitstring = Bitstring.fromBytes(new Uint8Array(binaryBytes));
+      const bitstring = Bitstring.fromBytes(binaryBytes);
 
       // Adjust leftoverBitCount based on the bits field
       // If bits is 8, all bytes are full (leftoverBitCount = 0, already set by fromBytes)
