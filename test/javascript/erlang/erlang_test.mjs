@@ -2833,6 +2833,24 @@ describe("Erlang", () => {
         assertBoxedStrictEqual(result, Type.integer(-100));
       });
 
+      it("decodes INTEGER_EXT at int32 max boundary (2^31 - 1)", async () => {
+        // :erlang.term_to_binary(2147483647) = <<131, 98, 127, 255, 255, 255>>
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 98, 127, 255, 255, 255]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(result, Type.integer(2147483647));
+      });
+
+      it("decodes INTEGER_EXT at int32 min boundary (-2^31)", async () => {
+        // :erlang.term_to_binary(-2147483648) = <<131, 98, 128, 0, 0, 0>>
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 98, 128, 0, 0, 0]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(result, Type.integer(-2147483648));
+      });
+
       it("decodes large positive integer (SMALL_BIG_EXT)", async () => {
         // :erlang.term_to_binary(1000000000000) = <<131, 110, 5, 0, 0, 16, 165, 212, 232>>
         const binary = Bitstring.fromBytes(

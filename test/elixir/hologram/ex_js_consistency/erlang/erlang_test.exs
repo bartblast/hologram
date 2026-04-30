@@ -1988,6 +1988,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == -100
     end
 
+    test "decodes INTEGER_EXT at int32 max boundary (2^31 - 1)" do
+      binary = <<131, 98, 127, 255, 255, 255>>
+      assert :erlang.binary_to_term(binary) == 2_147_483_647
+    end
+
+    test "decodes INTEGER_EXT at int32 min boundary (-2^31)" do
+      binary = <<131, 98, 128, 0, 0, 0>>
+      assert :erlang.binary_to_term(binary) == -2_147_483_648
+    end
+
     test "decodes large positive integer (SMALL_BIG_EXT)" do
       binary = :erlang.term_to_binary(1_000_000_000_000)
       assert :erlang.binary_to_term(binary) == 1_000_000_000_000
