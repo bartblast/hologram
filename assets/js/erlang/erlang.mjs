@@ -906,9 +906,16 @@ const Erlang = {
       const atomString = decodeAtomBytes(atomBytes, isUtf8);
 
       // For UTF-8 (ATOM_UTF8_EXT) the byte length can be up to 1020 (255 * 4),
-      // but the code-point count must be <= 255. The spread iterator walks
-      // code points, not UTF-16 units, so it counts emoji etc. correctly.
-      if (isUtf8 && [...atomString].length > 255) raiseInvalid();
+      // but the code-point count must be <= 255. for...of iterates by code
+      // points (not UTF-16 units), so emoji etc. count as one. Short-circuit
+      // at 256 to avoid walking the whole string when we already know it
+      // overflows the cap.
+      if (isUtf8) {
+        let codepoints = 0;
+        for (const _ of atomString) {
+          if (++codepoints > 255) raiseInvalid();
+        }
+      }
 
       return {
         term: Type.atom(atomString),
