@@ -680,15 +680,10 @@ const Erlang = {
       const reader = decompressedStream.getReader();
       const chunks = [];
 
-      try {
-        while (true) {
-          const {done, value} = await reader.read();
-          if (done) break;
-          chunks.push(value);
-        }
-      } catch (err) {
-        // In Node, stream errors often need to be caught during the read loop
-        throw new Error(`Decompression failed: ${err.message}`);
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        chunks.push(value);
       }
 
       // TODO: binary_to_term/2 with :used must report the exact number of
