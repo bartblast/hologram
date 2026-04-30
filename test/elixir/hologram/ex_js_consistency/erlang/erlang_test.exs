@@ -2830,6 +2830,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "invalid external representation of a term"),
                    {:erlang, :binary_to_term, [binary]}
     end
+
+    test "raises ArgumentError for FUN_EXT (legacy anonymous fun, tag 117)" do
+      # Well-formed FUN_EXT: NumFree=0, Pid + Module + Index + Uniq.
+      # OTP stopped decoding FUN_EXT in OTP 23; both runtimes reject it.
+      binary =
+        <<131, 117, 0, 0, 0, 0, 103, 119, 13, "nonode@nohost", 0, 0, 0, 1, 0, 0, 0, 1, 0, 119, 1,
+          ?m, 97, 0, 97, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
   end
 
   describe "bit_size/1" do

@@ -4424,6 +4424,27 @@ describe("Erlang", () => {
           ),
         );
       });
+
+      it("raises ArgumentError for FUN_EXT (legacy anonymous fun, tag 117)", async () => {
+        // Well-formed FUN_EXT: NumFree=0, Pid + Module + Index + Uniq.
+        // OTP itself stopped decoding FUN_EXT in OTP 23, so both runtimes
+        // reject it; this test pins down the shared behaviour.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 117, 0, 0, 0, 0, 103, 119, 13, 110, 111, 110, 111, 100, 101,
+            64, 110, 111, 104, 111, 115, 116, 0, 0, 0, 1, 0, 0, 0, 1, 0, 119, 1,
+            109, 97, 0, 97, 0,
+          ]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
     });
   });
 

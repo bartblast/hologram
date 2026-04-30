@@ -687,11 +687,10 @@ const Erlang = {
         throw new Error(`Decompression failed: ${err.message}`);
       }
 
-      // TODO(binary_to_term/2): bytesRead is not surfaced. binary_to_term/1
-      // accepts trailing bytes, so it does not care - it just decodes the
-      // first term and ignores the rest. binary_to_term/2 with :used must
-      // report the exact number of bytes consumed by the zlib stream, which
-      // DecompressionStream does not expose. Options when we get there:
+      // TODO: binary_to_term/2 with :used must report the exact number of
+      // bytes consumed by the zlib stream, which DecompressionStream does
+      // not expose. binary_to_term/1 does not care - it accepts trailing
+      // bytes and decodes only the first term. Options when we get there:
       //   1. Parse the zlib header/trailer ourselves to find the stream end.
       //   2. Switch to a sync zlib (e.g. pako) that returns bytes consumed.
       //   3. Drop COMPRESSED support and reject tag 80.
@@ -703,6 +702,14 @@ const Erlang = {
     // the version byte), so a nested tag 80 falls to the default case and
     // raises. Keeping this function sync avoids a Promise allocation per
     // recursive call, which matters for deeply nested / large terms.
+    //
+    // TODO: NEW_FUN_EXT (tag 112, anonymous fun encoding) is not implemented
+    // and currently falls to the default case, raising. OTP accepts it; we
+    // diverge. Filling the gap requires a JS shape for "remote anon fun
+    // reference" plus a decision on how Hologram represents funs encoded by
+    // a foreign BEAM (the decoded fun cannot actually be invoked without
+    // the matching module + Uniq). FUN_EXT (tag 117) is intentionally
+    // rejected forever - OTP itself stopped decoding it in OTP 23.
     const decodeTerm = (dataView, bytes, offset) => {
       if (offset >= bytes.length) {
         Interpreter.raiseArgumentError(
