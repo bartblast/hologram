@@ -3749,8 +3749,9 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for BIT_BINARY_EXT with Bits=0", async () => {
         // BIT_BINARY_EXT (77) with length 1, bits 0 (invalid - spec says 1-8).
-        // Pins down the bits validation gate; without this test, removing the
-        // `bits < 1 || bits > 8` check would not fail any other existing test.
+        // Pins the Bits arm of the guard; the Length=0 test below pins the
+        // Length arm. Without this test, removing the `bits < 1 || bits > 8`
+        // check would not fail any other existing test.
         const binary = Bitstring.fromBytes(
           new Uint8Array([131, 77, 0, 0, 0, 1, 0, 0]),
         );
