@@ -4050,6 +4050,23 @@ describe("Erlang", () => {
         );
       });
 
+      it("raises ArgumentError for BIT_BINARY_EXT with Bits=0", async () => {
+        // BIT_BINARY_EXT (77) with length 1, bits 0 (invalid - spec says 1-8).
+        // Pins down the bits validation gate; without this test, removing the
+        // `bits < 1 || bits > 8` check would not fail any other existing test.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 77, 0, 0, 0, 1, 0, 0]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
       it("raises ArgumentError for malformed NEW_REFERENCE_EXT with len exceeding data", async () => {
         // NEW_REFERENCE_EXT (114) with len=10 but insufficient id bytes
         const binary = Bitstring.fromBytes(

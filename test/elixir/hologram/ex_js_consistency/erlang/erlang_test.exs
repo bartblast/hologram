@@ -2517,6 +2517,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for BIT_BINARY_EXT with Bits=0" do
+      # BIT_BINARY_EXT (77) with length 1, bits 0 (invalid - spec says 1-8).
+      binary = <<131, 77, 0, 0, 0, 1, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "raises ArgumentError for malformed LARGE_BIG_EXT with n exceeding data" do
       # LARGE_BIG_EXT (111) with large n but insufficient bytes
       binary = <<131, 111, 0, 0, 1, 0, 0, 1, 2, 3>>
