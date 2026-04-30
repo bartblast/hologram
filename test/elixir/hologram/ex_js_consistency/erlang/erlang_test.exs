@@ -2208,6 +2208,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       name = String.duplicate("🚀", 255)
       binary = <<131, 118, byte_size(name)::16, name::binary>>
 
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.binary_to_term(binary) == String.to_atom(name)
     end
 
