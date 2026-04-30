@@ -652,9 +652,8 @@ const Erlang = {
     const SMALL_ATOM_UTF8_EXT = 119;
     const V4_PORT_EXT = 120;
 
-    // Decompresses zlib-compressed data using native DecompressionStream API
-    // Returns a Promise that resolves to {data: Uint8Array, bytesRead: number}
-    // Throws an error if decompression fails
+    // Decompresses zlib-compressed data using native DecompressionStream API.
+    // Returns a Promise that resolves to a Uint8Array; throws on failure.
     const zlibInflate = async (compressedData) => {
       const stream = new ReadableStream({
         start(controller) {
@@ -688,30 +687,23 @@ const Erlang = {
         throw new Error(`Decompression failed: ${err.message}`);
       }
 
-      // TODO(binary_to_term/2): bytesRead is faked.
-      //
-      // We report bytesRead as compressedData.length, i.e. "we consumed
-      // everything you gave us". For binary_to_term/1 this is harmless,
-      // because the caller (decodeCompressed) feeds us the entire tail of
-      // the input via bytes.slice(offset + 4) - there is no notion of
-      // "bytes after the compressed term" at the top level, so the trailing-
-      // bytes check in binary_to_term/1 has nothing to catch either way.
-      //
-      // It becomes a real bug for binary_to_term/2 with the :used option
-      // (which must return the exact number of bytes consumed), and for any
-      // future caller that needs to decode one term out of a longer stream.
-      // To fix this properly we need the actual zlib end-of-stream offset,
-      // which DecompressionStream does not expose. Options when we get there:
+      // TODO(binary_to_term/2): bytesRead is not surfaced. binary_to_term/1
+      // accepts trailing bytes, so it does not care - it just decodes the
+      // first term and ignores the rest. binary_to_term/2 with :used must
+      // report the exact number of bytes consumed by the zlib stream, which
+      // DecompressionStream does not expose. Options when we get there:
       //   1. Parse the zlib header/trailer ourselves to find the stream end.
       //   2. Switch to a sync zlib (e.g. pako) that returns bytes consumed.
       //   3. Drop COMPRESSED support and reject tag 80.
-      return {
-        data: Utils.concatUint8Arrays(chunks),
-        bytesRead: compressedData.length,
-      };
+      return Utils.concatUint8Arrays(chunks);
     };
 
-    const decodeTerm = async (dataView, bytes, offset) => {
+    // Sync recursive dispatcher. The COMPRESSED tag is intentionally NOT
+    // handled here - OTP only allows it at the top level (immediately after
+    // the version byte), so a nested tag 80 falls to the default case and
+    // raises. Keeping this function sync avoids a Promise allocation per
+    // recursive call, which matters for deeply nested / large terms.
+    const decodeTerm = (dataView, bytes, offset) => {
       if (offset >= bytes.length) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
@@ -724,9 +716,6 @@ const Erlang = {
       const tag = dataView.getUint8(offset);
 
       switch (tag) {
-        case COMPRESSED:
-          return await decodeCompressed(dataView, bytes, offset + 1);
-
         case SMALL_INTEGER_EXT:
           return decodeSmallInteger(dataView, offset + 1);
 
@@ -755,10 +744,10 @@ const Erlang = {
           return decodeBinary(dataView, bytes, offset + 1);
 
         case SMALL_TUPLE_EXT:
-          return await decodeSmallTuple(dataView, bytes, offset + 1);
+          return decodeSmallTuple(dataView, bytes, offset + 1);
 
         case LARGE_TUPLE_EXT:
-          return await decodeLargeTuple(dataView, bytes, offset + 1);
+          return decodeLargeTuple(dataView, bytes, offset + 1);
 
         case NIL_EXT:
           return {term: Type.list(), newOffset: offset + 1};
@@ -767,10 +756,10 @@ const Erlang = {
           return decodeString(dataView, bytes, offset + 1);
 
         case LIST_EXT:
-          return await decodeList(dataView, bytes, offset + 1);
+          return decodeList(dataView, bytes, offset + 1);
 
         case MAP_EXT:
-          return await decodeMap(dataView, bytes, offset + 1);
+          return decodeMap(dataView, bytes, offset + 1);
 
         case NEW_FLOAT_EXT:
           return decodeNewFloat(dataView, offset + 1);
@@ -782,31 +771,31 @@ const Erlang = {
           return decodeBitBinary(dataView, bytes, offset + 1);
 
         case REFERENCE_EXT:
-          return await decodeReference(dataView, bytes, offset + 1);
+          return decodeReference(dataView, bytes, offset + 1);
 
         case NEW_REFERENCE_EXT:
-          return await decodeNewReference(dataView, bytes, offset + 1);
+          return decodeNewReference(dataView, bytes, offset + 1);
 
         case NEWER_REFERENCE_EXT:
-          return await decodeNewerReference(dataView, bytes, offset + 1);
+          return decodeNewerReference(dataView, bytes, offset + 1);
 
         case PID_EXT:
-          return await decodePid(dataView, bytes, offset + 1);
+          return decodePid(dataView, bytes, offset + 1);
 
         case NEW_PID_EXT:
-          return await decodeNewPid(dataView, bytes, offset + 1);
+          return decodeNewPid(dataView, bytes, offset + 1);
 
         case PORT_EXT:
-          return await decodePort(dataView, bytes, offset + 1);
+          return decodePort(dataView, bytes, offset + 1);
 
         case NEW_PORT_EXT:
-          return await decodeNewPort(dataView, bytes, offset + 1);
+          return decodeNewPort(dataView, bytes, offset + 1);
 
         case V4_PORT_EXT:
-          return await decodeV4Port(dataView, bytes, offset + 1);
+          return decodeV4Port(dataView, bytes, offset + 1);
 
         case EXPORT_EXT:
-          return await decodeExport(dataView, bytes, offset + 1);
+          return decodeExport(dataView, bytes, offset + 1);
 
         default:
           Interpreter.raiseArgumentError(
@@ -815,71 +804,6 @@ const Erlang = {
               "invalid external representation of a term",
             ),
           );
-      }
-    };
-
-    // Compressed term decoder
-    // Format: COMPRESSED (80) | UncompressedSize (4 bytes, big-endian) | ZlibCompressedData
-    // The decompressed data contains the ETF representation of the term without the version byte
-
-    const decodeCompressed = async (dataView, bytes, offset) => {
-      if (offset + 4 > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
-
-      const uncompressedSize = dataView.getUint32(offset, false);
-      const compressedData = bytes.slice(offset + 4);
-
-      try {
-        // Use native DecompressionStream for zlib decompression
-        const {data: decompressed, bytesRead} =
-          await zlibInflate(compressedData);
-
-        if (decompressed.length !== uncompressedSize) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
-        }
-
-        const decompressedView = new DataView(
-          decompressed.buffer,
-          decompressed.byteOffset,
-          decompressed.byteLength,
-        );
-
-        const result = await decodeTerm(decompressedView, decompressed, 0);
-
-        if (result.newOffset !== decompressed.length) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
-        }
-
-        // Compute newOffset relative to the original bytes buffer
-        const newOffset = offset + 4 + bytesRead;
-
-        return {
-          term: result.term,
-          newOffset: newOffset,
-        };
-      } catch {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
       }
     };
 
@@ -1080,13 +1004,13 @@ const Erlang = {
 
     // Tuple decoders
 
-    const decodeSmallTuple = async (dataView, bytes, offset) => {
+    const decodeSmallTuple = (dataView, bytes, offset) => {
       const arity = dataView.getUint8(offset);
       const elements = [];
       let currentOffset = offset + 1;
 
       for (let i = 0; i < arity; i++) {
-        const result = await decodeTerm(dataView, bytes, currentOffset);
+        const result = decodeTerm(dataView, bytes, currentOffset);
         elements.push(result.term);
         currentOffset = result.newOffset;
       }
@@ -1097,13 +1021,13 @@ const Erlang = {
       };
     };
 
-    const decodeLargeTuple = async (dataView, bytes, offset) => {
+    const decodeLargeTuple = (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
       const elements = [];
       let currentOffset = offset + 4;
 
       for (let i = 0; i < arity; i++) {
-        const result = await decodeTerm(dataView, bytes, currentOffset);
+        const result = decodeTerm(dataView, bytes, currentOffset);
         elements.push(result.term);
         currentOffset = result.newOffset;
       }
@@ -1139,19 +1063,19 @@ const Erlang = {
       };
     };
 
-    const decodeList = async (dataView, bytes, offset) => {
+    const decodeList = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
       const elements = [];
       let currentOffset = offset + 4;
 
       for (let i = 0; i < length; i++) {
-        const result = await decodeTerm(dataView, bytes, currentOffset);
+        const result = decodeTerm(dataView, bytes, currentOffset);
         elements.push(result.term);
         currentOffset = result.newOffset;
       }
 
       // Decode the tail
-      const tailResult = await decodeTerm(dataView, bytes, currentOffset);
+      const tailResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = tailResult.newOffset;
 
       // LIST_EXT with length=0 collapses to its tail. OTP accepts this and
@@ -1182,19 +1106,15 @@ const Erlang = {
 
     // Map decoder
 
-    const decodeMap = async (dataView, bytes, offset) => {
+    const decodeMap = (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
       const entries = [];
       const seenKeys = new Set();
       let currentOffset = offset + 4;
 
       for (let i = 0; i < arity; i++) {
-        const keyResult = await decodeTerm(dataView, bytes, currentOffset);
-        const valueResult = await decodeTerm(
-          dataView,
-          bytes,
-          keyResult.newOffset,
-        );
+        const keyResult = decodeTerm(dataView, bytes, currentOffset);
+        const valueResult = decodeTerm(dataView, bytes, keyResult.newOffset);
 
         // Spec: MAP_EXT keys must be unique. OTP raises badarg on duplicates;
         // without this check we'd silently apply Type.map's last-write-wins
@@ -1334,12 +1254,7 @@ const Erlang = {
     // compatibility with legacy external term format data.
 
     // Common reference decoder helper
-    const decodeReferenceWithOptions = async (
-      dataView,
-      bytes,
-      offset,
-      options,
-    ) => {
+    const decodeReferenceWithOptions = (dataView, bytes, offset, options) => {
       let currentOffset = offset;
 
       // Read length prefix if present
@@ -1364,7 +1279,7 @@ const Erlang = {
       }
 
       // Decode node name (atom)
-      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // For REFERENCE_EXT: read ID words first, then creation
@@ -1402,22 +1317,22 @@ const Erlang = {
       };
     };
 
-    const decodeReference = async (dataView, bytes, offset) => {
-      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+    const decodeReference = (dataView, bytes, offset) => {
+      return decodeReferenceWithOptions(dataView, bytes, offset, {
         hasLengthPrefix: false,
         creationSize: 1,
       });
     };
 
-    const decodeNewReference = async (dataView, bytes, offset) => {
-      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+    const decodeNewReference = (dataView, bytes, offset) => {
+      return decodeReferenceWithOptions(dataView, bytes, offset, {
         hasLengthPrefix: true,
         creationSize: 1,
       });
     };
 
-    const decodeNewerReference = async (dataView, bytes, offset) => {
-      return await decodeReferenceWithOptions(dataView, bytes, offset, {
+    const decodeNewerReference = (dataView, bytes, offset) => {
+      return decodeReferenceWithOptions(dataView, bytes, offset, {
         hasLengthPrefix: true,
         creationSize: 4,
       });
@@ -1433,11 +1348,11 @@ const Erlang = {
     // so we deliberately do not validate either. Adding such checks would
     // diverge from OTP rather than match it.
 
-    const decodePid = async (dataView, bytes, offset) => {
+    const decodePid = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Serial (4 bytes), Creation (1 byte)
@@ -1456,11 +1371,11 @@ const Erlang = {
       };
     };
 
-    const decodeNewPid = async (dataView, bytes, offset) => {
+    const decodeNewPid = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Serial (4 bytes), Creation (4 bytes)
@@ -1481,11 +1396,11 @@ const Erlang = {
 
     // Port decoders
 
-    const decodePort = async (dataView, bytes, offset) => {
+    const decodePort = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Creation (1 byte)
@@ -1501,11 +1416,11 @@ const Erlang = {
       };
     };
 
-    const decodeNewPort = async (dataView, bytes, offset) => {
+    const decodeNewPort = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (4 bytes), Creation (4 bytes)
@@ -1521,11 +1436,11 @@ const Erlang = {
       };
     };
 
-    const decodeV4Port = async (dataView, bytes, offset) => {
+    const decodeV4Port = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode node name (atom)
-      const nodeResult = await decodeTerm(dataView, bytes, currentOffset);
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
       // Read ID (8 bytes as BigUint64), Creation (4 bytes)
@@ -1542,19 +1457,19 @@ const Erlang = {
     };
 
     // EXPORT_EXT decoder (function capture)
-    const decodeExport = async (dataView, bytes, offset) => {
+    const decodeExport = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
       // Decode module (atom)
-      const moduleResult = await decodeTerm(dataView, bytes, currentOffset);
+      const moduleResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = moduleResult.newOffset;
 
       // Decode function (atom)
-      const functionResult = await decodeTerm(dataView, bytes, currentOffset);
+      const functionResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = functionResult.newOffset;
 
       // Decode arity (small integer)
-      const arityResult = await decodeTerm(dataView, bytes, currentOffset);
+      const arityResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = arityResult.newOffset;
 
       // Spec: Module and Function must be atoms, Arity must be an integer.
@@ -1611,12 +1526,70 @@ const Erlang = {
         );
       }
 
+      // COMPRESSED is only valid immediately after the version byte. OTP
+      // rejects nested COMPRESSED tags, so handling it here (rather than as
+      // a case in decodeTerm's switch) keeps the recursive decoder sync.
+      // Format: 80 | UncompressedSize (uint32 BE) | zlib-compressed payload.
+      if (bytes.length >= 2 && dataView.getUint8(1) === COMPRESSED) {
+        if (bytes.length < 6) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
+        const uncompressedSize = dataView.getUint32(2, false);
+        const compressedData = bytes.slice(6);
+
+        let decompressed;
+        try {
+          decompressed = await zlibInflate(compressedData);
+        } catch {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
+        if (decompressed.length !== uncompressedSize) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
+        const decompressedView = new DataView(
+          decompressed.buffer,
+          decompressed.byteOffset,
+          decompressed.byteLength,
+        );
+
+        const innerResult = decodeTerm(decompressedView, decompressed, 0);
+
+        // Trailing bytes inside the decompressed payload are rejected by
+        // OTP (the outer binary may have trailing bytes; the decompressed
+        // term cannot).
+        if (innerResult.newOffset !== decompressed.length) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+
+        return innerResult.term;
+      }
+
       // OTP's binary_to_term/1 silently ignores any bytes past the first
-      // term: term_to_binary(42) <> "garbage" decodes to 42. The
-      // trailing-bytes check inside decodeCompressed still applies because
-      // OTP does reject trailing bytes inside the decompressed payload.
-      const result = await decodeTerm(dataView, bytes, 1);
-      return result.term;
+      // term: term_to_binary(42) <> "garbage" decodes to 42.
+      return decodeTerm(dataView, bytes, 1).term;
     } catch (err) {
       // RangeError is the only generic signal for malformed input we accept here:
       // DataView.getXxx throws RangeError when reading past the end of the buffer,

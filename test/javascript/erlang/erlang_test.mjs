@@ -4335,6 +4335,27 @@ describe("Erlang", () => {
           ),
         );
       });
+
+      it("raises ArgumentError for nested COMPRESSED tag", async () => {
+        // SMALL_TUPLE_EXT (104) of arity 1 wrapping a real COMPRESSED-prefixed
+        // payload (the same zlib stream used by the "decodes compressed term
+        // (COMPRESSED tag 80) with repeated string" test). OTP accepts COMPRESSED
+        // only at the top level - any tag 80 reached recursively is rejected.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 104, 1, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146,
+            145, 154, 147, 147, 63, 74, 140, 40, 2, 0, 21, 94, 209, 51,
+          ]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
     });
 
     describe("error handling", () => {

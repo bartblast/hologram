@@ -2770,6 +2770,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for nested COMPRESSED tag" do
+      # SMALL_TUPLE_EXT (104) of arity 1 wrapping a COMPRESSED-prefixed payload.
+      # OTP accepts COMPRESSED only at the top level.
+      binary =
+        <<131, 104, 1, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146, 145, 154, 147, 147,
+          63, 74, 140, 40, 2, 0, 21, 94, 209, 51>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     # === error handling ===
 
     test "raises ArgumentError if argument is not a binary" do
