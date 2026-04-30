@@ -2803,68 +2803,60 @@ describe("Erlang", () => {
     describe("integers", () => {
       it("decodes small positive integer (SMALL_INTEGER_EXT)", async () => {
         // :erlang.term_to_binary(42) = <<131, 97, 42>>
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 97, 42]));
+        const binary = Bitstring.fromBytes([131, 97, 42]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(42));
       });
 
       it("decodes small positive integer (max value 255)", async () => {
         // :erlang.term_to_binary(255) = <<131, 97, 255>>
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 97, 255]));
+        const binary = Bitstring.fromBytes([131, 97, 255]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(255));
       });
 
       it("decodes positive integer (INTEGER_EXT)", async () => {
         // :erlang.term_to_binary(1000) = <<131, 98, 0, 0, 3, 232>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 98, 0, 0, 3, 232]),
-        );
+        const binary = Bitstring.fromBytes([131, 98, 0, 0, 3, 232]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(1000));
       });
 
       it("decodes negative integer (INTEGER_EXT)", async () => {
         // :erlang.term_to_binary(-100) = <<131, 98, 255, 255, 255, 156>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 98, 255, 255, 255, 156]),
-        );
+        const binary = Bitstring.fromBytes([131, 98, 255, 255, 255, 156]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(-100));
       });
 
       it("decodes INTEGER_EXT at int32 max boundary (2^31 - 1)", async () => {
         // :erlang.term_to_binary(2147483647) = <<131, 98, 127, 255, 255, 255>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 98, 127, 255, 255, 255]),
-        );
+        const binary = Bitstring.fromBytes([131, 98, 127, 255, 255, 255]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(2147483647));
       });
 
       it("decodes INTEGER_EXT at int32 min boundary (-2^31)", async () => {
         // :erlang.term_to_binary(-2147483648) = <<131, 98, 128, 0, 0, 0>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 98, 128, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 98, 128, 0, 0, 0]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(-2147483648));
       });
 
       it("decodes large positive integer (SMALL_BIG_EXT)", async () => {
         // :erlang.term_to_binary(1000000000000) = <<131, 110, 5, 0, 0, 16, 165, 212, 232>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 110, 5, 0, 0, 16, 165, 212, 232]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 110, 5, 0, 0, 16, 165, 212, 232,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(1000000000000n));
       });
 
       it("decodes large negative integer (SMALL_BIG_EXT)", async () => {
         // :erlang.term_to_binary(-1000000000000) = <<131, 110, 5, 1, 0, 16, 165, 212, 232>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 110, 5, 1, 0, 16, 165, 212, 232]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 110, 5, 1, 0, 16, 165, 212, 232,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(-1000000000000n));
       });
@@ -2890,7 +2882,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for INTEGER_EXT boundary - value truncated", async () => {
         // INTEGER_EXT (98) but only 2 bytes instead of 4
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 98, 0, 0]));
+        const binary = Bitstring.fromBytes([131, 98, 0, 0]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -2903,9 +2895,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed SMALL_BIG_EXT with n exceeding data", async () => {
         // SMALL_BIG_EXT (110) with n=100 but insufficient bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 110, 100, 0, 1, 2, 3]),
-        );
+        const binary = Bitstring.fromBytes([131, 110, 100, 0, 1, 2, 3]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -2918,9 +2908,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed LARGE_BIG_EXT with n exceeding data", async () => {
         // LARGE_BIG_EXT (111) with large n but insufficient bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 111, 0, 0, 1, 0, 0, 1, 2, 3]),
-        );
+        const binary = Bitstring.fromBytes([131, 111, 0, 0, 1, 0, 0, 1, 2, 3]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -2934,9 +2922,7 @@ describe("Erlang", () => {
       it("decodes SMALL_BIG_EXT with non-{0,1} sign byte as negative", async () => {
         // OTP treats any non-zero Sign byte as negative, not only 1.
         // SMALL_BIG_EXT (110), n=1, sign=2, value byte 42 -> -42.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 110, 1, 2, 42]),
-        );
+        const binary = Bitstring.fromBytes([131, 110, 1, 2, 42]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(-42));
       });
@@ -2944,9 +2930,7 @@ describe("Erlang", () => {
       it("decodes LARGE_BIG_EXT with non-{0,1} sign byte as negative", async () => {
         // OTP treats any non-zero Sign byte as negative.
         // LARGE_BIG_EXT (111), n=1, sign=255, value byte 42 -> -42.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 111, 0, 0, 0, 1, 255, 42]),
-        );
+        const binary = Bitstring.fromBytes([131, 111, 0, 0, 0, 1, 255, 42]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(-42));
       });
@@ -2960,18 +2944,20 @@ describe("Erlang", () => {
         // ATOM_UTF8_EXT uses 16-bit big-endian length
         const lengthHigh = (nameBytes.length >> 8) & 0xff;
         const lengthLow = nameBytes.length & 0xff;
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 118, lengthHigh, lengthLow, ...nameBytes]),
-        );
+        const binary = Bitstring.fromBytes([
+          131,
+          118,
+          lengthHigh,
+          lengthLow,
+          ...nameBytes,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom(name));
       });
 
       it("decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)", async () => {
         // :erlang.term_to_binary(:test) = <<131, 119, 4, 116, 101, 115, 116>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 119, 4, 116, 101, 115, 116]),
-        );
+        const binary = Bitstring.fromBytes([131, 119, 4, 116, 101, 115, 116]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom("test"));
       });
@@ -2983,9 +2969,13 @@ describe("Erlang", () => {
         // ATOM_EXT uses 16-bit big-endian length
         const lengthHigh = (nameBytes.length >> 8) & 0xff;
         const lengthLow = nameBytes.length & 0xff;
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 100, lengthHigh, lengthLow, ...nameBytes]),
-        );
+        const binary = Bitstring.fromBytes([
+          131,
+          100,
+          lengthHigh,
+          lengthLow,
+          ...nameBytes,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom(name));
       });
@@ -2994,38 +2984,37 @@ describe("Erlang", () => {
         // elixir as Latin-1 atom using SMALL_ATOM_EXT (tag 115)
         const name = "elixir";
         const nameBytes = new TextEncoder().encode(name);
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 115, nameBytes.length, ...nameBytes]),
-        );
+        const binary = Bitstring.fromBytes([
+          131,
+          115,
+          nameBytes.length,
+          ...nameBytes,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom(name));
       });
 
       it("decodes longer atom", async () => {
         // :erlang.term_to_binary(:test_atom) = <<131, 119, 9, 116, 101, 115, 116, 95, 97, 116, 111, 109>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 119, 9, 116, 101, 115, 116, 95, 97, 116, 111, 109,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 119, 9, 116, 101, 115, 116, 95, 97, 116, 111, 109,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom("test_atom"));
       });
 
       it("decodes true atom", async () => {
         // :erlang.term_to_binary(true) = <<131, 119, 4, 116, 114, 117, 101>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 119, 4, 116, 114, 117, 101]),
-        );
+        const binary = Bitstring.fromBytes([131, 119, 4, 116, 114, 117, 101]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom("true"));
       });
 
       it("decodes false atom", async () => {
         // :erlang.term_to_binary(false) = <<131, 119, 5, 102, 97, 108, 115, 101>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 119, 5, 102, 97, 108, 115, 101]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 119, 5, 102, 97, 108, 115, 101,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom("false"));
       });
@@ -3045,9 +3034,13 @@ describe("Erlang", () => {
           const nameBytes = new TextEncoder().encode(name);
           const lengthHigh = (nameBytes.length >> 8) & 0xff;
           const lengthLow = nameBytes.length & 0xff;
-          const binary = Bitstring.fromBytes(
-            new Uint8Array([131, 100, lengthHigh, lengthLow, ...nameBytes]),
-          );
+          const binary = Bitstring.fromBytes([
+            131,
+            100,
+            lengthHigh,
+            lengthLow,
+            ...nameBytes,
+          ]);
           const result = await binary_to_term(binary);
           assertBoxedStrictEqual(result, Type.atom(name));
         }
@@ -3066,9 +3059,12 @@ describe("Erlang", () => {
 
         for (const name of testAtoms) {
           const nameBytes = new TextEncoder().encode(name);
-          const binary = Bitstring.fromBytes(
-            new Uint8Array([131, 119, nameBytes.length, ...nameBytes]),
-          );
+          const binary = Bitstring.fromBytes([
+            131,
+            119,
+            nameBytes.length,
+            ...nameBytes,
+          ]);
           const result = await binary_to_term(binary);
           assertBoxedStrictEqual(result, Type.atom(name));
         }
@@ -3076,9 +3072,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed ATOM_EXT with length exceeding data", async () => {
         // ATOM_EXT (100) with length 100 but only 2 bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 100, 0, 100, 65, 66]),
-        );
+        const binary = Bitstring.fromBytes([131, 100, 0, 100, 65, 66]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3091,9 +3085,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed SMALL_ATOM_UTF8_EXT with length exceeding data", async () => {
         // SMALL_ATOM_UTF8_EXT (119) with length 50 but only 2 bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 119, 50, 65, 66]),
-        );
+        const binary = Bitstring.fromBytes([131, 119, 50, 65, 66]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3106,9 +3098,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for ATOM_UTF8_EXT with invalid UTF-8 bytes", async () => {
         // ATOM_UTF8_EXT (118) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 118, 0, 2, 0xc3, 0x28]),
-        );
+        const binary = Bitstring.fromBytes([131, 118, 0, 2, 0xc3, 0x28]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3121,9 +3111,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for SMALL_ATOM_UTF8_EXT with invalid UTF-8 bytes", async () => {
         // SMALL_ATOM_UTF8_EXT (119) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 119, 2, 0xc3, 0x28]),
-        );
+        const binary = Bitstring.fromBytes([131, 119, 2, 0xc3, 0x28]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3185,9 +3173,13 @@ describe("Erlang", () => {
         const nameBytes = new TextEncoder().encode(name);
         const lengthHigh = (nameBytes.length >> 8) & 0xff;
         const lengthLow = nameBytes.length & 0xff;
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 118, lengthHigh, lengthLow, ...nameBytes]),
-        );
+        const binary = Bitstring.fromBytes([
+          131,
+          118,
+          lengthHigh,
+          lengthLow,
+          ...nameBytes,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.atom(name));
       });
@@ -3196,18 +3188,16 @@ describe("Erlang", () => {
     describe("binaries", () => {
       it("decodes binary string (BINARY_EXT)", async () => {
         // :erlang.term_to_binary("hello") = <<131, 109, 0, 0, 0, 5, 104, 101, 108, 108, 111>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 109, 0, 0, 0, 5, 104, 101, 108, 108, 111]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 109, 0, 0, 0, 5, 104, 101, 108, 108, 111,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.bitstring("hello"));
       });
 
       it("decodes empty binary", async () => {
         // :erlang.term_to_binary("") = <<131, 109, 0, 0, 0, 0>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 109, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 109, 0, 0, 0, 0]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.bitstring(""));
       });
@@ -3242,9 +3232,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed BINARY_EXT with length exceeding data", async () => {
         // BINARY_EXT (109) with length 10 but only 2 bytes of data
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 109, 0, 0, 0, 10, 65, 66]),
-        );
+        const binary = Bitstring.fromBytes([131, 109, 0, 0, 0, 10, 65, 66]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3259,9 +3247,7 @@ describe("Erlang", () => {
     describe("tuples", () => {
       it("decodes small tuple (SMALL_TUPLE_EXT)", async () => {
         // :erlang.term_to_binary({1, 2, 3}) = <<131, 104, 3, 97, 1, 97, 2, 97, 3>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 104, 3, 97, 1, 97, 2, 97, 3]),
-        );
+        const binary = Bitstring.fromBytes([131, 104, 3, 97, 1, 97, 2, 97, 3]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(
           result,
@@ -3299,9 +3285,7 @@ describe("Erlang", () => {
           }
         }
 
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([...header, ...elementBytes]),
-        );
+        const binary = Bitstring.fromBytes([...header, ...elementBytes]);
         const result = await binary_to_term(binary);
 
         assert.strictEqual(Type.isTuple(result), true);
@@ -3313,16 +3297,16 @@ describe("Erlang", () => {
 
       it("decodes empty tuple", async () => {
         // :erlang.term_to_binary({}) = <<131, 104, 0>>
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 104, 0]));
+        const binary = Bitstring.fromBytes([131, 104, 0]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.tuple([]));
       });
 
       it("decodes nested tuple", async () => {
         // :erlang.term_to_binary({1, {2, 3}}) = <<131, 104, 2, 97, 1, 104, 2, 97, 2, 97, 3>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 104, 2, 97, 1, 104, 2, 97, 2, 97, 3]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 104, 2, 97, 1, 104, 2, 97, 2, 97, 3,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(
           result,
@@ -3335,9 +3319,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed SMALL_TUPLE_EXT with arity exceeding available data", async () => {
         // SMALL_TUPLE_EXT (104) with arity 5 but only 1 element
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 104, 5, 97, 1]),
-        );
+        const binary = Bitstring.fromBytes([131, 104, 5, 97, 1]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3351,9 +3333,7 @@ describe("Erlang", () => {
       it("raises ArgumentError for nested term truncation", async () => {
         // SMALL_TUPLE_EXT with 2 elements, but second element is truncated
         // [131, 104, 2, 97, 1, 97] - missing last byte
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 104, 2, 97, 1, 97]),
-        );
+        const binary = Bitstring.fromBytes([131, 104, 2, 97, 1, 97]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3366,9 +3346,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for LARGE_TUPLE_EXT with zero arity but missing NIL_EXT", async () => {
         // LARGE_TUPLE_EXT (105) with arity 0 - should work, but let's test malformed version
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 105, 0, 0, 0, 1]),
-        );
+        const binary = Bitstring.fromBytes([131, 105, 0, 0, 0, 1]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3383,16 +3361,14 @@ describe("Erlang", () => {
     describe("lists", () => {
       it("decodes empty list (NIL_EXT)", async () => {
         // :erlang.term_to_binary([]) = <<131, 106>>
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 106]));
+        const binary = Bitstring.fromBytes([131, 106]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.list([]));
       });
 
       it("decodes string list (STRING_EXT)", async () => {
         // :erlang.term_to_binary([1, 2, 3]) = <<131, 107, 0, 3, 1, 2, 3>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 107, 0, 3, 1, 2, 3]),
-        );
+        const binary = Bitstring.fromBytes([131, 107, 0, 3, 1, 2, 3]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(
           result,
@@ -3402,12 +3378,9 @@ describe("Erlang", () => {
 
       it("decodes proper list (LIST_EXT)", async () => {
         // :erlang.term_to_binary([100, 200, 300]) = <<131, 108, 0, 0, 0, 3, 97, 100, 98, 0, 0, 0, 200, 98, 0, 0, 1, 44, 106>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 108, 0, 0, 0, 3, 97, 100, 98, 0, 0, 0, 200, 98, 0, 0, 1, 44,
-            106,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 108, 0, 0, 0, 3, 97, 100, 98, 0, 0, 0, 200, 98, 0, 0, 1, 44, 106,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(
           result,
@@ -3418,9 +3391,9 @@ describe("Erlang", () => {
       it("decodes improper list (LIST_EXT)", async () => {
         // :erlang.term_to_binary([1 | [2 | [3 | 4]]]) - improper list
         // The tail is 4 instead of empty list (NIL_EXT)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 108, 0, 0, 0, 3, 97, 1, 97, 2, 97, 3, 97, 4]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 108, 0, 0, 0, 3, 97, 1, 97, 2, 97, 3, 97, 4,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(
           result,
@@ -3436,18 +3409,14 @@ describe("Erlang", () => {
       it("decodes LIST_EXT with length 0 and non-list tail to the tail term", async () => {
         // LIST_EXT (108) with length 0 and SMALL_INTEGER_EXT (97) 1 as tail
         // OTP collapses this to the integer 1.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 108, 0, 0, 0, 0, 97, 1]),
-        );
+        const binary = Bitstring.fromBytes([131, 108, 0, 0, 0, 0, 97, 1]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(1));
       });
 
       it("decodes LIST_EXT with length 0 and NIL_EXT tail to empty list", async () => {
         // LIST_EXT (108) with length 0 and NIL_EXT (106) tail
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 108, 0, 0, 0, 0, 106]),
-        );
+        const binary = Bitstring.fromBytes([131, 108, 0, 0, 0, 0, 106]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.list([]));
       });
@@ -3455,9 +3424,9 @@ describe("Erlang", () => {
       it("decodes LIST_EXT with length 0 and improper-list tail to the tail term", async () => {
         // LIST_EXT (108) with length 0 and tail = LIST_EXT [1 | 2]
         // OTP collapses this to the improper list [1 | 2].
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 108, 0, 0, 0, 0, 108, 0, 0, 0, 1, 97, 1, 97, 2]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 108, 0, 0, 0, 0, 108, 0, 0, 0, 1, 97, 1, 97, 2,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(
           result,
@@ -3467,9 +3436,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed STRING_EXT with length exceeding data", async () => {
         // STRING_EXT (107) with length 100 but only 2 bytes of data
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 107, 0, 100, 65, 66]),
-        );
+        const binary = Bitstring.fromBytes([131, 107, 0, 100, 65, 66]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3482,9 +3449,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed LIST_EXT with length exceeding data", async () => {
         // LIST_EXT (108) with length 10 but no elements
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 108, 0, 0, 0, 10]),
-        );
+        const binary = Bitstring.fromBytes([131, 108, 0, 0, 0, 10]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3499,20 +3464,16 @@ describe("Erlang", () => {
     describe("maps", () => {
       it("decodes empty map", async () => {
         // :erlang.term_to_binary(%{}) = <<131, 116, 0, 0, 0, 0>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 116, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 116, 0, 0, 0, 0]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.map([]));
       });
 
       it("decodes map with atom keys", async () => {
         // :erlang.term_to_binary(%{a: 1, b: 2}) = <<131, 116, 0, 0, 0, 2, 119, 1, 97, 97, 1, 119, 1, 98, 97, 2>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 116, 0, 0, 0, 2, 119, 1, 97, 97, 1, 119, 1, 98, 97, 2,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 116, 0, 0, 0, 2, 119, 1, 97, 97, 1, 119, 1, 98, 97, 2,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(
           result,
@@ -3525,9 +3486,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed MAP_EXT with arity exceeding data", async () => {
         // MAP_EXT (116) with arity 10 but no key-value pairs
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 116, 0, 0, 0, 10]),
-        );
+        const binary = Bitstring.fromBytes([131, 116, 0, 0, 0, 10]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3541,11 +3500,9 @@ describe("Erlang", () => {
       it("raises ArgumentError for MAP_EXT with duplicate keys", async () => {
         // MAP_EXT (116) arity=2, key1=:a value=1, key2=:a value=2 (duplicate).
         // OTP rejects MAP_EXT with non-unique keys.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 116, 0, 0, 0, 2, 100, 0, 1, 97, 97, 1, 100, 0, 1, 97, 97, 2,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 116, 0, 0, 0, 2, 100, 0, 1, 97, 97, 1, 100, 0, 1, 97, 97, 2,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3560,27 +3517,23 @@ describe("Erlang", () => {
     describe("floats", () => {
       it("decodes NEW_FLOAT_EXT (IEEE 754 double)", async () => {
         // :erlang.term_to_binary(3.14159) with NEW_FLOAT_EXT tag
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 70, 64, 9, 33, 249, 240, 27, 134, 110]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 70, 64, 9, 33, 249, 240, 27, 134, 110,
+        ]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.float(3.14159));
       });
 
       it("decodes NEW_FLOAT_EXT for negative float", async () => {
         // :erlang.term_to_binary(-2.5)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 70, 192, 4, 0, 0, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 70, 192, 4, 0, 0, 0, 0, 0, 0]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.float(-2.5));
       });
 
       it("decodes NEW_FLOAT_EXT for zero", async () => {
         // :erlang.term_to_binary(0.0)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 70, 0, 0, 0, 0, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 70, 0, 0, 0, 0, 0, 0, 0, 0]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.float(0.0));
       });
@@ -3619,9 +3572,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for NEW_FLOAT_EXT truncated", async () => {
         // NEW_FLOAT_EXT (70) but only 4 bytes instead of 8
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 70, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 70, 0, 0, 0, 0]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3635,9 +3586,9 @@ describe("Erlang", () => {
       it("raises ArgumentError for NEW_FLOAT_EXT with NaN bit pattern", async () => {
         // NEW_FLOAT_EXT (70) followed by IEEE 754 quiet NaN bytes.
         // OTP rejects non-finite floats.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 70, 127, 248, 0, 0, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 70, 127, 248, 0, 0, 0, 0, 0, 0,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3650,9 +3601,9 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for NEW_FLOAT_EXT with +Infinity bit pattern", async () => {
         // NEW_FLOAT_EXT (70) followed by IEEE 754 +Infinity bytes.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 70, 127, 240, 0, 0, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 70, 127, 240, 0, 0, 0, 0, 0, 0,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3665,9 +3616,9 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for NEW_FLOAT_EXT with -Infinity bit pattern", async () => {
         // NEW_FLOAT_EXT (70) followed by IEEE 754 -Infinity bytes.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 70, 255, 240, 0, 0, 0, 0, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 70, 255, 240, 0, 0, 0, 0, 0, 0,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3708,9 +3659,7 @@ describe("Erlang", () => {
         // 0, 0, 0, 1 - length (1 byte)
         // 5 - bits in last byte
         // 0b00001000 (8) - the byte with 5 bits set (bit pattern 00001)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 77, 0, 0, 0, 1, 5, 8]),
-        );
+        const binary = Bitstring.fromBytes([131, 77, 0, 0, 0, 1, 5, 8]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Bitstring.fromBits([0, 0, 0, 0, 1]));
       });
@@ -3722,21 +3671,14 @@ describe("Erlang", () => {
         // 0, 0, 0, 2 - length (2 bytes)
         // 8 - bits used in last byte (8 = full byte)
         // 255, 0 - the actual data bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 77, 0, 0, 0, 2, 8, 255, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 77, 0, 0, 0, 2, 8, 255, 0]);
         const result = await binary_to_term(binary);
-        assertBoxedStrictEqual(
-          result,
-          Bitstring.fromBytes(new Uint8Array([255, 0])),
-        );
+        assertBoxedStrictEqual(result, Bitstring.fromBytes([255, 0]));
       });
 
       it("raises ArgumentError for malformed BIT_BINARY_EXT with length exceeding data", async () => {
         // BIT_BINARY_EXT (77) with length 100 but only 2 bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 77, 0, 0, 0, 100, 5, 65, 66]),
-        );
+        const binary = Bitstring.fromBytes([131, 77, 0, 0, 0, 100, 5, 65, 66]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3752,9 +3694,7 @@ describe("Erlang", () => {
         // Pins the Bits arm of the guard; the Length=0 test below pins the
         // Length arm. Without this test, removing the `bits < 1 || bits > 8`
         // check would not fail any other existing test.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 77, 0, 0, 0, 1, 0, 0]),
-        );
+        const binary = Bitstring.fromBytes([131, 77, 0, 0, 0, 1, 0, 0]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3768,9 +3708,7 @@ describe("Erlang", () => {
       it("raises ArgumentError for BIT_BINARY_EXT with Length=0", async () => {
         // BIT_BINARY_EXT (77) with length 0, bits 8. OTP rejects: trailing-
         // bits count is meaningless without any data byte.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 77, 0, 0, 0, 0, 8]),
-        );
+        const binary = Bitstring.fromBytes([131, 77, 0, 0, 0, 0, 8]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3792,12 +3730,10 @@ describe("Erlang", () => {
         // "nonode@nohost" - node name
         // 0, 0, 0, 42 - single ID word (32-bit)
         // 1 - creation (8-bit)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 101, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
-            111, 115, 116, 0, 0, 0, 42, 1,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 101, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+          111, 115, 116, 0, 0, 0, 42, 1,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -3817,12 +3753,10 @@ describe("Erlang", () => {
         // "nonode@nohost" - node name
         // 0, 0, 1, 200 - single ID word (32-bit)
         // 3 - creation (8-bit)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 101, 115, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
-            111, 115, 116, 0, 0, 1, 200, 3,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 101, 115, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+          111, 115, 116, 0, 0, 1, 200, 3,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -3840,12 +3774,10 @@ describe("Erlang", () => {
         // "nonode@nohost" - node name
         // 0 - creation (1 byte)
         // ID words: 1, 2, 3 (each 4 bytes)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 114, 0, 3, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
-            104, 111, 115, 116, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 114, 0, 3, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
+          104, 111, 115, 116, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -3865,12 +3797,10 @@ describe("Erlang", () => {
         // 0, 0, 0, 1 - ID word 1 (32-bit)
         // 0, 0, 0, 2 - ID word 2 (32-bit)
         // 0, 0, 0, 3 - ID word 3 (32-bit)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 114, 0, 3, 100, 0, 13, 110, 111, 110, 111, 100, 101, 64, 110,
-            111, 104, 111, 115, 116, 1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 114, 0, 3, 100, 0, 13, 110, 111, 110, 111, 100, 101, 64, 110,
+          111, 104, 111, 115, 116, 1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -3888,12 +3818,10 @@ describe("Erlang", () => {
         // "nonode@nohost" - node name
         // 0, 0, 0, 0 - creation (4 bytes)
         // ID words: 1, 2, 3 (each 4 bytes)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 90, 0, 3, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
-            104, 111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 90, 0, 3, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
+          104, 111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -3911,13 +3839,10 @@ describe("Erlang", () => {
         // "nonode@nohost" - node name
         // 0, 0, 0, 0 - creation (4 bytes)
         // ID words: 1, 2, 3 (each 4 bytes)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 90, 0, 3, 100, 0, 13, 110, 111, 110, 111, 100, 101, 64, 110,
-            111, 104, 111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0,
-            0, 3,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 90, 0, 3, 100, 0, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111,
+          104, 111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -3927,11 +3852,9 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for malformed NEW_REFERENCE_EXT with len exceeding data", async () => {
         // NEW_REFERENCE_EXT (114) with len=10 but insufficient id bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 114, 0, 10, 119, 4, 110, 111, 100, 101, 0, 0, 0, 1,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 114, 0, 10, 119, 4, 110, 111, 100, 101, 0, 0, 0, 1,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3945,12 +3868,10 @@ describe("Erlang", () => {
       it("raises ArgumentError for NEW_REFERENCE_EXT with len exceeding OTP cap of 5", async () => {
         // NEW_REFERENCE_EXT (114), Len=6, Node=ATOM "n", Creation=0,
         // ID=6*4 zero bytes (OTP rejects Len > 5).
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 114, 0, 6, 100, 0, 1, 110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 114, 0, 6, 100, 0, 1, 110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3964,12 +3885,10 @@ describe("Erlang", () => {
       it("raises ArgumentError for NEWER_REFERENCE_EXT with len exceeding OTP cap of 5", async () => {
         // NEWER_REFERENCE_EXT (90), Len=6, Node=ATOM "n", Creation=0 (4 bytes),
         // ID=6*4 zero bytes (OTP rejects Len > 5).
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 90, 0, 6, 100, 0, 1, 110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 90, 0, 6, 100, 0, 1, 110, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -3990,12 +3909,10 @@ describe("Erlang", () => {
         // 13 - node name length
         // "nonode@nohost" - node name
         // ID (4 bytes), Serial (4 bytes), Creation (1 byte)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 103, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
-            111, 115, 116, 0, 0, 0, 100, 0, 0, 0, 50, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 103, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+          111, 115, 116, 0, 0, 0, 100, 0, 0, 0, 50, 0,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "pid");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -4010,12 +3927,10 @@ describe("Erlang", () => {
         // 13 - node name length
         // "nonode@nohost" - node name
         // ID (4 bytes), Serial (4 bytes), Creation (4 bytes)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 88, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
-            111, 115, 116, 0, 0, 0, 100, 0, 0, 0, 50, 0, 0, 0, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 88, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+          111, 115, 116, 0, 0, 0, 100, 0, 0, 0, 50, 0, 0, 0, 0,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "pid");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -4032,12 +3947,10 @@ describe("Erlang", () => {
         // 13 - node name length
         // "nonode@nohost" - node name
         // ID (4 bytes), Creation (1 byte)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 102, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
-            111, 115, 116, 0, 0, 0, 5, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 102, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+          111, 115, 116, 0, 0, 0, 5, 0,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "port");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -4052,12 +3965,10 @@ describe("Erlang", () => {
         // 13 - node name length
         // "nonode@nohost" - node name
         // ID (4 bytes), Creation (4 bytes)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 89, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
-            111, 115, 116, 0, 0, 0, 5, 0, 0, 0, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 89, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+          111, 115, 116, 0, 0, 0, 5, 0, 0, 0, 0,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "port");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -4072,12 +3983,10 @@ describe("Erlang", () => {
         // 13 - node name length
         // "nonode@nohost" - node name
         // ID (8 bytes as BigUint64), Creation (4 bytes)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 120, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
-            111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 120, 119, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+          111, 115, 116, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0,
+        ]);
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "port");
         assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
@@ -4090,12 +3999,10 @@ describe("Erlang", () => {
         // &Enum.map/2
         // :erlang.term_to_binary(&Enum.map/2) =
         // <<131, 113, 119, 11, 69, 108, 105, 120, 105, 114, 46, 69, 110, 117, 109, 119, 3, 109, 97, 112, 97, 2>>
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 113, 119, 11, 69, 108, 105, 120, 105, 114, 46, 69, 110, 117,
-            109, 119, 3, 109, 97, 112, 97, 2,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 113, 119, 11, 69, 108, 105, 120, 105, 114, 46, 69, 110, 117, 109,
+          119, 3, 109, 97, 112, 97, 2,
+        ]);
         const result = await binary_to_term(binary);
 
         assert.strictEqual(result.type, "anonymous_function");
@@ -4108,9 +4015,9 @@ describe("Erlang", () => {
       it("raises ArgumentError for EXPORT_EXT with non-atom module", async () => {
         // EXPORT_EXT (113), Module = SMALL_INTEGER_EXT 5 (not an atom),
         // Function = ATOM_EXT "f", Arity = SMALL_INTEGER_EXT 2
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 113, 97, 5, 100, 0, 1, 102, 97, 2]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 113, 97, 5, 100, 0, 1, 102, 97, 2,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4124,9 +4031,9 @@ describe("Erlang", () => {
       it("raises ArgumentError for EXPORT_EXT with non-atom function", async () => {
         // EXPORT_EXT (113), Module = ATOM_EXT "m", Function = SMALL_INTEGER_EXT 5,
         // Arity = SMALL_INTEGER_EXT 2
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 113, 100, 0, 1, 109, 97, 5, 97, 2]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 113, 100, 0, 1, 109, 97, 5, 97, 2,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4140,11 +4047,9 @@ describe("Erlang", () => {
       it("raises ArgumentError for EXPORT_EXT with non-integer arity", async () => {
         // EXPORT_EXT (113), Module = ATOM_EXT "m", Function = ATOM_EXT "f",
         // Arity = ATOM_EXT "a" (not an integer)
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 113, 100, 0, 1, 109, 100, 0, 1, 102, 100, 0, 1, 97,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 113, 100, 0, 1, 109, 100, 0, 1, 102, 100, 0, 1, 97,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4159,14 +4064,12 @@ describe("Erlang", () => {
     describe("complex nested structures", () => {
       it("decodes Code.fetch_docs/1 style tuple", async () => {
         // :erlang.term_to_binary({:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []})
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 104, 7, 119, 7, 100, 111, 99, 115, 95, 118, 49, 97, 1, 119, 6,
-            101, 108, 105, 120, 105, 114, 109, 0, 0, 0, 13, 116, 101, 120, 116,
-            47, 109, 97, 114, 107, 100, 111, 119, 110, 116, 0, 0, 0, 0, 116, 0,
-            0, 0, 0, 106,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 104, 7, 119, 7, 100, 111, 99, 115, 95, 118, 49, 97, 1, 119, 6,
+          101, 108, 105, 120, 105, 114, 109, 0, 0, 0, 13, 116, 101, 120, 116,
+          47, 109, 97, 114, 107, 100, 111, 119, 110, 116, 0, 0, 0, 0, 116, 0, 0,
+          0, 0, 106,
+        ]);
         const result = await binary_to_term(binary);
 
         assertBoxedStrictEqual(
@@ -4191,20 +4094,18 @@ describe("Erlang", () => {
         // )
         // Exercises populated maps, nested tuples, and lists - paths the
         // empty-containers Code.fetch_docs test does not reach.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 104, 7, 119, 7, 100, 111, 99, 115, 95, 118, 49, 97, 1, 119, 6,
-            101, 108, 105, 120, 105, 114, 109, 0, 0, 0, 13, 116, 101, 120, 116,
-            47, 109, 97, 114, 107, 100, 111, 119, 110, 116, 0, 0, 0, 1, 109, 0,
-            0, 0, 2, 101, 110, 109, 0, 0, 0, 11, 77, 111, 100, 117, 108, 101,
-            32, 100, 111, 99, 115, 116, 0, 0, 0, 1, 119, 5, 115, 105, 110, 99,
-            101, 109, 0, 0, 0, 5, 49, 46, 48, 46, 48, 108, 0, 0, 0, 1, 104, 5,
-            104, 3, 119, 8, 102, 117, 110, 99, 116, 105, 111, 110, 119, 7, 109,
-            121, 95, 102, 117, 110, 99, 97, 2, 97, 10, 108, 0, 0, 0, 1, 109, 0,
-            0, 0, 9, 115, 105, 103, 110, 97, 116, 117, 114, 101, 106, 116, 0, 0,
-            0, 0, 116, 0, 0, 0, 0, 106,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 104, 7, 119, 7, 100, 111, 99, 115, 95, 118, 49, 97, 1, 119, 6,
+          101, 108, 105, 120, 105, 114, 109, 0, 0, 0, 13, 116, 101, 120, 116,
+          47, 109, 97, 114, 107, 100, 111, 119, 110, 116, 0, 0, 0, 1, 109, 0, 0,
+          0, 2, 101, 110, 109, 0, 0, 0, 11, 77, 111, 100, 117, 108, 101, 32,
+          100, 111, 99, 115, 116, 0, 0, 0, 1, 119, 5, 115, 105, 110, 99, 101,
+          109, 0, 0, 0, 5, 49, 46, 48, 46, 48, 108, 0, 0, 0, 1, 104, 5, 104, 3,
+          119, 8, 102, 117, 110, 99, 116, 105, 111, 110, 119, 7, 109, 121, 95,
+          102, 117, 110, 99, 97, 2, 97, 10, 108, 0, 0, 0, 1, 109, 0, 0, 0, 9,
+          115, 105, 103, 110, 97, 116, 117, 114, 101, 106, 116, 0, 0, 0, 0, 116,
+          0, 0, 0, 0, 106,
+        ]);
         const result = await binary_to_term(binary);
 
         const expected = Type.tuple([
@@ -4239,12 +4140,10 @@ describe("Erlang", () => {
         // Generated with: :erlang.term_to_binary(String.duplicate("hello", 100), [compressed: 9])
         // Format: 131 (version) + 80 (COMPRESSED) + uncompressed_size (4 bytes) + zlib compressed data
         // Uncompressed size = 505 bytes
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146, 145,
-            154, 147, 147, 63, 74, 140, 40, 2, 0, 21, 94, 209, 51,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146, 145, 154,
+          147, 147, 63, 74, 140, 40, 2, 0, 21, 94, 209, 51,
+        ]);
         const result = await binary_to_term(binary);
         const expected = Type.bitstring("hello".repeat(100));
         assertBoxedStrictEqual(result, expected);
@@ -4253,12 +4152,10 @@ describe("Erlang", () => {
       it("decodes compressed term with list of tuples", async () => {
         // Real Erlang-generated compressed term for a list of 50 identical tuples
         // Generated with: :erlang.term_to_binary(List.duplicate({:ok, 42}, 50), [compressed: 9])
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 80, 0, 0, 1, 150, 120, 218, 203, 97, 96, 96, 48, 202, 96, 42,
-            103, 202, 207, 78, 212, 26, 165, 7, 7, 157, 5, 0, 189, 136, 115, 25,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 80, 0, 0, 1, 150, 120, 218, 203, 97, 96, 96, 48, 202, 96, 42,
+          103, 202, 207, 78, 212, 26, 165, 7, 7, 157, 5, 0, 189, 136, 115, 25,
+        ]);
         const result = await binary_to_term(binary);
         const expectedTuple = Type.tuple([Type.atom("ok"), Type.integer(42)]);
         const expectedList = Type.list(Array(50).fill(expectedTuple));
@@ -4268,7 +4165,7 @@ describe("Erlang", () => {
       it("raises ArgumentError for compressed term with truncated uncompressed size", async () => {
         // COMPRESSED tag but missing uncompressed size bytes
         const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 80, 0, 0]), // Only 2 bytes of size instead of 4
+          [131, 80, 0, 0], // Only 2 bytes of size instead of 4
         );
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
@@ -4282,19 +4179,17 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for compressed term with invalid zlib data", async () => {
         // COMPRESSED tag with invalid compressed data
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131,
-            80,
-            0,
-            0,
-            0,
-            2, // version, COMPRESSED tag, uncompressed size = 2
-            255,
-            255,
-            255, // invalid zlib data
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131,
+          80,
+          0,
+          0,
+          0,
+          2, // version, COMPRESSED tag, uncompressed size = 2
+          255,
+          255,
+          255, // invalid zlib data
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4307,26 +4202,24 @@ describe("Erlang", () => {
 
       it("raises ArgumentError for compressed term with size mismatch", async () => {
         // COMPRESSED tag where decompressed size doesn't match declared size
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131,
-            80,
-            0,
-            0,
-            0,
-            10, // version, COMPRESSED tag, uncompressed size = 10 (wrong!)
-            120,
-            156,
-            74,
-            180,
-            2,
-            0,
-            0,
-            121,
-            0,
-            121, // zlib data that decompresses to 2 bytes
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131,
+          80,
+          0,
+          0,
+          0,
+          10, // version, COMPRESSED tag, uncompressed size = 10 (wrong!)
+          120,
+          156,
+          74,
+          180,
+          2,
+          0,
+          0,
+          121,
+          0,
+          121, // zlib data that decompresses to 2 bytes
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4342,12 +4235,10 @@ describe("Erlang", () => {
         // payload (the same zlib stream used by the "decodes compressed term
         // (COMPRESSED tag 80) with repeated string" test). OTP accepts COMPRESSED
         // only at the top level - any tag 80 reached recursively is rejected.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 104, 1, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146,
-            145, 154, 147, 147, 63, 74, 140, 40, 2, 0, 21, 94, 209, 51,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 104, 1, 80, 0, 0, 1, 249, 120, 218, 203, 101, 96, 96, 252, 146,
+          145, 154, 147, 147, 63, 74, 140, 40, 2, 0, 21, 94, 209, 51,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4379,7 +4270,7 @@ describe("Erlang", () => {
       });
 
       it("raises ArgumentError if binary has invalid version byte", async () => {
-        const binary = Bitstring.fromBytes(new Uint8Array([130, 97, 42])); // Wrong version
+        const binary = Bitstring.fromBytes([130, 97, 42]); // Wrong version
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4391,7 +4282,7 @@ describe("Erlang", () => {
       });
 
       it("raises ArgumentError if binary is truncated", async () => {
-        const binary = Bitstring.fromBytes(new Uint8Array([131])); // Only version byte
+        const binary = Bitstring.fromBytes([131]); // Only version byte
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4406,16 +4297,14 @@ describe("Erlang", () => {
         // term_to_binary(42) is <<131, 97, 42>>. OTP decodes the prefix and
         // silently discards any tail: only binary_to_term/2 with :used
         // surfaces how many bytes were actually consumed.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([131, 97, 42, 99, 99, 99]),
-        );
+        const binary = Bitstring.fromBytes([131, 97, 42, 99, 99, 99]);
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.integer(42));
       });
 
       it("raises ArgumentError for unsupported ETF tag (tag 50)", async () => {
         // Tag 50 is not a valid ETF tag
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 50]));
+        const binary = Bitstring.fromBytes([131, 50]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
@@ -4430,13 +4319,11 @@ describe("Erlang", () => {
         // Well-formed FUN_EXT: NumFree=0, Pid + Module + Index + Uniq.
         // OTP itself stopped decoding FUN_EXT in OTP 23, so both runtimes
         // reject it; this test pins down the shared behaviour.
-        const binary = Bitstring.fromBytes(
-          new Uint8Array([
-            131, 117, 0, 0, 0, 0, 103, 119, 13, 110, 111, 110, 111, 100, 101,
-            64, 110, 111, 104, 111, 115, 116, 0, 0, 0, 1, 0, 0, 0, 1, 0, 119, 1,
-            109, 97, 0, 97, 0,
-          ]),
-        );
+        const binary = Bitstring.fromBytes([
+          131, 117, 0, 0, 0, 0, 103, 119, 13, 110, 111, 110, 111, 100, 101, 64,
+          110, 111, 104, 111, 115, 116, 0, 0, 0, 1, 0, 0, 0, 1, 0, 119, 1, 109,
+          97, 0, 97, 0,
+        ]);
         await assertBoxedErrorAsync(
           () => binary_to_term(binary),
           "ArgumentError",
