@@ -1090,7 +1090,7 @@ const Erlang = {
       const floatBytes = bytes.slice(offset, offset + 31);
 
       const floatString = String.fromCharCode(...floatBytes).replace(
-        /\0.*$/,
+        /\0.*/,
         "",
       );
 
