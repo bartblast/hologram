@@ -3302,12 +3302,12 @@ describe("Erlang", () => {
         // 77 - BIT_BINARY_EXT
         // 0, 0, 0, 1 - length (1 byte)
         // 5 - bits in last byte
-        // 0b00001000 (8) - the byte with 5 bits set
+        // 0b00001000 (8) - the byte with 5 bits set (bit pattern 00001)
         const binary = Bitstring.fromBytes(
           new Uint8Array([131, 77, 0, 0, 0, 1, 5, 8]),
         );
         const result = await binary_to_term(binary);
-        assert.strictEqual(Bitstring.calculateBitCount(result), 5);
+        assertBoxedStrictEqual(result, Bitstring.fromBits([0, 0, 0, 0, 1]));
       });
 
       it("decodes BIT_BINARY_EXT with full bytes (Bits=8)", async () => {
@@ -3321,7 +3321,10 @@ describe("Erlang", () => {
           new Uint8Array([131, 77, 0, 0, 0, 2, 8, 255, 0]),
         );
         const result = await binary_to_term(binary);
-        assert.strictEqual(Bitstring.calculateBitCount(result), 16);
+        assertBoxedStrictEqual(
+          result,
+          Bitstring.fromBytes(new Uint8Array([255, 0])),
+        );
       });
     });
 
