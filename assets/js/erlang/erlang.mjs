@@ -1394,7 +1394,15 @@ const Erlang = {
       });
     };
 
-    // PID decoders
+    // PID / Port decoders
+    //
+    // The ETF spec describes "only N bits significant" for several fields
+    // (PID_EXT id 15 bits, serial 13 bits; PORT_EXT / NEW_PORT_EXT id 28 bits;
+    // PID_EXT / PORT_EXT creation 2 bits; NEW_PORT_EXT creation == 0 is
+    // "reserved"). Empirically OTP does not validate any of these - it accepts
+    // the full 32-bit / 64-bit values as written and accepts creation == 0 -
+    // so we deliberately do not validate either. Adding such checks would
+    // diverge from OTP rather than match it.
 
     const decodePid = async (dataView, bytes, offset) => {
       let currentOffset = offset;
