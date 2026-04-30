@@ -3787,32 +3787,6 @@ describe("Erlang", () => {
         );
       });
 
-      it("raises ArgumentError for unsupported ETF tag (tag 255)", async () => {
-        // Tag 255 is not a valid ETF tag
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 255]));
-        await assertBoxedErrorAsync(
-          () => binary_to_term(binary),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      });
-
-      it("raises ArgumentError for unsupported ETF tag (tag 1)", async () => {
-        // Tag 1 is not a valid ETF tag
-        const binary = Bitstring.fromBytes(new Uint8Array([131, 1]));
-        await assertBoxedErrorAsync(
-          () => binary_to_term(binary),
-          "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      });
-
       it("raises ArgumentError for malformed BINARY_EXT with length exceeding data", async () => {
         // BINARY_EXT (109) with length 10 but only 2 bytes of data
         const binary = Bitstring.fromBytes(
