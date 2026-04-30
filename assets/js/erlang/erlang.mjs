@@ -1128,16 +1128,6 @@ const Erlang = {
       };
     };
 
-    // REFERENCE_EXT (tag 101) - Deprecated format for backward compatibility
-    // Format: Node | ID | Creation
-    // Where:
-    // - Node: atom (encoded with various atom formats)
-    // - ID: single 32-bit word
-    // - Creation: 8-bit value (only 2 bits significant)
-    //
-    // This format was used in older Erlang versions and is kept for
-    // compatibility with legacy external term format data.
-
     const decodeReferenceWithOptions = (dataView, bytes, offset, options) => {
       let currentOffset = offset;
       let idWordCount = 1; // Default for REFERENCE_EXT
