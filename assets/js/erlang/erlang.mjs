@@ -1299,7 +1299,10 @@ const Erlang = {
       const length = dataView.getUint32(offset);
       const bits = dataView.getUint8(offset + 4);
 
-      if (bits < 1 || bits > 8) {
+      // OTP rejects BIT_BINARY_EXT with Length=0 - the trailing-bits count is
+      // meaningless without any data byte. Note: real OTP actually crashes
+      // the VM with a giant binary alloc on len=0 bits=0; we reject cleanly.
+      if (length === 0 || bits < 1 || bits > 8) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
             1,

@@ -3743,6 +3743,22 @@ describe("Erlang", () => {
           ),
         );
       });
+
+      it("raises ArgumentError for BIT_BINARY_EXT with Length=0", async () => {
+        // BIT_BINARY_EXT (77) with length 0, bits 8. OTP rejects: trailing-
+        // bits count is meaningless without any data byte.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 77, 0, 0, 0, 0, 8]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
     });
 
     describe("references", () => {
