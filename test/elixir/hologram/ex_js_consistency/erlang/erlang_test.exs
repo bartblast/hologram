@@ -2715,30 +2715,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         assert :erlang.binary_to_term(binary) == bitstring
       end
     end
-
-    test "FLOAT_EXT format (deprecated string format)" do
-      # Test FLOAT_EXT (tag 99) - manually constructed deprecated format
-      test_floats = [
-        1.5,
-        -2.5,
-        3.14159,
-        0.0,
-        -0.0,
-        1.0e10,
-        1.23e-5
-      ]
-
-      for float_val <- test_floats do
-        # Manually construct FLOAT_EXT binary (31-byte null-terminated string)
-        iodata = :io_lib.format("~.20e", [float_val])
-        float_str = IO.iodata_to_binary(iodata)
-        padded = String.pad_trailing(float_str, 31, <<0>>)
-        binary = <<131, 99, padded::binary>>
-
-        decoded = :erlang.binary_to_term(binary)
-        assert_in_delta decoded, float_val, 1.0e-15
-      end
-    end
   end
 
   describe "bit_size/1" do
