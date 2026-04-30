@@ -1968,6 +1968,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "binary_to_term/1" do
+    # Tests are organised into the same groups as the JS test file
+    # (test/javascript/erlang/erlang_test.mjs binary_to_term/1 describe block).
+    # ExUnit does not support nested describe blocks, so groups are marked with
+    # comment headers. Within each group: happy-paths, then parameterised tests,
+    # then group-specific errors.
+
+    # === integers ===
+
     test "decodes small positive integer (SMALL_INTEGER_EXT)" do
       binary = :erlang.term_to_binary(42)
       assert :erlang.binary_to_term(binary) == 42
@@ -2017,6 +2025,35 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == large_int
     end
 
+    test "raises ArgumentError for INTEGER_EXT boundary - value truncated" do
+      # INTEGER_EXT (98) but only 2 bytes instead of 4
+      binary = <<131, 98, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for malformed SMALL_BIG_EXT with n exceeding data" do
+      # SMALL_BIG_EXT (110) with n=100 but insufficient bytes
+      binary = <<131, 110, 100, 0, 1, 2, 3>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for malformed LARGE_BIG_EXT with n exceeding data" do
+      # LARGE_BIG_EXT (111) with large n but insufficient bytes
+      binary = <<131, 111, 0, 0, 1, 0, 0, 1, 2, 3>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # === atoms ===
+
     test "decodes UTF-8 atom (ATOM_UTF8_EXT)" do
       name = "élixir"
       binary = <<131, 118, byte_size(name)::16, name::binary>>
@@ -2055,6 +2092,83 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == false
     end
 
+    test "ATOM_EXT format with Latin-1 atoms" do
+      # Test ATOM_EXT (tag 100) with various atom names
+      test_atoms = [
+        :test,
+        :hello_world,
+        :a,
+        # empty atom
+        :"",
+        :"special-atom!@#",
+        :atom_with_underscores_123
+      ]
+
+      for atom <- test_atoms do
+        # Manually construct ATOM_EXT binary
+        name = Atom.to_string(atom)
+        binary = <<131, 100, byte_size(name)::16, name::binary>>
+        assert :erlang.binary_to_term(binary) == atom
+      end
+    end
+
+    test "SMALL_ATOM_UTF8_EXT format with UTF-8 atoms" do
+      # SMALL_ATOM_UTF8_EXT (tag 119) with multi-byte UTF-8 characters.
+      test_atoms = [
+        # 2-byte UTF-8 chars
+        :élixir,
+        :café,
+        # 3-byte UTF-8 chars
+        :测试,
+        # 4-byte UTF-8 char
+        :"🚀",
+        :ñoño
+      ]
+
+      for atom <- test_atoms do
+        binary = :erlang.term_to_binary(atom)
+        assert :erlang.binary_to_term(binary) == atom
+      end
+    end
+
+    test "raises ArgumentError for malformed ATOM_EXT with length exceeding data" do
+      # ATOM_EXT (100) with length 100 but only 2 bytes
+      binary = <<131, 100, 0, 100, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for malformed SMALL_ATOM_UTF8_EXT with length exceeding data" do
+      # SMALL_ATOM_UTF8_EXT (119) with length 50 but only 2 bytes
+      binary = <<131, 119, 50, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for ATOM_UTF8_EXT with invalid UTF-8 bytes" do
+      # ATOM_UTF8_EXT (118) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
+      binary = <<131, 118, 0, 2, 0xC3, 0x28>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for SMALL_ATOM_UTF8_EXT with invalid UTF-8 bytes" do
+      # SMALL_ATOM_UTF8_EXT (119) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
+      binary = <<131, 119, 2, 0xC3, 0x28>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # === binaries ===
+
     test "decodes binary string (BINARY_EXT)" do
       binary = :erlang.term_to_binary("hello")
       assert :erlang.binary_to_term(binary) == "hello"
@@ -2064,6 +2178,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       binary = :erlang.term_to_binary("")
       assert :erlang.binary_to_term(binary) == ""
     end
+
+    test "BINARY_EXT format with various binary data" do
+      # Test BINARY_EXT (tag 109) with different binary content
+      test_binaries = [
+        "",
+        "hello",
+        "world with spaces",
+        "binary\0with\0nulls",
+        "UTF-8: élixir café 测试 🚀",
+        <<0, 1, 2, 255, 254, 253>>,
+        # larger binary
+        String.duplicate("x", 1000)
+      ]
+
+      for bin <- test_binaries do
+        binary = :erlang.term_to_binary(bin)
+        assert :erlang.binary_to_term(binary) == bin
+      end
+    end
+
+    test "raises ArgumentError for malformed BINARY_EXT with length exceeding data" do
+      # BINARY_EXT (109) with length 10 but only 2 bytes of data
+      binary = <<131, 109, 0, 0, 0, 10, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # === tuples ===
 
     test "decodes small tuple (SMALL_TUPLE_EXT)" do
       binary = :erlang.term_to_binary({1, 2, 3})
@@ -2095,6 +2239,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       binary = :erlang.term_to_binary({1, {2, 3}})
       assert :erlang.binary_to_term(binary) == {1, {2, 3}}
     end
+
+    test "raises ArgumentError for malformed SMALL_TUPLE_EXT with arity exceeding available data" do
+      # SMALL_TUPLE_EXT (104) with arity 5 but only 1 element
+      binary = <<131, 104, 5, 97, 1>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for nested term truncation" do
+      # SMALL_TUPLE_EXT with 2 elements, but second element is truncated
+      # [131, 104, 2, 97, 1, 97] - missing last byte
+      binary = <<131, 104, 2, 97, 1, 97>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for LARGE_TUPLE_EXT with zero arity but missing NIL_EXT" do
+      # LARGE_TUPLE_EXT (105) with arity 0 - should work, but let's test malformed version
+      binary = <<131, 105, 0, 0, 0, 1>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # === lists ===
 
     test "decodes empty list (NIL_EXT)" do
       binary = :erlang.term_to_binary([])
@@ -2133,6 +2307,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == [1 | 2]
     end
 
+    test "raises ArgumentError for malformed STRING_EXT with length exceeding data" do
+      # STRING_EXT (107) with length 100 but only 2 bytes of data
+      binary = <<131, 107, 0, 100, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for malformed LIST_EXT with length exceeding data" do
+      # LIST_EXT (108) with length 10 but no elements
+      binary = <<131, 108, 0, 0, 0, 10>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # === maps ===
+
     test "decodes empty map" do
       binary = :erlang.term_to_binary(%{})
       assert :erlang.binary_to_term(binary) == %{}
@@ -2143,6 +2337,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == %{a: 1, b: 2}
     end
 
+    test "raises ArgumentError for malformed MAP_EXT with arity exceeding data" do
+      # MAP_EXT (116) with arity 10 but no key-value pairs
+      binary = <<131, 116, 0, 0, 0, 10>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "raises ArgumentError for MAP_EXT with duplicate keys" do
       # MAP_EXT (116) arity=2, key1=:a value=1, key2=:a value=2 (duplicate).
       binary = <<131, 116, 0, 0, 0, 2, 100, 0, 1, ?a, 97, 1, 100, 0, 1, ?a, 97, 2>>
@@ -2151,6 +2354,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_argument_error_msg(1, "invalid external representation of a term"),
                    {:erlang, :binary_to_term, [binary]}
     end
+
+    # === floats ===
 
     test "decodes NEW_FLOAT_EXT (IEEE 754 double)" do
       binary = :erlang.term_to_binary(3.14159)
@@ -2177,6 +2382,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == 1.5
     end
 
+    test "raises ArgumentError for FLOAT_EXT with truncated data" do
+      # FLOAT_EXT (tag 99) with only 10 bytes instead of required 31
+      binary = <<131, 99, "1.23", 0, 0, 0, 0, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for NEW_FLOAT_EXT truncated" do
+      # NEW_FLOAT_EXT (70) but only 4 bytes instead of 8
+      binary = <<131, 70, 0, 0, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # === bitstrings ===
+
     test "decodes BIT_BINARY_EXT with partial byte" do
       # Bitstring with 5 bits
       bitstring = <<1::5>>
@@ -2189,6 +2414,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       binary = :erlang.term_to_binary(bitstring)
       assert :erlang.binary_to_term(binary) == bitstring
     end
+
+    test "raises ArgumentError for malformed BIT_BINARY_EXT with length exceeding data" do
+      # BIT_BINARY_EXT (77) with length 100 but only 2 bytes
+      binary = <<131, 77, 0, 0, 0, 100, 5, 65, 66>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for BIT_BINARY_EXT with Bits=0" do
+      # BIT_BINARY_EXT (77) with length 1, bits 0 (invalid - spec says 1-8).
+      binary = <<131, 77, 0, 0, 0, 1, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    # === references ===
 
     test "decodes REFERENCE_EXT" do
       binary =
@@ -2249,6 +2494,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert is_reference(decoded)
     end
 
+    test "raises ArgumentError for malformed NEW_REFERENCE_EXT with len exceeding data" do
+      # NEW_REFERENCE_EXT (114) with len=10 but insufficient id bytes
+      binary = <<131, 114, 0, 10, 119, 4, 110, 111, 100, 101, 0, 0, 0, 1>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "raises ArgumentError for NEW_REFERENCE_EXT with len exceeding OTP cap of 5" do
       # NEW_REFERENCE_EXT (114), Len=6, Node=ATOM "n", Creation=0,
       # ID=6*4 zero bytes (OTP rejects Len > 5).
@@ -2269,6 +2523,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    # === pids ===
+
     test "decodes PID_EXT" do
       # Manually construct PID_EXT binary
       # 131 - VERSION, 103 - PID_EXT, then node atom, ID, Serial, Creation
@@ -2286,6 +2542,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       decoded = :erlang.binary_to_term(binary)
       assert is_pid(decoded)
     end
+
+    # === ports ===
 
     test "decodes PORT_EXT" do
       # Manually construct PORT_EXT binary
@@ -2312,6 +2570,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       decoded = :erlang.binary_to_term(binary)
       assert is_port(decoded)
     end
+
+    # === exports (function captures) ===
 
     test "decodes EXPORT_EXT (function capture)" do
       # Create a function capture and encode/decode it
@@ -2351,6 +2611,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    # === complex nested structures ===
+
     test "decodes Code.fetch_docs/1 style tuple" do
       term = {:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []}
       binary = :erlang.term_to_binary(term)
@@ -2365,6 +2627,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       binary = :erlang.term_to_binary(term)
       assert :erlang.binary_to_term(binary) == term
     end
+
+    # === compressed terms ===
 
     test "decodes compressed term (COMPRESSED tag 80) with repeated string" do
       # Real Erlang-generated compressed term for String.duplicate("hello", 100)
@@ -2415,6 +2679,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    # === error handling ===
+
     test "raises ArgumentError if argument is not a binary" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),
@@ -2445,178 +2711,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
-    test "raises ArgumentError for FLOAT_EXT with truncated data" do
-      # FLOAT_EXT (tag 99) with only 10 bytes instead of required 31
-      binary = <<131, 99, "1.23", 0, 0, 0, 0, 0, 0>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed SMALL_ATOM_UTF8_EXT with length exceeding data" do
-      # SMALL_ATOM_UTF8_EXT (119) with length 50 but only 2 bytes
-      binary = <<131, 119, 50, 65, 66>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed ATOM_EXT with length exceeding data" do
-      # ATOM_EXT (100) with length 100 but only 2 bytes
-      binary = <<131, 100, 0, 100, 65, 66>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for ATOM_UTF8_EXT with invalid UTF-8 bytes" do
-      # ATOM_UTF8_EXT (118) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
-      binary = <<131, 118, 0, 2, 0xC3, 0x28>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for SMALL_ATOM_UTF8_EXT with invalid UTF-8 bytes" do
-      # SMALL_ATOM_UTF8_EXT (119) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
-      binary = <<131, 119, 2, 0xC3, 0x28>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed STRING_EXT with length exceeding data" do
-      # STRING_EXT (107) with length 100 but only 2 bytes of data
-      binary = <<131, 107, 0, 100, 65, 66>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed BINARY_EXT with length exceeding data" do
-      # BINARY_EXT (109) with length 10 but only 2 bytes of data
-      binary = <<131, 109, 0, 0, 0, 10, 65, 66>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed BIT_BINARY_EXT with length exceeding data" do
-      # BIT_BINARY_EXT (77) with length 100 but only 2 bytes
-      binary = <<131, 77, 0, 0, 0, 100, 5, 65, 66>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for BIT_BINARY_EXT with Bits=0" do
-      # BIT_BINARY_EXT (77) with length 1, bits 0 (invalid - spec says 1-8).
-      binary = <<131, 77, 0, 0, 0, 1, 0, 0>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed LARGE_BIG_EXT with n exceeding data" do
-      # LARGE_BIG_EXT (111) with large n but insufficient bytes
-      binary = <<131, 111, 0, 0, 1, 0, 0, 1, 2, 3>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed LIST_EXT with length exceeding data" do
-      # LIST_EXT (108) with length 10 but no elements
-      binary = <<131, 108, 0, 0, 0, 10>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed MAP_EXT with arity exceeding data" do
-      # MAP_EXT (116) with arity 10 but no key-value pairs
-      binary = <<131, 116, 0, 0, 0, 10>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed NEW_REFERENCE_EXT with len exceeding data" do
-      # NEW_REFERENCE_EXT (114) with len=10 but insufficient id bytes
-      binary = <<131, 114, 0, 10, 119, 4, 110, 111, 100, 101, 0, 0, 0, 1>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed SMALL_BIG_EXT with n exceeding data" do
-      # SMALL_BIG_EXT (110) with n=100 but insufficient bytes
-      binary = <<131, 110, 100, 0, 1, 2, 3>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for malformed SMALL_TUPLE_EXT with arity exceeding available data" do
-      # SMALL_TUPLE_EXT (104) with arity 5 but only 1 element
-      binary = <<131, 104, 5, 97, 1>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for INTEGER_EXT boundary - value truncated" do
-      # INTEGER_EXT (98) but only 2 bytes instead of 4
-      binary = <<131, 98, 0, 0>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for LARGE_TUPLE_EXT with zero arity but missing NIL_EXT" do
-      # LARGE_TUPLE_EXT (105) with arity 0 - should work, but let's test malformed version
-      binary = <<131, 105, 0, 0, 0, 1>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for NEW_FLOAT_EXT truncated" do
-      # NEW_FLOAT_EXT (70) but only 4 bytes instead of 8
-      binary = <<131, 70, 0, 0, 0, 0>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
-    test "raises ArgumentError for nested term truncation" do
-      # SMALL_TUPLE_EXT with 2 elements, but second element is truncated
-      # [131, 104, 2, 97, 1, 97] - missing last byte
-      binary = <<131, 104, 2, 97, 1, 97>>
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "invalid external representation of a term"),
-                   {:erlang, :binary_to_term, [binary]}
-    end
-
     test "raises ArgumentError for unsupported ETF tag (tag 50)" do
       # Tag 50 is not a valid ETF tag
       binary = <<131, 50>>
@@ -2624,66 +2718,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "invalid external representation of a term"),
                    {:erlang, :binary_to_term, [binary]}
-    end
-
-    # Consistency tests for specific external term formats
-
-    test "ATOM_EXT format with Latin-1 atoms" do
-      # Test ATOM_EXT (tag 100) with various atom names
-      test_atoms = [
-        :test,
-        :hello_world,
-        :a,
-        # empty atom
-        :"",
-        :"special-atom!@#",
-        :atom_with_underscores_123
-      ]
-
-      for atom <- test_atoms do
-        # Manually construct ATOM_EXT binary
-        name = Atom.to_string(atom)
-        binary = <<131, 100, byte_size(name)::16, name::binary>>
-        assert :erlang.binary_to_term(binary) == atom
-      end
-    end
-
-    test "SMALL_ATOM_UTF8_EXT format with UTF-8 atoms" do
-      # SMALL_ATOM_UTF8_EXT (tag 119) with multi-byte UTF-8 characters.
-      test_atoms = [
-        # 2-byte UTF-8 chars
-        :élixir,
-        :café,
-        # 3-byte UTF-8 chars
-        :测试,
-        # 4-byte UTF-8 char
-        :"🚀",
-        :ñoño
-      ]
-
-      for atom <- test_atoms do
-        binary = :erlang.term_to_binary(atom)
-        assert :erlang.binary_to_term(binary) == atom
-      end
-    end
-
-    test "BINARY_EXT format with various binary data" do
-      # Test BINARY_EXT (tag 109) with different binary content
-      test_binaries = [
-        "",
-        "hello",
-        "world with spaces",
-        "binary\0with\0nulls",
-        "UTF-8: élixir café 测试 🚀",
-        <<0, 1, 2, 255, 254, 253>>,
-        # larger binary
-        String.duplicate("x", 1000)
-      ]
-
-      for bin <- test_binaries do
-        binary = :erlang.term_to_binary(bin)
-        assert :erlang.binary_to_term(binary) == bin
-      end
     end
   end
 
