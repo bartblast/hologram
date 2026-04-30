@@ -1214,9 +1214,11 @@ const Erlang = {
       const length = dataView.getUint32(offset);
       const bits = dataView.getUint8(offset + 4);
 
-      // OTP rejects BIT_BINARY_EXT with Length=0 - the trailing-bits count is
-      // meaningless without any data byte. Note: real OTP actually crashes
-      // the VM with a giant binary alloc on len=0 bits=0; we reject cleanly.
+      // Reject BIT_BINARY_EXT with Length=0 (no data byte for trailing bits
+      // to attach to) or with Bits outside 1..8.
+      // Note: OTP also rejects all of these except the specific Length=0,
+      // Bits=0 pattern, which crashes the VM with a giant binary alloc
+      // (real OTP bug). We deliberately reject that case cleanly here.
       if (length === 0 || bits < 1 || bits > 8) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
