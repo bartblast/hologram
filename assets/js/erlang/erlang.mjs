@@ -828,10 +828,11 @@ const Erlang = {
 
       if (offset + 2 + n > bytes.length) raiseInvalid();
 
+      // Wire format is little-endian; walk high-to-low so each iteration is
+      // a single (value << 8n) | byte instead of allocating BigInt(i * 8).
       let value = 0n;
-      for (let i = 0; i < n; i++) {
-        const byte = BigInt(bytes[offset + 2 + i]);
-        value += byte << BigInt(i * 8);
+      for (let i = n - 1; i >= 0; i--) {
+        value = (value << 8n) | BigInt(bytes[offset + 2 + i]);
       }
 
       if (sign !== 0) {
@@ -851,9 +852,8 @@ const Erlang = {
       if (offset + 5 + n > bytes.length) raiseInvalid();
 
       let value = 0n;
-      for (let i = 0; i < n; i++) {
-        const byte = BigInt(bytes[offset + 5 + i]);
-        value += byte << BigInt(i * 8);
+      for (let i = n - 1; i >= 0; i--) {
+        value = (value << 8n) | BigInt(bytes[offset + 5 + i]);
       }
 
       if (sign !== 0) {
