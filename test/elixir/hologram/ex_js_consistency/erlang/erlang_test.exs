@@ -2106,6 +2106,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == [1 | [2 | [3 | 4]]]
     end
 
+    test "decodes LIST_EXT with length 0 and non-list tail to the tail term" do
+      # LIST_EXT (108) with length 0 and SMALL_INTEGER_EXT (97) 1 as tail
+      binary = <<131, 108, 0, 0, 0, 0, 97, 1>>
+      assert :erlang.binary_to_term(binary) == 1
+    end
+
+    test "decodes LIST_EXT with length 0 and NIL_EXT tail to empty list" do
+      binary = <<131, 108, 0, 0, 0, 0, 106>>
+      assert :erlang.binary_to_term(binary) == []
+    end
+
+    test "decodes LIST_EXT with length 0 and improper-list tail to the tail term" do
+      # LIST_EXT (108) with length 0 and tail = LIST_EXT [1 | 2]
+      binary = <<131, 108, 0, 0, 0, 0, 108, 0, 0, 0, 1, 97, 1, 97, 2>>
+      assert :erlang.binary_to_term(binary) == [1 | 2]
+    end
+
     test "decodes empty map" do
       binary = :erlang.term_to_binary(%{})
       assert :erlang.binary_to_term(binary) == %{}

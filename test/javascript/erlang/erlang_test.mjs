@@ -3100,6 +3100,38 @@ describe("Erlang", () => {
           ]),
         );
       });
+
+      it("decodes LIST_EXT with length 0 and non-list tail to the tail term", async () => {
+        // LIST_EXT (108) with length 0 and SMALL_INTEGER_EXT (97) 1 as tail
+        // OTP collapses this to the integer 1.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 108, 0, 0, 0, 0, 97, 1]),
+        );
+        const result = await binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.integer(1));
+      });
+
+      it("decodes LIST_EXT with length 0 and NIL_EXT tail to empty list", async () => {
+        // LIST_EXT (108) with length 0 and NIL_EXT (106) tail
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 108, 0, 0, 0, 0, 106]),
+        );
+        const result = await binary_to_term(binary);
+        assert.deepStrictEqual(result, Type.list([]));
+      });
+
+      it("decodes LIST_EXT with length 0 and improper-list tail to the tail term", async () => {
+        // LIST_EXT (108) with length 0 and tail = LIST_EXT [1 | 2]
+        // OTP collapses this to the improper list [1 | 2].
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 108, 0, 0, 0, 0, 108, 0, 0, 0, 1, 97, 1, 97, 2]),
+        );
+        const result = await binary_to_term(binary);
+        assert.deepStrictEqual(
+          result,
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        );
+      });
     });
 
     describe("maps", () => {

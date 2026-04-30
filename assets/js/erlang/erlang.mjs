@@ -1129,6 +1129,15 @@ const Erlang = {
       const tailResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = tailResult.newOffset;
 
+      // LIST_EXT with length=0 collapses to its tail. OTP accepts this and
+      // returns the tail term as-is (e.g. <<131,108,0,0,0,0,97,1>> decodes
+      // to the integer 1). Without this short-circuit, a non-list tail would
+      // hit Type.improperList([tail]) below and crash with
+      // HologramInterpreterError ("improper list must have at least 2 items").
+      if (length === 0) {
+        return {term: tailResult.term, newOffset: currentOffset};
+      }
+
       // If tail is a list, merge it to preserve proper list semantics
       if (Type.isList(tailResult.term)) {
         const merged = elements.concat(tailResult.term.data);
