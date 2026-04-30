@@ -368,7 +368,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."/="({1, 2, 3}, {1, 2}) == true
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe "</2" do
@@ -499,7 +499,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.<(arg_1, arg_2) == false
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe "=/=/2" do
@@ -609,7 +609,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=/="({1, 2, 3}, {1, 2}) == true
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe "=:=/2" do
@@ -719,7 +719,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=:="({1, 2, 3}, {1, 2}) == false
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe "=</2" do
@@ -847,7 +847,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=<"(arg_1, arg_2) == false
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe "==/2" do
@@ -957,7 +957,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.==({1, 2, 3}, {1, 2}) == false
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe ">/2" do
@@ -1085,7 +1085,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>(arg_1, arg_2) == true
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe ">=/2" do
@@ -1213,7 +1213,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>=(arg_1, arg_2) == true
     end
 
-    # // TODO: reference, function, port, map, list, bitstring
+    # TODO: reference, function, port, map, list, bitstring
   end
 
   describe "abs/1" do
