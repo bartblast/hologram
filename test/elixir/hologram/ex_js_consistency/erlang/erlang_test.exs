@@ -2267,6 +2267,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert is_function(decoded, 2)
     end
 
+    test "raises ArgumentError for EXPORT_EXT with non-atom module" do
+      # EXPORT_EXT (113), Module = SMALL_INTEGER_EXT 5 (not an atom),
+      # Function = ATOM_EXT "f", Arity = SMALL_INTEGER_EXT 2
+      binary = <<131, 113, 97, 5, 100, 0, 1, ?f, 97, 2>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for EXPORT_EXT with non-atom function" do
+      # EXPORT_EXT (113), Module = ATOM_EXT "m", Function = SMALL_INTEGER_EXT 5,
+      # Arity = SMALL_INTEGER_EXT 2
+      binary = <<131, 113, 100, 0, 1, ?m, 97, 5, 97, 2>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for EXPORT_EXT with non-integer arity" do
+      # EXPORT_EXT (113), Module = ATOM_EXT "m", Function = ATOM_EXT "f",
+      # Arity = ATOM_EXT "a" (not an integer)
+      binary = <<131, 113, 100, 0, 1, ?m, 100, 0, 1, ?f, 100, 0, 1, ?a>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "decodes Code.fetch_docs/1 style tuple" do
       term = {:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []}
       binary = :erlang.term_to_binary(term)

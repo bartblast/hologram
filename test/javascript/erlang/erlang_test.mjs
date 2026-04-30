@@ -4010,6 +4010,56 @@ describe("Erlang", () => {
         );
       });
 
+      it("raises ArgumentError for EXPORT_EXT with non-atom module", async () => {
+        // EXPORT_EXT (113), Module = SMALL_INTEGER_EXT 5 (not an atom),
+        // Function = ATOM_EXT "f", Arity = SMALL_INTEGER_EXT 2
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 113, 97, 5, 100, 0, 1, 102, 97, 2]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for EXPORT_EXT with non-atom function", async () => {
+        // EXPORT_EXT (113), Module = ATOM_EXT "m", Function = SMALL_INTEGER_EXT 5,
+        // Arity = SMALL_INTEGER_EXT 2
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 113, 100, 0, 1, 109, 97, 5, 97, 2]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for EXPORT_EXT with non-integer arity", async () => {
+        // EXPORT_EXT (113), Module = ATOM_EXT "m", Function = ATOM_EXT "f",
+        // Arity = ATOM_EXT "a" (not an integer)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 113, 100, 0, 1, 109, 100, 0, 1, 102, 100, 0, 1, 97,
+          ]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
       it("raises ArgumentError for INTEGER_EXT boundary - value truncated", async () => {
         // INTEGER_EXT (98) but only 2 bytes instead of 4
         const binary = Bitstring.fromBytes(new Uint8Array([131, 98, 0, 0]));

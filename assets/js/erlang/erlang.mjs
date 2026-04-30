@@ -1476,6 +1476,23 @@ const Erlang = {
       const arityResult = await decodeTerm(dataView, bytes, currentOffset);
       currentOffset = arityResult.newOffset;
 
+      // Spec: Module and Function must be atoms, Arity must be an integer.
+      // OTP raises badarg when any component has the wrong shape; without
+      // this check we'd reach .value on the wrong term and either throw
+      // (relabelled by the outer wrapper) or build a malformed function.
+      if (
+        !Type.isAtom(moduleResult.term) ||
+        !Type.isAtom(functionResult.term) ||
+        !Type.isInteger(arityResult.term)
+      ) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       const context = Interpreter.buildContext();
 
       // Convert arity from BigInt to Number
