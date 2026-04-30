@@ -652,8 +652,6 @@ const Erlang = {
     const SMALL_ATOM_UTF8_EXT = 119;
     const V4_PORT_EXT = 120;
 
-    // Shared raise for any malformed-ETF case. Hoisted so every decoder /
-    // bounds check below can be a one-liner.
     const raiseInvalid = () =>
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
@@ -805,8 +803,6 @@ const Erlang = {
       }
     };
 
-    // Integer decoders
-
     const decodeSmallInteger = (dataView, offset) => {
       const value = dataView.getUint8(offset);
       return {
@@ -869,8 +865,6 @@ const Erlang = {
         newOffset: offset + 5 + n,
       };
     };
-
-    // Atom decoders
 
     // Decodes atom name bytes. Latin-1 (the deprecated ATOM_EXT/SMALL_ATOM_EXT
     // encoding) maps each byte 0-255 to the same Unicode code point, which is
@@ -935,8 +929,6 @@ const Erlang = {
       };
     };
 
-    // Binary decoder
-
     const decodeBinary = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
       if (offset + 4 + length > bytes.length) raiseInvalid();
@@ -950,8 +942,6 @@ const Erlang = {
         newOffset: offset + 4 + length,
       };
     };
-
-    // Tuple decoders
 
     const decodeSmallTuple = (dataView, bytes, offset) => {
       const arity = dataView.getUint8(offset);
@@ -987,8 +977,6 @@ const Erlang = {
       };
     };
 
-    // List decoders
-
     const decodeString = (dataView, bytes, offset) => {
       const length = dataView.getUint16(offset);
       if (offset + 2 + length > bytes.length) raiseInvalid();
@@ -1016,7 +1004,6 @@ const Erlang = {
         currentOffset = result.newOffset;
       }
 
-      // Decode the tail
       const tailResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = tailResult.newOffset;
 
@@ -1038,15 +1025,12 @@ const Erlang = {
           : {term: Type.improperList(merged), newOffset: currentOffset};
       }
 
-      // Otherwise, it's an improper list
       elements.push(tailResult.term);
       return {
         term: Type.improperList(elements),
         newOffset: currentOffset,
       };
     };
-
-    // Map decoder
 
     const decodeMap = (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
@@ -1074,8 +1058,6 @@ const Erlang = {
         newOffset: currentOffset,
       };
     };
-
-    // Float decoders
 
     const decodeNewFloat = (dataView, offset) => {
       const value = dataView.getFloat64(offset);
@@ -1113,8 +1095,6 @@ const Erlang = {
       };
     };
 
-    // Bitstring decoder
-
     const decodeBitBinary = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
       const bits = dataView.getUint8(offset + 4);
@@ -1133,9 +1113,6 @@ const Erlang = {
       const binaryBytes = bytes.slice(offset + 5, offset + 5 + length);
       const bitstring = Bitstring.fromBytes(binaryBytes);
 
-      // Adjust leftoverBitCount based on the bits field
-      // If bits is 8, all bytes are full (leftoverBitCount = 0, already set by fromBytes)
-      // If bits is 1-7, the last byte is partial (leftoverBitCount = bits)
       if (bits < 8) {
         bitstring.leftoverBitCount = bits;
       }
@@ -1158,11 +1135,9 @@ const Erlang = {
     // This format was used in older Erlang versions and is kept for
     // compatibility with legacy external term format data.
 
-    // Common reference decoder helper
     const decodeReferenceWithOptions = (dataView, bytes, offset, options) => {
       let currentOffset = offset;
 
-      // Read length prefix if present
       let idWordCount = 1; // Default for REFERENCE_EXT
       if (options.hasLengthPrefix) {
         idWordCount = dataView.getUint16(currentOffset);
@@ -1176,7 +1151,6 @@ const Erlang = {
         if (idWordCount > 5) raiseInvalid();
       }
 
-      // Decode node name (atom)
       const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
@@ -1185,7 +1159,6 @@ const Erlang = {
       let creation, idWords;
 
       if (options.hasLengthPrefix) {
-        // NEW_REFERENCE_EXT and NEWER_REFERENCE_EXT: Creation | ID words
         creation =
           options.creationSize === 4
             ? dataView.getUint32(currentOffset)
@@ -1198,7 +1171,6 @@ const Erlang = {
           currentOffset += 4;
         }
       } else {
-        // REFERENCE_EXT: ID | Creation
         idWords = [];
         for (let i = 0; i < idWordCount; i++) {
           idWords.push(dataView.getUint32(currentOffset));
@@ -1249,7 +1221,6 @@ const Erlang = {
     const decodePid = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
-      // Decode node name (atom)
       const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
@@ -1272,7 +1243,6 @@ const Erlang = {
     const decodeNewPid = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
-      // Decode node name (atom)
       const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
@@ -1292,12 +1262,9 @@ const Erlang = {
       };
     };
 
-    // Port decoders
-
     const decodePort = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
-      // Decode node name (atom)
       const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
@@ -1317,7 +1284,6 @@ const Erlang = {
     const decodeNewPort = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
-      // Decode node name (atom)
       const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
@@ -1337,7 +1303,6 @@ const Erlang = {
     const decodeV4Port = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
-      // Decode node name (atom)
       const nodeResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = nodeResult.newOffset;
 
@@ -1354,19 +1319,15 @@ const Erlang = {
       };
     };
 
-    // EXPORT_EXT decoder (function capture)
     const decodeExport = (dataView, bytes, offset) => {
       let currentOffset = offset;
 
-      // Decode module (atom)
       const moduleResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = moduleResult.newOffset;
 
-      // Decode function (atom)
       const functionResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = functionResult.newOffset;
 
-      // Decode arity (small integer)
       const arityResult = decodeTerm(dataView, bytes, currentOffset);
       currentOffset = arityResult.newOffset;
 
@@ -1384,7 +1345,6 @@ const Erlang = {
 
       const context = Interpreter.buildContext();
 
-      // Convert arity from BigInt to Number
       const arity = Number(arityResult.term.value);
 
       return {
@@ -1409,7 +1369,6 @@ const Erlang = {
         bytes.byteLength,
       );
 
-      // Check ETF version byte (must be 131)
       if (dataView.getUint8(0) !== 131) raiseInvalid();
 
       // COMPRESSED is only valid immediately after the version byte. OTP
