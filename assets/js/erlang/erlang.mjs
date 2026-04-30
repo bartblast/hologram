@@ -1214,6 +1214,19 @@ const Erlang = {
 
     const decodeNewFloat = (dataView, offset) => {
       const value = dataView.getFloat64(offset);
+
+      // OTP rejects non-finite floats (NaN, +Inf, -Inf): Erlang floats must
+      // be finite. Without this check, hand-crafted IEEE 754 bit patterns
+      // would produce a Type.float(NaN) / Type.float(Infinity) and diverge.
+      if (!Number.isFinite(value)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       return {
         term: Type.float(value),
         newOffset: offset + 8,
@@ -1237,7 +1250,10 @@ const Erlang = {
       );
       const value = parseFloat(floatString);
 
-      if (Number.isNaN(value)) {
+      // !isFinite covers NaN and +/-Infinity. parseFloat returns NaN for
+      // unparseable strings ("nan", "inf") and Infinity for "Infinity";
+      // OTP rejects all of them.
+      if (!Number.isFinite(value)) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
             1,

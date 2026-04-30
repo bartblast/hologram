@@ -3553,6 +3553,73 @@ describe("Erlang", () => {
           ),
         );
       });
+
+      it("raises ArgumentError for NEW_FLOAT_EXT with NaN bit pattern", async () => {
+        // NEW_FLOAT_EXT (70) followed by IEEE 754 quiet NaN bytes.
+        // OTP rejects non-finite floats.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 70, 127, 248, 0, 0, 0, 0, 0, 0]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for NEW_FLOAT_EXT with +Infinity bit pattern", async () => {
+        // NEW_FLOAT_EXT (70) followed by IEEE 754 +Infinity bytes.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 70, 127, 240, 0, 0, 0, 0, 0, 0]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for NEW_FLOAT_EXT with -Infinity bit pattern", async () => {
+        // NEW_FLOAT_EXT (70) followed by IEEE 754 -Infinity bytes.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 70, 255, 240, 0, 0, 0, 0, 0, 0]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for FLOAT_EXT with Infinity string", async () => {
+        // FLOAT_EXT (99) with the string "Infinity" - parseFloat returns
+        // Infinity, but OTP rejects non-finite floats.
+        const floatStr = "Infinity";
+        const bytes = new Uint8Array(33);
+        bytes[0] = 131;
+        bytes[1] = 99;
+        for (let i = 0; i < floatStr.length; i++) {
+          bytes[2 + i] = floatStr.charCodeAt(i);
+        }
+        const binary = Bitstring.fromBytes(bytes);
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
     });
 
     describe("bitstrings", () => {

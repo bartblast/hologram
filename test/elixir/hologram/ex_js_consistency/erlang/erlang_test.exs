@@ -2400,6 +2400,43 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for NEW_FLOAT_EXT with NaN bit pattern" do
+      # NEW_FLOAT_EXT (70) followed by IEEE 754 quiet NaN bytes.
+      binary = <<131, 70, 127, 248, 0, 0, 0, 0, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for NEW_FLOAT_EXT with +Infinity bit pattern" do
+      # NEW_FLOAT_EXT (70) followed by IEEE 754 +Infinity bytes.
+      binary = <<131, 70, 127, 240, 0, 0, 0, 0, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for NEW_FLOAT_EXT with -Infinity bit pattern" do
+      # NEW_FLOAT_EXT (70) followed by IEEE 754 -Infinity bytes.
+      binary = <<131, 70, 255, 240, 0, 0, 0, 0, 0, 0>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for FLOAT_EXT with Infinity string" do
+      # FLOAT_EXT (99) with the string "Infinity" - OTP rejects non-finite floats.
+      padded = String.pad_trailing("Infinity", 31, <<0>>)
+      binary = <<131, 99, padded::binary>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     # === bitstrings ===
 
     test "decodes BIT_BINARY_EXT with partial byte" do
