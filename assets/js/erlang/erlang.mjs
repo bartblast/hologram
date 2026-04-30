@@ -1375,7 +1375,7 @@ const Erlang = {
       // rejects nested COMPRESSED tags, so handling it here (rather than as
       // a case in decodeTerm's switch) keeps the recursive decoder sync.
       // Format: 80 | UncompressedSize (uint32 BE) | zlib-compressed payload.
-      if (bytes.length >= 2 && dataView.getUint8(1) === COMPRESSED) {
+      if (dataView.getUint8(1) === COMPRESSED) {
         if (bytes.length < 6) raiseInvalid();
 
         const uncompressedSize = dataView.getUint32(2, false);
