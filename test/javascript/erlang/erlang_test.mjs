@@ -2991,6 +2991,34 @@ describe("Erlang", () => {
         const result = await binary_to_term(binary);
         assertBoxedStrictEqual(result, Type.bitstring(""));
       });
+
+      it("BINARY_EXT format with various binary data", async () => {
+        // BINARY_EXT (tag 109) with different binary content
+        const testCases = [
+          new Uint8Array(0),
+          new TextEncoder().encode("hello"),
+          new TextEncoder().encode("world with spaces"),
+          new TextEncoder().encode("binary\0with\0nulls"),
+          new TextEncoder().encode("UTF-8: élixir café 测试 🚀"),
+          new Uint8Array([0, 1, 2, 255, 254, 253]),
+          new TextEncoder().encode("x".repeat(1000)),
+        ];
+
+        for (const content of testCases) {
+          const len = content.length;
+          const fullBytes = new Uint8Array(6 + len);
+          fullBytes[0] = 131;
+          fullBytes[1] = 109;
+          fullBytes[2] = (len >> 24) & 0xff;
+          fullBytes[3] = (len >> 16) & 0xff;
+          fullBytes[4] = (len >> 8) & 0xff;
+          fullBytes[5] = len & 0xff;
+          fullBytes.set(content, 6);
+          const binary = Bitstring.fromBytes(fullBytes);
+          const result = await binary_to_term(binary);
+          assertBoxedStrictEqual(result, Bitstring.fromBytes(content));
+        }
+      });
     });
 
     describe("tuples", () => {
