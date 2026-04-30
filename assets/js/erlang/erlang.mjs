@@ -979,10 +979,25 @@ const Erlang = {
 
     // Atom decoders
 
-    // Decodes atom name bytes, converting invalid UTF-8 to ArgumentError
-    // instead of letting TextDecoder's TypeError leak out.
+    // Decodes atom name bytes. Latin-1 (the deprecated ATOM_EXT/SMALL_ATOM_EXT
+    // encoding) maps each byte 0-255 to the same Unicode code point, which is
+    // why we use String.fromCharCode in a loop rather than TextDecoder("latin1"):
+    // per the WHATWG Encoding Standard, "latin1" is a label for windows-1252,
+    // and would mis-decode 0x80-0x9F (e.g. 0x80 -> U+20AC). The loop also
+    // avoids String.fromCharCode(...atomBytes), whose argument count is engine-
+    // limited (~65k); Erlang atoms are capped at 255 bytes today, but ATOM_EXT's
+    // wire-format length field is uint16, so we stay defensive.
+    // For UTF-8, invalid bytes throw TypeError from TextDecoder({fatal:true});
+    // we convert that to ArgumentError here so the outer wrapper does not have
+    // to catch TypeError generically.
     const decodeAtomBytes = (atomBytes, isUtf8) => {
-      if (!isUtf8) return String.fromCharCode(...atomBytes);
+      if (!isUtf8) {
+        let result = "";
+        for (let i = 0; i < atomBytes.length; i++) {
+          result += String.fromCharCode(atomBytes[i]);
+        }
+        return result;
+      }
       try {
         return ERTS.utf8Decoder.decode(atomBytes);
       } catch {
