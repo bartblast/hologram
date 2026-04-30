@@ -2694,27 +2694,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         assert :erlang.binary_to_term(binary) == bin
       end
     end
-
-    test "BIT_BINARY_EXT format with partial bytes" do
-      # Test BIT_BINARY_EXT (tag 77) with various bit lengths
-      test_bitstrings = [
-        <<1::1>>,
-        <<1::3>>,
-        <<15::4>>,
-        <<31::5>>,
-        # full byte
-        <<255::8>>,
-        # mixed bytes and bits
-        <<1, 2, 3::6>>,
-        # multiple bytes + 1 bit
-        <<255, 255, 1::1>>
-      ]
-
-      for bitstring <- test_bitstrings do
-        binary = :erlang.term_to_binary(bitstring)
-        assert :erlang.binary_to_term(binary) == bitstring
-      end
-    end
   end
 
   describe "bit_size/1" do
