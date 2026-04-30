@@ -1012,6 +1012,19 @@ const Erlang = {
 
     const decodeAtom = (dataView, bytes, offset, isUtf8) => {
       const length = dataView.getUint16(offset);
+
+      // OTP caps atom names at 255 characters. For Latin-1 (ATOM_EXT) one
+      // byte == one char, so we can early-reject without slicing. The
+      // SMALL_* variants use a uint8 length field and are naturally bounded.
+      if (!isUtf8 && length > 255) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       if (offset + 2 + length > bytes.length) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
@@ -1022,6 +1035,18 @@ const Erlang = {
       }
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
       const atomString = decodeAtomBytes(atomBytes, isUtf8);
+
+      // For UTF-8 (ATOM_UTF8_EXT) the byte length can be up to 1020 (255 * 4),
+      // but the code-point count must be <= 255. The spread iterator walks
+      // code points, not UTF-16 units, so it counts emoji etc. correctly.
+      if (isUtf8 && [...atomString].length > 255) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
 
       return {
         term: Type.atom(atomString),

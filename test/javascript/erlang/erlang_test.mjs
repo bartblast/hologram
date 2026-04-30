@@ -3113,6 +3113,64 @@ describe("Erlang", () => {
           ),
         );
       });
+
+      it("raises ArgumentError for ATOM_EXT with byte length exceeding 255", async () => {
+        // ATOM_EXT (100) with 256 Latin-1 bytes. OTP caps atom names at 255 chars.
+        const len = 256;
+        const bytes = new Uint8Array(4 + len);
+        bytes[0] = 131;
+        bytes[1] = 100;
+        bytes[2] = (len >> 8) & 0xff;
+        bytes[3] = len & 0xff;
+        bytes.fill(0x61, 4); // 'a'
+        const binary = Bitstring.fromBytes(bytes);
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for ATOM_UTF8_EXT with codepoint count exceeding 255", async () => {
+        // ATOM_UTF8_EXT (118) with 256 ASCII bytes (256 codepoints). OTP caps
+        // UTF-8 atom names at 255 codepoints, not at byte length: 100 emoji
+        // (400 bytes, 100 codepoints) is accepted by OTP, but 256 ASCII
+        // codepoints is not.
+        const len = 256;
+        const bytes = new Uint8Array(4 + len);
+        bytes[0] = 131;
+        bytes[1] = 118;
+        bytes[2] = (len >> 8) & 0xff;
+        bytes[3] = len & 0xff;
+        bytes.fill(0x61, 4); // 'a'
+        const binary = Bitstring.fromBytes(bytes);
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("decodes ATOM_UTF8_EXT with 255 multibyte codepoints (>255 bytes)", async () => {
+        // 255 rocket emoji (4 bytes each = 1020 bytes). Exercises the
+        // codepoint-vs-byte distinction: byte length > 255 is allowed when
+        // codepoint count <= 255.
+        const name = "🚀".repeat(255);
+        const nameBytes = new TextEncoder().encode(name);
+        const lengthHigh = (nameBytes.length >> 8) & 0xff;
+        const lengthLow = nameBytes.length & 0xff;
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 118, lengthHigh, lengthLow, ...nameBytes]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(result, Type.atom(name));
+      });
     });
 
     describe("binaries", () => {

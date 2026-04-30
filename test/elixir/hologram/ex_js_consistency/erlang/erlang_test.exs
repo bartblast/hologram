@@ -2167,6 +2167,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for ATOM_EXT with byte length exceeding 255" do
+      # ATOM_EXT (100) with 256 Latin-1 bytes. OTP caps atom names at 255 chars.
+      name = String.duplicate("a", 256)
+      binary = <<131, 100, byte_size(name)::16, name::binary>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for ATOM_UTF8_EXT with codepoint count exceeding 255" do
+      # ATOM_UTF8_EXT (118) with 256 ASCII bytes (256 codepoints). OTP caps
+      # UTF-8 atom names at 255 codepoints, not at byte length.
+      name = String.duplicate("a", 256)
+      binary = <<131, 118, byte_size(name)::16, name::binary>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "decodes ATOM_UTF8_EXT with 255 multibyte codepoints (>255 bytes)" do
+      # 255 rocket emoji (4 bytes each = 1020 bytes). Codepoint count <= 255
+      # is allowed even when byte length > 255.
+      name = String.duplicate("🚀", 255)
+      binary = <<131, 118, byte_size(name)::16, name::binary>>
+
+      assert :erlang.binary_to_term(binary) == String.to_atom(name)
+    end
+
     # === binaries ===
 
     test "decodes binary string (BINARY_EXT)" do
