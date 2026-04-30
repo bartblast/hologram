@@ -2007,7 +2007,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == large_int
     end
 
-    test "decodes atom UTF-8 (ATOM_UTF8_EXT)" do
+    test "decodes UTF-8 atom (ATOM_UTF8_EXT)" do
       name = "élixir"
       binary = <<131, 118, byte_size(name)::16, name::binary>>
       assert :erlang.binary_to_term(binary) == :élixir

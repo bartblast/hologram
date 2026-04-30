@@ -2872,7 +2872,7 @@ describe("Erlang", () => {
     });
 
     describe("atoms", () => {
-      it("decodes atom UTF-8 (ATOM_UTF8_EXT)", async () => {
+      it("decodes UTF-8 atom (ATOM_UTF8_EXT)", async () => {
         // élixir as UTF-8 atom using ATOM_UTF8_EXT (tag 118)
         const name = "élixir";
         const nameBytes = new TextEncoder().encode(name);
