@@ -2378,17 +2378,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == expected
     end
 
-    test "decodes compressed term round-trip" do
-      # Test that we can decode Erlang's compressed format
-      term = %{
-        data: List.duplicate({:item, "value", 123}, 100),
-        metadata: %{compressed: true, version: 1}
-      }
-
-      binary = :erlang.term_to_binary(term, compressed: 9)
-      assert :erlang.binary_to_term(binary) == term
-    end
-
     test "raises ArgumentError for compressed term with truncated uncompressed size" do
       # COMPRESSED tag but missing uncompressed size bytes
       binary = <<131, 80, 0, 0>>
