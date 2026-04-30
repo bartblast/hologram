@@ -2052,6 +2052,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "decodes SMALL_BIG_EXT with non-{0,1} sign byte as negative" do
+      # OTP treats any non-zero Sign byte as negative, not only 1.
+      binary = <<131, 110, 1, 2, 42>>
+
+      assert :erlang.binary_to_term(binary) == -42
+    end
+
+    test "decodes LARGE_BIG_EXT with non-{0,1} sign byte as negative" do
+      # OTP treats any non-zero Sign byte as negative.
+      binary = <<131, 111, 0, 0, 0, 1, 255, 42>>
+
+      assert :erlang.binary_to_term(binary) == -42
+    end
+
     # === atoms ===
 
     test "decodes UTF-8 atom (ATOM_UTF8_EXT)" do

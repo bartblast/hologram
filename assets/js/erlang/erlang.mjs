@@ -901,18 +901,12 @@ const Erlang = {
       };
     };
 
+    // OTP treats any non-zero Sign byte as negative (not just 1) - so e.g.
+    // sign=2, sign=255 all decode to a negative value. The spec says only 0
+    // and 1 are emitted, but the decoder is lenient.
     const decodeSmallBig = (dataView, bytes, offset) => {
       const n = dataView.getUint8(offset);
       const sign = dataView.getUint8(offset + 1);
-
-      if (sign !== 0 && sign !== 1) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
 
       if (offset + 2 + n > bytes.length) {
         Interpreter.raiseArgumentError(
@@ -929,7 +923,7 @@ const Erlang = {
         value += byte << BigInt(i * 8);
       }
 
-      if (sign === 1) {
+      if (sign !== 0) {
         value = -value;
       }
 
@@ -942,15 +936,6 @@ const Erlang = {
     const decodeLargeBig = (dataView, bytes, offset) => {
       const n = dataView.getUint32(offset);
       const sign = dataView.getUint8(offset + 4);
-
-      if (sign !== 0 && sign !== 1) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
 
       if (offset + 5 + n > bytes.length) {
         Interpreter.raiseArgumentError(
@@ -967,7 +952,7 @@ const Erlang = {
         value += byte << BigInt(i * 8);
       }
 
-      if (sign === 1) {
+      if (sign !== 0) {
         value = -value;
       }
 

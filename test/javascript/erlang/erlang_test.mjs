@@ -2930,6 +2930,26 @@ describe("Erlang", () => {
           ),
         );
       });
+
+      it("decodes SMALL_BIG_EXT with non-{0,1} sign byte as negative", async () => {
+        // OTP treats any non-zero Sign byte as negative, not only 1.
+        // SMALL_BIG_EXT (110), n=1, sign=2, value byte 42 -> -42.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 110, 1, 2, 42]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(result, Type.integer(-42));
+      });
+
+      it("decodes LARGE_BIG_EXT with non-{0,1} sign byte as negative", async () => {
+        // OTP treats any non-zero Sign byte as negative.
+        // LARGE_BIG_EXT (111), n=1, sign=255, value byte 42 -> -42.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 111, 0, 0, 0, 1, 255, 42]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(result, Type.integer(-42));
+      });
     });
 
     describe("atoms", () => {
