@@ -652,6 +652,16 @@ const Erlang = {
     const SMALL_ATOM_UTF8_EXT = 119;
     const V4_PORT_EXT = 120;
 
+    // Shared raise for any malformed-ETF case. Hoisted so every decoder /
+    // bounds check below can be a one-liner.
+    const raiseInvalid = () =>
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "invalid external representation of a term",
+        ),
+      );
+
     // Decompresses zlib-compressed data using native DecompressionStream API.
     // Returns a Promise that resolves to a Uint8Array; throws on failure.
     const zlibInflate = async (compressedData) => {
@@ -704,14 +714,7 @@ const Erlang = {
     // the matching module + Uniq). FUN_EXT (tag 117) is intentionally
     // rejected forever - OTP itself stopped decoding it in OTP 23.
     const decodeTerm = (dataView, bytes, offset) => {
-      if (offset >= bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset >= bytes.length) raiseInvalid();
 
       const tag = dataView.getUint8(offset);
 
@@ -798,12 +801,7 @@ const Erlang = {
           return decodeExport(dataView, bytes, offset + 1);
 
         default:
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
+          raiseInvalid();
       }
     };
 
@@ -832,14 +830,7 @@ const Erlang = {
       const n = dataView.getUint8(offset);
       const sign = dataView.getUint8(offset + 1);
 
-      if (offset + 2 + n > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 2 + n > bytes.length) raiseInvalid();
 
       let value = 0n;
       for (let i = 0; i < n; i++) {
@@ -861,14 +852,7 @@ const Erlang = {
       const n = dataView.getUint32(offset);
       const sign = dataView.getUint8(offset + 4);
 
-      if (offset + 5 + n > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 5 + n > bytes.length) raiseInvalid();
 
       let value = 0n;
       for (let i = 0; i < n; i++) {
@@ -910,12 +894,7 @@ const Erlang = {
       try {
         return ERTS.utf8Decoder.decode(atomBytes);
       } catch {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
+        raiseInvalid();
       }
     };
 
@@ -925,37 +904,17 @@ const Erlang = {
       // OTP caps atom names at 255 characters. For Latin-1 (ATOM_EXT) one
       // byte == one char, so we can early-reject without slicing. The
       // SMALL_* variants use a uint8 length field and are naturally bounded.
-      if (!isUtf8 && length > 255) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (!isUtf8 && length > 255) raiseInvalid();
 
-      if (offset + 2 + length > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 2 + length > bytes.length) raiseInvalid();
+
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
       const atomString = decodeAtomBytes(atomBytes, isUtf8);
 
       // For UTF-8 (ATOM_UTF8_EXT) the byte length can be up to 1020 (255 * 4),
       // but the code-point count must be <= 255. The spread iterator walks
       // code points, not UTF-16 units, so it counts emoji etc. correctly.
-      if (isUtf8 && [...atomString].length > 255) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (isUtf8 && [...atomString].length > 255) raiseInvalid();
 
       return {
         term: Type.atom(atomString),
@@ -965,14 +924,8 @@ const Erlang = {
 
     const decodeSmallAtom = (dataView, bytes, offset, isUtf8) => {
       const length = dataView.getUint8(offset);
-      if (offset + 1 + length > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 1 + length > bytes.length) raiseInvalid();
+
       const atomBytes = bytes.slice(offset + 1, offset + 1 + length);
       const atomString = decodeAtomBytes(atomBytes, isUtf8);
 
@@ -986,14 +939,7 @@ const Erlang = {
 
     const decodeBinary = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
-      if (offset + 4 + length > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 4 + length > bytes.length) raiseInvalid();
       // Uint8Array.slice already returns a fresh Uint8Array, so passing it
       // straight into Bitstring.fromBytes avoids the extra copy that
       // `new Uint8Array(binaryBytes)` would do.
@@ -1045,14 +991,7 @@ const Erlang = {
 
     const decodeString = (dataView, bytes, offset) => {
       const length = dataView.getUint16(offset);
-      if (offset + 2 + length > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 2 + length > bytes.length) raiseInvalid();
       const elements = [];
 
       for (let i = 0; i < length; i++) {
@@ -1123,14 +1062,7 @@ const Erlang = {
         // without this check we'd silently apply Type.map's last-write-wins
         // semantics and diverge from OTP.
         const encodedKey = Type.encodeMapKey(keyResult.term);
-        if (seenKeys.has(encodedKey)) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
-        }
+        if (seenKeys.has(encodedKey)) raiseInvalid();
         seenKeys.add(encodedKey);
 
         entries.push([keyResult.term, valueResult.term]);
@@ -1151,14 +1083,7 @@ const Erlang = {
       // OTP rejects non-finite floats (NaN, +Inf, -Inf): Erlang floats must
       // be finite. Without this check, hand-crafted IEEE 754 bit patterns
       // would produce a Type.float(NaN) / Type.float(Infinity) and diverge.
-      if (!Number.isFinite(value)) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (!Number.isFinite(value)) raiseInvalid();
 
       return {
         term: Type.float(value),
@@ -1168,14 +1093,8 @@ const Erlang = {
 
     const decodeFloatExt = (dataView, bytes, offset) => {
       // FLOAT_EXT: 31-byte null-terminated string (deprecated format)
-      if (offset + 31 > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 31 > bytes.length) raiseInvalid();
+
       const floatBytes = bytes.slice(offset, offset + 31);
       const floatString = String.fromCharCode(...floatBytes).replace(
         /\0.*$/,
@@ -1186,14 +1105,7 @@ const Erlang = {
       // !isFinite covers NaN and +/-Infinity. parseFloat returns NaN for
       // unparseable strings ("nan", "inf") and Infinity for "Infinity";
       // OTP rejects all of them.
-      if (!Number.isFinite(value)) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (!Number.isFinite(value)) raiseInvalid();
 
       return {
         term: Type.float(value),
@@ -1212,23 +1124,9 @@ const Erlang = {
       // Note: OTP also rejects all of these except the specific Length=0,
       // Bits=0 pattern, which crashes the VM with a giant binary alloc
       // (real OTP bug). We deliberately reject that case cleanly here.
-      if (length === 0 || bits < 1 || bits > 8) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (length === 0 || bits < 1 || bits > 8) raiseInvalid();
 
-      if (offset + 5 + length > bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (offset + 5 + length > bytes.length) raiseInvalid();
 
       // bytes.slice already returns a fresh Uint8Array; no need to copy
       // again via `new Uint8Array(...)`.
@@ -1275,14 +1173,7 @@ const Erlang = {
         // this check a Len of e.g. 65535 would attempt a 256KB read - caught
         // by the outer wrapper as RangeError, but we lose the early-exit and
         // diverge from OTP for moderately oversized values like Len=6.
-        if (idWordCount > 5) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
-        }
+        if (idWordCount > 5) raiseInvalid();
       }
 
       // Decode node name (atom)
@@ -1488,12 +1379,7 @@ const Erlang = {
         !Type.isAtom(functionResult.term) ||
         !Type.isInteger(arityResult.term)
       ) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
+        raiseInvalid();
       }
 
       const context = Interpreter.buildContext();
@@ -1524,28 +1410,14 @@ const Erlang = {
       );
 
       // Check ETF version byte (must be 131)
-      if (dataView.getUint8(0) !== 131) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (dataView.getUint8(0) !== 131) raiseInvalid();
 
       // COMPRESSED is only valid immediately after the version byte. OTP
       // rejects nested COMPRESSED tags, so handling it here (rather than as
       // a case in decodeTerm's switch) keeps the recursive decoder sync.
       // Format: 80 | UncompressedSize (uint32 BE) | zlib-compressed payload.
       if (bytes.length >= 2 && dataView.getUint8(1) === COMPRESSED) {
-        if (bytes.length < 6) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
-        }
+        if (bytes.length < 6) raiseInvalid();
 
         const uncompressedSize = dataView.getUint32(2, false);
         const compressedData = bytes.slice(6);
@@ -1554,22 +1426,10 @@ const Erlang = {
         try {
           decompressed = await zlibInflate(compressedData);
         } catch {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
+          raiseInvalid();
         }
 
-        if (decompressed.length !== uncompressedSize) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
-        }
+        if (decompressed.length !== uncompressedSize) raiseInvalid();
 
         const decompressedView = new DataView(
           decompressed.buffer,
@@ -1582,14 +1442,7 @@ const Erlang = {
         // Trailing bytes inside the decompressed payload are rejected by
         // OTP (the outer binary may have trailing bytes; the decompressed
         // term cannot).
-        if (innerResult.newOffset !== decompressed.length) {
-          Interpreter.raiseArgumentError(
-            Interpreter.buildArgumentErrorMsg(
-              1,
-              "invalid external representation of a term",
-            ),
-          );
-        }
+        if (innerResult.newOffset !== decompressed.length) raiseInvalid();
 
         return innerResult.term;
       }
@@ -1606,14 +1459,7 @@ const Erlang = {
       // a real bug and bubbles up. Decoder helpers that have other legitimate
       // failure modes (e.g. invalid UTF-8 in atom names) raise ArgumentError at
       // the call site instead of relying on this wrapper.
-      if (err instanceof RangeError) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
+      if (err instanceof RangeError) raiseInvalid();
       throw err;
     }
   },
