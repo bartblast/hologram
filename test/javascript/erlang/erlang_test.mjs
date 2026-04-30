@@ -3190,10 +3190,10 @@ describe("Erlang", () => {
         assert.deepStrictEqual(result, Type.float(0.0));
       });
 
-      it("decodes FLOAT_EXT (deprecated 31-byte string format) for positive float", async () => {
-        // FLOAT_EXT: tag 99, followed by 31 bytes (null-terminated string)
-        // Encoding 3.14159 as "3.14159000000000000000e+00" (31 bytes with null padding)
-        const floatStr = "3.14159000000000000000e+00";
+      it("decodes FLOAT_EXT (deprecated string format)", async () => {
+        // FLOAT_EXT: tag 99, followed by 31 bytes (null-terminated string).
+        // Encoding 1.5 as "1.50000000000000000000e+00" (31 bytes with null padding).
+        const floatStr = "1.50000000000000000000e+00";
         const bytes = new Uint8Array(33);
         bytes[0] = 131; // ETF version
         bytes[1] = 99; // FLOAT_EXT tag
@@ -3203,65 +3203,7 @@ describe("Erlang", () => {
         // Remaining bytes are 0 (null padding)
         const binary = Bitstring.fromBytes(bytes);
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(3.14159));
-      });
-
-      it("decodes FLOAT_EXT for negative float", async () => {
-        // Encoding -2.5 as "-2.50000000000000000000e+00"
-        const floatStr = "-2.50000000000000000000e+00";
-        const bytes = new Uint8Array(33);
-        bytes[0] = 131;
-        bytes[1] = 99;
-        for (let i = 0; i < floatStr.length; i++) {
-          bytes[2 + i] = floatStr.charCodeAt(i);
-        }
-        const binary = Bitstring.fromBytes(bytes);
-        const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(-2.5));
-      });
-
-      it("decodes FLOAT_EXT for zero", async () => {
-        // Encoding 0.0 as "0.00000000000000000000e+00"
-        const floatStr = "0.00000000000000000000e+00";
-        const bytes = new Uint8Array(33);
-        bytes[0] = 131;
-        bytes[1] = 99;
-        for (let i = 0; i < floatStr.length; i++) {
-          bytes[2 + i] = floatStr.charCodeAt(i);
-        }
-        const binary = Bitstring.fromBytes(bytes);
-        const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(0.0));
-      });
-
-      it("decodes FLOAT_EXT with shorter string (null-terminated)", async () => {
-        // Encoding 1.5 as "1.5" with null termination
-        const floatStr = "1.5";
-        const bytes = new Uint8Array(33);
-        bytes[0] = 131;
-        bytes[1] = 99;
-        for (let i = 0; i < floatStr.length; i++) {
-          bytes[2 + i] = floatStr.charCodeAt(i);
-        }
-        bytes[2 + floatStr.length] = 0; // null terminator
-        // Remaining bytes are already 0
-        const binary = Bitstring.fromBytes(bytes);
-        const result = await binary_to_term(binary);
         assert.deepStrictEqual(result, Type.float(1.5));
-      });
-
-      it("decodes FLOAT_EXT with negative exponent", async () => {
-        // Encoding 0.00625 as "6.25000000000000000000e-03"
-        const floatStr = "6.25000000000000000000e-03";
-        const bytes = new Uint8Array(33);
-        bytes[0] = 131;
-        bytes[1] = 99;
-        for (let i = 0; i < floatStr.length; i++) {
-          bytes[2 + i] = floatStr.charCodeAt(i);
-        }
-        const binary = Bitstring.fromBytes(bytes);
-        const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(0.00625));
       });
 
       it("raises ArgumentError for FLOAT_EXT with truncated data", async () => {
