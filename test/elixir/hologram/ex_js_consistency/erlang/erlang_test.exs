@@ -2566,6 +2566,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for LARGE_TUPLE_EXT with zero arity but missing NIL_EXT" do
+      # LARGE_TUPLE_EXT (105) with arity 0 - should work, but let's test malformed version
+      binary = <<131, 105, 0, 0, 0, 1>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     # Consistency tests for specific external term formats
 
     test "STRING_EXT format with various byte values" do
