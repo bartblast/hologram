@@ -803,6 +803,7 @@ const Erlang = {
 
     const decodeSmallInteger = (dataView, offset) => {
       const value = dataView.getUint8(offset);
+
       return {
         term: Type.integer(value),
         newOffset: offset + 1,
@@ -811,6 +812,7 @@ const Erlang = {
 
     const decodeInteger = (dataView, offset) => {
       const value = dataView.getInt32(offset);
+
       return {
         term: Type.integer(value),
         newOffset: offset + 4,
@@ -929,7 +931,9 @@ const Erlang = {
 
     const decodeBinary = (dataView, bytes, offset) => {
       const length = dataView.getUint32(offset);
+
       if (offset + 4 + length > bytes.length) raiseInvalid();
+
       // Uint8Array.slice already returns a fresh Uint8Array, so passing it
       // straight into Bitstring.fromBytes avoids the extra copy that
       // `new Uint8Array(binaryBytes)` would do.
@@ -1024,6 +1028,7 @@ const Erlang = {
       }
 
       elements.push(tailResult.term);
+
       return {
         term: Type.improperList(elements),
         newOffset: currentOffset,
@@ -1076,10 +1081,12 @@ const Erlang = {
       if (offset + 31 > bytes.length) raiseInvalid();
 
       const floatBytes = bytes.slice(offset, offset + 31);
+
       const floatString = String.fromCharCode(...floatBytes).replace(
         /\0.*$/,
         "",
       );
+
       const value = parseFloat(floatString);
 
       // !isFinite covers NaN and +/-Infinity. parseFloat returns NaN for
@@ -1121,8 +1128,6 @@ const Erlang = {
       };
     };
 
-    // Reference decoders
-    //
     // REFERENCE_EXT (tag 101) - Deprecated format for backward compatibility
     // Format: Node | ID | Creation
     // Where:
@@ -1135,8 +1140,8 @@ const Erlang = {
 
     const decodeReferenceWithOptions = (dataView, bytes, offset, options) => {
       let currentOffset = offset;
-
       let idWordCount = 1; // Default for REFERENCE_EXT
+
       if (options.hasLengthPrefix) {
         idWordCount = dataView.getUint16(currentOffset);
         currentOffset += 2;
@@ -1161,6 +1166,7 @@ const Erlang = {
           options.creationSize === 4
             ? dataView.getUint32(currentOffset)
             : dataView.getUint8(currentOffset);
+
         currentOffset += options.creationSize;
 
         idWords = [];
@@ -1206,8 +1212,6 @@ const Erlang = {
       });
     };
 
-    // PID / Port decoders
-    //
     // The ETF spec describes "only N bits significant" for several fields
     // (PID_EXT id 15 bits, serial 13 bits; PORT_EXT / NEW_PORT_EXT id 28 bits;
     // PID_EXT / PORT_EXT creation 2 bits; NEW_PORT_EXT creation == 0 is
@@ -1361,6 +1365,7 @@ const Erlang = {
       Bitstring.maybeSetBytesFromText(binary);
 
       const bytes = binary.bytes;
+
       const dataView = new DataView(
         bytes.buffer,
         bytes.byteOffset,
