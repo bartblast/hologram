@@ -2174,7 +2174,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == bitstring
     end
 
-    test "decodes BIT_BINARY_EXT with full bytes" do
+    test "decodes BIT_BINARY_EXT with full bytes (Bits=8)" do
       bitstring = <<255, 0>>
       binary = :erlang.term_to_binary(bitstring)
       assert :erlang.binary_to_term(binary) == bitstring
