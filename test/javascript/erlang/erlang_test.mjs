@@ -2805,14 +2805,14 @@ describe("Erlang", () => {
         // :erlang.term_to_binary(42) = <<131, 97, 42>>
         const binary = Bitstring.fromBytes(new Uint8Array([131, 97, 42]));
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(42));
+        assertBoxedStrictEqual(result, Type.integer(42));
       });
 
       it("decodes small positive integer (max value 255)", async () => {
         // :erlang.term_to_binary(255) = <<131, 97, 255>>
         const binary = Bitstring.fromBytes(new Uint8Array([131, 97, 255]));
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(255));
+        assertBoxedStrictEqual(result, Type.integer(255));
       });
 
       it("decodes positive integer (INTEGER_EXT)", async () => {
@@ -2821,7 +2821,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 98, 0, 0, 3, 232]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(1000));
+        assertBoxedStrictEqual(result, Type.integer(1000));
       });
 
       it("decodes negative integer (INTEGER_EXT)", async () => {
@@ -2830,7 +2830,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 98, 255, 255, 255, 156]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(-100));
+        assertBoxedStrictEqual(result, Type.integer(-100));
       });
 
       it("decodes large positive integer (SMALL_BIG_EXT)", async () => {
@@ -2839,7 +2839,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 110, 5, 0, 0, 16, 165, 212, 232]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(1000000000000n));
+        assertBoxedStrictEqual(result, Type.integer(1000000000000n));
       });
 
       it("decodes large negative integer (SMALL_BIG_EXT)", async () => {
@@ -2848,7 +2848,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 110, 5, 1, 0, 16, 165, 212, 232]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(-1000000000000n));
+        assertBoxedStrictEqual(result, Type.integer(-1000000000000n));
       });
 
       it("decodes large positive integer (LARGE_BIG_EXT)", async () => {
@@ -2867,7 +2867,7 @@ describe("Erlang", () => {
 
         const binary = Bitstring.fromBytes(bytes);
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(2n ** 2048n));
+        assertBoxedStrictEqual(result, Type.integer(2n ** 2048n));
       });
     });
 
@@ -2883,7 +2883,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 118, lengthHigh, lengthLow, ...nameBytes]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.atom(name));
+        assertBoxedStrictEqual(result, Type.atom(name));
       });
 
       it("decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)", async () => {
@@ -2892,7 +2892,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 119, 4, 116, 101, 115, 116]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.atom("test"));
+        assertBoxedStrictEqual(result, Type.atom("test"));
       });
 
       it("SMALL_ATOM_UTF8_EXT format with UTF-8 atoms", async () => {
@@ -2912,7 +2912,7 @@ describe("Erlang", () => {
             new Uint8Array([131, 119, nameBytes.length, ...nameBytes]),
           );
           const result = await binary_to_term(binary);
-          assert.deepStrictEqual(result, Type.atom(name));
+          assertBoxedStrictEqual(result, Type.atom(name));
         }
       });
 
@@ -2927,7 +2927,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 100, lengthHigh, lengthLow, ...nameBytes]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.atom(name));
+        assertBoxedStrictEqual(result, Type.atom(name));
       });
 
       it("ATOM_EXT format with Latin-1 atoms", async () => {
@@ -2949,7 +2949,7 @@ describe("Erlang", () => {
             new Uint8Array([131, 100, lengthHigh, lengthLow, ...nameBytes]),
           );
           const result = await binary_to_term(binary);
-          assert.deepStrictEqual(result, Type.atom(name));
+          assertBoxedStrictEqual(result, Type.atom(name));
         }
       });
 
@@ -2961,7 +2961,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 115, nameBytes.length, ...nameBytes]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.atom(name));
+        assertBoxedStrictEqual(result, Type.atom(name));
       });
 
       it("decodes longer atom", async () => {
@@ -2972,7 +2972,7 @@ describe("Erlang", () => {
           ]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.atom("test_atom"));
+        assertBoxedStrictEqual(result, Type.atom("test_atom"));
       });
 
       it("decodes true atom", async () => {
@@ -2981,7 +2981,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 119, 4, 116, 114, 117, 101]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.atom("true"));
+        assertBoxedStrictEqual(result, Type.atom("true"));
       });
 
       it("decodes false atom", async () => {
@@ -2990,7 +2990,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 119, 5, 102, 97, 108, 115, 101]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.atom("false"));
+        assertBoxedStrictEqual(result, Type.atom("false"));
       });
     });
 
@@ -3049,7 +3049,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 104, 3, 97, 1, 97, 2, 97, 3]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(
+        assertBoxedStrictEqual(
           result,
           Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
         );
@@ -3092,16 +3092,16 @@ describe("Erlang", () => {
 
         assert.strictEqual(Type.isTuple(result), true);
         assert.strictEqual(result.data.length, arity);
-        assert.deepStrictEqual(result.data[0], Type.integer(1));
-        assert.deepStrictEqual(result.data[255], Type.integer(256)); // Verify no wraparound
-        assert.deepStrictEqual(result.data[299], Type.integer(300)); // Verify last element
+        assertBoxedStrictEqual(result.data[0], Type.integer(1));
+        assertBoxedStrictEqual(result.data[255], Type.integer(256)); // Verify no wraparound
+        assertBoxedStrictEqual(result.data[299], Type.integer(300)); // Verify last element
       });
 
       it("decodes empty tuple", async () => {
         // :erlang.term_to_binary({}) = <<131, 104, 0>>
         const binary = Bitstring.fromBytes(new Uint8Array([131, 104, 0]));
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.tuple([]));
+        assertBoxedStrictEqual(result, Type.tuple([]));
       });
 
       it("decodes nested tuple", async () => {
@@ -3110,7 +3110,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 104, 2, 97, 1, 104, 2, 97, 2, 97, 3]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(
+        assertBoxedStrictEqual(
           result,
           Type.tuple([
             Type.integer(1),
@@ -3125,7 +3125,7 @@ describe("Erlang", () => {
         // :erlang.term_to_binary([]) = <<131, 106>>
         const binary = Bitstring.fromBytes(new Uint8Array([131, 106]));
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.list([]));
+        assertBoxedStrictEqual(result, Type.list([]));
       });
 
       it("decodes string list (STRING_EXT)", async () => {
@@ -3134,7 +3134,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 107, 0, 3, 1, 2, 3]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(
+        assertBoxedStrictEqual(
           result,
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
         );
@@ -3149,7 +3149,7 @@ describe("Erlang", () => {
           ]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(
+        assertBoxedStrictEqual(
           result,
           Type.list([Type.integer(100), Type.integer(200), Type.integer(300)]),
         );
@@ -3162,7 +3162,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 108, 0, 0, 0, 3, 97, 1, 97, 2, 97, 3, 97, 4]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(
+        assertBoxedStrictEqual(
           result,
           Type.improperList([
             Type.integer(1),
@@ -3180,7 +3180,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 108, 0, 0, 0, 0, 97, 1]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.integer(1));
+        assertBoxedStrictEqual(result, Type.integer(1));
       });
 
       it("decodes LIST_EXT with length 0 and NIL_EXT tail to empty list", async () => {
@@ -3189,7 +3189,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 108, 0, 0, 0, 0, 106]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.list([]));
+        assertBoxedStrictEqual(result, Type.list([]));
       });
 
       it("decodes LIST_EXT with length 0 and improper-list tail to the tail term", async () => {
@@ -3199,7 +3199,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 108, 0, 0, 0, 0, 108, 0, 0, 0, 1, 97, 1, 97, 2]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(
+        assertBoxedStrictEqual(
           result,
           Type.improperList([Type.integer(1), Type.integer(2)]),
         );
@@ -3213,7 +3213,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 116, 0, 0, 0, 0]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.map([]));
+        assertBoxedStrictEqual(result, Type.map([]));
       });
 
       it("decodes map with atom keys", async () => {
@@ -3224,7 +3224,7 @@ describe("Erlang", () => {
           ]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(
+        assertBoxedStrictEqual(
           result,
           Type.map([
             [Type.atom("a"), Type.integer(1)],
@@ -3241,7 +3241,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 70, 64, 9, 33, 249, 240, 27, 134, 110]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(3.14159));
+        assertBoxedStrictEqual(result, Type.float(3.14159));
       });
 
       it("decodes NEW_FLOAT_EXT for negative float", async () => {
@@ -3250,7 +3250,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 70, 192, 4, 0, 0, 0, 0, 0, 0]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(-2.5));
+        assertBoxedStrictEqual(result, Type.float(-2.5));
       });
 
       it("decodes NEW_FLOAT_EXT for zero", async () => {
@@ -3259,7 +3259,7 @@ describe("Erlang", () => {
           new Uint8Array([131, 70, 0, 0, 0, 0, 0, 0, 0, 0]),
         );
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(0.0));
+        assertBoxedStrictEqual(result, Type.float(0.0));
       });
 
       it("decodes FLOAT_EXT (deprecated string format)", async () => {
@@ -3275,7 +3275,7 @@ describe("Erlang", () => {
         // Remaining bytes are 0 (null padding)
         const binary = Bitstring.fromBytes(bytes);
         const result = await binary_to_term(binary);
-        assert.deepStrictEqual(result, Type.float(1.5));
+        assertBoxedStrictEqual(result, Type.float(1.5));
       });
 
       it("raises ArgumentError for FLOAT_EXT with truncated data", async () => {
@@ -3347,7 +3347,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.strictEqual(result.creation, 0);
         assert.deepStrictEqual(result.idWords, [1, 2, 3]);
       });
@@ -3370,7 +3370,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.strictEqual(result.creation, 0);
         assert.deepStrictEqual(result.idWords, [1, 2, 3]);
       });
@@ -3394,7 +3394,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.strictEqual(result.creation, 0);
         assert.deepStrictEqual(result.idWords, [1, 2, 3]);
       });
@@ -3415,7 +3415,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.strictEqual(result.creation, 1);
         assert.deepStrictEqual(result.idWords, [42]);
       });
@@ -3440,7 +3440,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.strictEqual(result.creation, 3);
         assert.deepStrictEqual(result.idWords, [456]);
       });
@@ -3465,7 +3465,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "reference");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.strictEqual(result.creation, 1);
         assert.deepStrictEqual(result.idWords, [1, 2, 3]);
       });
@@ -3488,7 +3488,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "pid");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.deepStrictEqual(result.segments, [100, 50, 0]);
       });
 
@@ -3508,7 +3508,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "pid");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.deepStrictEqual(result.segments, [100, 50, 0]);
       });
     });
@@ -3530,7 +3530,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "port");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.deepStrictEqual(result.segments, [5, 0]);
       });
 
@@ -3550,7 +3550,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "port");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.deepStrictEqual(result.segments, [5, 0]);
       });
 
@@ -3570,7 +3570,7 @@ describe("Erlang", () => {
         );
         const result = await binary_to_term(binary);
         assert.strictEqual(result.type, "port");
-        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assertBoxedStrictEqual(result.node, Type.atom("nonode@nohost"));
         assert.deepStrictEqual(result.segments, [5n, 0]);
       });
     });
