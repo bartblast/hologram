@@ -3250,6 +3250,61 @@ describe("Erlang", () => {
           ]),
         );
       });
+
+      it("decodes map with string keys", async () => {
+        // :erlang.term_to_binary(%{"hello" => 1, "world" => 2})
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 116, 0, 0, 0, 2, 109, 0, 0, 0, 5, 104, 101, 108, 108, 111, 97,
+            1, 109, 0, 0, 0, 5, 119, 111, 114, 108, 100, 97, 2,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(
+          result,
+          Type.map([
+            [Type.bitstring("hello"), Type.integer(1)],
+            [Type.bitstring("world"), Type.integer(2)],
+          ]),
+        );
+      });
+
+      it("decodes map with integer keys", async () => {
+        // :erlang.term_to_binary(%{1 => :one, 2 => :two})
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 116, 0, 0, 0, 2, 97, 1, 119, 3, 111, 110, 101, 97, 2, 119, 3,
+            116, 119, 111,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(
+          result,
+          Type.map([
+            [Type.integer(1), Type.atom("one")],
+            [Type.integer(2), Type.atom("two")],
+          ]),
+        );
+      });
+
+      it("decodes map with mixed key types (atom, string, integer)", async () => {
+        // :erlang.term_to_binary(%{:a => 1, "b" => 2, 3 => :three})
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 116, 0, 0, 0, 3, 97, 3, 119, 5, 116, 104, 114, 101, 101, 119,
+            1, 97, 97, 1, 109, 0, 0, 0, 1, 98, 97, 2,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(
+          result,
+          Type.map([
+            [Type.integer(3), Type.atom("three")],
+            [Type.atom("a"), Type.integer(1)],
+            [Type.bitstring("b"), Type.integer(2)],
+          ]),
+        );
+      });
     });
 
     describe("floats", () => {
