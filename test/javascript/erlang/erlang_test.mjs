@@ -3368,6 +3368,31 @@ describe("Erlang", () => {
         assert.deepStrictEqual(result.idWords, [42]);
       });
 
+      it("decodes REFERENCE_EXT with SMALL_ATOM_EXT", async () => {
+        // Integration test: SMALL_ATOM_EXT used as the node sub-term.
+        // Validates SMALL_ATOM_EXT's newOffset is correctly propagated when the
+        // atom is followed by more bytes - the standalone atom test cannot
+        // catch a wrong newOffset because the atom is the entire term there.
+        // 131 - VERSION_NUMBER
+        // 101 - REFERENCE_EXT
+        // 115 - SMALL_ATOM_EXT
+        // 13 - node name length (8-bit)
+        // "nonode@nohost" - node name
+        // 0, 0, 1, 200 - single ID word (32-bit)
+        // 3 - creation (8-bit)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 101, 115, 13, 110, 111, 110, 111, 100, 101, 64, 110, 111, 104,
+            111, 115, 116, 0, 0, 1, 200, 3,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+        assert.strictEqual(result.type, "reference");
+        assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+        assert.strictEqual(result.creation, 3);
+        assert.deepStrictEqual(result.idWords, [456]);
+      });
+
       it("decodes NEW_REFERENCE_EXT with ATOM_EXT", async () => {
         // NEW_REFERENCE_EXT with ATOM_EXT node (deprecated format)
         // 131 - VERSION_NUMBER

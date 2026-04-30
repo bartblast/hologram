@@ -2188,6 +2188,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert is_reference(decoded)
     end
 
+    test "decodes REFERENCE_EXT with SMALL_ATOM_EXT" do
+      # Integration test: SMALL_ATOM_EXT (115) used as the node sub-term.
+      # 131 - VERSION_NUMBER
+      # 101 - REFERENCE_EXT
+      # 115 - SMALL_ATOM_EXT
+      # 13 - node name length (8-bit)
+      # "nonode@nohost" - node name
+      # 0, 0, 1, 200 - single ID word (32-bit)
+      # 3 - creation (8-bit)
+      binary = <<131, 101, 115, 13, "nonode@nohost", 0, 0, 1, 200, 3>>
+
+      decoded = :erlang.binary_to_term(binary)
+      assert is_reference(decoded)
+    end
+
     test "decodes NEW_REFERENCE_EXT" do
       # Create a reference and encode/decode it
       ref = make_ref()
