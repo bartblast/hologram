@@ -4360,6 +4360,17 @@ describe("Erlang", () => {
         );
       });
 
+      it("ignores trailing bytes after a valid term", async () => {
+        // term_to_binary(42) is <<131, 97, 42>>. OTP decodes the prefix and
+        // silently discards any tail: only binary_to_term/2 with :used
+        // surfaces how many bytes were actually consumed.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 97, 42, 99, 99, 99]),
+        );
+        const result = await binary_to_term(binary);
+        assertBoxedStrictEqual(result, Type.integer(42));
+      });
+
       it("raises ArgumentError for unsupported ETF tag (tag 50)", async () => {
         // Tag 50 is not a valid ETF tag
         const binary = Bitstring.fromBytes(new Uint8Array([131, 50]));

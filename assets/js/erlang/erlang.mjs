@@ -1626,15 +1626,11 @@ const Erlang = {
         );
       }
 
+      // OTP's binary_to_term/1 silently ignores any bytes past the first
+      // term: term_to_binary(42) <> "garbage" decodes to 42. The
+      // trailing-bytes check inside decodeCompressed still applies because
+      // OTP does reject trailing bytes inside the decompressed payload.
       const result = await decodeTerm(dataView, bytes, 1);
-      if (result.newOffset !== bytes.length) {
-        Interpreter.raiseArgumentError(
-          Interpreter.buildArgumentErrorMsg(
-            1,
-            "invalid external representation of a term",
-          ),
-        );
-      }
       return result.term;
     } catch (err) {
       // RangeError is the only generic signal for malformed input we accept here:

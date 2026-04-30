@@ -2788,6 +2788,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "ignores trailing bytes after a valid term" do
+      # OTP decodes the prefix and silently discards any tail.
+      binary = <<131, 97, 42, 99, 99, 99>>
+
+      assert :erlang.binary_to_term(binary) == 42
+    end
+
     test "raises ArgumentError for unsupported ETF tag (tag 50)" do
       # Tag 50 is not a valid ETF tag
       binary = <<131, 50>>
