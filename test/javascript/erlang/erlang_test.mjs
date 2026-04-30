@@ -2909,6 +2909,29 @@ describe("Erlang", () => {
         assert.deepStrictEqual(result, Type.atom(name));
       });
 
+      it("ATOM_EXT format with Latin-1 atoms", async () => {
+        // ATOM_EXT (tag 100) with various atom names
+        const testAtoms = [
+          "test",
+          "hello_world",
+          "a",
+          "", // empty atom
+          "special-atom!@#",
+          "atom_with_underscores_123",
+        ];
+
+        for (const name of testAtoms) {
+          const nameBytes = new TextEncoder().encode(name);
+          const lengthHigh = (nameBytes.length >> 8) & 0xff;
+          const lengthLow = nameBytes.length & 0xff;
+          const binary = Bitstring.fromBytes(
+            new Uint8Array([131, 100, lengthHigh, lengthLow, ...nameBytes]),
+          );
+          const result = await binary_to_term(binary);
+          assert.deepStrictEqual(result, Type.atom(name));
+        }
+      });
+
       it("decodes small atom (SMALL_ATOM_EXT)", async () => {
         // elixir as Latin-1 atom using SMALL_ATOM_EXT (tag 115)
         const name = "elixir";
