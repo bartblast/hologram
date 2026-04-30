@@ -1403,14 +1403,13 @@ const Erlang = {
       // term: term_to_binary(42) <> "garbage" decodes to 42.
       return decodeTerm(dataView, bytes, 1).term;
     } catch (err) {
-      // RangeError is the only generic signal for malformed input we accept here:
-      // DataView.getXxx throws RangeError when reading past the end of the buffer,
-      // for tags whose helpers don't pre-check length (INTEGER_EXT, NEW_FLOAT_EXT,
-      // references, pids, ports, exports, LARGE_TUPLE_EXT arity-0 with no NIL_EXT).
-      // Everything else - TypeError, HologramInterpreterError, etc. - is treated as
-      // a real bug and bubbles up. Decoder helpers that have other legitimate
-      // failure modes (e.g. invalid UTF-8 in atom names) raise ArgumentError at
-      // the call site instead of relying on this wrapper.
+      // RangeError is the only generic signal for malformed input we accept
+      // here: DataView.getXxx throws it when reading past the end of the
+      // buffer, which any decoder can hit on truncated input. Everything
+      // else - TypeError, HologramInterpreterError, etc. - is treated as a
+      // real bug and bubbles up. Decoder helpers that have other legitimate
+      // failure modes (e.g. invalid UTF-8 in atom names) raise ArgumentError
+      // at the call site instead of relying on this wrapper.
       if (err instanceof RangeError) raiseInvalid();
       throw err;
     }
