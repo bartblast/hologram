@@ -1175,6 +1175,7 @@ const Erlang = {
     const decodeMap = async (dataView, bytes, offset) => {
       const arity = dataView.getUint32(offset);
       const entries = [];
+      const seenKeys = new Set();
       let currentOffset = offset + 4;
 
       for (let i = 0; i < arity; i++) {
@@ -1184,6 +1185,20 @@ const Erlang = {
           bytes,
           keyResult.newOffset,
         );
+
+        // Spec: MAP_EXT keys must be unique. OTP raises badarg on duplicates;
+        // without this check we'd silently apply Type.map's last-write-wins
+        // semantics and diverge from OTP.
+        const encodedKey = Type.encodeMapKey(keyResult.term);
+        if (seenKeys.has(encodedKey)) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
+        seenKeys.add(encodedKey);
 
         entries.push([keyResult.term, valueResult.term]);
         currentOffset = valueResult.newOffset;

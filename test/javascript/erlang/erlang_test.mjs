@@ -3888,6 +3888,24 @@ describe("Erlang", () => {
         );
       });
 
+      it("raises ArgumentError for MAP_EXT with duplicate keys", async () => {
+        // MAP_EXT (116) arity=2, key1=:a value=1, key2=:a value=2 (duplicate).
+        // OTP rejects MAP_EXT with non-unique keys.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 116, 0, 0, 0, 2, 100, 0, 1, 97, 97, 1, 100, 0, 1, 97, 97, 2,
+          ]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
       it("raises ArgumentError for malformed ATOM_EXT with length exceeding data", async () => {
         // ATOM_EXT (100) with length 100 but only 2 bytes
         const binary = Bitstring.fromBytes(

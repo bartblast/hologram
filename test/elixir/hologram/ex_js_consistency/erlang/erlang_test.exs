@@ -2133,6 +2133,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == %{a: 1, b: 2}
     end
 
+    test "raises ArgumentError for MAP_EXT with duplicate keys" do
+      # MAP_EXT (116) arity=2, key1=:a value=1, key2=:a value=2 (duplicate).
+      binary = <<131, 116, 0, 0, 0, 2, 100, 0, 1, ?a, 97, 1, 100, 0, 1, ?a, 97, 2>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "decodes NEW_FLOAT_EXT (IEEE 754 double)" do
       binary = :erlang.term_to_binary(3.14159)
       assert :erlang.binary_to_term(binary) == 3.14159
