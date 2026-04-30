@@ -3302,6 +3302,59 @@ describe("Erlang", () => {
         const result = await binary_to_term(binary);
         assert.strictEqual(Bitstring.calculateBitCount(result), 16);
       });
+
+      it("BIT_BINARY_EXT format with partial bytes", async () => {
+        // OTP-encoded binaries from :erlang.term_to_binary/1 for each case.
+        // Note: <<255::8>> is encoded as BINARY_EXT (109) by OTP because it's
+        // a full byte; the others use BIT_BINARY_EXT (77).
+        const cases = [
+          // <<1::1>>
+          {
+            encoded: [131, 77, 0, 0, 0, 1, 1, 128],
+            expected: Bitstring.fromBits([1]),
+          },
+          // <<1::3>>
+          {
+            encoded: [131, 77, 0, 0, 0, 1, 3, 32],
+            expected: Bitstring.fromBits([0, 0, 1]),
+          },
+          // <<15::4>>
+          {
+            encoded: [131, 77, 0, 0, 0, 1, 4, 240],
+            expected: Bitstring.fromBits([1, 1, 1, 1]),
+          },
+          // <<31::5>>
+          {
+            encoded: [131, 77, 0, 0, 0, 1, 5, 248],
+            expected: Bitstring.fromBits([1, 1, 1, 1, 1]),
+          },
+          // <<255::8>> - encoded as BINARY_EXT
+          {
+            encoded: [131, 109, 0, 0, 0, 1, 255],
+            expected: Bitstring.fromBytes(new Uint8Array([255])),
+          },
+          // <<1, 2, 3::6>>
+          {
+            encoded: [131, 77, 0, 0, 0, 3, 6, 1, 2, 12],
+            expected: Bitstring.fromBits([
+              0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1,
+            ]),
+          },
+          // <<255, 255, 1::1>>
+          {
+            encoded: [131, 77, 0, 0, 0, 3, 1, 255, 255, 128],
+            expected: Bitstring.fromBits([
+              1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            ]),
+          },
+        ];
+
+        for (const {encoded, expected} of cases) {
+          const binary = Bitstring.fromBytes(new Uint8Array(encoded));
+          const result = await binary_to_term(binary);
+          assertBoxedStrictEqual(result, expected);
+        }
+      });
     });
 
     describe("references", () => {
