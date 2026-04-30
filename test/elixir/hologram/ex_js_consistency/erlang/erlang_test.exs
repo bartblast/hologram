@@ -2659,15 +2659,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "SMALL_ATOM_UTF8_EXT format with UTF-8 atoms" do
-      # Test SMALL_ATOM_UTF8_EXT (tag 119) with UTF-8 characters
+      # SMALL_ATOM_UTF8_EXT (tag 119) with multi-byte UTF-8 characters.
       test_atoms = [
+        # 2-byte UTF-8 chars
         :élixir,
         :café,
+        # 3-byte UTF-8 chars
         :测试,
+        # 4-byte UTF-8 char
         :"🚀",
-        :ñoño,
-        # regular ASCII for comparison
-        :test
+        :ñoño
       ]
 
       for atom <- test_atoms do

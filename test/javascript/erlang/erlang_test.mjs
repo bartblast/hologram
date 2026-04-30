@@ -2895,6 +2895,27 @@ describe("Erlang", () => {
         assert.deepStrictEqual(result, Type.atom("test"));
       });
 
+      it("SMALL_ATOM_UTF8_EXT format with UTF-8 atoms", async () => {
+        // SMALL_ATOM_UTF8_EXT (tag 119) with multi-byte UTF-8 characters.
+        // Exercises ERTS.utf8Decoder paths that the ASCII-only tests cannot.
+        const testAtoms = [
+          "élixir", // 2-byte UTF-8 chars
+          "café",
+          "测试", // 3-byte UTF-8 chars
+          "🚀", // 4-byte UTF-8 char
+          "ñoño",
+        ];
+
+        for (const name of testAtoms) {
+          const nameBytes = new TextEncoder().encode(name);
+          const binary = Bitstring.fromBytes(
+            new Uint8Array([131, 119, nameBytes.length, ...nameBytes]),
+          );
+          const result = await binary_to_term(binary);
+          assert.deepStrictEqual(result, Type.atom(name));
+        }
+      });
+
       it("decodes atom (ATOM_EXT)", async () => {
         // elixir as Latin-1 atom using ATOM_EXT (tag 100)
         const name = "elixir";
