@@ -3619,6 +3619,55 @@ describe("Erlang", () => {
           ]),
         );
       });
+
+      it("decodes complex nested structure", async () => {
+        // :erlang.term_to_binary(
+        //   {:docs_v1, 1, :elixir, "text/markdown",
+        //    %{"en" => "Module docs"}, %{since: "1.0.0"},
+        //    [{{:function, :my_func, 2}, 10, ["signature"], %{}, %{}}]}
+        // )
+        // Exercises populated maps, nested tuples, and lists - paths the
+        // empty-containers Code.fetch_docs test does not reach.
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([
+            131, 104, 7, 119, 7, 100, 111, 99, 115, 95, 118, 49, 97, 1, 119, 6,
+            101, 108, 105, 120, 105, 114, 109, 0, 0, 0, 13, 116, 101, 120, 116,
+            47, 109, 97, 114, 107, 100, 111, 119, 110, 116, 0, 0, 0, 1, 109, 0,
+            0, 0, 2, 101, 110, 109, 0, 0, 0, 11, 77, 111, 100, 117, 108, 101,
+            32, 100, 111, 99, 115, 116, 0, 0, 0, 1, 119, 5, 115, 105, 110, 99,
+            101, 109, 0, 0, 0, 5, 49, 46, 48, 46, 48, 108, 0, 0, 0, 1, 104, 5,
+            104, 3, 119, 8, 102, 117, 110, 99, 116, 105, 111, 110, 119, 7, 109,
+            121, 95, 102, 117, 110, 99, 97, 2, 97, 10, 108, 0, 0, 0, 1, 109, 0,
+            0, 0, 9, 115, 105, 103, 110, 97, 116, 117, 114, 101, 106, 116, 0, 0,
+            0, 0, 116, 0, 0, 0, 0, 106,
+          ]),
+        );
+        const result = await binary_to_term(binary);
+
+        const expected = Type.tuple([
+          Type.atom("docs_v1"),
+          Type.integer(1),
+          Type.atom("elixir"),
+          Type.bitstring("text/markdown"),
+          Type.map([[Type.bitstring("en"), Type.bitstring("Module docs")]]),
+          Type.map([[Type.atom("since"), Type.bitstring("1.0.0")]]),
+          Type.list([
+            Type.tuple([
+              Type.tuple([
+                Type.atom("function"),
+                Type.atom("my_func"),
+                Type.integer(2),
+              ]),
+              Type.integer(10),
+              Type.list([Type.bitstring("signature")]),
+              Type.map([]),
+              Type.map([]),
+            ]),
+          ]),
+        ]);
+
+        assertBoxedStrictEqual(result, expected);
+      });
     });
 
     describe("compressed terms", () => {
