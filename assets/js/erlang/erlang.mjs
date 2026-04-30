@@ -688,8 +688,23 @@ const Erlang = {
         throw new Error(`Decompression failed: ${err.message}`);
       }
 
-      // NOTE: This is a simplified approach - in a full implementation,
-      // we would need to parse the zlib stream to determine exact bytes consumed
+      // TODO(binary_to_term/2): bytesRead is faked.
+      //
+      // We report bytesRead as compressedData.length, i.e. "we consumed
+      // everything you gave us". For binary_to_term/1 this is harmless,
+      // because the caller (decodeCompressed) feeds us the entire tail of
+      // the input via bytes.slice(offset + 4) - there is no notion of
+      // "bytes after the compressed term" at the top level, so the trailing-
+      // bytes check in binary_to_term/1 has nothing to catch either way.
+      //
+      // It becomes a real bug for binary_to_term/2 with the :used option
+      // (which must return the exact number of bytes consumed), and for any
+      // future caller that needs to decode one term out of a longer stream.
+      // To fix this properly we need the actual zlib end-of-stream offset,
+      // which DecompressionStream does not expose. Options when we get there:
+      //   1. Parse the zlib header/trailer ourselves to find the stream end.
+      //   2. Switch to a sync zlib (e.g. pako) that returns bytes consumed.
+      //   3. Drop COMPRESSED support and reject tag 80.
       return {
         data: Utils.concatUint8Arrays(chunks),
         bytesRead: compressedData.length,
