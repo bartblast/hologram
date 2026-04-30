@@ -914,6 +914,15 @@ const Erlang = {
         );
       }
 
+      if (offset + 2 + n > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       let value = 0n;
       for (let i = 0; i < n; i++) {
         const byte = BigInt(bytes[offset + 2 + i]);
@@ -943,6 +952,15 @@ const Erlang = {
         );
       }
 
+      if (offset + 5 + n > bytes.length) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+
       let value = 0n;
       for (let i = 0; i < n; i++) {
         const byte = BigInt(bytes[offset + 5 + i]);
@@ -961,6 +979,22 @@ const Erlang = {
 
     // Atom decoders
 
+    // Decodes atom name bytes, converting invalid UTF-8 to ArgumentError
+    // instead of letting TextDecoder's TypeError leak out.
+    const decodeAtomBytes = (atomBytes, isUtf8) => {
+      if (!isUtf8) return String.fromCharCode(...atomBytes);
+      try {
+        return ERTS.utf8Decoder.decode(atomBytes);
+      } catch {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      }
+    };
+
     const decodeAtom = (dataView, bytes, offset, isUtf8) => {
       const length = dataView.getUint16(offset);
       if (offset + 2 + length > bytes.length) {
@@ -972,10 +1006,7 @@ const Erlang = {
         );
       }
       const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
-
-      const atomString = isUtf8
-        ? ERTS.utf8Decoder.decode(atomBytes)
-        : String.fromCharCode(...atomBytes);
+      const atomString = decodeAtomBytes(atomBytes, isUtf8);
 
       return {
         term: Type.atom(atomString),
@@ -994,10 +1025,7 @@ const Erlang = {
         );
       }
       const atomBytes = bytes.slice(offset + 1, offset + 1 + length);
-
-      const atomString = isUtf8
-        ? ERTS.utf8Decoder.decode(atomBytes)
-        : String.fromCharCode(...atomBytes);
+      const atomString = decodeAtomBytes(atomBytes, isUtf8);
 
       return {
         term: Type.atom(atomString),
@@ -1487,7 +1515,15 @@ const Erlang = {
       }
       return result.term;
     } catch (err) {
-      if (err instanceof RangeError || err instanceof TypeError) {
+      // RangeError is the only generic signal for malformed input we accept here:
+      // DataView.getXxx throws RangeError when reading past the end of the buffer,
+      // for tags whose helpers don't pre-check length (INTEGER_EXT, NEW_FLOAT_EXT,
+      // references, pids, ports, exports, LARGE_TUPLE_EXT arity-0 with no NIL_EXT).
+      // Everything else - TypeError, HologramInterpreterError, etc. - is treated as
+      // a real bug and bubbles up. Decoder helpers that have other legitimate
+      // failure modes (e.g. invalid UTF-8 in atom names) raise ArgumentError at
+      // the call site instead of relying on this wrapper.
+      if (err instanceof RangeError) {
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
             1,

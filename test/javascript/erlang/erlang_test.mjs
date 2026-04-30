@@ -3886,6 +3886,36 @@ describe("Erlang", () => {
         );
       });
 
+      it("raises ArgumentError for ATOM_UTF8_EXT with invalid UTF-8 bytes", async () => {
+        // ATOM_UTF8_EXT (118) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 118, 0, 2, 0xc3, 0x28]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for SMALL_ATOM_UTF8_EXT with invalid UTF-8 bytes", async () => {
+        // SMALL_ATOM_UTF8_EXT (119) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
+        const binary = Bitstring.fromBytes(
+          new Uint8Array([131, 119, 2, 0xc3, 0x28]),
+        );
+        await assertBoxedErrorAsync(
+          () => binary_to_term(binary),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "invalid external representation of a term",
+          ),
+        );
+      });
+
       it("raises ArgumentError for malformed SMALL_BIG_EXT with n exceeding data", async () => {
         // SMALL_BIG_EXT (110) with n=100 but insufficient bytes
         const binary = Bitstring.fromBytes(

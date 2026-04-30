@@ -2382,6 +2382,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for ATOM_UTF8_EXT with invalid UTF-8 bytes" do
+      # ATOM_UTF8_EXT (118) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
+      binary = <<131, 118, 0, 2, 0xC3, 0x28>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for SMALL_ATOM_UTF8_EXT with invalid UTF-8 bytes" do
+      # SMALL_ATOM_UTF8_EXT (119) with length 2 and invalid UTF-8 sequence (0xC3 0x28)
+      binary = <<131, 119, 2, 0xC3, 0x28>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "raises ArgumentError for malformed STRING_EXT with length exceeding data" do
       # STRING_EXT (107) with length 100 but only 2 bytes of data
       binary = <<131, 107, 0, 100, 65, 66>>
