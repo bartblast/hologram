@@ -657,14 +657,7 @@ const Erlang = {
     const zlibInflate = async (compressedData) => {
       const stream = new ReadableStream({
         start(controller) {
-          // Ensure we are passing a standard Uint8Array to the stream
-          // This solves the Buffer/Uint8Array mismatch in Node.js
-          const data =
-            compressedData instanceof Uint8Array
-              ? compressedData
-              : new Uint8Array(compressedData);
-
-          controller.enqueue(data);
+          controller.enqueue(compressedData);
           controller.close();
         },
       });
