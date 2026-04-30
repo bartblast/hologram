@@ -2215,6 +2215,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert is_reference(decoded)
     end
 
+    test "raises ArgumentError for NEW_REFERENCE_EXT with len exceeding OTP cap of 5" do
+      # NEW_REFERENCE_EXT (114), Len=6, Node=ATOM "n", Creation=0,
+      # ID=6*4 zero bytes (OTP rejects Len > 5).
+      binary = <<131, 114, 0, 6, 100, 0, 1, ?n, 0>> <> :binary.copy(<<0>>, 6 * 4)
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError for NEWER_REFERENCE_EXT with len exceeding OTP cap of 5" do
+      # NEWER_REFERENCE_EXT (90), Len=6, Node=ATOM "n", Creation=0 (4 bytes),
+      # ID=6*4 zero bytes (OTP rejects Len > 5).
+      binary = <<131, 90, 0, 6, 100, 0, 1, ?n, 0, 0, 0, 0>> <> :binary.copy(<<0>>, 6 * 4)
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     test "decodes PID_EXT" do
       # Manually construct PID_EXT binary
       # 131 - VERSION, 103 - PID_EXT, then node atom, ID, Serial, Creation

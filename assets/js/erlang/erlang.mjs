@@ -1303,6 +1303,20 @@ const Erlang = {
       if (options.hasLengthPrefix) {
         idWordCount = dataView.getUint16(currentOffset);
         currentOffset += 2;
+
+        // OTP caps both NEW_REFERENCE_EXT and NEWER_REFERENCE_EXT at 5 ID
+        // words regardless of what the wire format permits (uint16). Without
+        // this check a Len of e.g. 65535 would attempt a 256KB read - caught
+        // by the outer wrapper as RangeError, but we lose the early-exit and
+        // diverge from OTP for moderately oversized values like Len=6.
+        if (idWordCount > 5) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "invalid external representation of a term",
+            ),
+          );
+        }
       }
 
       // Decode node name (atom)
