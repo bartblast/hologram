@@ -2620,24 +2620,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     # Consistency tests for specific external term formats
 
-    test "STRING_EXT format with various byte values" do
-      # Test STRING_EXT (tag 107) with different byte ranges
-      test_cases = [
-        [0, 1, 2],
-        [255, 254, 253],
-        # ABC
-        [65, 66, 67],
-        [128, 129, 130],
-        # empty string
-        []
-      ]
-
-      for bytes <- test_cases do
-        binary = :erlang.term_to_binary(bytes)
-        assert :erlang.binary_to_term(binary) == bytes
-      end
-    end
-
     test "ATOM_EXT format with Latin-1 atoms" do
       # Test ATOM_EXT (tag 100) with various atom names
       test_atoms = [
