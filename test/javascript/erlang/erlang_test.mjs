@@ -4048,7 +4048,7 @@ describe("Erlang", () => {
       });
     });
 
-    describe("pids", () => {
+    describe("PIDs", () => {
       it("decodes PID_EXT", async () => {
         // PID_EXT format
         // 131 - VERSION_NUMBER

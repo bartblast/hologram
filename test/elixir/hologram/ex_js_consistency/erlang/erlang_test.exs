@@ -1978,41 +1978,49 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes small positive integer (SMALL_INTEGER_EXT)" do
       binary = :erlang.term_to_binary(42)
+
       assert :erlang.binary_to_term(binary) == 42
     end
 
     test "decodes small positive integer (max value 255)" do
       binary = :erlang.term_to_binary(255)
+
       assert :erlang.binary_to_term(binary) == 255
     end
 
     test "decodes positive integer (INTEGER_EXT)" do
       binary = :erlang.term_to_binary(1000)
+
       assert :erlang.binary_to_term(binary) == 1000
     end
 
     test "decodes negative integer (INTEGER_EXT)" do
       binary = :erlang.term_to_binary(-100)
+
       assert :erlang.binary_to_term(binary) == -100
     end
 
     test "decodes INTEGER_EXT at int32 max boundary (2^31 - 1)" do
       binary = <<131, 98, 127, 255, 255, 255>>
+
       assert :erlang.binary_to_term(binary) == 2_147_483_647
     end
 
     test "decodes INTEGER_EXT at int32 min boundary (-2^31)" do
       binary = <<131, 98, 128, 0, 0, 0>>
+
       assert :erlang.binary_to_term(binary) == -2_147_483_648
     end
 
     test "decodes large positive integer (SMALL_BIG_EXT)" do
       binary = :erlang.term_to_binary(1_000_000_000_000)
+
       assert :erlang.binary_to_term(binary) == 1_000_000_000_000
     end
 
     test "decodes large negative integer (SMALL_BIG_EXT)" do
       binary = :erlang.term_to_binary(-1_000_000_000_000)
+
       assert :erlang.binary_to_term(binary) == -1_000_000_000_000
     end
 
@@ -2020,8 +2028,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       # LARGE_BIG_EXT requires integers with >255 bytes +
       # 2^2048 requires 257 bytes, triggering LARGE_BIG_EXT encoding
       large_int = trunc(Integer.pow(2, 2048))
-
       binary = :erlang.term_to_binary(large_int)
+
       assert :erlang.binary_to_term(binary) == large_int
     end
 
@@ -2071,38 +2079,45 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "decodes UTF-8 atom (ATOM_UTF8_EXT)" do
       name = "élixir"
       binary = <<131, 118, byte_size(name)::16, name::binary>>
+
       assert :erlang.binary_to_term(binary) == :élixir
     end
 
     test "decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)" do
       binary = :erlang.term_to_binary(:test)
+
       assert :erlang.binary_to_term(binary) == :test
     end
 
     test "decodes atom (ATOM_EXT)" do
       name = "elixir"
       binary = <<131, 100, byte_size(name)::16, name::binary>>
+
       assert :erlang.binary_to_term(binary) == :elixir
     end
 
     test "decodes small atom (SMALL_ATOM_EXT)" do
       name = "elixir"
       binary = <<131, 115, byte_size(name)::8, name::binary>>
+
       assert :erlang.binary_to_term(binary) == :elixir
     end
 
     test "decodes longer atom" do
       binary = :erlang.term_to_binary(:test_atom)
+
       assert :erlang.binary_to_term(binary) == :test_atom
     end
 
     test "decodes true atom" do
       binary = :erlang.term_to_binary(true)
+
       assert :erlang.binary_to_term(binary) == true
     end
 
     test "decodes false atom" do
       binary = :erlang.term_to_binary(false)
+
       assert :erlang.binary_to_term(binary) == false
     end
 
@@ -2122,6 +2137,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         # Manually construct ATOM_EXT binary
         name = Atom.to_string(atom)
         binary = <<131, 100, byte_size(name)::16, name::binary>>
+
         assert :erlang.binary_to_term(binary) == atom
       end
     end
@@ -2141,6 +2157,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       for atom <- test_atoms do
         binary = :erlang.term_to_binary(atom)
+
         assert :erlang.binary_to_term(binary) == atom
       end
     end
@@ -2216,11 +2233,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes binary string (BINARY_EXT)" do
       binary = :erlang.term_to_binary("hello")
+
       assert :erlang.binary_to_term(binary) == "hello"
     end
 
     test "decodes empty binary" do
       binary = :erlang.term_to_binary("")
+
       assert :erlang.binary_to_term(binary) == ""
     end
 
@@ -2239,6 +2258,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       for bin <- test_binaries do
         binary = :erlang.term_to_binary(bin)
+
         assert :erlang.binary_to_term(binary) == bin
       end
     end
@@ -2256,6 +2276,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes small tuple (SMALL_TUPLE_EXT)" do
       binary = :erlang.term_to_binary({1, 2, 3})
+
       assert :erlang.binary_to_term(binary) == {1, 2, 3}
     end
 
@@ -2277,11 +2298,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes empty tuple" do
       binary = :erlang.term_to_binary({})
+
       assert :erlang.binary_to_term(binary) == {}
     end
 
     test "decodes nested tuple" do
       binary = :erlang.term_to_binary({1, {2, 3}})
+
       assert :erlang.binary_to_term(binary) == {1, {2, 3}}
     end
 
@@ -2317,38 +2340,45 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes empty list (NIL_EXT)" do
       binary = :erlang.term_to_binary([])
+
       assert :erlang.binary_to_term(binary) == []
     end
 
     test "decodes string list (STRING_EXT)" do
       binary = :erlang.term_to_binary([1, 2, 3])
+
       assert :erlang.binary_to_term(binary) == [1, 2, 3]
     end
 
     test "decodes proper list (LIST_EXT)" do
       binary = :erlang.term_to_binary([100, 200, 300])
+
       assert :erlang.binary_to_term(binary) == [100, 200, 300]
     end
 
     test "decodes improper list (LIST_EXT)" do
       binary = :erlang.term_to_binary([1 | [2 | [3 | 4]]])
+
       assert :erlang.binary_to_term(binary) == [1 | [2 | [3 | 4]]]
     end
 
     test "decodes LIST_EXT with length 0 and non-list tail to the tail term" do
       # LIST_EXT (108) with length 0 and SMALL_INTEGER_EXT (97) 1 as tail
       binary = <<131, 108, 0, 0, 0, 0, 97, 1>>
+
       assert :erlang.binary_to_term(binary) == 1
     end
 
     test "decodes LIST_EXT with length 0 and NIL_EXT tail to empty list" do
       binary = <<131, 108, 0, 0, 0, 0, 106>>
+
       assert :erlang.binary_to_term(binary) == []
     end
 
     test "decodes LIST_EXT with length 0 and improper-list tail to the tail term" do
       # LIST_EXT (108) with length 0 and tail = LIST_EXT [1 | 2]
       binary = <<131, 108, 0, 0, 0, 0, 108, 0, 0, 0, 1, 97, 1, 97, 2>>
+
       assert :erlang.binary_to_term(binary) == [1 | 2]
     end
 
@@ -2374,11 +2404,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes empty map" do
       binary = :erlang.term_to_binary(%{})
+
       assert :erlang.binary_to_term(binary) == %{}
     end
 
     test "decodes map with atom keys" do
       binary = :erlang.term_to_binary(%{a: 1, b: 2})
+
       assert :erlang.binary_to_term(binary) == %{a: 1, b: 2}
     end
 
@@ -2404,16 +2436,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "decodes NEW_FLOAT_EXT (IEEE 754 double)" do
       binary = :erlang.term_to_binary(3.14159)
+
       assert :erlang.binary_to_term(binary) == 3.14159
     end
 
     test "decodes NEW_FLOAT_EXT for negative float" do
       binary = :erlang.term_to_binary(-2.5)
+
       assert :erlang.binary_to_term(binary) == -2.5
     end
 
     test "decodes NEW_FLOAT_EXT for zero" do
       binary = :erlang.term_to_binary(0.0)
+
       assert :erlang.binary_to_term(binary) == 0.0
     end
 
@@ -2488,12 +2523,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       # Bitstring with 5 bits
       bitstring = <<1::5>>
       binary = :erlang.term_to_binary(bitstring)
+
       assert :erlang.binary_to_term(binary) == bitstring
     end
 
     test "decodes BIT_BINARY_EXT with full bytes (Bits=8)" do
       bitstring = <<255, 0>>
       binary = :erlang.term_to_binary(bitstring)
+
       assert :erlang.binary_to_term(binary) == bitstring
     end
 
@@ -2528,11 +2565,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     # === references ===
 
     test "decodes REFERENCE_EXT" do
-      binary =
-        <<131, 101, 119, 13, "nonode@nohost", 0, 0, 0, 42, 1>>
+      binary = <<131, 101, 119, 13, "nonode@nohost", 0, 0, 0, 42, 1>>
+      result = :erlang.binary_to_term(binary)
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_reference(decoded)
+      assert is_reference(result)
     end
 
     test "decodes REFERENCE_EXT with SMALL_ATOM_EXT" do
@@ -2545,25 +2581,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       # 0, 0, 1, 200 - single ID word (32-bit)
       # 3 - creation (8-bit)
       binary = <<131, 101, 115, 13, "nonode@nohost", 0, 0, 1, 200, 3>>
+      result = :erlang.binary_to_term(binary)
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_reference(decoded)
+      assert is_reference(result)
     end
 
     test "decodes NEW_REFERENCE_EXT" do
       # Create a reference and encode/decode it
       ref = make_ref()
       binary = :erlang.term_to_binary(ref)
-      decoded = :erlang.binary_to_term(binary)
-      assert is_reference(decoded)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_reference(result)
     end
 
     test "decodes NEW_REFERENCE_EXT with ATOM_EXT" do
       binary =
         <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3>>
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_reference(decoded)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_reference(result)
     end
 
     test "decodes NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT" do
@@ -2572,8 +2610,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
           3>>
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_reference(decoded)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_reference(result)
     end
 
     test "decodes NEWER_REFERENCE_EXT with ATOM_EXT" do
@@ -2582,8 +2621,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
           3>>
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_reference(decoded)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_reference(result)
     end
 
     test "raises ArgumentError for malformed NEW_REFERENCE_EXT with len exceeding data" do
@@ -2615,7 +2655,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
-    # === pids ===
+    # === PIDs ===
 
     test "decodes PID_EXT" do
       # Manually construct PID_EXT binary
@@ -2623,16 +2663,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       binary =
         <<131, 103, 119, 13, "nonode@nohost", 0, 0, 0, 100, 0, 0, 0, 50, 0>>
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_pid(decoded)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_pid(result)
     end
 
     test "decodes NEW_PID_EXT" do
       # Create a PID and encode/decode it
       pid = self()
       binary = :erlang.term_to_binary(pid)
-      decoded = :erlang.binary_to_term(binary)
-      assert is_pid(decoded)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_pid(result)
     end
 
     # === ports ===
@@ -2641,26 +2683,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       # Manually construct PORT_EXT binary
       # 131 - VERSION, 102 - PORT_EXT, then node atom, ID, Creation
       binary = <<131, 102, 119, 13, "nonode@nohost", 0, 0, 0, 5, 0>>
+      result = :erlang.binary_to_term(binary)
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_port(decoded)
+      assert is_port(result)
     end
 
     test "decodes NEW_PORT_EXT" do
       # Manually construct NEW_PORT_EXT binary
       # 131 - VERSION, 89 - NEW_PORT_EXT, then node atom, ID (4 bytes), Creation (4 bytes)
       binary = <<131, 89, 119, 13, "nonode@nohost", 0, 0, 0, 5, 0, 0, 0, 0>>
+      result = :erlang.binary_to_term(binary)
 
-      decoded = :erlang.binary_to_term(binary)
-      assert is_port(decoded)
+      assert is_port(result)
     end
 
     test "decodes V4_PORT_EXT" do
       # Create a port and encode/decode it (modern Erlang uses V4_PORT_EXT)
       port = hd(Port.list())
       binary = :erlang.term_to_binary(port)
-      decoded = :erlang.binary_to_term(binary)
-      assert is_port(decoded)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_port(result)
     end
 
     # === exports (function captures) ===
@@ -2669,8 +2712,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       # Create a function capture and encode/decode it
       fun = &Enum.map/2
       binary = :erlang.term_to_binary(fun)
-      decoded = :erlang.binary_to_term(binary)
-      assert is_function(decoded, 2)
+      result = :erlang.binary_to_term(binary)
+
+      assert is_function(result, 2)
     end
 
     test "raises ArgumentError for EXPORT_EXT with non-atom module" do
@@ -2708,6 +2752,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "decodes Code.fetch_docs/1 style tuple" do
       term = {:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []}
       binary = :erlang.term_to_binary(term)
+
       assert :erlang.binary_to_term(binary) == term
     end
 
@@ -2717,6 +2762,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
          [{{:function, :my_func, 2}, 10, ["signature"], %{}, %{}}]}
 
       binary = :erlang.term_to_binary(term)
+
       assert :erlang.binary_to_term(binary) == term
     end
 
@@ -2730,6 +2776,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
           140, 40, 2, 0, 21, 94, 209, 51>>
 
       expected = String.duplicate("hello", 100)
+
       assert :erlang.binary_to_term(binary) == expected
     end
 
@@ -2741,6 +2788,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
           212, 26, 165, 7, 7, 157, 5, 0, 189, 136, 115, 25>>
 
       expected = List.duplicate({:ok, 42}, 50)
+
       assert :erlang.binary_to_term(binary) == expected
     end
 
