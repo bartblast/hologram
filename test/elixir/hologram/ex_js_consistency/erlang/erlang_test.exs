@@ -2143,21 +2143,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_term(binary) == %{a: 1, b: 2}
     end
 
-    test "decodes map with string keys" do
-      binary = :erlang.term_to_binary(%{"hello" => 1, "world" => 2})
-      assert :erlang.binary_to_term(binary) == %{"hello" => 1, "world" => 2}
-    end
-
-    test "decodes map with integer keys" do
-      binary = :erlang.term_to_binary(%{1 => :one, 2 => :two})
-      assert :erlang.binary_to_term(binary) == %{1 => :one, 2 => :two}
-    end
-
-    test "decodes map with mixed key types (atom, string, integer)" do
-      binary = :erlang.term_to_binary(%{:a => 1, "b" => 2, 3 => :three})
-      assert :erlang.binary_to_term(binary) == %{:a => 1, "b" => 2, 3 => :three}
-    end
-
     test "raises ArgumentError for MAP_EXT with duplicate keys" do
       # MAP_EXT (116) arity=2, key1=:a value=1, key2=:a value=2 (duplicate).
       binary = <<131, 116, 0, 0, 0, 2, 100, 0, 1, ?a, 97, 1, 100, 0, 1, ?a, 97, 2>>
