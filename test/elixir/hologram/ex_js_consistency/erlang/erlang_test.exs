@@ -2512,6 +2512,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :binary_to_term, [binary]}
     end
 
+    test "raises ArgumentError for malformed LIST_EXT with length exceeding data" do
+      # LIST_EXT (108) with length 10 but no elements
+      binary = <<131, 108, 0, 0, 0, 10>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
     # Consistency tests for specific external term formats
 
     test "STRING_EXT format with various byte values" do
