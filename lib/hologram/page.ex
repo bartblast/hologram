@@ -18,6 +18,18 @@ defmodule Hologram.Page do
   """
   @callback template() :: (map -> list)
 
+  @doc """
+  Called when the component starts its lifecycle directly on the client.
+  """
+  @callback action(atom, map, Component.t()) :: Component.t()
+
+  @doc """
+  Run server-side operations.
+  """
+  @callback command(atom, map, Server.t()) :: Server.t()
+
+  @optional_callbacks [action: 3, command: 3]
+
   defmacro __using__(_opts) do
     template_path = Component.colocated_template_path(__CALLER__.file)
 

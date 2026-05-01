@@ -16,6 +16,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Module23 do
   end
 
   def action(:action_23a, _params, _component) do
-    {Module18.my_fun(), Module22.my_fun()}
+    _throwaway = Module22.my_fun()
+
+    Module18.my_fun()
   end
 end
