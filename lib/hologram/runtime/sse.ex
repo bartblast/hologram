@@ -11,6 +11,18 @@ defmodule Hologram.Runtime.SSE do
   # the browser's EventSource), "\n\n" terminates the SSE event.
   @heartbeat_chunk ": hb\n\n"
 
+  @doc """
+  Opens a Server-Sent Events stream on the given connection and blocks
+  the request process while emitting periodic heartbeat comments.
+
+  Returns when the client disconnects or the process receives a
+  `:hologram_sse_close` message.
+
+  ## Options
+
+    * `:heartbeat_interval_ms` - milliseconds between heartbeat chunks
+      (defaults to `#{@default_heartbeat_interval_ms}`).
+  """
   @spec stream(Plug.Conn.t(), keyword) :: Plug.Conn.t()
   def stream(conn, opts \\ []) do
     interval =
