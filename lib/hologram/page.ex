@@ -19,7 +19,7 @@ defmodule Hologram.Page do
   @callback template() :: (map -> list)
 
   @doc """
-  Called when the component starts its lifecycle directly on the client.
+  Client side operations, typically executed in response to user interactions.
   """
   @callback action(atom, map, Component.t()) :: Component.t()
 
