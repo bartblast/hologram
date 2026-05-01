@@ -21,7 +21,7 @@ defmodule Hologram.Component do
   defmodule Command do
     defstruct name: nil, params: %{}, target: nil
 
-    @type t :: %__MODULE__{name: :atom, params: %{atom => any}, target: String.t() | nil}
+    @type t :: %__MODULE__{name: atom(), params: %{atom => any}, target: String.t() | nil}
   end
 
   @type t :: %__MODULE__{
