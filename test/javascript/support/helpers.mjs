@@ -42,55 +42,20 @@ export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 export const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-function validateBoxedError(error, expectedErrorType, expectedErrorMessage) {
-  const isRegex = expectedErrorMessage instanceof RegExp;
-  const expectedMessageDisplay = isRegex
-    ? expectedErrorMessage.toString()
-    : expectedErrorMessage;
-
-  const failMessagePrefix = `\nexpected:\n${expectedErrorType}: ${expectedMessageDisplay}\n`;
-
-  if (!error) {
-    assert.fail(failMessagePrefix + "but got no error");
-  }
-
-  if (!(error instanceof HologramBoxedError)) {
-    assert.fail(
-      failMessagePrefix + `but got:\n${error.name}: ${error.message}`,
-    );
-  }
-
-  const receivedErrorType = Interpreter.getErrorType(error);
-  const receivedErrorMessage = Interpreter.resolveErrorMessage(error.struct);
-
-  const typeMatches = receivedErrorType === expectedErrorType;
-  const messageMatches = isRegex
-    ? expectedErrorMessage.test(receivedErrorMessage)
-    : Interpreter.isStrictlyEqual(
-        error.struct,
-        Type.errorStruct(expectedErrorType, expectedErrorMessage),
-      );
-
-  if (!typeMatches || !messageMatches) {
-    assert.fail(
-      failMessagePrefix +
-        `but got:\n${receivedErrorType}: ${receivedErrorMessage}`,
-    );
-  }
-}
-
 export function assertBoxedError(
   callable,
   expectedErrorType,
   expectedErrorMessage,
 ) {
   let error;
+
   try {
     callable();
   } catch (e) {
     error = e;
   }
-  validateBoxedError(error, expectedErrorType, expectedErrorMessage);
+
+  assertCapturedBoxedError(error, expectedErrorType, expectedErrorMessage);
 }
 
 export async function assertBoxedErrorAsync(
@@ -99,12 +64,14 @@ export async function assertBoxedErrorAsync(
   expectedErrorMessage,
 ) {
   let error;
+
   try {
     await asyncCallable();
   } catch (e) {
     error = e;
   }
-  validateBoxedError(error, expectedErrorType, expectedErrorMessage);
+
+  assertCapturedBoxedError(error, expectedErrorType, expectedErrorMessage);
 }
 
 export function assertBoxedFalse(boxed) {
@@ -123,6 +90,48 @@ export function assertBoxedStrictEqual(left, right) {
 
 export function assertBoxedTrue(boxed) {
   assert.isTrue(Type.isTrue(boxed));
+}
+
+function assertCapturedBoxedError(
+  error,
+  expectedErrorType,
+  expectedErrorMessage,
+) {
+  const isRegex = expectedErrorMessage instanceof RegExp;
+
+  const expectedMessageDisplay = isRegex
+    ? expectedErrorMessage.toString()
+    : expectedErrorMessage;
+
+  const failMessagePrefix = `\nexpected:\n${expectedErrorType}: ${expectedMessageDisplay}\n`;
+
+  if (!error) {
+    assert.fail(failMessagePrefix + "but got no error");
+  }
+
+  if (!(error instanceof HologramBoxedError)) {
+    assert.fail(
+      failMessagePrefix + `but got:\n${error.name}: ${error.message}`,
+    );
+  }
+
+  const receivedErrorType = Interpreter.getErrorType(error);
+  const receivedErrorMessage = Interpreter.resolveErrorMessage(error.struct);
+  const typeMatches = receivedErrorType === expectedErrorType;
+
+  const messageMatches = isRegex
+    ? expectedErrorMessage.test(receivedErrorMessage)
+    : Interpreter.isStrictlyEqual(
+        error.struct,
+        Type.errorStruct(expectedErrorType, expectedErrorMessage),
+      );
+
+  if (!typeMatches || !messageMatches) {
+    assert.fail(
+      failMessagePrefix +
+        `but got:\n${receivedErrorType}: ${receivedErrorMessage}`,
+    );
+  }
 }
 
 export function componentRegistryEntryFixture(data = {}) {
