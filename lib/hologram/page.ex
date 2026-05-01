@@ -8,17 +8,17 @@ defmodule Hologram.Page do
   alias Hologram.Server
 
   @doc """
-  Client side operations, typically executed in response to user interactions.
+  Handles a client-side action, typically triggered by a user interaction.
   """
   @callback action(atom, map, Component.t()) :: Component.t()
 
   @doc """
-  Run server-side operations.
+  Handles a server-side command dispatched from the client.
   """
   @callback command(atom, map, Server.t()) :: Server.t()
 
   @doc """
-  Initializes component and server structs (when run on the server).
+  Initializes the component and server structs on the server.
   """
   @callback init(%{atom => any}, Component.t(), Server.t()) ::
               {Component.t(), Server.t()} | Component.t() | Server.t()
