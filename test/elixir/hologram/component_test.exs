@@ -1,7 +1,8 @@
 defmodule Hologram.ComponentTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Component
+
   import ExUnit.CaptureIO
+  import Hologram.Component
 
   alias Hologram.Component
   alias Hologram.Component.Action

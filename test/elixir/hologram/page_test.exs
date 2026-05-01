@@ -1,7 +1,8 @@
 defmodule Hologram.PageTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Page
+
   import ExUnit.CaptureIO
+  import Hologram.Page
 
   alias Hologram.Component
   alias Hologram.Server
