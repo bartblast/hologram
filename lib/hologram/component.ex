@@ -33,17 +33,6 @@ defmodule Hologram.Component do
         }
 
   @doc """
-  Initializes component and server structs (when run on the server).
-  """
-  @callback init(%{atom => any}, Component.t(), Server.t()) ::
-              {Component.t(), Server.t()} | Component.t() | Server.t()
-
-  @doc """
-  Called when the component starts its lifecycle directly on the client.
-  """
-  @callback init(%{atom => any}, Component.t()) :: Component.t()
-
-  @doc """
   Client side operations, typically executed in response to user interactions.
   """
   @callback action(atom, %{atom => any}, Component.t()) :: Component.t()
@@ -53,12 +42,23 @@ defmodule Hologram.Component do
   """
   @callback command(atom, %{atom => any}, Server.t()) :: Server.t()
 
-  @optional_callbacks [init: 2, action: 3, command: 3]
+  @doc """
+  Called when the component starts its lifecycle directly on the client.
+  """
+  @callback init(%{atom => any}, Component.t()) :: Component.t()
+
+  @doc """
+  Initializes component and server structs (when run on the server).
+  """
+  @callback init(%{atom => any}, Component.t(), Server.t()) ::
+              {Component.t(), Server.t()} | Component.t() | Server.t()
 
   @doc """
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
   """
   @callback template() :: (map -> list)
+
+  @optional_callbacks [action: 3, command: 3, init: 2]
 
   defmacro __using__(_opts) do
     template_path = colocated_template_path(__CALLER__.file)
