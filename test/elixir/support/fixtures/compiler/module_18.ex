@@ -6,5 +6,5 @@ defmodule Hologram.Test.Fixtures.Compiler.Module18 do
 
   js_import :export_1a, from: @js_fixture_path, as: :alias_1a
 
-  def my_fun, do: :ok
+  def my_fun, do: %Hologram.Component{}
 end

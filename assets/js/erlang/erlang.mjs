@@ -614,6 +614,816 @@ const Erlang = {
   // End binary_to_list/1
   // Deps: []
 
+  // Start binary_to_term/1
+  "binary_to_term/1": async (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    // ETF version byte (precedes every top-level term).
+    const VERSION_MAGIC = 131;
+
+    // ETF tag constants
+    const NEW_FLOAT_EXT = 70;
+    const BIT_BINARY_EXT = 77;
+    const COMPRESSED = 80;
+    const NEW_PID_EXT = 88;
+    const NEW_PORT_EXT = 89;
+    const NEWER_REFERENCE_EXT = 90;
+    const SMALL_INTEGER_EXT = 97;
+    const INTEGER_EXT = 98;
+    const FLOAT_EXT = 99;
+    const ATOM_EXT = 100;
+    const REFERENCE_EXT = 101;
+    const PORT_EXT = 102;
+    const PID_EXT = 103;
+    const SMALL_TUPLE_EXT = 104;
+    const LARGE_TUPLE_EXT = 105;
+    const NIL_EXT = 106;
+    const STRING_EXT = 107;
+    const LIST_EXT = 108;
+    const BINARY_EXT = 109;
+    const SMALL_BIG_EXT = 110;
+    const LARGE_BIG_EXT = 111;
+    const EXPORT_EXT = 113;
+    const NEW_REFERENCE_EXT = 114;
+    const SMALL_ATOM_EXT = 115;
+    const MAP_EXT = 116;
+    const ATOM_UTF8_EXT = 118;
+    const SMALL_ATOM_UTF8_EXT = 119;
+    const V4_PORT_EXT = 120;
+
+    const raiseInvalid = () =>
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "invalid external representation of a term",
+        ),
+      );
+
+    // Decompresses zlib-compressed data using native DecompressionStream API.
+    // Returns a Promise that resolves to a Uint8Array; throws on failure.
+    const zlibInflate = async (compressedData) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(compressedData);
+          controller.close();
+        },
+      });
+
+      const decompressedStream = stream.pipeThrough(
+        new DecompressionStream("deflate"),
+      );
+
+      const reader = decompressedStream.getReader();
+      const chunks = [];
+
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+
+      // TODO: binary_to_term/2 with :used must report the exact number of
+      // bytes consumed by the zlib stream, which DecompressionStream does
+      // not expose. binary_to_term/1 does not care - it accepts trailing
+      // bytes and decodes only the first term. Options when we get there:
+      //   1. Parse the zlib header/trailer ourselves to find the stream end.
+      //   2. Switch to a sync zlib (e.g. pako) that returns bytes consumed.
+      //   3. Drop COMPRESSED support and reject tag 80.
+      return Utils.concatUint8Arrays(chunks);
+    };
+
+    // Sync recursive dispatcher. The COMPRESSED tag is intentionally NOT
+    // handled here - OTP only allows it at the top level (immediately after
+    // the version byte), so a nested tag 80 falls to the default case and
+    // raises. Keeping this function sync avoids a Promise allocation per
+    // recursive call, which matters for deeply nested / large terms.
+    //
+    // TODO: NEW_FUN_EXT (tag 112, anonymous fun encoding) is not implemented
+    // and currently falls to the default case, raising. OTP accepts it; we
+    // diverge. Filling the gap requires a JS shape for "remote anon fun
+    // reference" plus a decision on how Hologram represents funs encoded by
+    // a foreign BEAM (the decoded fun cannot actually be invoked without
+    // the matching module + Uniq). FUN_EXT (tag 117) is intentionally
+    // rejected forever - OTP itself stopped decoding it in OTP 23.
+    const decodeTerm = (dataView, bytes, offset) => {
+      if (offset >= bytes.length) raiseInvalid();
+
+      const tag = dataView.getUint8(offset);
+
+      switch (tag) {
+        case SMALL_INTEGER_EXT:
+          return decodeSmallInteger(dataView, offset + 1);
+
+        case INTEGER_EXT:
+          return decodeInteger(dataView, offset + 1);
+
+        case SMALL_BIG_EXT:
+          return decodeSmallBig(dataView, bytes, offset + 1);
+
+        case LARGE_BIG_EXT:
+          return decodeLargeBig(dataView, bytes, offset + 1);
+
+        case ATOM_EXT:
+          return decodeAtom(dataView, bytes, offset + 1, false);
+
+        case SMALL_ATOM_EXT:
+          return decodeSmallAtom(dataView, bytes, offset + 1, false);
+
+        case ATOM_UTF8_EXT:
+          return decodeAtom(dataView, bytes, offset + 1, true);
+
+        case SMALL_ATOM_UTF8_EXT:
+          return decodeSmallAtom(dataView, bytes, offset + 1, true);
+
+        case BINARY_EXT:
+          return decodeBinary(dataView, bytes, offset + 1);
+
+        case SMALL_TUPLE_EXT:
+          return decodeSmallTuple(dataView, bytes, offset + 1);
+
+        case LARGE_TUPLE_EXT:
+          return decodeLargeTuple(dataView, bytes, offset + 1);
+
+        case NIL_EXT:
+          return {term: Type.list(), newOffset: offset + 1};
+
+        case STRING_EXT:
+          return decodeString(dataView, bytes, offset + 1);
+
+        case LIST_EXT:
+          return decodeList(dataView, bytes, offset + 1);
+
+        case MAP_EXT:
+          return decodeMap(dataView, bytes, offset + 1);
+
+        case NEW_FLOAT_EXT:
+          return decodeNewFloat(dataView, offset + 1);
+
+        case FLOAT_EXT:
+          return decodeFloatExt(dataView, bytes, offset + 1);
+
+        case BIT_BINARY_EXT:
+          return decodeBitBinary(dataView, bytes, offset + 1);
+
+        case REFERENCE_EXT:
+          return decodeReference(dataView, bytes, offset + 1);
+
+        case NEW_REFERENCE_EXT:
+          return decodeNewReference(dataView, bytes, offset + 1);
+
+        case NEWER_REFERENCE_EXT:
+          return decodeNewerReference(dataView, bytes, offset + 1);
+
+        case PID_EXT:
+          return decodePid(dataView, bytes, offset + 1);
+
+        case NEW_PID_EXT:
+          return decodeNewPid(dataView, bytes, offset + 1);
+
+        case PORT_EXT:
+          return decodePort(dataView, bytes, offset + 1);
+
+        case NEW_PORT_EXT:
+          return decodeNewPort(dataView, bytes, offset + 1);
+
+        case V4_PORT_EXT:
+          return decodeV4Port(dataView, bytes, offset + 1);
+
+        case EXPORT_EXT:
+          return decodeExport(dataView, bytes, offset + 1);
+
+        default:
+          raiseInvalid();
+      }
+    };
+
+    const decodeSmallInteger = (dataView, offset) => {
+      const value = dataView.getUint8(offset);
+
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 1,
+      };
+    };
+
+    const decodeInteger = (dataView, offset) => {
+      const value = dataView.getInt32(offset);
+
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 4,
+      };
+    };
+
+    // OTP treats any non-zero Sign byte as negative (not just 1) - so e.g.
+    // sign=2, sign=255 all decode to a negative value. The spec says only 0
+    // and 1 are emitted, but the decoder is lenient.
+    const decodeSmallBig = (dataView, bytes, offset) => {
+      const n = dataView.getUint8(offset);
+      const sign = dataView.getUint8(offset + 1);
+
+      if (offset + 2 + n > bytes.length) raiseInvalid();
+
+      // Wire format is little-endian; walk high-to-low so each iteration is
+      // a single (value << 8n) | byte instead of allocating BigInt(i * 8).
+      let value = 0n;
+      for (let i = n - 1; i >= 0; i--) {
+        value = (value << 8n) | BigInt(bytes[offset + 2 + i]);
+      }
+
+      if (sign !== 0) {
+        value = -value;
+      }
+
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 2 + n,
+      };
+    };
+
+    const decodeLargeBig = (dataView, bytes, offset) => {
+      const n = dataView.getUint32(offset);
+      const sign = dataView.getUint8(offset + 4);
+
+      if (offset + 5 + n > bytes.length) raiseInvalid();
+
+      let value = 0n;
+      for (let i = n - 1; i >= 0; i--) {
+        value = (value << 8n) | BigInt(bytes[offset + 5 + i]);
+      }
+
+      if (sign !== 0) {
+        value = -value;
+      }
+
+      return {
+        term: Type.integer(value),
+        newOffset: offset + 5 + n,
+      };
+    };
+
+    // Decodes atom name bytes. Latin-1 (the deprecated ATOM_EXT/SMALL_ATOM_EXT
+    // encoding) maps each byte 0-255 to the same Unicode code point, which is
+    // why we use String.fromCharCode in a loop rather than TextDecoder("latin1"):
+    // per the WHATWG Encoding Standard, "latin1" is a label for windows-1252,
+    // and would mis-decode 0x80-0x9F (e.g. 0x80 -> U+20AC). The loop also
+    // avoids String.fromCharCode(...atomBytes), whose argument count is engine-
+    // limited (~65k); Erlang atoms are capped at 255 bytes today, but ATOM_EXT's
+    // wire-format length field is uint16, so we stay defensive.
+    // For UTF-8, invalid bytes throw TypeError from TextDecoder({fatal:true});
+    // we convert that to ArgumentError here so the outer wrapper does not have
+    // to catch TypeError generically.
+    const decodeAtomBytes = (atomBytes, isUtf8) => {
+      if (!isUtf8) {
+        let result = "";
+        for (let i = 0; i < atomBytes.length; i++) {
+          result += String.fromCharCode(atomBytes[i]);
+        }
+        return result;
+      }
+      try {
+        return ERTS.utf8Decoder.decode(atomBytes);
+      } catch {
+        raiseInvalid();
+      }
+    };
+
+    const decodeAtom = (dataView, bytes, offset, isUtf8) => {
+      const length = dataView.getUint16(offset);
+
+      // OTP caps atom names at 255 characters. For Latin-1 (ATOM_EXT) one
+      // byte == one char, so we can early-reject without slicing. The
+      // SMALL_* variants use a uint8 length field and are naturally bounded.
+      if (!isUtf8 && length > 255) raiseInvalid();
+
+      if (offset + 2 + length > bytes.length) raiseInvalid();
+
+      const atomBytes = bytes.slice(offset + 2, offset + 2 + length);
+      const atomString = decodeAtomBytes(atomBytes, isUtf8);
+
+      // For UTF-8 (ATOM_UTF8_EXT) the byte length can be up to 1020 (255 * 4),
+      // but the code-point count must be <= 255. for...of iterates by code
+      // points (not UTF-16 units), so emoji etc. count as one. Short-circuit
+      // at 256 to avoid walking the whole string when we already know it
+      // overflows the cap.
+      if (isUtf8) {
+        let codepoints = 0;
+        for (const _ of atomString) {
+          if (++codepoints > 255) raiseInvalid();
+        }
+      }
+
+      return {
+        term: Type.atom(atomString),
+        newOffset: offset + 2 + length,
+      };
+    };
+
+    const decodeSmallAtom = (dataView, bytes, offset, isUtf8) => {
+      const length = dataView.getUint8(offset);
+      if (offset + 1 + length > bytes.length) raiseInvalid();
+
+      const atomBytes = bytes.slice(offset + 1, offset + 1 + length);
+      const atomString = decodeAtomBytes(atomBytes, isUtf8);
+
+      return {
+        term: Type.atom(atomString),
+        newOffset: offset + 1 + length,
+      };
+    };
+
+    const decodeBinary = (dataView, bytes, offset) => {
+      const length = dataView.getUint32(offset);
+
+      if (offset + 4 + length > bytes.length) raiseInvalid();
+
+      // Uint8Array.slice already returns a fresh Uint8Array, so passing it
+      // straight into Bitstring.fromBytes avoids the extra copy that
+      // `new Uint8Array(binaryBytes)` would do.
+      const binaryBytes = bytes.slice(offset + 4, offset + 4 + length);
+
+      return {
+        term: Bitstring.fromBytes(binaryBytes),
+        newOffset: offset + 4 + length,
+      };
+    };
+
+    const decodeSmallTuple = (dataView, bytes, offset) => {
+      const arity = dataView.getUint8(offset);
+      const elements = [];
+      let currentOffset = offset + 1;
+
+      for (let i = 0; i < arity; i++) {
+        const result = decodeTerm(dataView, bytes, currentOffset);
+        elements.push(result.term);
+        currentOffset = result.newOffset;
+      }
+
+      return {
+        term: Type.tuple(elements),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeLargeTuple = (dataView, bytes, offset) => {
+      const arity = dataView.getUint32(offset);
+      const elements = [];
+      let currentOffset = offset + 4;
+
+      for (let i = 0; i < arity; i++) {
+        const result = decodeTerm(dataView, bytes, currentOffset);
+        elements.push(result.term);
+        currentOffset = result.newOffset;
+      }
+
+      return {
+        term: Type.tuple(elements),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeString = (dataView, bytes, offset) => {
+      const length = dataView.getUint16(offset);
+      if (offset + 2 + length > bytes.length) raiseInvalid();
+      const elements = [];
+
+      for (let i = 0; i < length; i++) {
+        const byte = bytes[offset + 2 + i];
+        elements.push(Type.integer(byte));
+      }
+
+      return {
+        term: Type.list(elements),
+        newOffset: offset + 2 + length,
+      };
+    };
+
+    const decodeList = (dataView, bytes, offset) => {
+      const length = dataView.getUint32(offset);
+      const elements = [];
+      let currentOffset = offset + 4;
+
+      for (let i = 0; i < length; i++) {
+        const result = decodeTerm(dataView, bytes, currentOffset);
+        elements.push(result.term);
+        currentOffset = result.newOffset;
+      }
+
+      const tailResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = tailResult.newOffset;
+
+      // LIST_EXT with length=0 collapses to its tail. OTP accepts this and
+      // returns the tail term as-is (e.g. <<131,108,0,0,0,0,97,1>> decodes
+      // to the integer 1). Without this short-circuit, a non-list tail would
+      // hit Type.improperList([tail]) below and crash with
+      // HologramInterpreterError ("improper list must have at least 2 items").
+      if (length === 0) {
+        return {term: tailResult.term, newOffset: currentOffset};
+      }
+
+      // If tail is a list, merge it to preserve proper list semantics
+      if (Type.isList(tailResult.term)) {
+        const merged = elements.concat(tailResult.term.data);
+
+        return Type.isProperList(tailResult.term)
+          ? {term: Type.list(merged), newOffset: currentOffset}
+          : {term: Type.improperList(merged), newOffset: currentOffset};
+      }
+
+      elements.push(tailResult.term);
+
+      return {
+        term: Type.improperList(elements),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeMap = (dataView, bytes, offset) => {
+      const arity = dataView.getUint32(offset);
+      const entries = [];
+      const seenKeys = new Set();
+      let currentOffset = offset + 4;
+
+      for (let i = 0; i < arity; i++) {
+        const keyResult = decodeTerm(dataView, bytes, currentOffset);
+        const valueResult = decodeTerm(dataView, bytes, keyResult.newOffset);
+
+        // Spec: MAP_EXT keys must be unique. OTP raises badarg on duplicates;
+        // without this check we'd silently apply Type.map's last-write-wins
+        // semantics and diverge from OTP.
+        const encodedKey = Type.encodeMapKey(keyResult.term);
+        if (seenKeys.has(encodedKey)) raiseInvalid();
+        seenKeys.add(encodedKey);
+
+        entries.push([keyResult.term, valueResult.term]);
+        currentOffset = valueResult.newOffset;
+      }
+
+      return {
+        term: Type.map(entries),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewFloat = (dataView, offset) => {
+      const value = dataView.getFloat64(offset);
+
+      // OTP rejects non-finite floats (NaN, +Inf, -Inf): Erlang floats must
+      // be finite. Without this check, hand-crafted IEEE 754 bit patterns
+      // would produce a Type.float(NaN) / Type.float(Infinity) and diverge.
+      if (!Number.isFinite(value)) raiseInvalid();
+
+      return {
+        term: Type.float(value),
+        newOffset: offset + 8,
+      };
+    };
+
+    const decodeFloatExt = (dataView, bytes, offset) => {
+      // FLOAT_EXT: 31-byte null-terminated string (deprecated format)
+      if (offset + 31 > bytes.length) raiseInvalid();
+
+      const floatBytes = bytes.slice(offset, offset + 31);
+
+      const floatString = String.fromCharCode(...floatBytes).replace(
+        /\0.*/,
+        "",
+      );
+
+      const value = parseFloat(floatString);
+
+      // !isFinite covers NaN and +/-Infinity. parseFloat returns NaN for
+      // unparseable strings ("nan", "inf") and Infinity for "Infinity";
+      // OTP rejects all of them.
+      if (!Number.isFinite(value)) raiseInvalid();
+
+      return {
+        term: Type.float(value),
+        newOffset: offset + 31,
+      };
+    };
+
+    const decodeBitBinary = (dataView, bytes, offset) => {
+      const length = dataView.getUint32(offset);
+      const bits = dataView.getUint8(offset + 4);
+
+      // Reject BIT_BINARY_EXT with Length=0 (no data byte for trailing bits
+      // to attach to) or with Bits outside 1..8.
+      // Note: OTP also rejects all of these except the specific Length=0,
+      // Bits=0 pattern, which crashes the VM with a giant binary alloc
+      // (real OTP bug). We deliberately reject that case cleanly here.
+      if (length === 0 || bits < 1 || bits > 8) raiseInvalid();
+
+      if (offset + 5 + length > bytes.length) raiseInvalid();
+
+      // bytes.slice already returns a fresh Uint8Array; no need to copy
+      // again via `new Uint8Array(...)`.
+      const binaryBytes = bytes.slice(offset + 5, offset + 5 + length);
+      const bitstring = Bitstring.fromBytes(binaryBytes);
+
+      if (bits < 8) {
+        bitstring.leftoverBitCount = bits;
+      }
+
+      return {
+        term: bitstring,
+        newOffset: offset + 5 + length,
+      };
+    };
+
+    const decodeReferenceWithOptions = (dataView, bytes, offset, options) => {
+      let currentOffset = offset;
+      let idWordCount = 1; // Default for REFERENCE_EXT
+
+      if (options.hasLengthPrefix) {
+        idWordCount = dataView.getUint16(currentOffset);
+        currentOffset += 2;
+
+        // OTP caps both NEW_REFERENCE_EXT and NEWER_REFERENCE_EXT at 5 ID
+        // words regardless of what the wire format permits (uint16). Without
+        // this check a Len of e.g. 65535 would attempt a 256KB read - caught
+        // by the outer wrapper as RangeError, but we lose the early-exit and
+        // diverge from OTP for moderately oversized values like Len=6.
+        if (idWordCount > 5) raiseInvalid();
+      }
+
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // For REFERENCE_EXT: read ID words first, then creation
+      // For NEW/NEWER_REFERENCE_EXT: read creation first, then ID words
+      let creation, idWords;
+
+      if (options.hasLengthPrefix) {
+        creation =
+          options.creationSize === 4
+            ? dataView.getUint32(currentOffset)
+            : dataView.getUint8(currentOffset);
+
+        currentOffset += options.creationSize;
+
+        idWords = [];
+        for (let i = 0; i < idWordCount; i++) {
+          idWords.push(dataView.getUint32(currentOffset));
+          currentOffset += 4;
+        }
+      } else {
+        idWords = [];
+        for (let i = 0; i < idWordCount; i++) {
+          idWords.push(dataView.getUint32(currentOffset));
+          currentOffset += 4;
+        }
+
+        creation = dataView.getUint8(currentOffset);
+        currentOffset += 1;
+      }
+
+      return {
+        term: Type.reference(nodeResult.term, creation, idWords),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeReference = (dataView, bytes, offset) => {
+      return decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: false,
+        creationSize: 1,
+      });
+    };
+
+    const decodeNewReference = (dataView, bytes, offset) => {
+      return decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: true,
+        creationSize: 1,
+      });
+    };
+
+    const decodeNewerReference = (dataView, bytes, offset) => {
+      return decodeReferenceWithOptions(dataView, bytes, offset, {
+        hasLengthPrefix: true,
+        creationSize: 4,
+      });
+    };
+
+    // The ETF spec describes "only N bits significant" for several fields
+    // (PID_EXT id 15 bits, serial 13 bits; PORT_EXT / NEW_PORT_EXT id 28 bits;
+    // PID_EXT / PORT_EXT creation 2 bits; NEW_PORT_EXT creation == 0 is
+    // "reserved"). Empirically OTP does not validate any of these - it accepts
+    // the full 32-bit / 64-bit values as written and accepts creation == 0 -
+    // so we deliberately do not validate either. Adding such checks would
+    // diverge from OTP rather than match it.
+
+    const decodePid = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Serial (4 bytes), Creation (1 byte)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const serial = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint8(currentOffset);
+      currentOffset += 1;
+
+      return {
+        term: Type.pid(nodeResult.term, [id, serial, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewPid = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Serial (4 bytes), Creation (4 bytes)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const serial = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.pid(nodeResult.term, [id, serial, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodePort = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Creation (1 byte)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint8(currentOffset);
+      currentOffset += 1;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeNewPort = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (4 bytes), Creation (4 bytes)
+      const id = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeV4Port = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      const nodeResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = nodeResult.newOffset;
+
+      // Read ID (8 bytes as BigUint64), Creation (4 bytes)
+      const id = dataView.getBigUint64(currentOffset);
+      currentOffset += 8;
+
+      const creation = dataView.getUint32(currentOffset);
+      currentOffset += 4;
+
+      return {
+        term: Type.port(nodeResult.term, [id, creation]),
+        newOffset: currentOffset,
+      };
+    };
+
+    const decodeExport = (dataView, bytes, offset) => {
+      let currentOffset = offset;
+
+      const moduleResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = moduleResult.newOffset;
+
+      const functionResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = functionResult.newOffset;
+
+      const arityResult = decodeTerm(dataView, bytes, currentOffset);
+      currentOffset = arityResult.newOffset;
+
+      // Spec: Module and Function must be atoms, Arity must be an integer.
+      // OTP raises badarg when any component has the wrong shape; without
+      // this check we'd reach .value on the wrong term and either throw
+      // (relabelled by the outer wrapper) or build a malformed function.
+      if (
+        !Type.isAtom(moduleResult.term) ||
+        !Type.isAtom(functionResult.term) ||
+        !Type.isInteger(arityResult.term)
+      ) {
+        raiseInvalid();
+      }
+
+      const context = Interpreter.buildContext();
+
+      const arity = Number(arityResult.term.value);
+
+      return {
+        term: Type.functionCapture(
+          moduleResult.term.value,
+          functionResult.term.value,
+          arity,
+          [],
+          context,
+        ),
+        newOffset: currentOffset,
+      };
+    };
+
+    try {
+      Bitstring.maybeSetBytesFromText(binary);
+
+      const bytes = binary.bytes;
+
+      const dataView = new DataView(
+        bytes.buffer,
+        bytes.byteOffset,
+        bytes.byteLength,
+      );
+
+      if (dataView.getUint8(0) !== VERSION_MAGIC) raiseInvalid();
+
+      // COMPRESSED is only valid immediately after the version byte. OTP
+      // rejects nested COMPRESSED tags, so handling it here (rather than as
+      // a case in decodeTerm's switch) keeps the recursive decoder sync.
+      // Format: 80 | UncompressedSize (uint32 BE) | zlib-compressed payload.
+      if (dataView.getUint8(1) === COMPRESSED) {
+        if (bytes.length < 6) raiseInvalid();
+
+        const uncompressedSize = dataView.getUint32(2, false);
+        const compressedData = bytes.slice(6);
+
+        let decompressed;
+        try {
+          decompressed = await zlibInflate(compressedData);
+        } catch {
+          raiseInvalid();
+        }
+
+        if (decompressed.length !== uncompressedSize) raiseInvalid();
+
+        const decompressedView = new DataView(
+          decompressed.buffer,
+          decompressed.byteOffset,
+          decompressed.byteLength,
+        );
+
+        const innerResult = decodeTerm(decompressedView, decompressed, 0);
+
+        // Trailing bytes inside the decompressed payload are rejected by
+        // OTP (the outer binary may have trailing bytes; the decompressed
+        // term cannot).
+        if (innerResult.newOffset !== decompressed.length) raiseInvalid();
+
+        return innerResult.term;
+      }
+
+      // OTP's binary_to_term/1 silently ignores any bytes past the first
+      // term: term_to_binary(42) <> "garbage" decodes to 42.
+      return decodeTerm(dataView, bytes, 1).term;
+    } catch (err) {
+      // RangeError is the only generic signal for malformed input we accept
+      // here: DataView.getXxx throws it when reading past the end of the
+      // buffer, which any decoder can hit on truncated input. Everything
+      // else - TypeError, HologramInterpreterError, etc. - is treated as a
+      // real bug and bubbles up. Decoder helpers that have other legitimate
+      // failure modes (e.g. invalid UTF-8 in atom names) raise ArgumentError
+      // at the call site instead of relying on this wrapper.
+      if (err instanceof RangeError) raiseInvalid();
+      throw err;
+    }
+  },
+  // End binary_to_term/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {

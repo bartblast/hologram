@@ -12,8 +12,7 @@
           ~r"/node_modules/",
           "test/features/",
           "test/elixir/support/fixtures/compiler/normalizer/module_7.ex",
-          "test/elixir/support/fixtures/compiler/normalizer/module_8.ex",
-          "test/elixir/support/fixtures/compiler/transformer/module_156.ex"
+          "test/elixir/support/fixtures/compiler/normalizer/module_8.ex"
         ]
       },
       strict: true,

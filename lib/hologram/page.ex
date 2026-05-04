@@ -8,7 +8,17 @@ defmodule Hologram.Page do
   alias Hologram.Server
 
   @doc """
-  Initializes component and server structs (when run on the server).
+  Handles a client-side action, typically triggered by a user interaction.
+  """
+  @callback action(atom, map, Component.t()) :: Component.t()
+
+  @doc """
+  Handles a server-side command dispatched from the client.
+  """
+  @callback command(atom, map, Server.t()) :: Server.t()
+
+  @doc """
+  Initializes the component and server structs on the server.
   """
   @callback init(%{atom => any}, Component.t(), Server.t()) ::
               {Component.t(), Server.t()} | Component.t() | Server.t()
@@ -17,6 +27,8 @@ defmodule Hologram.Page do
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
   """
   @callback template() :: (map -> list)
+
+  @optional_callbacks [action: 3, command: 3]
 
   defmacro __using__(_opts) do
     template_path = Component.colocated_template_path(__CALLER__.file)

@@ -12,7 +12,7 @@ defmodule Hologram.Component do
 
     @type t :: %__MODULE__{
             delay: non_neg_integer,
-            name: :atom,
+            name: atom(),
             params: %{atom => any},
             target: String.t() | nil
           }
@@ -21,7 +21,7 @@ defmodule Hologram.Component do
   defmodule Command do
     defstruct name: nil, params: %{}, target: nil
 
-    @type t :: %__MODULE__{name: :atom, params: %{atom => any}, target: String.t() | nil}
+    @type t :: %__MODULE__{name: atom(), params: %{atom => any}, target: String.t() | nil}
   end
 
   @type t :: %__MODULE__{
@@ -33,7 +33,22 @@ defmodule Hologram.Component do
         }
 
   @doc """
-  Initializes component and server structs (when run on the server).
+  Handles a client-side action, typically triggered by a user interaction.
+  """
+  @callback action(atom, %{atom => any}, Component.t()) :: Component.t()
+
+  @doc """
+  Handles a server-side command dispatched from the client.
+  """
+  @callback command(atom, %{atom => any}, Server.t()) :: Server.t()
+
+  @doc """
+  Initializes the component struct on the client.
+  """
+  @callback init(%{atom => any}, Component.t()) :: Component.t()
+
+  @doc """
+  Initializes the component and server structs on the server.
   """
   @callback init(%{atom => any}, Component.t(), Server.t()) ::
               {Component.t(), Server.t()} | Component.t() | Server.t()
@@ -42,6 +57,8 @@ defmodule Hologram.Component do
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
   """
   @callback template() :: (map -> list)
+
+  @optional_callbacks [action: 3, command: 3, init: 2]
 
   defmacro __using__(_opts) do
     template_path = colocated_template_path(__CALLER__.file)
