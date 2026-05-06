@@ -7206,14 +7206,18 @@ describe("Interpreter", () => {
   });
 
   describe("with()", () => {
-    const context = contextFixture({
-      vars: {
-        a: Type.atom("ok"),
-      },
+    let context, body;
+
+    beforeEach(() => {
+      context = contextFixture({
+        vars: {
+          a: Type.atom("ok"),
+        },
+      });
+      body = (context) => {
+        return Type.tuple([context.vars.a, context.vars.b]);
+      };
     });
-    const body = (context) => {
-      return Type.tuple([context.vars.a, context.vars.b]);
-    };
 
     it("handles an empty with", () => {
       // with do: nil
