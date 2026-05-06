@@ -7630,7 +7630,7 @@ describe("Interpreter", () => {
     });
     it("does not leak assignments into the original context", () => {
       // a = :ok
-      // with do
+      // with b <- a do
       //   a = 2
       // end
       // a == :ok
@@ -7643,11 +7643,18 @@ describe("Interpreter", () => {
           );
           return Interpreter.updateVarsToMatchedValues(context);
         },
-        [],
+        [
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
         [],
         context,
       );
       assert.deepStrictEqual(context.vars.a, Type.atom("ok"));
+      assert.deepStrictEqual(context.vars.b, undefined);
     });
   });
 });
