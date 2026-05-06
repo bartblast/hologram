@@ -1056,7 +1056,8 @@ export default class Interpreter {
         Interpreter.isMatched(clause.match, condition, contextClone);
       Interpreter.updateVarsToMatchedValues(contextClone);
       const guardMatched =
-        plainClause || Interpreter.#evaluateGuards(clause.guards, contextClone);
+        plainClause ||
+        (matched && Interpreter.#evaluateGuards(clause.guards, contextClone));
 
       if (!matched || !guardMatched) {
         return Interpreter.#withElse(
