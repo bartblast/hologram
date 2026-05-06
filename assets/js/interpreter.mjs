@@ -1050,26 +1050,22 @@ export default class Interpreter {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
       const condition = clause.expression(contextClone);
+      const plainClause = !clause.match;
+      const matched =
+        plainClause ||
+        Interpreter.isMatched(clause.match, condition, contextClone);
+      Interpreter.updateVarsToMatchedValues(contextClone);
+      const guardMatched =
+        plainClause || Interpreter.#evaluateGuards(clause.guards, contextClone);
 
-      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
-        Interpreter.updateVarsToMatchedValues(contextClone);
-
-        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          context = contextClone;
-        } else {
-          return Interpreter.#withElse(
-            condition,
-            elseClauses,
-            Interpreter.cloneContext(originalContext),
-          );
-        }
-      } else {
+      if (!matched || !guardMatched) {
         return Interpreter.#withElse(
           condition,
           elseClauses,
           Interpreter.cloneContext(originalContext),
         );
       }
+      context = contextClone;
     }
 
     return body(Interpreter.cloneContext(context));

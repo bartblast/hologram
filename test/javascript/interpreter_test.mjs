@@ -7229,8 +7229,7 @@ describe("Interpreter", () => {
       const expected = Type.atom("nil");
       assert.deepStrictEqual(result, expected);
     });
-
-    it("successful match returns body result", () => {
+    it("successful match returns body result (single match clause)", () => {
       // with b <- a do
       //   {a, b}
       // end
@@ -7250,7 +7249,32 @@ describe("Interpreter", () => {
       const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
       assert.deepStrictEqual(result, expected);
     });
+    it("successful match return body result (multiple match clause)", () => {
+      // with b <- a,
+      //   :ok <- b do
+      //   {a, b}
+      // end
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            expression: (context) => context.vars.b,
+          },
+        ],
+        [],
+        context,
+      );
 
+      const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+      assert.deepStrictEqual(result, expected);
+    });
     it("can fail to match on match condition", () => {
       // with :error <- a do
       // else
@@ -7317,12 +7341,10 @@ describe("Interpreter", () => {
         body,
         [
           {
-            match: Type.variablePattern("b"),
-            guards: [],
             expression: (context) =>
               Interpreter.matchOperator(
                 context.vars.a,
-                Type.variablePattern("a"),
+                Type.variablePattern("b"),
                 context,
               ),
           },
@@ -7332,6 +7354,195 @@ describe("Interpreter", () => {
       );
 
       assert.deepStrictEqual(result, expected);
+    });
+    it("handles multiple plain expressions", () => {
+      // with b = a,
+      //   c = b do
+      //   {a, b}
+      // end
+      const expected = Type.tuple([
+        Type.atom("ok"),
+        Type.atom("ok"),
+        Type.atom("ok"),
+      ]);
+      const result = Interpreter.with(
+        (context) =>
+          Type.tuple([context.vars.a, context.vars.b, context.vars.c]),
+        [
+          {
+            expression: (context) =>
+              Interpreter.matchOperator(
+                context.vars.a,
+                Type.variablePattern("b"),
+                context,
+              ),
+          },
+          {
+            expression: (context) =>
+              Interpreter.matchOperator(
+                context.vars.b,
+                Type.variablePattern("c"),
+                context,
+              ),
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("returns the unmatched value directly if there are no else clauses", () => {
+      // with :error <- a do
+      //   x
+      // end
+      const expected = Type.atom("ok");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("handles single else clause", () => {
+      const expected = Type.atom("match");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => Type.atom("match"),
+          },
+        ],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("handles multiple else clauses", () => {
+      const expected = Type.atom("second");
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [
+          {
+            match: Type.atom("a"),
+            guards: [],
+            body: (_context) => Type.atom("first"),
+          },
+          {
+            match: Type.atom("ok"),
+            guards: [],
+            body: (_context) => Type.atom("second"),
+          },
+          {
+            match: Type.atom("c"),
+            guards: [],
+            body: (_context) => Type.atom("third"),
+          },
+        ],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("handles shadowing correctly", () => {
+      // Based on a test case from the Elixir standard lib
+      //   that ensures that later clauses can shadow variables
+      //   set in earlier clauses.
+      // with a <- (
+      //  b = 1
+      //  _ = b
+      //  1
+      // ),
+      //   b <- 2 do
+      //   a + b
+      // end
+      const expected = Type.integer(3);
+      const result = Interpreter.with(
+        (context) => Erlang["+/2"](context.vars.a, context.vars.b),
+        [
+          {
+            match: Type.variablePattern("a"),
+            guards: [],
+            expression: (context) => {
+              Interpreter.matchOperator(
+                Type.integer(1),
+                Type.variablePattern("b"),
+                context,
+              );
+              Interpreter.updateVarsToMatchedValues(context);
+              Interpreter.matchOperator(
+                context.vars.b,
+                Type.matchPlaceholder(),
+                context,
+              );
+              Interpreter.updateVarsToMatchedValues(context);
+              return Type.integer(1);
+            },
+          },
+          {
+            match: Type.variablePattern("b"),
+            guards: [],
+            expression: (_context) => Type.integer(2),
+          },
+        ],
+        [],
+        context,
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+    it("throws error if there are else clauses but none match", () => {
+      // with  :error <- a do
+      // else
+      //   :other -> {:error, :nomatch}
+      // end
+      assertBoxedError(
+        () =>
+          Interpreter.with(
+            body,
+            [
+              {
+                match: Type.atom("error"),
+                guards: [],
+                expression: (context) => context.vars.a,
+              },
+            ],
+            [
+              {
+                match: Type.atom("other"),
+                guards: [],
+                body: (_context) => null,
+              },
+            ],
+            context,
+          ),
+        "WithClauseError",
+        "no with clause matching: :ok",
+      );
     });
     it("gives the original context to the else clauses", () => {
       // x = :original
@@ -7417,126 +7628,12 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-    it("returns the unmatched value directly if there are no else clauses", () => {
-      // with :error <- a do
-      //   x
+    it("does not leak assignments into the original context", () => {
+      // a = :ok
+      // with do
+      //   a = 2
       // end
-      const expected = Type.atom("ok");
-      const result = Interpreter.with(
-        body,
-        [
-          {
-            match: Type.atom("error"),
-            guards: [],
-            expression: (context) => context.vars.a,
-          },
-        ],
-        [],
-        context,
-      );
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles multiple else clauses", () => {
-      const expected = Type.atom("second");
-      const result = Interpreter.with(
-        body,
-        [
-          {
-            match: Type.atom("error"),
-            guards: [],
-            expression: (context) => context.vars.a,
-          },
-        ],
-        [
-          {
-            match: Type.atom("a"),
-            guards: [],
-            body: (_context) => Type.atom("first"),
-          },
-          {
-            match: Type.atom("ok"),
-            guards: [],
-            body: (_context) => Type.atom("second"),
-          },
-          {
-            match: Type.atom("c"),
-            guards: [],
-            body: (_context) => Type.atom("third"),
-          },
-        ],
-        context,
-      );
-
-      assert.deepStrictEqual(result, expected);
-    });
-    it("handles shadowing correctly", () => {
-      const expected = Type.integer(3);
-      const result = Interpreter.with(
-        (context) => Erlang["+/2"](context.vars.a, context.vars.b),
-        [
-          {
-            match: Type.variablePattern("a"),
-            guards: [],
-            expression: (context) => {
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.variablePattern("b"),
-                context,
-              );
-              Interpreter.updateVarsToMatchedValues(context);
-              Interpreter.matchOperator(
-                context.vars.b,
-                Type.matchPlaceholder(),
-                context,
-              );
-              Interpreter.updateVarsToMatchedValues(context);
-              return Type.integer(1);
-            },
-          },
-          {
-            match: Type.variablePattern("b"),
-            guards: [],
-            expression: (_context) => Type.integer(2),
-          },
-        ],
-        [],
-        context,
-      );
-
-      assert.deepStrictEqual(result, expected);
-    });
-    it("throws error if no else clauses match", () => {
-      // with  :error <- a do
-      // else
-      //   :other -> {:error, :nomatch}
-      // end
-      assertBoxedError(
-        () =>
-          Interpreter.with(
-            body,
-            [
-              {
-                match: Type.atom("error"),
-                guards: [],
-                expression: (context) => context.vars.a,
-              },
-            ],
-            [
-              {
-                match: Type.atom("other"),
-                guards: [],
-                body: (_context) => null,
-              },
-            ],
-            context,
-          ),
-        "WithClauseError",
-        "no with clause matching: :ok",
-      );
-    });
-    it("does not leak into the original context", () => {
+      // a == :ok
       Interpreter.with(
         (context) => {
           Interpreter.matchOperator(
