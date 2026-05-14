@@ -4,6 +4,7 @@ defmodule Hologram.UI.Runtime do
 
   prop :csrf_token, :string, from_context: {Hologram.Runtime, :csrf_token}
   prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
+  prop :instance_id, :string, from_context: {Hologram.Runtime, :instance_id}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
   prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
 
@@ -16,6 +17,7 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram._pendingJsInteropActions = [];
         globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
         globalThis.Hologram.csrfToken = "{@csrf_token}";
+        globalThis.Hologram.instanceId = "{@instance_id}";
 
         globalThis.Hologram.dispatchAction = function(actionName, target, params) \{
           globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
