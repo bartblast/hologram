@@ -61,6 +61,13 @@ defmodule Hologram.ControllerTest do
     |> handle_command_request()
   end
 
+  defp extract_instance_id(resp_body) do
+    [_full, instance_id] =
+      Regex.run(~r/globalThis\.Hologram\.instanceId = "([^"]+)";/, resp_body)
+
+    instance_id
+  end
+
   defp serialize_params(params) when params == %{} do
     %{"t" => "m", "d" => []}
   end
@@ -842,6 +849,39 @@ defmodule Hologram.ControllerTest do
       csrf_token = Plug.Conn.get_session(conn, @csrf_token_session_key)
       assert is_binary(csrf_token)
       assert byte_size(csrf_token) == 24
+    end
+
+    test "generates and embeds instance_id for initial page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      assert {:ok, _info} =
+               conn.resp_body
+               |> extract_instance_id()
+               |> UUID.info()
+    end
+
+    test "generates a fresh instance_id on each initial page request" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn_1 =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      conn_2 =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      assert extract_instance_id(conn_1.resp_body) != extract_instance_id(conn_2.resp_body)
     end
 
     test "updates Plug.Conn session" do

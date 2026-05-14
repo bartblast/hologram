@@ -177,7 +177,13 @@ defmodule Hologram.Controller do
     {conn_with_csrf_token, {masked_csrf_token, _unmasked_csrf_token}} =
       CSRFProtection.ensure_tokens(conn)
 
-    renderer_opts = [csrf_token: masked_csrf_token, initial_page?: true]
+    instance_id = UUID.uuid4()
+
+    renderer_opts = [
+      csrf_token: masked_csrf_token,
+      initial_page?: true,
+      instance_id: instance_id
+    ]
 
     handle_page_request(conn_with_csrf_token, page_module, params, renderer_opts)
   end
