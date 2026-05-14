@@ -1,6 +1,9 @@
 "use strict";
 
-import {assert} from "./support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+} from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
 
