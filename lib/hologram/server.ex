@@ -5,10 +5,15 @@ defmodule Hologram.Server do
   alias Hologram.Runtime.Session
   alias Hologram.Server.Metadata
 
-  defstruct cookies: %{}, next_action: nil, session: %{}, __meta__: %Metadata{}
+  defstruct cookies: %{},
+            instance_id: nil,
+            next_action: nil,
+            session: %{},
+            __meta__: %Metadata{}
 
   @type t :: %__MODULE__{
           cookies: %{String.t() => any()},
+          instance_id: String.t() | nil,
           next_action: Action.t() | nil,
           session: %{atom => any},
           __meta__: Metadata.t()
