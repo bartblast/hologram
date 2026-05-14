@@ -46,6 +46,7 @@ defmodule Hologram.MixProject do
       {:benchee, "~> 1.0", only: :dev, runtime: false},
       {:benchee_markdown, "~> 0.3", only: :dev, runtime: false},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
+      {:decimal, "~> 3.0", only: [:dev, :test], runtime: false, override: true},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0", only: :test, runtime: false},
