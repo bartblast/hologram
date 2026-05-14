@@ -1,5 +1,6 @@
 "use strict";
 
+import App from "./app.mjs";
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
@@ -799,6 +800,8 @@ export default class Hologram {
     $.#pendingJsInteropActions = globalThis.Hologram._pendingJsInteropActions;
     globalThis.Hologram.dispatchAction = $.dispatchAction;
     delete globalThis.Hologram._pendingJsInteropActions;
+
+    App.loadInstanceId();
 
     Hologram.#isInitiated = true;
   }
