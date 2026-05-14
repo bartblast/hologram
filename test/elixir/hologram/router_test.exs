@@ -39,6 +39,7 @@ defmodule Hologram.RouterTest do
         %{
           "t" => "m",
           "d" => [
+            ["ainstance_id", "b074657374696e7374616e6365"],
             ["amodule", "a#{Module2}"],
             ["aname", "amy_command"],
             ["aparams", %{"t" => "m", "d" => []}],

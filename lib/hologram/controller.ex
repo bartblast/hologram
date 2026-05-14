@@ -124,11 +124,17 @@ defmodule Hologram.Controller do
         |> Map.get("_json")
         |> Deserializer.deserialize()
 
-      %{module: module, name: name, params: params, target: target} = payload
+      %{
+        instance_id: instance_id,
+        module: module,
+        name: name,
+        params: params,
+        target: target
+      } = payload
 
       # TODO: uncomment when standalone Hologram is supported
       # {conn_with_session, _session_id} = Session.init(conn)
-      server_struct = Server.from(conn)
+      server_struct = %{Server.from(conn) | instance_id: instance_id}
 
       command_result = module.command(name, params, server_struct)
 

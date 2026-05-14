@@ -48,6 +48,10 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     put_action(server, get_cookie(server, "my_cookie_name"))
   end
 
+  def command(:my_command_accessing_instance_id, _params, server) do
+    put_action(server, :my_action_echoing_instance_id, instance_id: server.instance_id)
+  end
+
   def command(:my_command_accessing_session, _params, server) do
     put_action(server, get_session(server, "my_session_key"))
   end

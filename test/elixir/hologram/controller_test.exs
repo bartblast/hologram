@@ -34,6 +34,14 @@ defmodule Hologram.ControllerTest do
 
   setup :set_mox_global
 
+  defp binary_to_hex(binary) do
+    binary
+    |> :binary.bin_to_list()
+    |> Enum.map(&Integer.to_string(&1, 16))
+    |> Enum.map(&String.downcase/1)
+    |> Enum.map_join(&String.pad_leading(&1, 2, "0"))
+  end
+
   # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
   defp conn_with_parsed_json(method, path, parsed_json, session \\ @session) do
     method
@@ -84,18 +92,14 @@ defmodule Hologram.ControllerTest do
   # Serialize payload in the format expected by Deserializer.deserialize/1
   # Version 2 format: [version, serialized_data]
   defp serialize_payload(payload) do
-    target_hex =
-      payload.target
-      |> :binary.bin_to_list()
-      |> Enum.map(&Integer.to_string(&1, 16))
-      |> Enum.map(&String.downcase/1)
-      |> Enum.map_join(&String.pad_leading(&1, 2, "0"))
+    instance_id = Map.get(payload, :instance_id, "test-instance-id")
 
     serialized_map_data = [
+      ["ainstance_id", "b0#{binary_to_hex(instance_id)}"],
       ["amodule", "a#{payload.module}"],
       ["aname", "a#{payload.name}"],
       ["aparams", serialize_params(payload.params)],
-      ["atarget", "b0#{target_hex}"]
+      ["atarget", "b0#{binary_to_hex(payload.target)}"]
     ]
 
     Jason.encode!([2, %{"t" => "m", "d" => serialized_map_data}])
@@ -440,6 +444,34 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
       assert response == [1, ~s'Type.atom("nil")']
+    end
+
+    test "extracts instance_id from payload and exposes it via server.instance_id" do
+      payload = %{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_accessing_instance_id,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_instance_id")], [Type.atom("params"), Type.map([[Type.atom("instance_id"), Type.bitstring("my-instance-id")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+             ]
     end
 
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
