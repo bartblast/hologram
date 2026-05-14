@@ -1,5 +1,6 @@
 "use strict";
 
+import App from "./app.mjs";
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
@@ -24,6 +25,7 @@ export default class Client {
     const module = ComponentRegistry.getComponentModule(target);
 
     return Type.map([
+      [Type.atom("instance_id"), Type.bitstring(App.instanceId)],
       [Type.atom("module"), module],
       [Type.atom("name"), Erlang_Maps["get/2"](Type.atom("name"), command)],
       [Type.atom("params"), Erlang_Maps["get/2"](Type.atom("params"), command)],

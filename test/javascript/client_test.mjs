@@ -9,6 +9,7 @@ import {
   waitForEventLoop,
 } from "./support/helpers.mjs";
 
+import App from "../../assets/js/app.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Connection from "../../assets/js/connection.mjs";
@@ -36,8 +37,17 @@ describe("Client", () => {
 
     const command = Type.commandStruct({name, params, target});
 
+    let originalInstanceId;
+
     beforeEach(() => {
       ComponentRegistry.clear();
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
+    });
+
+    afterEach(() => {
+      App.instanceId = originalInstanceId;
     });
 
     it("builds command payload when target component is registered", () => {
@@ -47,6 +57,7 @@ describe("Client", () => {
       const result = Client.buildCommandPayload(command);
 
       const expected = Type.map([
+        [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
         [Type.atom("module"), module],
         [Type.atom("name"), name],
         [Type.atom("params"), params],
@@ -463,7 +474,7 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
-    let fetchStub, hologramScheduleActionStub;
+    let fetchStub, hologramScheduleActionStub, originalInstanceId;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
@@ -489,11 +500,15 @@ describe("Client", () => {
       hologramScheduleActionStub = sinon.stub(Hologram, "scheduleAction");
 
       globalThis.Hologram = {csrfToken: "test-csrf-token-123"};
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
     });
 
     afterEach(() => {
       sinon.restore();
       delete globalThis.Hologram;
+      App.instanceId = originalInstanceId;
     });
 
     it("calls fetch with correct URL, options, and payload including CSRF token", async () => {
@@ -521,6 +536,7 @@ describe("Client", () => {
         options.body,
         Serializer.serialize(
           Type.map([
+            [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
             [Type.atom("module"), module],
             [Type.atom("name"), name],
             [Type.atom("params"), params],
