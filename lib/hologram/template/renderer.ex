@@ -153,6 +153,7 @@ defmodule Hologram.Template.Renderer do
       |> put_page_digest_context(page_digest)
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csrf_token_context(opts, initial_page?)
+      |> maybe_put_instance_id_context(opts, initial_page?)
 
     {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
@@ -344,6 +345,22 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp maybe_put_csrf_token_context(page_component_struct, _opts, false) do
+    page_component_struct
+  end
+
+  defp maybe_put_instance_id_context(page_component_struct, opts, true) do
+    instance_id =
+      opts[:instance_id] ||
+        raise ArgumentError, "instance_id is required for initial page requests"
+
+    Component.put_context(
+      page_component_struct,
+      {Hologram.Runtime, :instance_id},
+      instance_id
+    )
+  end
+
+  defp maybe_put_instance_id_context(page_component_struct, _opts, false) do
     page_component_struct
   end
 
