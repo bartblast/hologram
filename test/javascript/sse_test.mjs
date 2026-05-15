@@ -6,6 +6,7 @@ import {
   sinon,
 } from "./support/helpers.mjs";
 
+import App from "../../assets/js/app.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Sse from "../../assets/js/sse.mjs";
 
@@ -13,6 +14,7 @@ defineGlobalErlangAndElixirModules();
 
 describe("Sse", () => {
   let mockEventSource;
+  let originalInstanceId;
 
   beforeEach(() => {
     Sse.eventSource = null;
@@ -24,20 +26,25 @@ describe("Sse", () => {
     };
 
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
+
+    originalInstanceId = App.instanceId;
+    App.instanceId = "test-instance-id";
   });
 
   afterEach(() => {
     sinon.restore();
     delete globalThis.EventSource;
+
+    App.instanceId = originalInstanceId;
   });
 
   describe("connect()", () => {
-    it("instantiates an EventSource at the SSE path", () => {
+    it("instantiates an EventSource at the SSE path with the current instance_id", () => {
       Sse.connect();
 
       sinon.assert.calledOnceWithExactly(
         globalThis.EventSource,
-        "/hologram/sse",
+        "/hologram/sse?instance_id=test-instance-id",
       );
     });
 

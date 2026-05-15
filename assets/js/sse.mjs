@@ -1,5 +1,6 @@
 "use strict";
 
+import App from "./app.mjs";
 import Logger from "./logger.mjs";
 
 export default class Sse {
@@ -8,7 +9,8 @@ export default class Sse {
   static eventSource = null;
 
   static connect() {
-    $.eventSource = new EventSource($.SSE_PATH);
+    const params = new URLSearchParams({instance_id: App.instanceId});
+    $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
     $.eventSource.onmessage = (event) =>
       Logger.debug(`SSE event: ${event.data}`);
