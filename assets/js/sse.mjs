@@ -9,6 +9,7 @@ export default class Sse {
 
   static connect() {
     $.eventSource = new EventSource($.SSE_PATH);
+
     $.eventSource.onmessage = (event) =>
       Logger.debug(`SSE event: ${event.data}`);
   }
