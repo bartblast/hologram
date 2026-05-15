@@ -70,17 +70,6 @@ defmodule Hologram.Realtime.SSE do
     |> message_pump(heartbeat_interval_ms)
   end
 
-  defp message_pump(conn, heartbeat_interval_ms) do
-    case process_message(conn, heartbeat_interval_ms) do
-      {:cont, conn} -> message_pump(conn, heartbeat_interval_ms)
-      {:halt, conn} -> conn
-    end
-  end
-
-  defp schedule_heartbeat(heartbeat_interval_ms) do
-    Process.send_after(self(), :heartbeat, heartbeat_interval_ms)
-  end
-
   # Public so tests can exercise subscription wiring without entering the
   # blocking message-pump loop.
   @doc false
@@ -102,5 +91,16 @@ defmodule Hologram.Realtime.SSE do
     end
 
     conn
+  end
+
+  defp message_pump(conn, heartbeat_interval_ms) do
+    case process_message(conn, heartbeat_interval_ms) do
+      {:cont, conn} -> message_pump(conn, heartbeat_interval_ms)
+      {:halt, conn} -> conn
+    end
+  end
+
+  defp schedule_heartbeat(heartbeat_interval_ms) do
+    Process.send_after(self(), :heartbeat, heartbeat_interval_ms)
   end
 end
