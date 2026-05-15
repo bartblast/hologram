@@ -1,7 +1,7 @@
 defmodule Hologram.Realtime.SSETest do
   use Hologram.Test.BasicCase, async: false
 
-  alias Hologram.Realtime.SSE
+  import Hologram.Realtime.SSE
 
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
@@ -28,7 +28,7 @@ defmodule Hologram.Realtime.SSETest do
     conn =
       :get
       |> Plug.Test.conn("/")
-      |> SSE.prepare()
+      |> prepare()
 
     flush_plug_conn_sent()
     conn
@@ -37,7 +37,7 @@ defmodule Hologram.Realtime.SSETest do
   describe "prepare/1" do
     test "sets SSE response headers" do
       conn = Plug.Test.conn(:get, "/")
-      result = SSE.prepare(conn)
+      result = prepare(conn)
 
       assert result.resp_headers == [
                {"cache-control", "no-cache"},
@@ -48,7 +48,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "opens a chunked response with status 200" do
       conn = Plug.Test.conn(:get, "/")
-      result = SSE.prepare(conn)
+      result = prepare(conn)
 
       assert result.state == :chunked
       assert result.status == 200
@@ -60,7 +60,7 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
 
-      {:cont, updated_conn} = SSE.process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn, 30_000)
 
       assert updated_conn.resp_body == ":\n\n"
     end
@@ -69,7 +69,7 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
 
-      SSE.process_message(conn, 30)
+      process_message(conn, 30)
 
       assert_receive :heartbeat, 100
     end
@@ -78,7 +78,7 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :some_unknown_message)
 
-      {:cont, updated_conn} = SSE.process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn, 30_000)
 
       assert updated_conn.resp_body == ""
     end
@@ -87,13 +87,13 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), {:close, :superseded})
 
-      assert {:halt, ^conn} = SSE.process_message(conn, 30_000)
+      assert {:halt, ^conn} = process_message(conn, 30_000)
     end
   end
 
   describe "subscribe_to_identity_channels/1" do
     test "subscribes to the instance channel" do
-      conn = SSE.subscribe_to_identity_channels(conn_with_instance_id())
+      conn = subscribe_to_identity_channels(conn_with_instance_id())
       instance_id = conn.query_params["instance_id"]
       instance_topic = "hologram:channel:instance:#{instance_id}"
 
@@ -106,7 +106,7 @@ defmodule Hologram.Realtime.SSETest do
   describe "stream/2" do
     test "blocks on receive after preparing the stream" do
       conn = conn_with_instance_id()
-      pid = spawn(fn -> SSE.stream(conn) end)
+      pid = spawn(fn -> stream(conn) end)
 
       Process.sleep(50)
 
@@ -117,7 +117,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "ignores unknown messages without exiting" do
       conn = conn_with_instance_id()
-      pid = spawn(fn -> SSE.stream(conn) end)
+      pid = spawn(fn -> stream(conn) end)
 
       Process.sleep(50)
       send(pid, :some_unknown_message)
@@ -131,7 +131,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "exits cleanly on {:close, reason}" do
       conn = conn_with_instance_id()
-      pid = spawn(fn -> SSE.stream(conn) end)
+      pid = spawn(fn -> stream(conn) end)
 
       Process.sleep(50)
       send(pid, {:close, :superseded})
