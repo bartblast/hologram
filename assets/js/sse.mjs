@@ -12,6 +12,9 @@ export default class Sse {
 
     $.eventSource.onmessage = (event) =>
       Logger.debug(`SSE event: ${event.data}`);
+
+    // Log and let the browser auto-reconnect; JS-driven reconnect lands later.
+    $.eventSource.onerror = (event) => Logger.debug(`SSE error: ${event.type}`);
   }
 }
 

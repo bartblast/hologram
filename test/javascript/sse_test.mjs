@@ -55,5 +55,21 @@ describe("Sse", () => {
 
       sinon.assert.calledOnceWithExactly(loggerDebugStub, "SSE event: hello");
     });
+
+    it("assigns an onerror handler that logs the error", () => {
+      const loggerDebugStub = sinon.stub(Logger, "debug");
+
+      Sse.connect();
+      Sse.eventSource.onerror({type: "error"});
+
+      sinon.assert.calledOnceWithExactly(loggerDebugStub, "SSE error: error");
+    });
+
+    it("does not close the EventSource on error (relies on native browser reconnect)", () => {
+      Sse.connect();
+      Sse.eventSource.onerror({type: "error"});
+
+      sinon.assert.notCalled(mockEventSource.close);
+    });
   });
 });
