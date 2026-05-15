@@ -750,8 +750,9 @@ defmodule Hologram.ControllerTest do
 
       # Only framework-managed entries should be in the session
       # (no app-level session entries since the command made no changes).
-      assert Enum.sort(Map.keys(conn.private.plug_session)) ==
-               Enum.sort([@csrf_token_session_key, "hologram_session_id"])
+      assert conn.private.plug_session
+             |> Map.keys()
+             |> Enum.sort() == Enum.sort([@csrf_token_session_key, "hologram_session_id"])
     end
 
     test "command handler works correctly when no cookie changes are made" do
