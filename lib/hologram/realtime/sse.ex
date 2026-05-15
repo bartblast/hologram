@@ -1,9 +1,30 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  alias Hologram.Compiler.Encoder
+  alias Hologram.Component.Action
   alias Hologram.Runtime.Session
 
   @default_heartbeat_interval_ms 15_000
+
+  @doc """
+  Builds the SSE event envelope for a broadcast `%Action{}`.
+
+  The envelope shape is the standard SSE event framing:
+
+      event: action
+      id: <id>
+      data: <encoded>
+
+  where `<encoded>` is the result of `Hologram.Compiler.Encoder.encode_term/1`
+  on the `%Action{}` struct - the same path the controller uses for command
+  responses.
+  """
+  @spec encode_envelope(integer, Action.t()) :: String.t()
+  def encode_envelope(id, %Action{} = action) do
+    {:ok, data} = Encoder.encode_term(action)
+    "event: action\nid: #{id}\ndata: #{data}\n\n"
+  end
 
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.

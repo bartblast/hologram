@@ -3,6 +3,9 @@ defmodule Hologram.Realtime.SSETest do
 
   import Hologram.Realtime.SSE
 
+  alias Hologram.Compiler.Encoder
+  alias Hologram.Component.Action
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -35,6 +38,15 @@ defmodule Hologram.Realtime.SSETest do
 
     flush_plug_conn_sent()
     conn
+  end
+
+  describe "encode_envelope/2" do
+    test "wraps an encoded action in the SSE event envelope" do
+      action = %Action{name: :my_action, target: "c1"}
+      {:ok, encoded} = Encoder.encode_term(action)
+
+      assert encode_envelope(42, action) == "event: action\nid: 42\ndata: #{encoded}\n\n"
+    end
   end
 
   describe "prepare/1" do
