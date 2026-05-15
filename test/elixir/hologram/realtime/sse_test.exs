@@ -74,7 +74,7 @@ defmodule Hologram.Realtime.SSETest do
 
       process_message(conn, 30)
 
-      assert_receive :heartbeat, 100
+      assert_receive :heartbeat
     end
 
     test "continues without writing on unknown messages" do
