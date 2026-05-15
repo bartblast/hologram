@@ -25,7 +25,7 @@ defmodule Hologram.Realtime.SSE do
   @spec process_message(Plug.Conn.t(), non_neg_integer) ::
           {:cont, Plug.Conn.t()} | {:halt, Plug.Conn.t()}
   def process_message(conn, heartbeat_interval_ms) do
-    # TODO: typed message clauses (close, PubSub broadcasts, sub/unsub,
+    # TODO: typed message clauses (PubSub broadcasts, sub/unsub,
     # identity-change) land in future phases.
     receive do
       :heartbeat ->
@@ -37,6 +37,9 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} ->
             {:halt, conn}
         end
+
+      {:close, _reason} ->
+        {:halt, conn}
 
       _msg ->
         {:cont, conn}

@@ -66,6 +66,13 @@ defmodule Hologram.Realtime.SSETest do
 
       assert conn.resp_body == ""
     end
+
+    test "halts on {:close, reason}" do
+      conn = prepared_test_conn()
+      send(self(), {:close, :superseded})
+
+      assert {:halt, ^conn} = SSE.process_message(conn, 30_000)
+    end
   end
 
   describe "stream/2" do
@@ -92,6 +99,17 @@ defmodule Hologram.Realtime.SSETest do
       assert Process.alive?(pid)
 
       Process.exit(pid, :kill)
+    end
+
+    test "exits cleanly on {:close, reason}" do
+      conn = Plug.Test.conn(:get, "/")
+      pid = spawn(fn -> SSE.stream(conn) end)
+
+      Process.sleep(50)
+      send(pid, {:close, :superseded})
+      Process.sleep(50)
+
+      refute Process.alive?(pid)
     end
   end
 end
