@@ -7,8 +7,11 @@ import {
 } from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
+import Hologram from "../../assets/js/hologram.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -53,17 +56,10 @@ describe("Sse", () => {
 
       assert.strictEqual(Sse.eventSource, mockEventSource);
     });
+  });
 
-    it("assigns an onmessage handler that logs the event data", () => {
-      const loggerDebugStub = sinon.stub(Logger, "debug");
-
-      Sse.connect();
-      Sse.eventSource.onmessage({data: "hello"});
-
-      sinon.assert.calledOnceWithExactly(loggerDebugStub, "SSE event: hello");
-    });
-
-    it("assigns an onerror handler that logs the error", () => {
+  describe("onerror", () => {
+    it("logs the error", () => {
       const loggerDebugStub = sinon.stub(Logger, "debug");
 
       Sse.connect();
@@ -72,11 +68,33 @@ describe("Sse", () => {
       sinon.assert.calledOnceWithExactly(loggerDebugStub, "SSE error: error");
     });
 
-    it("does not close the EventSource on error (relies on native browser reconnect)", () => {
+    it("does not close the EventSource (relies on native browser reconnect)", () => {
       Sse.connect();
       Sse.eventSource.onerror({type: "error"});
 
       sinon.assert.notCalled(mockEventSource.close);
+    });
+  });
+
+  describe("onmessage", () => {
+    it("decodes the event data and schedules the resulting action", () => {
+      const decodedAction = Type.actionStruct({
+        name: Type.atom("my_action"),
+        target: Type.bitstring("c1"),
+      });
+
+      const evalStub = sinon
+        .stub(Interpreter, "evaluateJavaScriptExpression")
+        .returns(decodedAction);
+
+      const scheduleStub = sinon.stub(Hologram, "scheduleAction");
+
+      Sse.connect();
+      Sse.eventSource.onmessage({data: "encoded-action-expression"});
+
+      sinon.assert.calledOnceWithExactly(evalStub, "encoded-action-expression");
+
+      sinon.assert.calledOnceWithExactly(scheduleStub, decodedAction);
     });
   });
 });
