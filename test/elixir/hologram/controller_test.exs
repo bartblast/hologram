@@ -928,6 +928,21 @@ defmodule Hologram.ControllerTest do
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
     end
 
+    test "populates the Hologram session ID in the Phoenix session" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module4)
+
+      assert {:ok, _info} =
+               conn
+               |> Plug.Conn.get_session(:hologram_session_id)
+               |> UUID.info()
+    end
+
     test "updates Plug.Conn cookies" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
 
@@ -983,6 +998,21 @@ defmodule Hologram.ControllerTest do
 
     #   assert Map.has_key?(conn.resp_cookies, "hologram_session")
     # end
+
+    test "populates the Hologram session ID in the Phoenix session" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_subsequent_page_request(Module4)
+
+      assert {:ok, _info} =
+               conn
+               |> Plug.Conn.get_session(:hologram_session_id)
+               |> UUID.info()
+    end
 
     test "casts page params and passes them to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)

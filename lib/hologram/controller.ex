@@ -259,10 +259,8 @@ defmodule Hologram.Controller do
   end
 
   # sobelow_skip ["XSS.HTML"]
-  defp handle_page_request(conn, page_module, params, renderer_opts) do
-    # TODO: uncomment when standalone Hologram is supported
-    # {conn_with_session, _session_id} = Session.init(conn)
-
+  defp handle_page_request(initial_conn, page_module, params, renderer_opts) do
+    conn = Session.init(initial_conn)
     server_struct = Server.from(conn)
 
     {html, _component_registry, updated_server_struct} =
