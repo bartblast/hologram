@@ -23,4 +23,31 @@ defmodule Hologram.Realtime.SSETest do
       assert result.status == 200
     end
   end
+
+  describe "stream/1" do
+    test "blocks on receive after preparing the stream" do
+      conn = Plug.Test.conn(:get, "/")
+      pid = spawn(fn -> SSE.stream(conn) end)
+
+      Process.sleep(50)
+
+      assert Process.alive?(pid)
+
+      Process.exit(pid, :kill)
+    end
+
+    test "ignores unknown messages without exiting" do
+      conn = Plug.Test.conn(:get, "/")
+      pid = spawn(fn -> SSE.stream(conn) end)
+
+      Process.sleep(50)
+      send(pid, :some_unknown_message)
+      send(pid, {:another, "message"})
+      Process.sleep(50)
+
+      assert Process.alive?(pid)
+
+      Process.exit(pid, :kill)
+    end
+  end
 end

@@ -16,4 +16,23 @@ defmodule Hologram.Realtime.SSE do
     |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
     |> Plug.Conn.send_chunked(200)
   end
+
+  @doc """
+  Opens an SSE stream on the given conn and enters a message-pump loop that
+  runs until the connection is closed.
+  """
+  @spec stream(Plug.Conn.t()) :: Plug.Conn.t()
+  def stream(conn) do
+    conn
+    |> prepare()
+    |> message_pump()
+  end
+
+  defp message_pump(conn) do
+    # TODO: typed message clauses (heartbeat, close, PubSub broadcasts,
+    # sub/unsub, identity-change) land in future phases.
+    receive do
+      _msg -> message_pump(conn)
+    end
+  end
 end
