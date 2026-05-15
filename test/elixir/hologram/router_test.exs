@@ -27,6 +27,11 @@ defmodule Hologram.RouterTest do
     setup_page_digest_registry(PageDigestRegistryStub)
 
     setup_page_module_resolver(PageModuleResolverStub)
+
+    wait_for_process_cleanup(Hologram.PubSub)
+    start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+    :ok
   end
 
   describe "/hologram/command" do
@@ -104,7 +109,7 @@ defmodule Hologram.RouterTest do
     test "opens an SSE stream when a Hologram session ID is present" do
       conn =
         :get
-        |> Plug.Test.conn("/hologram/sse")
+        |> Plug.Test.conn("/hologram/sse?instance_id=test-instance-id")
         |> Plug.Test.init_test_session(%{hologram_session_id: "some-session-id"})
 
       # SSE.stream/1 blocks in a receive loop forever; run it in a Task so the
