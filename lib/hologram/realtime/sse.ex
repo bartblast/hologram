@@ -1,6 +1,8 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  @default_heartbeat_interval_ms 15_000
+
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.
   @doc false
@@ -17,22 +19,59 @@ defmodule Hologram.Realtime.SSE do
     |> Plug.Conn.send_chunked(200)
   end
 
+  # Public so tests can step the pump one message at a time without spawning
+  # the blocking loop.
+  @doc false
+  @spec process_message(Plug.Conn.t(), non_neg_integer) ::
+          {:cont, Plug.Conn.t()} | {:halt, Plug.Conn.t()}
+  def process_message(conn, heartbeat_interval_ms) do
+    # TODO: typed message clauses (close, PubSub broadcasts, sub/unsub,
+    # identity-change) land in future phases.
+    receive do
+      :heartbeat ->
+        case Plug.Conn.chunk(conn, ":\n\n") do
+          {:ok, conn} ->
+            schedule_heartbeat(heartbeat_interval_ms)
+            {:cont, conn}
+
+          {:error, _reason} ->
+            {:halt, conn}
+        end
+
+      _msg ->
+        {:cont, conn}
+    end
+  end
+
   @doc """
   Opens an SSE stream on the given conn and enters a message-pump loop that
   runs until the connection is closed.
+
+  ## Options
+
+    * `:heartbeat_interval_ms` - milliseconds between proxy-keep-alive comment
+      writes. Defaults to `15_000`.
   """
-  @spec stream(Plug.Conn.t()) :: Plug.Conn.t()
-  def stream(conn) do
+  @spec stream(Plug.Conn.t(), keyword) :: Plug.Conn.t()
+  def stream(conn, opts \\ []) do
+    heartbeat_interval_ms =
+      Keyword.get(opts, :heartbeat_interval_ms, @default_heartbeat_interval_ms)
+
+    schedule_heartbeat(heartbeat_interval_ms)
+
     conn
     |> prepare()
-    |> message_pump()
+    |> message_pump(heartbeat_interval_ms)
   end
 
-  defp message_pump(conn) do
-    # TODO: typed message clauses (heartbeat, close, PubSub broadcasts,
-    # sub/unsub, identity-change) land in future phases.
-    receive do
-      _msg -> message_pump(conn)
+  defp message_pump(conn, heartbeat_interval_ms) do
+    case process_message(conn, heartbeat_interval_ms) do
+      {:cont, conn} -> message_pump(conn, heartbeat_interval_ms)
+      {:halt, conn} -> conn
     end
+  end
+
+  defp schedule_heartbeat(heartbeat_interval_ms) do
+    Process.send_after(self(), :heartbeat, heartbeat_interval_ms)
   end
 end

@@ -3,6 +3,21 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Realtime.SSE
 
+  # Plug.Test.Adapter sends `{:plug_conn, :sent}` to the owner on send_chunked.
+  # Consume it so tests that drive process_message/2 directly see only the
+  # messages they sent themselves.
+  defp flush_plug_conn_sent do
+    receive do
+      {:plug_conn, :sent} -> :ok
+    end
+  end
+
+  defp prepared_test_conn do
+    conn = Plug.Test.conn(:get, "/") |> SSE.prepare()
+    flush_plug_conn_sent()
+    conn
+  end
+
   describe "prepare/1" do
     test "sets SSE response headers" do
       conn = Plug.Test.conn(:get, "/")
@@ -24,7 +39,36 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "stream/1" do
+  describe "process_message/2" do
+    test "writes an SSE comment line on :heartbeat" do
+      conn = prepared_test_conn()
+      send(self(), :heartbeat)
+
+      {:cont, conn} = SSE.process_message(conn, 30_000)
+
+      assert conn.resp_body == ":\n\n"
+    end
+
+    test "schedules the next heartbeat after handling :heartbeat" do
+      conn = prepared_test_conn()
+      send(self(), :heartbeat)
+
+      SSE.process_message(conn, 30)
+
+      assert_receive :heartbeat, 100
+    end
+
+    test "continues without writing on unknown messages" do
+      conn = prepared_test_conn()
+      send(self(), :some_unknown_message)
+
+      {:cont, conn} = SSE.process_message(conn, 30_000)
+
+      assert conn.resp_body == ""
+    end
+  end
+
+  describe "stream/2" do
     test "blocks on receive after preparing the stream" do
       conn = Plug.Test.conn(:get, "/")
       pid = spawn(fn -> SSE.stream(conn) end)
