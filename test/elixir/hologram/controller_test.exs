@@ -450,7 +450,7 @@ defmodule Hologram.ControllerTest do
     test "establishes a Hologram session ID" do
       conn = execute_successful_command_request()
 
-      assert {:ok, session_id} = Session.fetch_id(conn)
+      assert {:ok, session_id} = Session.fetch_session_id(conn)
       assert {:ok, _info} = UUID.info(session_id)
     end
 
@@ -948,7 +948,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module4)
 
-      assert {:ok, session_id} = Session.fetch_id(conn)
+      assert {:ok, session_id} = Session.fetch_session_id(conn)
       assert {:ok, _info} = UUID.info(session_id)
     end
 
@@ -1017,7 +1017,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_subsequent_page_request(Module4)
 
-      assert {:ok, session_id} = Session.fetch_id(conn)
+      assert {:ok, session_id} = Session.fetch_session_id(conn)
       assert {:ok, _info} = UUID.info(session_id)
     end
 

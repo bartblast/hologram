@@ -24,7 +24,7 @@ defmodule Hologram.Router do
   end
 
   get "/hologram/sse" do
-    case Session.fetch_id(conn) do
+    case Session.fetch_session_id(conn) do
       {:ok, _session_id} ->
         SSE.stream(conn)
 

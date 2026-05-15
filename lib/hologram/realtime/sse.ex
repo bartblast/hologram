@@ -81,7 +81,7 @@ defmodule Hologram.Realtime.SSE do
 
     Phoenix.PubSub.subscribe(Hologram.PubSub, instance_topic)
 
-    case Session.fetch_id(conn) do
+    case Session.fetch_session_id(conn) do
       {:ok, session_id} ->
         session_topic = "hologram:channel:session:#{session_id}"
         Phoenix.PubSub.subscribe(Hologram.PubSub, session_topic)

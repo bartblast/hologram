@@ -29,8 +29,8 @@ defmodule Hologram.Runtime.Session do
 
   Returns `{:ok, session_id}` when present, `:error` otherwise.
   """
-  @spec fetch_id(Plug.Conn.t()) :: {:ok, String.t()} | :error
-  def fetch_id(conn) do
+  @spec fetch_session_id(Plug.Conn.t()) :: {:ok, String.t()} | :error
+  def fetch_session_id(conn) do
     case Plug.Conn.get_session(conn, @session_id_key) do
       nil -> :error
       session_id -> {:ok, session_id}
