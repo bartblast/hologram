@@ -2,8 +2,10 @@ defmodule Hologram.Router do
   use Plug.Router
 
   alias Hologram.Controller
+  alias Hologram.Realtime.SSE
   alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.Connection
+  alias Hologram.Runtime.Session
 
   plug :match
   plug :dispatch
@@ -19,6 +21,18 @@ defmodule Hologram.Router do
 
   get "/hologram/ping" do
     Controller.handle_ping_request(conn)
+  end
+
+  get "/hologram/sse" do
+    case Session.fetch_id(conn) do
+      {:ok, _session_id} ->
+        SSE.stream(conn)
+
+      :error ->
+        conn
+        |> send_resp(401, "Unauthorized")
+        |> halt()
+    end
   end
 
   get "/hologram/websocket" do

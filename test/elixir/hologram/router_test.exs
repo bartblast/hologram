@@ -88,6 +88,44 @@ defmodule Hologram.RouterTest do
     end
   end
 
+  describe "/hologram/sse" do
+    test "returns 401 when no Hologram session ID is present" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/sse")
+        |> Plug.Test.init_test_session(%{})
+        |> call([])
+
+      assert conn.halted == true
+      assert conn.status == 401
+      assert conn.resp_body == "Unauthorized"
+    end
+
+    test "opens an SSE stream when a Hologram session ID is present" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/sse")
+        |> Plug.Test.init_test_session(%{hologram_session_id: "some-session-id"})
+
+      # SSE.stream/1 blocks in a receive loop forever; run it in a Task so the
+      # test process can drive it, then send {:close, _reason} to terminate the
+      # loop cleanly and await the final conn for assertions.
+      task = Task.async(fn -> call(conn, []) end)
+      Process.sleep(50)
+      send(task.pid, {:close, :test_done})
+      result_conn = Task.await(task)
+
+      assert result_conn.status == 200
+      assert result_conn.state == :chunked
+
+      assert result_conn.resp_headers == [
+               {"cache-control", "no-cache"},
+               {"connection", "keep-alive"},
+               {"content-type", "text/event-stream"}
+             ]
+    end
+  end
+
   describe "/hologram/websocket" do
     test "upgrades websocket connection" do
       conn =
