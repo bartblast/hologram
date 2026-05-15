@@ -23,4 +23,17 @@ defmodule Hologram.Runtime.Session do
       _session_id -> conn
     end
   end
+
+  @doc """
+  Fetches the Hologram session ID from the Phoenix session.
+
+  Returns `{:ok, session_id}` when present, `:error` otherwise.
+  """
+  @spec fetch_id(Plug.Conn.t()) :: {:ok, String.t()} | :error
+  def fetch_id(conn) do
+    case Plug.Conn.get_session(conn, @session_id_key) do
+      nil -> :error
+      session_id -> {:ok, session_id}
+    end
+  end
 end
