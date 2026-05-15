@@ -127,6 +127,29 @@ defmodule Hologram.Realtime.SSETest do
 
       refute_receive :hello_session
     end
+
+    test "subscribes to the user channel when a user ID is present" do
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+
+      %{hologram_user_id: user_id}
+      |> conn_with_instance_id()
+      |> subscribe_to_identity_channels()
+
+      user_topic = "hologram:channel:user:#{user_id}"
+      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello_user)
+
+      assert_receive :hello_user
+    end
+
+    test "does not subscribe to a user channel when no user ID is present" do
+      subscribe_to_identity_channels(conn_with_instance_id())
+
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+      user_topic = "hologram:channel:user:#{user_id}"
+      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello_user)
+
+      refute_receive :hello_user
+    end
   end
 
   describe "stream/2" do

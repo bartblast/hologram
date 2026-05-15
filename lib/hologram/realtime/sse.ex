@@ -90,6 +90,15 @@ defmodule Hologram.Realtime.SSE do
         :ok
     end
 
+    case Session.fetch_user_id(conn) do
+      {:ok, user_id} ->
+        user_topic = "hologram:channel:user:#{user_id}"
+        Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
+
+      :error ->
+        :ok
+    end
+
     conn
   end
 
