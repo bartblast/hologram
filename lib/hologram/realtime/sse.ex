@@ -1,6 +1,8 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  alias Hologram.Runtime.Session
+
   @default_heartbeat_interval_ms 15_000
 
   # Public so tests can exercise the prep step without entering the blocking
@@ -89,6 +91,15 @@ defmodule Hologram.Realtime.SSE do
     instance_topic = "hologram:channel:instance:#{instance_id}"
 
     Phoenix.PubSub.subscribe(Hologram.PubSub, instance_topic)
+
+    case Session.fetch_id(conn) do
+      {:ok, session_id} ->
+        session_topic = "hologram:channel:session:#{session_id}"
+        Phoenix.PubSub.subscribe(Hologram.PubSub, session_topic)
+
+      :error ->
+        :ok
+    end
 
     conn
   end

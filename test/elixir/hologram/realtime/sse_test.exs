@@ -10,9 +10,12 @@ defmodule Hologram.Realtime.SSETest do
     :ok
   end
 
-  defp conn_with_instance_id do
+  defp conn_with_instance_id(session \\ %{}) do
     instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-    Plug.Test.conn(:get, "/?instance_id=#{instance_id}")
+
+    :get
+    |> Plug.Test.conn("/?instance_id=#{instance_id}")
+    |> Plug.Test.init_test_session(session)
   end
 
   # Plug.Test.Adapter sends `{:plug_conn, :sent}` to the owner on send_chunked.
@@ -99,7 +102,30 @@ defmodule Hologram.Realtime.SSETest do
 
       Phoenix.PubSub.broadcast(Hologram.PubSub, instance_topic, :hello)
 
-      assert_receive :hello, 100
+      assert_receive :hello
+    end
+
+    test "subscribes to the session channel when a session ID is present" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      %{hologram_session_id: session_id}
+      |> conn_with_instance_id()
+      |> subscribe_to_identity_channels()
+
+      session_topic = "hologram:channel:session:#{session_id}"
+      Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hello_session)
+
+      assert_receive :hello_session
+    end
+
+    test "does not subscribe to a session channel when no session ID is present" do
+      subscribe_to_identity_channels(conn_with_instance_id())
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      session_topic = "hologram:channel:session:#{session_id}"
+      Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hello_session)
+
+      refute_receive :hello_session
     end
   end
 
