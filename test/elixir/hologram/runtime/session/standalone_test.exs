@@ -1,5 +1,6 @@
 defmodule Hologram.Runtime.Session.StandaloneTest do
   use Hologram.Test.BasicCase, async: true
+
   import Hologram.Runtime.Session.Standalone
 
   defp assert_session_cookie_properties(conn, secure_flag) do
