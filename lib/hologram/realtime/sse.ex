@@ -63,6 +63,7 @@ defmodule Hologram.Realtime.SSE do
     schedule_heartbeat(heartbeat_interval_ms)
 
     conn
+    |> subscribe_to_identity_channels()
     |> prepare()
     |> message_pump(heartbeat_interval_ms)
   end
@@ -76,5 +77,19 @@ defmodule Hologram.Realtime.SSE do
 
   defp schedule_heartbeat(heartbeat_interval_ms) do
     Process.send_after(self(), :heartbeat, heartbeat_interval_ms)
+  end
+
+  # Public so tests can exercise subscription wiring without entering the
+  # blocking message-pump loop.
+  @doc false
+  @spec subscribe_to_identity_channels(Plug.Conn.t()) :: Plug.Conn.t()
+  def subscribe_to_identity_channels(initial_conn) do
+    conn = Plug.Conn.fetch_query_params(initial_conn)
+    instance_id = conn.query_params["instance_id"]
+    instance_topic = "hologram:channel:instance:#{instance_id}"
+
+    Phoenix.PubSub.subscribe(Hologram.PubSub, instance_topic)
+
+    conn
   end
 end

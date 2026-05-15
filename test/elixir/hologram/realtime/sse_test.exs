@@ -1,7 +1,19 @@
 defmodule Hologram.Realtime.SSETest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
 
   alias Hologram.Realtime.SSE
+
+  setup do
+    wait_for_process_cleanup(Hologram.PubSub)
+    start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+    :ok
+  end
+
+  defp conn_with_instance_id do
+    instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+    Plug.Test.conn(:get, "/?instance_id=#{instance_id}")
+  end
 
   # Plug.Test.Adapter sends `{:plug_conn, :sent}` to the owner on send_chunked.
   # Consume it so tests that drive process_message/2 directly see only the
@@ -79,9 +91,21 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "subscribe_to_identity_channels/1" do
+    test "subscribes to the instance channel" do
+      conn = SSE.subscribe_to_identity_channels(conn_with_instance_id())
+      instance_id = conn.query_params["instance_id"]
+      instance_topic = "hologram:channel:instance:#{instance_id}"
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, instance_topic, :hello)
+
+      assert_receive :hello, 100
+    end
+  end
+
   describe "stream/2" do
     test "blocks on receive after preparing the stream" do
-      conn = Plug.Test.conn(:get, "/")
+      conn = conn_with_instance_id()
       pid = spawn(fn -> SSE.stream(conn) end)
 
       Process.sleep(50)
@@ -92,7 +116,7 @@ defmodule Hologram.Realtime.SSETest do
     end
 
     test "ignores unknown messages without exiting" do
-      conn = Plug.Test.conn(:get, "/")
+      conn = conn_with_instance_id()
       pid = spawn(fn -> SSE.stream(conn) end)
 
       Process.sleep(50)
@@ -106,7 +130,7 @@ defmodule Hologram.Realtime.SSETest do
     end
 
     test "exits cleanly on {:close, reason}" do
-      conn = Plug.Test.conn(:get, "/")
+      conn = conn_with_instance_id()
       pid = spawn(fn -> SSE.stream(conn) end)
 
       Process.sleep(50)
