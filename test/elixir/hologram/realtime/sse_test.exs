@@ -13,7 +13,11 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   defp prepared_test_conn do
-    conn = Plug.Test.conn(:get, "/") |> SSE.prepare()
+    conn =
+      :get
+      |> Plug.Test.conn("/")
+      |> SSE.prepare()
+
     flush_plug_conn_sent()
     conn
   end
@@ -44,9 +48,9 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
 
-      {:cont, conn} = SSE.process_message(conn, 30_000)
+      {:cont, updated_conn} = SSE.process_message(conn, 30_000)
 
-      assert conn.resp_body == ":\n\n"
+      assert updated_conn.resp_body == ":\n\n"
     end
 
     test "schedules the next heartbeat after handling :heartbeat" do
@@ -62,9 +66,9 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :some_unknown_message)
 
-      {:cont, conn} = SSE.process_message(conn, 30_000)
+      {:cont, updated_conn} = SSE.process_message(conn, 30_000)
 
-      assert conn.resp_body == ""
+      assert updated_conn.resp_body == ""
     end
 
     test "halts on {:close, reason}" do
