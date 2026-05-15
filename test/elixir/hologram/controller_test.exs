@@ -11,6 +11,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Runtime.Session
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module11
@@ -446,6 +447,13 @@ defmodule Hologram.ControllerTest do
       assert response == [1, ~s'Type.atom("nil")']
     end
 
+    test "establishes a Hologram session ID" do
+      conn = execute_successful_command_request()
+
+      assert {:ok, session_id} = Session.fetch_id(conn)
+      assert {:ok, _info} = UUID.info(session_id)
+    end
+
     test "extracts instance_id from payload and exposes it via server.instance_id" do
       payload = %{
         instance_id: "my-instance-id",
@@ -740,8 +748,10 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
       assert [1, _encoded_action] = response
 
-      # Only the CSRF token should be in the session
-      assert Map.keys(conn.private.plug_session) == [@csrf_token_session_key]
+      # Only framework-managed entries should be in the session
+      # (no app-level session entries since the command made no changes).
+      assert Enum.sort(Map.keys(conn.private.plug_session)) ==
+               Enum.sort([@csrf_token_session_key, "hologram_session_id"])
     end
 
     test "command handler works correctly when no cookie changes are made" do
@@ -928,7 +938,7 @@ defmodule Hologram.ControllerTest do
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
     end
 
-    test "populates the Hologram session ID in the Phoenix session" do
+    test "establishes a Hologram session ID" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
@@ -937,10 +947,8 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module4)
 
-      assert {:ok, _info} =
-               conn
-               |> Plug.Conn.get_session(:hologram_session_id)
-               |> UUID.info()
+      assert {:ok, session_id} = Session.fetch_id(conn)
+      assert {:ok, _info} = UUID.info(session_id)
     end
 
     test "updates Plug.Conn cookies" do
@@ -999,7 +1007,7 @@ defmodule Hologram.ControllerTest do
     #   assert Map.has_key?(conn.resp_cookies, "hologram_session")
     # end
 
-    test "populates the Hologram session ID in the Phoenix session" do
+    test "establishes a Hologram session ID" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
@@ -1008,10 +1016,8 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_subsequent_page_request(Module4)
 
-      assert {:ok, _info} =
-               conn
-               |> Plug.Conn.get_session(:hologram_session_id)
-               |> UUID.info()
+      assert {:ok, session_id} = Session.fetch_id(conn)
+      assert {:ok, _info} = UUID.info(session_id)
     end
 
     test "casts page params and passes them to page renderer" do

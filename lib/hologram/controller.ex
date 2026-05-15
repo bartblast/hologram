@@ -116,7 +116,10 @@ defmodule Hologram.Controller do
   """
   @spec handle_command_request(command_conn()) :: Plug.Conn.t()
   def handle_command_request(initial_conn) do
-    conn = PlugConnUtils.init_conn(initial_conn)
+    conn =
+      initial_conn
+      |> PlugConnUtils.init_conn()
+      |> Session.init()
 
     if validate_csrf_token(conn) do
       payload =
@@ -132,8 +135,6 @@ defmodule Hologram.Controller do
         target: target
       } = payload
 
-      # TODO: uncomment when standalone Hologram is supported
-      # {conn_with_session, _session_id} = Session.init(conn)
       server_struct = %{Server.from(conn) | instance_id: instance_id}
 
       command_result = module.command(name, params, server_struct)
