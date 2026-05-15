@@ -7,6 +7,7 @@ defmodule Hologram.Runtime.Session do
   # Today this module only exposes the Phoenix-backed (embedded-mode) path.
 
   @session_id_key :hologram_session_id
+  @user_id_key :hologram_user_id
 
   @type op :: :delete | {:put, any}
 
@@ -34,6 +35,19 @@ defmodule Hologram.Runtime.Session do
     case Plug.Conn.get_session(conn, @session_id_key) do
       nil -> :error
       session_id -> {:ok, session_id}
+    end
+  end
+
+  @doc """
+  Fetches the authenticated Hologram user ID from the Phoenix session.
+
+  Returns `{:ok, user_id}` when present, `:error` otherwise.
+  """
+  @spec fetch_user_id(Plug.Conn.t()) :: {:ok, any} | :error
+  def fetch_user_id(conn) do
+    case Plug.Conn.get_session(conn, @user_id_key) do
+      nil -> :error
+      user_id -> {:ok, user_id}
     end
   end
 end

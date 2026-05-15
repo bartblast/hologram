@@ -4,6 +4,7 @@ defmodule Hologram.Runtime.SessionTest do
   import Hologram.Runtime.Session
 
   @session_id_key :hologram_session_id
+  @user_id_key :hologram_user_id
 
   defp conn_with_empty_session do
     :get
@@ -57,6 +58,19 @@ defmodule Hologram.Runtime.SessionTest do
 
     test "returns :error when no session ID is present" do
       assert fetch_session_id(conn_with_empty_session()) == :error
+    end
+  end
+
+  describe "fetch_user_id/1" do
+    test "returns {:ok, user_id} when a user ID is present" do
+      existing_id = "existing-user-id"
+      conn = conn_with_session(%{@user_id_key => existing_id})
+
+      assert fetch_user_id(conn) == {:ok, existing_id}
+    end
+
+    test "returns :error when no user ID is present" do
+      assert fetch_user_id(conn_with_empty_session()) == :error
     end
   end
 end
