@@ -45,6 +45,15 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert entry.session_id == nil
       assert entry.user_id == nil
     end
+
+    test "defaults bindings to an empty map in the inserted entry" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{}
+    end
   end
 
   describe "start_link/1" do
