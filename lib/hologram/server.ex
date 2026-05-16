@@ -5,13 +5,15 @@ defmodule Hologram.Server do
   alias Hologram.Runtime.Session
   alias Hologram.Server.Metadata
 
-  defstruct cookies: %{},
+  defstruct broadcasts: [],
+            cookies: %{},
             instance_id: nil,
             next_action: nil,
             session: %{},
             __meta__: %Metadata{}
 
   @type t :: %__MODULE__{
+          broadcasts: [tuple],
           cookies: %{String.t() => any()},
           instance_id: String.t() | nil,
           next_action: Action.t() | nil,
