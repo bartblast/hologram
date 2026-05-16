@@ -262,7 +262,12 @@ defmodule Hologram.Controller do
   # sobelow_skip ["XSS.HTML"]
   defp handle_page_request(initial_conn, page_module, params, renderer_opts) do
     conn = Session.init(initial_conn)
-    server_struct = Server.from(conn)
+
+    server_struct = %{
+      Server.from(conn)
+      | cid: "page",
+        instance_id: renderer_opts[:instance_id]
+    }
 
     {html, _component_registry, updated_server_struct} =
       Renderer.render_page(page_module, params, server_struct, renderer_opts)
