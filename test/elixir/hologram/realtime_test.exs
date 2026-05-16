@@ -93,7 +93,7 @@ defmodule Hologram.RealtimeTest do
 
       server = %Server{
         broadcasts: [
-          {{:instance, instance_id}, "my_editor", :append_message, %{text: "hi"}}
+          {{:instance, instance_id}, "my_editor", :append_message, [text: "hi"]}
         ]
       }
 
@@ -116,8 +116,8 @@ defmodule Hologram.RealtimeTest do
       # Two calls in order :first, :second produce [{:second, ...}, {:first, ...}]
       server = %Server{
         broadcasts: [
-          {{:instance, instance_id}, "page", :second, %{}},
-          {{:instance, instance_id}, "page", :first, %{}}
+          {{:instance, instance_id}, "page", :second, []},
+          {{:instance, instance_id}, "page", :first, []}
         ]
       }
 

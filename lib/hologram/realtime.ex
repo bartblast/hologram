@@ -18,8 +18,8 @@ defmodule Hologram.Realtime do
   and is always required - the inside-handler `put_broadcast` defaults it to
   the currently-executing handler's cid, but no such context exists here.
   """
-  @spec broadcast_action(tuple, String.t(), atom, Enumerable.t()) :: :ok
-  def broadcast_action(channel, cid, action_name, params \\ %{})
+  @spec broadcast_action(tuple, String.t(), atom, keyword) :: :ok
+  def broadcast_action(channel, cid, action_name, params \\ [])
 
   def broadcast_action({kind, id}, cid, action_name, params)
       when kind in [:instance, :session, :user] and is_binary(cid) do
