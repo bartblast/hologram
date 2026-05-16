@@ -97,9 +97,10 @@ defmodule Hologram.Realtime.SSE do
   @spec subscribe_to_identity_channels(Plug.Conn.t()) :: Plug.Conn.t()
   def subscribe_to_identity_channels(initial_conn) do
     conn = Plug.Conn.fetch_query_params(initial_conn)
-    instance_id = conn.query_params["instance_id"]
 
-    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
+    instance_id = conn.query_params["instance_id"]
+    instance_topic = "hologram:channel:instance:#{instance_id}"
+    Phoenix.PubSub.subscribe(Hologram.PubSub, instance_topic)
 
     maybe_subscribe(:session, Session.fetch_session_id(conn))
     maybe_subscribe(:user, Session.fetch_user_id(conn))
