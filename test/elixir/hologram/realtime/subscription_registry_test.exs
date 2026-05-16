@@ -30,6 +30,19 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     assert info[:read_concurrency] == true
   end
 
+  describe "identity_of/1" do
+    test "returns the defaulted {nil, nil} for a freshly registered entry" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      assert identity_of("test-instance-id") == {nil, nil}
+    end
+
+    test "returns nil for an unknown instance_id" do
+      assert identity_of("test-unknown-instance-id") == nil
+    end
+  end
+
   describe "register/2" do
     test "inserts an entry whose sse_pid and sse_ref round-trip through the documented shape" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)

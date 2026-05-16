@@ -12,6 +12,18 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   def ets_table_name, do: @table_name
 
   @doc """
+  Returns `{session_id, user_id}` for the given `instance_id`, or `nil` if no
+  entry exists. Reads ETS directly to bypass the registry's GenServer mailbox.
+  """
+  @spec identity_of(String.t()) :: {term | nil, term | nil} | nil
+  def identity_of(instance_id) do
+    case :ets.lookup(@table_name, instance_id) do
+      [{^instance_id, entry}] -> {entry.session_id, entry.user_id}
+      [] -> nil
+    end
+  end
+
+  @doc """
   Registers an SSE connection for the given `instance_id` by inserting an entry
   into the ETS table. The registry monitors `sse_pid` so the entry can be
   cleaned up when the pid goes down.
