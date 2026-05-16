@@ -227,22 +227,53 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Queues an action broadcast on the server struct.
+  Queues an action broadcast on the server struct. The broadcast is appended to
+  `server.broadcasts` and flushed by the framework after the handler returns
+  successfully. If the handler raises, the queued broadcasts are discarded along
+  with the rest of the Server state.
 
-  The broadcast is appended to `server.broadcasts` and flushed by the framework
-  after the handler returns successfully. If the handler raises, the queued
-  broadcasts are discarded along with the rest of the Server state.
-
-  `cid` defaults to `server.cid` (set by the framework at handler entry: `"page"`
-  in a page handler, `"layout"` in a layout handler, or the component's cid in a
-  component handler).
+  When not explicitly provided, `cid` defaults to `server.cid` - set by the
+  framework at handler entry: `"page"` in a page handler, `"layout"` in a layout
+  handler, or the component's cid in a component handler.
   """
-  @spec put_broadcast(Server.t(), atom | tuple, atom, keyword | map) :: Server.t()
-  def put_broadcast(server, channel, action_name, params \\ %{}) do
-    Channel.validate!(channel)
-    broadcast = {channel, server.cid, action_name, Map.new(params)}
+  @spec put_broadcast(Server.t(), atom | tuple, atom) :: Server.t()
+  def put_broadcast(server, channel, action_name) when is_atom(action_name) do
+    append_broadcast(server, channel, server.cid, action_name, %{})
+  end
 
-    %{server | broadcasts: [broadcast | server.broadcasts]}
+  @doc """
+  Queues an action broadcast on the server struct. The broadcast is appended to
+  `server.broadcasts` and flushed by the framework after the handler returns
+  successfully. If the handler raises, the queued broadcasts are discarded along
+  with the rest of the Server state.
+
+  When not explicitly provided, `cid` defaults to `server.cid` - set by the
+  framework at handler entry: `"page"` in a page handler, `"layout"` in a layout
+  handler, or the component's cid in a component handler.
+  """
+  @spec put_broadcast(Server.t(), atom | tuple, String.t() | atom, atom | keyword | map) ::
+          Server.t()
+  def put_broadcast(server, channel, cid_or_action_name, action_name_or_params)
+
+  def put_broadcast(server, channel, cid, action_name)
+      when is_binary(cid) and is_atom(action_name) do
+    append_broadcast(server, channel, cid, action_name, %{})
+  end
+
+  def put_broadcast(server, channel, action_name, params) when is_atom(action_name) do
+    append_broadcast(server, channel, server.cid, action_name, params)
+  end
+
+  @doc """
+  Queues an action broadcast on the server struct. The broadcast is appended to
+  `server.broadcasts` and flushed by the framework after the handler returns
+  successfully. If the handler raises, the queued broadcasts are discarded along
+  with the rest of the Server state.
+  """
+  @spec put_broadcast(Server.t(), atom | tuple, String.t(), atom, keyword | map) :: Server.t()
+  def put_broadcast(server, channel, cid, action_name, params)
+      when is_binary(cid) and is_atom(action_name) do
+    append_broadcast(server, channel, cid, action_name, params)
   end
 
   @doc """
@@ -337,5 +368,12 @@ defmodule Hologram.Component do
     quote do
       Module.register_attribute(__MODULE__, :__props__, accumulate: true)
     end
+  end
+
+  defp append_broadcast(server, channel, cid, action_name, params) do
+    Channel.validate!(channel)
+    broadcast = {channel, cid, action_name, Map.new(params)}
+
+    %{server | broadcasts: [broadcast | server.broadcasts]}
   end
 end

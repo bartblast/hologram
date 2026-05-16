@@ -205,35 +205,7 @@ defmodule Hologram.ComponentTest do
            }
   end
 
-  describe "put_broadcast/3,4" do
-    test "appends a broadcast entry with cid taken from server.cid (keyword params)" do
-      server = %Server{cid: "page"}
-
-      result = put_broadcast(server, {:room, 42}, :append_message, text: "hi")
-
-      assert result.broadcasts == [
-               {{:room, 42}, "page", :append_message, %{text: "hi"}}
-             ]
-    end
-
-    test "accepts params as a map" do
-      server = %Server{cid: "page"}
-
-      result = put_broadcast(server, {:room, 42}, :append_message, %{text: "hi"})
-
-      assert result.broadcasts == [
-               {{:room, 42}, "page", :append_message, %{text: "hi"}}
-             ]
-    end
-
-    test "no-params arity defaults params to an empty map" do
-      server = %Server{cid: "layout"}
-
-      result = put_broadcast(server, {:room, 42}, :refresh)
-
-      assert result.broadcasts == [{{:room, 42}, "layout", :refresh, %{}}]
-    end
-
+  describe "put_broadcast/* (common behavior)" do
     test "prepends so multiple calls accumulate in reverse-of-call order" do
       server = %Server{cid: "page"}
 
@@ -254,6 +226,68 @@ defmodule Hologram.ComponentTest do
       assert_error ArgumentError,
                    "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
                    fn -> put_broadcast(server, "bad-channel", :foo) end
+    end
+  end
+
+  describe "put_broadcast/3" do
+    test "defaults params to an empty map and uses server.cid as the broadcast target" do
+      server = %Server{cid: "layout"}
+      result = put_broadcast(server, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [{{:room, 42}, "layout", :refresh, %{}}]
+    end
+  end
+
+  describe "put_broadcast/4" do
+    test "defaulted-cid form appends with keyword params and uses server.cid" do
+      server = %Server{cid: "page"}
+      result = put_broadcast(server, {:room, 42}, :append_message, text: "hi")
+
+      assert result.broadcasts == [
+               {{:room, 42}, "page", :append_message, %{text: "hi"}}
+             ]
+    end
+
+    test "defaulted-cid form accepts params as a map" do
+      server = %Server{cid: "page"}
+      result = put_broadcast(server, {:room, 42}, :append_message, %{text: "hi"})
+
+      assert result.broadcasts == [
+               {{:room, 42}, "page", :append_message, %{text: "hi"}}
+             ]
+    end
+
+    test "explicit-cid form overrides server.cid" do
+      server = %Server{cid: "page"}
+      result = put_broadcast(server, {:room, 42}, "my_editor", :refresh)
+
+      assert result.broadcasts == [{{:room, 42}, "my_editor", :refresh, %{}}]
+    end
+
+    test "guard dispatches by position-3 type (string -> cid, atom -> action_name)" do
+      server = %Server{cid: "page"}
+
+      # Position 3 is a binary -> explicit-cid clause; param 4 is the action_name atom.
+      cid_form_result = put_broadcast(server, {:room, 42}, "my_editor", :refresh)
+
+      # Position 3 is an atom -> defaulted-cid clause; param 4 is params.
+      action_form_result = put_broadcast(server, {:room, 42}, :refresh, text: "hi")
+
+      assert cid_form_result.broadcasts == [{{:room, 42}, "my_editor", :refresh, %{}}]
+      assert action_form_result.broadcasts == [{{:room, 42}, "page", :refresh, %{text: "hi"}}]
+    end
+  end
+
+  describe "put_broadcast/5" do
+    test "explicit-cid form overrides server.cid and accepts params" do
+      server = %Server{cid: "page"}
+
+      result =
+        put_broadcast(server, {:room, 42}, "my_editor", :append_message, text: "hi")
+
+      assert result.broadcasts == [
+               {{:room, 42}, "my_editor", :append_message, %{text: "hi"}}
+             ]
     end
   end
 
