@@ -221,7 +221,7 @@ defmodule Hologram.Component do
   Puts the given action spec to the component or server struct's next_action field.
   Next action will be executed by the client-side runtime after the specified delay (in milliseconds, defaults to 0).
   """
-  @spec put_action(Component.t() | Server.t(), atom, keyword) :: Component.t() | Server.t()
+  @spec put_action(Component.t() | Server.t(), atom, keyword | map) :: Component.t() | Server.t()
   def put_action(struct, name, params) do
     %{struct | next_action: %Action{name: name, params: Map.new(params)}}
   end
@@ -299,7 +299,7 @@ defmodule Hologram.Component do
   Puts the given command spec to the component's next_command field.
   Next command will be sent asynchronously to the server.
   """
-  @spec put_command(Component.t(), atom, keyword) :: Component.t()
+  @spec put_command(Component.t(), atom, keyword | map) :: Component.t()
   def put_command(%Component{} = component, name, params) do
     %{component | next_command: %Command{name: name, params: Map.new(params)}}
   end

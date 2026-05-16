@@ -189,20 +189,40 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  test "put_action/3, component struct" do
-    result = put_action(%Component{}, :my_action, a: 1, b: 2)
+  describe "put_action/3, component struct" do
+    test "accepts params as keyword list" do
+      result = put_action(%Component{}, :my_action, a: 1, b: 2)
 
-    assert result == %Component{
-             next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
-           }
+      assert result == %Component{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+
+    test "accepts params as a map" do
+      result = put_action(%Component{}, :my_action, %{a: 1, b: 2})
+
+      assert result == %Component{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
   end
 
-  test "put_action/3, server struct" do
-    result = put_action(%Server{}, :my_action, a: 1, b: 2)
+  describe "put_action/3, server struct" do
+    test "accepts params as keyword list" do
+      result = put_action(%Server{}, :my_action, a: 1, b: 2)
 
-    assert result == %Server{
-             next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
-           }
+      assert result == %Server{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+
+    test "accepts params as a map" do
+      result = put_action(%Server{}, :my_action, %{a: 1, b: 2})
+
+      assert result == %Server{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
   end
 
   describe "put_broadcast/* (common behavior)" do
@@ -325,12 +345,22 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  test "put_command/3" do
-    result = put_command(%Component{}, :my_command, a: 1, b: 2)
+  describe "put_command/3" do
+    test "accepts params as keyword list" do
+      result = put_command(%Component{}, :my_command, a: 1, b: 2)
 
-    assert result == %Component{
-             next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
-           }
+      assert result == %Component{
+               next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+
+    test "accepts params as a map" do
+      result = put_command(%Component{}, :my_command, %{a: 1, b: 2})
+
+      assert result == %Component{
+               next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
   end
 
   test "put_context/3" do
