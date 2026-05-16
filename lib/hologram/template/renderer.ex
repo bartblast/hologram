@@ -448,9 +448,7 @@ defmodule Hologram.Template.Renderer do
 
   defp render_stateful_component(module, props, children_dom, context, server_struct) do
     server_struct = %{server_struct | cid: props.cid}
-
-    {component_struct, mutated_server_struct} =
-      init_component(module, props, server_struct)
+    {component_struct, mutated_server_struct} = init_component(module, props, server_struct)
 
     vars = Map.merge(props, component_struct.state)
     merged_context = Map.merge(context, component_struct.emitted_context)
