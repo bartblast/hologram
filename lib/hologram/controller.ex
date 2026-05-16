@@ -135,7 +135,7 @@ defmodule Hologram.Controller do
         target: target
       } = payload
 
-      server_struct = %{Server.from(conn) | instance_id: instance_id}
+      server_struct = %{Server.from(conn) | cid: target, instance_id: instance_id}
 
       command_result = module.command(name, params, server_struct)
 

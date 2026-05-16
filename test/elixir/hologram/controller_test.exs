@@ -454,6 +454,33 @@ defmodule Hologram.ControllerTest do
       assert {:ok, _info} = UUID.info(session_id)
     end
 
+    test "exposes the target as server.cid for the command handler" do
+      payload = %{
+        module: Module6,
+        name: :my_command_accessing_cid,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_cid")], [Type.atom("params"), Type.map([[Type.atom("cid"), Type.bitstring("my_target_1")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+             ]
+    end
+
     test "extracts instance_id from payload and exposes it via server.instance_id" do
       payload = %{
         instance_id: "my-instance-id",
