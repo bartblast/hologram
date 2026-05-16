@@ -65,6 +65,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module77
   alias Hologram.Test.Fixtures.Template.Renderer.Module79
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
+  alias Hologram.Test.Fixtures.Template.Renderer.Module84
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   @csrf_token "test-csrf-token"
@@ -1054,6 +1055,23 @@ defmodule Hologram.Template.RendererTest do
                  }
                }
              }
+    end
+
+    test "accumulates broadcasts queued during init across the full page + layout + component tree" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module84, :dummy_module_84_digest)
+
+      server = %{@server | cid: "page", instance_id: "test-instance-id"}
+
+      {_html, _registry, returned_server} = render_page(Module84, @params, server, @opts)
+
+      # Render order: page init -> layout init -> comp_1 init -> comp_2 init
+      # server.broadcasts is LIFO (head = most recent put_broadcast call):
+      assert returned_server.broadcasts == [
+               {{:instance, "test-instance-id"}, "comp_2", :component_broadcast, %{text: "hi"}},
+               {{:instance, "test-instance-id"}, "comp_1", :component_broadcast, %{text: "hi"}},
+               {{:instance, "test-instance-id"}, "layout", :layout_broadcast, %{level: "layout"}},
+               {{:instance, "test-instance-id"}, "page", :page_broadcast, %{level: "page"}}
+             ]
     end
 
     test "injects (interpolated) asset manifest when the initial_page? opt is set to true" do
