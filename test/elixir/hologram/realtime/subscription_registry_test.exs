@@ -1,6 +1,8 @@
 defmodule Hologram.Realtime.SubscriptionRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
+  import Hologram.Realtime.SubscriptionRegistry
+
   alias Hologram.Realtime.SubscriptionRegistry
 
   setup do
@@ -15,7 +17,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   end
 
   test "creates the backing ETS table with the documented name and options" do
-    table_name = SubscriptionRegistry.ets_table_name()
+    table_name = ets_table_name()
 
     assert table_name == :hologram_subscriptions
     assert ets_table_name_registered?(table_name)
