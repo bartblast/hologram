@@ -63,6 +63,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module70
   alias Hologram.Test.Fixtures.Template.Renderer.Module76
   alias Hologram.Test.Fixtures.Template.Renderer.Module77
+  alias Hologram.Test.Fixtures.Template.Renderer.Module79
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
@@ -623,6 +624,14 @@ defmodule Hologram.Template.RendererTest do
                    fn ->
                      render_dom(node, @env, @server)
                    end
+    end
+
+    test "framework sets server.cid to the component's cid during init/3" do
+      node = {:component, Module79, [{"cid", [text: "my_component"]}], []}
+
+      {_html, registry, _server} = render_dom(node, @env, @server)
+
+      assert registry["my_component"].struct.state.observed_cid == "my_component"
     end
   end
 

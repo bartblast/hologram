@@ -279,16 +279,19 @@ defmodule Hologram.Template.Renderer do
         {%Component{}, server_struct}
       end
 
-    case init_result do
-      {component_struct, mutaded_server_struct} ->
-        {component_struct, mutaded_server_struct}
+    {component_struct, returned_server_struct} =
+      case init_result do
+        {component_struct, mutaded_server_struct} ->
+          {component_struct, mutaded_server_struct}
 
-      %Component{} = component_struct ->
-        {component_struct, server_struct}
+        %Component{} = component_struct ->
+          {component_struct, server_struct}
 
-      %Server{} = mutated_server_struct ->
-        {%Component{}, mutated_server_struct}
-    end
+        %Server{} = mutated_server_struct ->
+          {%Component{}, mutated_server_struct}
+      end
+
+    {component_struct, %{returned_server_struct | cid: nil}}
   end
 
   defp inject_default_prop_values(props, module) do
@@ -444,7 +447,11 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp render_stateful_component(module, props, children_dom, context, server_struct) do
-    {component_struct, mutated_server_struct} = init_component(module, props, server_struct)
+    server_struct = %{server_struct | cid: props.cid}
+
+    {component_struct, mutated_server_struct} =
+      init_component(module, props, server_struct)
+
     vars = Map.merge(props, component_struct.state)
     merged_context = Map.merge(context, component_struct.emitted_context)
 
