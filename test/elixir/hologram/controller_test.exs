@@ -16,6 +16,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module11
+  alias Hologram.Test.Fixtures.Controller.Module12
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
@@ -1053,6 +1054,27 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
+    end
+
+    test "fires broadcasts queued during page init after successful render" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module12, :dummy_module_12_digest)
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:user:test-broadcast-user")
+
+      :get
+      |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module12")
+      |> Plug.Test.init_test_session(%{})
+      |> handle_initial_page_request(Module12)
+
+      assert_receive {:broadcast_action,
+                      %Action{
+                        name: :page_init_broadcast,
+                        params: %{text: "hi"},
+                        target: "page"
+                      }}
     end
   end
 

@@ -272,12 +272,14 @@ defmodule Hologram.Controller do
         instance_id: renderer_opts[:instance_id]
     }
 
-    {html, _component_registry, updated_server_struct} =
+    {html, _component_registry, rendered_server_struct} =
       Renderer.render_page(page_module, params, server_struct, renderer_opts)
 
+    flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+
     conn
-    |> apply_session_ops(updated_server_struct.__meta__.session_ops)
-    |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
+    |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
+    |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
     |> Controller.html(html)
     |> Plug.Conn.halt()
   end
