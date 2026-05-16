@@ -76,6 +76,89 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "transition/4" do
+    test "client-side diff is driven by client_supplied_keys, not the registry's bindings" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      # Seed the registry's bindings with one set
+      transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      # new_bindings, client_supplied_keys, and the registry's seeded bindings all differ
+      {add_keys, drop_keys} =
+        transition(
+          "test-instance-id",
+          [{:room_b, "page"}],
+          [{:room_c, "page"}],
+          "test-user-id"
+        )
+
+      assert MapSet.new(add_keys) == MapSet.new([{:room_b, "page"}])
+      assert MapSet.new(drop_keys) == MapSet.new([{:room_c, "page"}])
+    end
+
+    test "replaces the registry's bindings field with the new set" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      transition("test-instance-id", [{:room_a, "page"}, {:room_b, "comp_1"}], [], "test-user-id")
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{
+               {:room_a, "page"} => "test-user-id",
+               {:room_b, "comp_1"} => "test-user-id"
+             }
+    end
+
+    test "persists authorizing_user_id per binding for both anonymous and authenticated values" do
+      sse_pid_anon = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id-anon", sse_pid_anon)
+      transition("test-instance-id-anon", [{:room_x, "page"}], [], nil)
+
+      [{"test-instance-id-anon", anon_entry}] =
+        :ets.lookup(ets_table_name(), "test-instance-id-anon")
+
+      assert anon_entry.bindings == %{{:room_x, "page"} => nil}
+
+      sse_pid_auth = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id-auth", sse_pid_auth)
+      transition("test-instance-id-auth", [{:room_y, "page"}], [], "test-user-id")
+
+      [{"test-instance-id-auth", auth_entry}] =
+        :ets.lookup(ets_table_name(), "test-instance-id-auth")
+
+      assert auth_entry.bindings == %{{:room_y, "page"} => "test-user-id"}
+    end
+
+    test "returns empty add and drop lists when new_bindings fully overlap client_supplied_keys" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      bindings = [{:room_a, "page"}, {:room_b, "comp_1"}]
+      {add_keys, drop_keys} = transition("test-instance-id", bindings, bindings, "test-user-id")
+
+      assert add_keys == []
+      assert drop_keys == []
+    end
+
+    test "returns correct add and drop lists for partial overlap" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      {add_keys, drop_keys} =
+        transition(
+          "test-instance-id",
+          [{:room_b, "page"}, {:room_c, "page"}],
+          [{:room_a, "page"}, {:room_b, "page"}],
+          "test-user-id"
+        )
+
+      assert MapSet.new(add_keys) == MapSet.new([{:room_c, "page"}])
+      assert MapSet.new(drop_keys) == MapSet.new([{:room_a, "page"}])
+    end
+  end
+
   describe "update_identity/3" do
     test "updates session_id and user_id on an existing entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)

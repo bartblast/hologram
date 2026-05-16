@@ -56,6 +56,25 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Transitions the registry's binding set for the given `instance_id` to
+  `new_bindings`. When a registry entry exists, the entry's `bindings` field is
+  replaced and each binding is tagged with `authorizing_user_id` (the current
+  authenticated user_id at handler time, or `nil` for anonymous).
+
+  Returns `{add_keys, drop_keys}` - the diff between `new_bindings` and
+  `client_supplied_keys`, used to drive the client-side `{adds, drops}`
+  response payload.
+  """
+  @spec transition(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
+          {[{any, String.t()}], [{any, String.t()}]}
+  def transition(instance_id, new_bindings, client_supplied_keys, authorizing_user_id) do
+    GenServer.call(
+      __MODULE__,
+      {:transition, instance_id, new_bindings, client_supplied_keys, authorizing_user_id}
+    )
+  end
+
+  @doc """
   Updates the `session_id` and `user_id` fields of the entry for the given
   `instance_id`. No-op when no entry exists.
   """
@@ -86,6 +105,37 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     :ets.insert(@table_name, {instance_id, entry})
 
     {:reply, :ok, Map.put(refs, sse_ref, instance_id)}
+  end
+
+  @impl GenServer
+  def handle_call(
+        {:transition, instance_id, new_bindings, client_supplied_keys, authorizing_user_id},
+        _from,
+        refs
+      ) do
+    new_keys_set = MapSet.new(new_bindings)
+    client_keys_set = MapSet.new(client_supplied_keys)
+
+    add_keys =
+      new_keys_set
+      |> MapSet.difference(client_keys_set)
+      |> MapSet.to_list()
+
+    drop_keys =
+      client_keys_set
+      |> MapSet.difference(new_keys_set)
+      |> MapSet.to_list()
+
+    case :ets.lookup(@table_name, instance_id) do
+      [{^instance_id, entry}] ->
+        new_bindings_map = Map.new(new_bindings, fn key -> {key, authorizing_user_id} end)
+        :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings_map}})
+
+      [] ->
+        :noop
+    end
+
+    {:reply, {add_keys, drop_keys}, refs}
   end
 
   @impl GenServer
