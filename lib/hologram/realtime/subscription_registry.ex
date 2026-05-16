@@ -51,4 +51,16 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
     {:reply, :ok, Map.put(refs, sse_ref, instance_id)}
   end
+
+  @impl GenServer
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, refs) do
+    case Map.pop(refs, ref) do
+      {nil, refs} ->
+        {:noreply, refs}
+
+      {instance_id, new_refs} ->
+        :ets.delete(@table_name, instance_id)
+        {:noreply, new_refs}
+    end
+  end
 end
