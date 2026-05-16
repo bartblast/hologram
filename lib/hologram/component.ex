@@ -3,6 +3,7 @@ defmodule Hologram.Component do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
+  alias Hologram.Realtime.Channel
   alias Hologram.Server
 
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
@@ -221,6 +222,24 @@ defmodule Hologram.Component do
   @spec put_action(Component.t() | Server.t(), atom, keyword) :: Component.t() | Server.t()
   def put_action(struct, name, params) do
     %{struct | next_action: %Action{name: name, params: Map.new(params)}}
+  end
+
+  @doc """
+  Queues an action broadcast on the server struct.
+
+  The broadcast is appended to `server.broadcasts` and flushed by the framework
+  after the handler returns successfully. If the handler raises, the queued
+  broadcasts are discarded along with the rest of the Server state.
+
+  `cid` defaults to `server.cid` (set by the framework at handler entry: `"page"`
+  in a page handler, `"layout"` in a layout handler, or the component's cid in a
+  component handler).
+  """
+  @spec put_broadcast(Server.t(), atom | tuple, atom, Enumerable.t()) :: Server.t()
+  def put_broadcast(server, channel, action_name, params \\ %{}) do
+    Channel.validate!(channel)
+    broadcast = {channel, server.cid, action_name, Map.new(params)}
+    %{server | broadcasts: [broadcast | server.broadcasts]}
   end
 
   @doc """

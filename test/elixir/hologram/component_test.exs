@@ -205,6 +205,48 @@ defmodule Hologram.ComponentTest do
            }
   end
 
+  describe "put_broadcast/3,4" do
+    test "appends a broadcast entry with cid taken from server.cid" do
+      server = %Server{cid: "page"}
+
+      result = put_broadcast(server, {:room, 42}, :append_message, text: "hi")
+
+      assert result.broadcasts == [
+               {{:room, 42}, "page", :append_message, %{text: "hi"}}
+             ]
+    end
+
+    test "no-params arity defaults params to an empty map" do
+      server = %Server{cid: "layout"}
+
+      result = put_broadcast(server, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [{{:room, 42}, "layout", :refresh, %{}}]
+    end
+
+    test "prepends so multiple calls accumulate in reverse-of-call order" do
+      server = %Server{cid: "page"}
+
+      result =
+        server
+        |> put_broadcast({:room, 1}, :first)
+        |> put_broadcast({:room, 2}, :second)
+
+      assert result.broadcasts == [
+               {{:room, 2}, "page", :second, %{}},
+               {{:room, 1}, "page", :first, %{}}
+             ]
+    end
+
+    test "raises at the call site when the channel is invalid" do
+      server = %Server{cid: "page"}
+
+      assert_error ArgumentError,
+                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   fn -> put_broadcast(server, "bad-channel", :foo) end
+    end
+  end
+
   describe "put_command/2" do
     test "name" do
       result = put_command(%Component{}, :my_command)
