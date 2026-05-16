@@ -29,4 +29,16 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     assert info[:named_table] == true
     assert info[:read_concurrency] == true
   end
+
+  describe "register/2" do
+    test "inserts an entry whose sse_pid and sse_ref round-trip through the documented shape" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.sse_pid == sse_pid
+      assert is_reference(entry.sse_ref)
+    end
+  end
 end

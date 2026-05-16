@@ -12,6 +12,23 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   def ets_table_name, do: @table_name
 
   @doc """
+  Registers an SSE connection for the given `instance_id` by inserting an entry
+  into the ETS table. The registry monitors `sse_pid` so the entry can be
+  cleaned up when the pid goes down.
+
+  Inserted entry shape per `instance_id`:
+
+      %{
+        sse_pid: pid,
+        sse_ref: reference
+      }
+  """
+  @spec register(String.t(), pid) :: :ok
+  def register(instance_id, sse_pid) do
+    GenServer.call(__MODULE__, {:register, instance_id, sse_pid})
+  end
+
+  @doc """
   Starts the subscription registry process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
@@ -23,6 +40,15 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
 
-    {:ok, nil}
+    {:ok, %{}}
+  end
+
+  @impl GenServer
+  def handle_call({:register, instance_id, sse_pid}, _from, refs) do
+    sse_ref = Process.monitor(sse_pid)
+    entry = %{sse_pid: sse_pid, sse_ref: sse_ref}
+    :ets.insert(@table_name, {instance_id, entry})
+
+    {:reply, :ok, Map.put(refs, sse_ref, instance_id)}
   end
 end
