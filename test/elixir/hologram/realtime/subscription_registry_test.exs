@@ -67,6 +67,23 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "update_identity/3" do
+    test "updates session_id and user_id on an existing entry" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      :ok = update_identity("test-instance-id", "test-session-id", "test-user-id")
+
+      assert identity_of("test-instance-id") == {"test-session-id", "test-user-id"}
+    end
+
+    test "is a no-op for an unknown instance_id" do
+      :ok = update_identity("test-unknown-instance-id", "test-session-id", "test-user-id")
+
+      assert identity_of("test-unknown-instance-id") == nil
+    end
+  end
+
   describe "{:DOWN, ...} cleanup" do
     test "deletes the entry when the monitored SSE pid dies" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)

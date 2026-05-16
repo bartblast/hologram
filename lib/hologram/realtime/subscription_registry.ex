@@ -53,6 +53,15 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Updates the `session_id` and `user_id` fields of the entry for the given
+  `instance_id`. No-op when no entry exists.
+  """
+  @spec update_identity(String.t(), term | nil, term | nil) :: :ok
+  def update_identity(instance_id, session_id, user_id) do
+    GenServer.call(__MODULE__, {:update_identity, instance_id, session_id, user_id})
+  end
+
   @impl GenServer
   def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
@@ -67,6 +76,20 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     :ets.insert(@table_name, {instance_id, entry})
 
     {:reply, :ok, Map.put(refs, sse_ref, instance_id)}
+  end
+
+  @impl GenServer
+  def handle_call({:update_identity, instance_id, session_id, user_id}, _from, refs) do
+    case :ets.lookup(@table_name, instance_id) do
+      [{^instance_id, entry}] ->
+        new_entry = %{entry | session_id: session_id, user_id: user_id}
+        :ets.insert(@table_name, {instance_id, new_entry})
+
+      [] ->
+        :noop
+    end
+
+    {:reply, :ok, refs}
   end
 
   @impl GenServer
