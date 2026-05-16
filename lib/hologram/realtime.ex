@@ -21,7 +21,7 @@ defmodule Hologram.Realtime do
   def broadcast_action(channel, cid, action_name, params \\ %{})
 
   def broadcast_action({kind, id}, cid, action_name, params)
-      when kind in [:instance, :session] and is_binary(cid) do
+      when kind in [:instance, :session, :user] and is_binary(cid) do
     action = %Action{name: action_name, params: Map.new(params), target: cid}
     topic = "hologram:channel:#{kind}:#{id}"
 

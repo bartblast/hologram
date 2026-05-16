@@ -45,6 +45,22 @@ defmodule Hologram.RealtimeTest do
                       }}
     end
 
+    test "broadcasts to the user channel topic" do
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+      topic = "hologram:channel:user:#{user_id}"
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      broadcast_action({:user, user_id}, "notifications", :show_toast, text: "hi")
+
+      assert_receive {:broadcast_action,
+                      %Action{
+                        name: :show_toast,
+                        params: %{text: "hi"},
+                        target: "notifications"
+                      }}
+    end
+
     test "supports the no-params arity" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       topic = "hologram:channel:instance:#{instance_id}"
