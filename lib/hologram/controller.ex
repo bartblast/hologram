@@ -6,6 +6,7 @@ defmodule Hologram.Controller do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
+  alias Hologram.Realtime
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
@@ -139,15 +140,17 @@ defmodule Hologram.Controller do
 
       command_result = module.command(name, params, server_struct)
 
-      {updated_server_struct, next_action} =
+      {processed_server_struct, next_action} =
         process_command_result(command_result, server_struct, target)
+
+      flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
       {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
       command_status = if encode_status == :ok, do: 1, else: 0
 
       conn
-      |> apply_session_ops(updated_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
+      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
       |> Controller.json([command_status, encoded_next_action])
       |> Plug.Conn.halt()
     else

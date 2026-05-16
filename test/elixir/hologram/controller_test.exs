@@ -9,6 +9,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
+  alias Hologram.Component.Action
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
@@ -813,6 +814,71 @@ defmodule Hologram.ControllerTest do
       assert Enum.empty?(cookie_keys)
       # assert length(cookie_keys) == 1
       # assert "hologram_session" in cookie_keys
+    end
+
+    test "fires broadcasts queued during command after successful return" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
+
+      payload = %{
+        instance_id: instance_id,
+        module: Module6,
+        name: :my_command_queueing_broadcast,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      :post
+      |> conn_with_parsed_json("/hologram/command", parsed_json)
+      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+      |> handle_command_request()
+
+      assert_receive {:broadcast_action,
+                      %Action{
+                        name: :my_broadcast_action,
+                        params: %{text: "hi"},
+                        target: "my_target_1"
+                      }}
+    end
+
+    test "does not fire broadcasts when command raises" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
+
+      payload = %{
+        instance_id: instance_id,
+        module: Module6,
+        name: :my_command_queueing_broadcast_then_raising,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+
+      assert_raise RuntimeError, "boom", fn ->
+        handle_command_request(conn)
+      end
+
+      refute_receive {:broadcast_action, _action}
     end
   end
 

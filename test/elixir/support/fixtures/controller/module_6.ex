@@ -60,6 +60,15 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     put_action(server, get_session(server, "my_session_key"))
   end
 
+  def command(:my_command_queueing_broadcast, _params, server) do
+    put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
+  end
+
+  def command(:my_command_queueing_broadcast_then_raising, _params, server) do
+    put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
+    raise "boom"
+  end
+
   @impl Component
   def template do
     ~HOLO""
