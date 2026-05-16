@@ -19,9 +19,14 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   Inserted entry shape per `instance_id`:
 
       %{
-        sse_pid: pid,
-        sse_ref: reference
+        session_id: term | nil,
+        sse_pid:    pid,
+        sse_ref:    reference,
+        user_id:    term | nil
       }
+
+  `session_id` and `user_id` are initialized to `nil` and populated later via
+  the identity-update helpers.
   """
   @spec register(String.t(), pid) :: :ok
   def register(instance_id, sse_pid) do
@@ -46,7 +51,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   @impl GenServer
   def handle_call({:register, instance_id, sse_pid}, _from, refs) do
     sse_ref = Process.monitor(sse_pid)
-    entry = %{sse_pid: sse_pid, sse_ref: sse_ref}
+    entry = %{session_id: nil, sse_pid: sse_pid, sse_ref: sse_ref, user_id: nil}
     :ets.insert(@table_name, {instance_id, entry})
 
     {:reply, :ok, Map.put(refs, sse_ref, instance_id)}
