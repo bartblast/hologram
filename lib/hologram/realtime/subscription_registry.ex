@@ -11,6 +11,9 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   @spec ets_table_name() :: atom
   def ets_table_name, do: @table_name
 
+  @doc """
+  Starts the subscription registry process.
+  """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
