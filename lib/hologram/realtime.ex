@@ -4,6 +4,7 @@ defmodule Hologram.Realtime do
   """
 
   alias Hologram.Component.Action
+  alias Hologram.Server
 
   @doc """
   Broadcasts an action to subscribers of the given channel.
@@ -26,5 +27,21 @@ defmodule Hologram.Realtime do
     topic = "hologram:channel:#{kind}:#{id}"
 
     Phoenix.PubSub.broadcast(Hologram.PubSub, topic, {:broadcast_action, action})
+  end
+
+  # Invoked by the framework (controller / renderer) after a handler returns
+  # successfully. Iterates the LIFO list in call order, fires each entry via
+  # broadcast_action/4, and clears the list. If the handler raises, the server
+  # state is discarded before reaching here.
+  @doc false
+  @spec flush_broadcasts(Server.t()) :: Server.t()
+  def flush_broadcasts(%Server{broadcasts: broadcasts} = server) do
+    broadcasts
+    |> Enum.reverse()
+    |> Enum.each(fn {channel, cid, action_name, params} ->
+      broadcast_action(channel, cid, action_name, params)
+    end)
+
+    %{server | broadcasts: []}
   end
 end
