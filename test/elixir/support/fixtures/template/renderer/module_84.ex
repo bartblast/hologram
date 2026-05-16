@@ -7,6 +7,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module84 do
 
   layout Hologram.Test.Fixtures.Template.Renderer.Module85
 
+  @impl Page
   def init(_params, component, server) do
     {component,
      put_broadcast(server, {:instance, server.instance_id}, :page_broadcast, level: "page")}
