@@ -1,21 +1,21 @@
-defmodule Hologram.Realtime.RegistryTest do
+defmodule Hologram.Realtime.SubscriptionRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
-  alias Hologram.Realtime.Registry
+  alias Hologram.Realtime.SubscriptionRegistry
 
   setup do
-    wait_for_process_cleanup(Registry)
-    start_supervised!(Registry)
+    wait_for_process_cleanup(SubscriptionRegistry)
+    start_supervised!(SubscriptionRegistry)
 
     :ok
   end
 
   test "starts under a supervisor and registers itself by module name" do
-    assert process_name_registered?(Registry)
+    assert process_name_registered?(SubscriptionRegistry)
   end
 
   test "creates the backing ETS table with the documented name and options" do
-    table_name = Registry.ets_table_name()
+    table_name = SubscriptionRegistry.ets_table_name()
 
     assert table_name == :hologram_subscriptions
     assert ets_table_name_registered?(table_name)

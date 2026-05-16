@@ -1,4 +1,4 @@
-defmodule Hologram.Realtime.Registry do
+defmodule Hologram.Realtime.SubscriptionRegistry do
   @moduledoc false
 
   use GenServer
