@@ -20,9 +20,10 @@ defmodule Hologram.Realtime do
   @spec broadcast_action(tuple, String.t(), atom, Enumerable.t()) :: :ok
   def broadcast_action(channel, cid, action_name, params \\ %{})
 
-  def broadcast_action({:instance, instance_id}, cid, action_name, params) when is_binary(cid) do
+  def broadcast_action({kind, id}, cid, action_name, params)
+      when kind in [:instance, :session] and is_binary(cid) do
     action = %Action{name: action_name, params: Map.new(params), target: cid}
-    topic = "hologram:channel:instance:#{instance_id}"
+    topic = "hologram:channel:#{kind}:#{id}"
 
     Phoenix.PubSub.broadcast(Hologram.PubSub, topic, {:broadcast_action, action})
   end
