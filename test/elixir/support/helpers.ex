@@ -236,6 +236,21 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Subscribes the calling process to a Hologram identity-channel PubSub topic
+  with a unique generated id. Returns the generated id so the caller can build
+  matching channel tuples (e.g. `{:instance, id}`).
+
+  `kind` must be one of `:instance`, `:session`, or `:user`.
+  """
+  @spec subscribe_to_identity_channel(:instance | :session | :user) :: String.t()
+  def subscribe_to_identity_channel(kind) when kind in [:instance, :session, :user] do
+    id = "test-#{kind}-#{:erlang.unique_integer([:positive])}"
+    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:#{kind}:#{id}")
+
+    id
+  end
+
+  @doc """
   Returns the template for the given markup.
   """
   defmacro template(markup) do

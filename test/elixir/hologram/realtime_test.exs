@@ -6,13 +6,6 @@ defmodule Hologram.RealtimeTest do
   alias Hologram.Component.Action
   alias Hologram.Server
 
-  defp subscribe_to_identity_channel(kind) do
-    id = "test-#{kind}-#{:erlang.unique_integer([:positive])}"
-    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:#{kind}:#{id}")
-
-    id
-  end
-
   describe "broadcast_action/3,4" do
     setup do
       wait_for_process_cleanup(Hologram.PubSub)

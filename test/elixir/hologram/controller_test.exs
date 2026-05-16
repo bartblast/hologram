@@ -820,8 +820,7 @@ defmodule Hologram.ControllerTest do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
+      instance_id = subscribe_to_identity_channel(:instance)
 
       payload = %{
         instance_id: instance_id,
@@ -853,8 +852,7 @@ defmodule Hologram.ControllerTest do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
+      instance_id = subscribe_to_identity_channel(:instance)
 
       payload = %{
         instance_id: instance_id,
