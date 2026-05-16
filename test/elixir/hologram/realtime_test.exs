@@ -21,10 +21,23 @@ defmodule Hologram.RealtimeTest do
       :ok
     end
 
-    test "broadcasts to the instance channel topic with a custom cid" do
+    test "broadcasts to the instance channel topic with a custom cid (keyword params)" do
       instance_id = subscribe_to_identity_channel(:instance)
 
       broadcast_action({:instance, instance_id}, "my_editor", :append_message, text: "hi")
+
+      assert_receive {:broadcast_action,
+                      %Action{
+                        name: :append_message,
+                        params: %{text: "hi"},
+                        target: "my_editor"
+                      }}
+    end
+
+    test "accepts params as a map" do
+      instance_id = subscribe_to_identity_channel(:instance)
+
+      broadcast_action({:instance, instance_id}, "my_editor", :append_message, %{text: "hi"})
 
       assert_receive {:broadcast_action,
                       %Action{
@@ -93,7 +106,7 @@ defmodule Hologram.RealtimeTest do
 
       server = %Server{
         broadcasts: [
-          {{:instance, instance_id}, "my_editor", :append_message, [text: "hi"]}
+          {{:instance, instance_id}, "my_editor", :append_message, %{text: "hi"}}
         ]
       }
 
@@ -116,8 +129,8 @@ defmodule Hologram.RealtimeTest do
       # Two calls in order :first, :second produce [{:second, ...}, {:first, ...}]
       server = %Server{
         broadcasts: [
-          {{:instance, instance_id}, "page", :second, []},
-          {{:instance, instance_id}, "page", :first, []}
+          {{:instance, instance_id}, "page", :second, %{}},
+          {{:instance, instance_id}, "page", :first, %{}}
         ]
       }
 

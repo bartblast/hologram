@@ -206,22 +206,32 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "put_broadcast/3,4" do
-    test "appends a broadcast entry with cid taken from server.cid" do
+    test "appends a broadcast entry with cid taken from server.cid (keyword params)" do
       server = %Server{cid: "page"}
 
       result = put_broadcast(server, {:room, 42}, :append_message, text: "hi")
 
       assert result.broadcasts == [
-               {{:room, 42}, "page", :append_message, [text: "hi"]}
+               {{:room, 42}, "page", :append_message, %{text: "hi"}}
              ]
     end
 
-    test "no-params arity defaults params to an empty keyword list" do
+    test "accepts params as a map" do
+      server = %Server{cid: "page"}
+
+      result = put_broadcast(server, {:room, 42}, :append_message, %{text: "hi"})
+
+      assert result.broadcasts == [
+               {{:room, 42}, "page", :append_message, %{text: "hi"}}
+             ]
+    end
+
+    test "no-params arity defaults params to an empty map" do
       server = %Server{cid: "layout"}
 
       result = put_broadcast(server, {:room, 42}, :refresh)
 
-      assert result.broadcasts == [{{:room, 42}, "layout", :refresh, []}]
+      assert result.broadcasts == [{{:room, 42}, "layout", :refresh, %{}}]
     end
 
     test "prepends so multiple calls accumulate in reverse-of-call order" do
@@ -233,8 +243,8 @@ defmodule Hologram.ComponentTest do
         |> put_broadcast({:room, 2}, :second)
 
       assert result.broadcasts == [
-               {{:room, 2}, "page", :second, []},
-               {{:room, 1}, "page", :first, []}
+               {{:room, 2}, "page", :second, %{}},
+               {{:room, 1}, "page", :first, %{}}
              ]
     end
 

@@ -235,10 +235,10 @@ defmodule Hologram.Component do
   in a page handler, `"layout"` in a layout handler, or the component's cid in a
   component handler).
   """
-  @spec put_broadcast(Server.t(), atom | tuple, atom, keyword) :: Server.t()
-  def put_broadcast(server, channel, action_name, params \\ []) do
+  @spec put_broadcast(Server.t(), atom | tuple, atom, keyword | map) :: Server.t()
+  def put_broadcast(server, channel, action_name, params \\ %{}) do
     Channel.validate!(channel)
-    broadcast = {channel, server.cid, action_name, params}
+    broadcast = {channel, server.cid, action_name, Map.new(params)}
 
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end
