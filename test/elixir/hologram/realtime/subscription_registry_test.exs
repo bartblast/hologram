@@ -12,24 +12,6 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     :ok
   end
 
-  test "starts under a supervisor and registers itself by module name" do
-    assert process_name_registered?(SubscriptionRegistry)
-  end
-
-  test "creates the backing ETS table with the documented name and options" do
-    table_name = ets_table_name()
-
-    assert table_name == :hologram_subscriptions
-    assert ets_table_name_registered?(table_name)
-
-    info = :ets.info(table_name)
-
-    assert info[:type] == :set
-    assert info[:protection] == :public
-    assert info[:named_table] == true
-    assert info[:read_concurrency] == true
-  end
-
   describe "identity_of/1" do
     test "returns the defaulted {nil, nil} for a freshly registered entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
@@ -62,6 +44,26 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
       assert entry.session_id == nil
       assert entry.user_id == nil
+    end
+  end
+
+  describe "start_link/1" do
+    test "starts under a supervisor and registers itself by module name" do
+      assert process_name_registered?(SubscriptionRegistry)
+    end
+
+    test "creates the backing ETS table with the documented name and options" do
+      table_name = ets_table_name()
+
+      assert table_name == :hologram_subscriptions
+      assert ets_table_name_registered?(table_name)
+
+      info = :ets.info(table_name)
+
+      assert info[:type] == :set
+      assert info[:protection] == :public
+      assert info[:named_table] == true
+      assert info[:read_concurrency] == true
     end
   end
 
