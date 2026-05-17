@@ -143,8 +143,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           prior_channels =
             MapSet.new(prior_bindings, fn {{channel, _cid}, _user_id} -> channel end)
 
-          new_channels =
-            MapSet.new(new_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+          new_channels = MapSet.new(new_bindings, fn {{channel, _cid}, _user_id} -> channel end)
 
           new_channels
           |> MapSet.difference(prior_channels)
