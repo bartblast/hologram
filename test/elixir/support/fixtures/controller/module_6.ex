@@ -64,10 +64,6 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     put_action(server, :my_action_echoing_subscriptions, subscriptions: server.subscriptions)
   end
 
-  def command(:my_command_queueing_broadcast, _params, server) do
-    put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
-  end
-
   def command(:my_command_putting_subscription, _params, server) do
     put_subscription(server, :room_a)
   end
@@ -76,6 +72,10 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     server = put_subscription(server, :room_a)
     raise "boom"
     server
+  end
+
+  def command(:my_command_queueing_broadcast, _params, server) do
+    put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
   end
 
   def command(:my_command_queueing_broadcast_then_raising, _params, server) do
