@@ -11,6 +11,7 @@ defmodule Hologram.Server do
             instance_id: nil,
             next_action: nil,
             session: %{},
+            subscriptions: [],
             __meta__: %Metadata{}
 
   @type t :: %__MODULE__{
@@ -20,6 +21,7 @@ defmodule Hologram.Server do
           instance_id: String.t() | nil,
           next_action: Action.t() | nil,
           session: %{atom => any},
+          subscriptions: [tuple],
           __meta__: Metadata.t()
         }
 
