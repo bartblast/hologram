@@ -10,6 +10,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Component.Action
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
@@ -17,6 +18,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module11
   alias Hologram.Test.Fixtures.Controller.Module12
+  alias Hologram.Test.Fixtures.Controller.Module13
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
@@ -36,6 +38,13 @@ defmodule Hologram.ControllerTest do
   use_module_stub :page_digest_registry
 
   setup :set_mox_global
+
+  setup do
+    wait_for_process_cleanup(SubscriptionRegistry)
+    start_supervised!(SubscriptionRegistry)
+
+    :ok
+  end
 
   defp binary_to_hex(binary) do
     binary
@@ -511,6 +520,71 @@ defmodule Hologram.ControllerTest do
              ]
     end
 
+    test "pre-populates server.subscriptions from SubscriptionRegistry bindings for the request's instance_id" do
+      :ok = SubscriptionRegistry.register("my-instance-id", self())
+
+      SubscriptionRegistry.apply_deltas(
+        "my-instance-id",
+        [{:room_a, "page"}],
+        [],
+        "test-user-id"
+      )
+
+      payload = %{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_accessing_subscriptions,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+             ]
+    end
+
+    test "pre-populates server.subscriptions to an empty list when no registry entry exists" do
+      payload = %{
+        instance_id: "test-unknown-instance-id",
+        module: Module6,
+        name: :my_command_accessing_subscriptions,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+             ]
+    end
+
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
       payload = %{
         module: Module6,
@@ -933,7 +1007,7 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "param_a = hello world, param_b = foo/bar"
     end
 
-    test "passes server struct with session to page renderer" do
+    test "passes server struct with session to page init/3" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
 
       conn =
@@ -945,7 +1019,19 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "session = my_session_value"
     end
 
-    test "passes server struct with cookies to page renderer" do
+    test "passes server struct with empty subscriptions to page init/3" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module13, :dummy_module_13_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module13")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module13)
+
+      assert conn.resp_body == "subscription_count = 0"
+    end
+
+    test "passes server struct with cookies to page init/3" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
       conn =
@@ -1163,7 +1249,7 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "param_a = hello world, param_b = foo/bar"
     end
 
-    test "passes server struct with session to page renderer" do
+    test "passes server struct with session to page init/3" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
 
       conn =
@@ -1175,7 +1261,7 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "session = my_session_value"
     end
 
-    test "passes server struct with cookies to page renderer" do
+    test "passes server struct with cookies to page init/3" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
       conn =

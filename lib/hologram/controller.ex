@@ -7,6 +7,7 @@ defmodule Hologram.Controller do
   alias Hologram.Component.Action
   alias Hologram.Page
   alias Hologram.Realtime
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
@@ -136,7 +137,14 @@ defmodule Hologram.Controller do
         target: target
       } = payload
 
-      server_struct = %{Server.from(conn) | cid: target, instance_id: instance_id}
+      bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+
+      server_struct = %{
+        Server.from(conn)
+        | cid: target,
+          instance_id: instance_id,
+          subscriptions: Map.keys(bindings)
+      }
 
       command_result = module.command(name, params, server_struct)
 

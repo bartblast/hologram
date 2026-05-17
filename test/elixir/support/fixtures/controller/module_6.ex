@@ -60,6 +60,10 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     put_action(server, get_session(server, "my_session_key"))
   end
 
+  def command(:my_command_accessing_subscriptions, _params, server) do
+    put_action(server, :my_action_echoing_subscriptions, subscriptions: server.subscriptions)
+  end
+
   def command(:my_command_queueing_broadcast, _params, server) do
     put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
   end
