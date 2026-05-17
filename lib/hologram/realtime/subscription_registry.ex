@@ -45,6 +45,19 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Returns the `bindings` map (`%{ {channel, cid} => authorizing_user_id | nil }`)
+  for the given `instance_id`, or `nil` if no entry exists. Reads ETS directly
+  to bypass the registry's GenServer mailbox.
+  """
+  @spec bindings_of(String.t()) :: %{{any, String.t()} => term | nil} | nil
+  def bindings_of(instance_id) do
+    case :ets.lookup(@table_name, instance_id) do
+      [{^instance_id, entry}] -> entry.bindings
+      [] -> nil
+    end
+  end
+
+  @doc """
   Returns the name of the ETS table that backs the registry.
   """
   @spec ets_table_name() :: atom

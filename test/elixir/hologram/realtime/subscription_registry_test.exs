@@ -236,6 +236,35 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "bindings_of/1" do
+    test "returns the bindings map for a registered entry with seeded bindings" do
+      :ok = register("test-instance-id", self())
+
+      apply_deltas(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_b, "comp_1"}],
+        [],
+        "test-user-id"
+      )
+
+      assert bindings_of("test-instance-id") == %{
+               {:room_a, "page"} => "test-user-id",
+               {:room_b, "comp_1"} => "test-user-id"
+             }
+    end
+
+    test "returns the default empty map for a freshly registered entry" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      assert bindings_of("test-instance-id") == %{}
+    end
+
+    test "returns nil for an unknown instance_id" do
+      assert bindings_of("test-unknown-instance-id") == nil
+    end
+  end
+
   describe "identity_of/1" do
     test "returns the defaulted {nil, nil} for a freshly registered entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
