@@ -151,6 +151,11 @@ defmodule Hologram.Controller do
       {processed_server_struct, next_action} =
         process_command_result(command_result, server_struct, target)
 
+      # Apply subscription ops before flushing broadcasts so a registry failure
+      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
+      # effectively infallible, so once apply succeeds both side effects land.
+      apply_subscription_ops(processed_server_struct.__meta__.subscription_ops, instance_id)
+
       flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
       {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
@@ -240,6 +245,18 @@ defmodule Hologram.Controller do
       |> Page.cast_params(page_module)
 
     handle_page_request(conn, page_module, params, initial_page?: false)
+  end
+
+  defp apply_subscription_ops(subscription_ops, _instance_id) when subscription_ops == %{},
+    do: :ok
+
+  defp apply_subscription_ops(subscription_ops, instance_id) do
+    adds = for {key, :put} <- subscription_ops, do: key
+    drops = for {key, :delete} <- subscription_ops, do: key
+
+    SubscriptionRegistry.apply_deltas(instance_id, adds, drops, nil)
+
+    :ok
   end
 
   defp build_cookie_opts(cookie_struct) do

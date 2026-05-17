@@ -547,6 +547,61 @@ defmodule Hologram.ControllerTest do
              ]
     end
 
+    test "drives SubscriptionRegistry.apply_deltas after a command calls put_subscription" do
+      :ok = SubscriptionRegistry.register("my-instance-id", self())
+
+      execute_command_request(%{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_putting_subscription,
+        params: %{},
+        target: "my_target_1"
+      })
+
+      assert SubscriptionRegistry.bindings_of("my-instance-id") == %{
+               {:room_a, "my_target_1"} => nil
+             }
+    end
+
+    test "leaves SubscriptionRegistry bindings unchanged when subscription_ops is empty" do
+      :ok = SubscriptionRegistry.register("my-instance-id", self())
+
+      SubscriptionRegistry.apply_deltas(
+        "my-instance-id",
+        [{:pre_existing, "page"}],
+        [],
+        "seed-user-id"
+      )
+
+      execute_command_request(%{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      })
+
+      assert SubscriptionRegistry.bindings_of("my-instance-id") == %{
+               {:pre_existing, "page"} => "seed-user-id"
+             }
+    end
+
+    test "does not flush subscription_ops when the command raises" do
+      :ok = SubscriptionRegistry.register("my-instance-id", self())
+
+      payload = %{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_putting_subscription_then_raising,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      assert_raise RuntimeError, "boom", fn -> execute_command_request(payload) end
+
+      assert SubscriptionRegistry.bindings_of("my-instance-id") == %{}
+    end
+
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
       payload = %{
         module: Module6,
