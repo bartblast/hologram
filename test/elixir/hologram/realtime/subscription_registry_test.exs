@@ -216,6 +216,32 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       refute_receive {:sub, _channel}
       refute_receive {:unsub, _channel}
     end
+
+    test "returns the client-side diff for an unknown instance_id" do
+      {add_keys, drop_keys} =
+        transition(
+          "test-unknown-instance-id",
+          [{:room_a, "page"}, {:room_b, "page"}],
+          [{:room_b, "page"}, {:room_c, "page"}],
+          "test-user-id"
+        )
+
+      assert MapSet.new(add_keys) == MapSet.new([{:room_a, "page"}])
+      assert MapSet.new(drop_keys) == MapSet.new([{:room_c, "page"}])
+    end
+
+    test "creates no entry for an unknown instance_id" do
+      transition("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert :ets.lookup(ets_table_name(), "test-unknown-instance-id") == []
+    end
+
+    test "sends no zero-crossing messages for an unknown instance_id" do
+      transition("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      refute_receive {:sub, _channel}
+      refute_receive {:unsub, _channel}
+    end
   end
 
   describe "update_identity/3" do
