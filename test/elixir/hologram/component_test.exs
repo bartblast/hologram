@@ -230,10 +230,8 @@ defmodule Hologram.ComponentTest do
 
   describe "put_broadcast/* (common behavior)" do
     test "prepends so multiple calls accumulate in reverse-of-call order" do
-      server = %Server{cid: "page"}
-
       result =
-        server
+        @server
         |> put_broadcast({:room, 1}, :first)
         |> put_broadcast({:room, 2}, :second)
 
@@ -244,11 +242,9 @@ defmodule Hologram.ComponentTest do
     end
 
     test "raises at the call site when the channel is invalid" do
-      server = %Server{cid: "page"}
-
       assert_error ArgumentError,
                    "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
-                   fn -> put_broadcast(server, "bad-channel", :foo) end
+                   fn -> put_broadcast(@server, "bad-channel", :foo) end
     end
   end
 
@@ -265,8 +261,7 @@ defmodule Hologram.ComponentTest do
 
   describe "put_broadcast/4" do
     test "defaulted-cid form appends with keyword params and uses server.cid" do
-      server = %Server{cid: "page"}
-      result = put_broadcast(server, {:room, 42}, :append_message, text: "hi")
+      result = put_broadcast(@server, {:room, 42}, :append_message, text: "hi")
 
       assert result.broadcasts == [
                %Broadcast{
@@ -279,8 +274,7 @@ defmodule Hologram.ComponentTest do
     end
 
     test "defaulted-cid form accepts params as a map" do
-      server = %Server{cid: "page"}
-      result = put_broadcast(server, {:room, 42}, :append_message, %{text: "hi"})
+      result = put_broadcast(@server, {:room, 42}, :append_message, %{text: "hi"})
 
       assert result.broadcasts == [
                %Broadcast{
@@ -293,8 +287,7 @@ defmodule Hologram.ComponentTest do
     end
 
     test "explicit-cid form overrides server.cid" do
-      server = %Server{cid: "page"}
-      result = put_broadcast(server, {:room, 42}, "my_editor", :refresh)
+      result = put_broadcast(@server, {:room, 42}, "my_editor", :refresh)
 
       assert result.broadcasts == [
                %Broadcast{
@@ -307,13 +300,11 @@ defmodule Hologram.ComponentTest do
     end
 
     test "guard dispatches by position-3 type (string -> cid, atom -> action_name)" do
-      server = %Server{cid: "page"}
-
       # Position 3 is a binary -> explicit-cid clause; param 4 is the action_name atom.
-      cid_form_result = put_broadcast(server, {:room, 42}, "my_editor", :refresh)
+      cid_form_result = put_broadcast(@server, {:room, 42}, "my_editor", :refresh)
 
       # Position 3 is an atom -> defaulted-cid clause; param 4 is params.
-      action_form_result = put_broadcast(server, {:room, 42}, :refresh, text: "hi")
+      action_form_result = put_broadcast(@server, {:room, 42}, :refresh, text: "hi")
 
       assert cid_form_result.broadcasts == [
                %Broadcast{
@@ -337,10 +328,8 @@ defmodule Hologram.ComponentTest do
 
   describe "put_broadcast/5" do
     test "explicit-cid form overrides server.cid and accepts params" do
-      server = %Server{cid: "page"}
-
       result =
-        put_broadcast(server, {:room, 42}, "my_editor", :append_message, text: "hi")
+        put_broadcast(@server, {:room, 42}, "my_editor", :append_message, text: "hi")
 
       assert result.broadcasts == [
                %Broadcast{
@@ -615,26 +604,21 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "put_subscription/2" do
-    setup do
-      [server: %Server{cid: "page"}]
-    end
-
-    test "appends {channel, server.cid} to server.subscriptions", %{server: server} do
-      result = put_subscription(server, :room_a)
+    test "appends {channel, server.cid} to server.subscriptions" do
+      result = put_subscription(@server, :room_a)
 
       assert result.subscriptions == [{:room_a, "page"}]
     end
 
-    test "records :put in subscription_ops keyed by {channel, server.cid}", %{server: server} do
-      result = put_subscription(server, :room_a)
+    test "records :put in subscription_ops keyed by {channel, server.cid}" do
+      result = put_subscription(@server, :room_a)
 
       assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :put}
     end
 
-    test "server.subscriptions and __meta__.subscription_ops stay in sync across multiple calls",
-         %{server: server} do
+    test "server.subscriptions and __meta__.subscription_ops stay in sync across multiple calls" do
       result =
-        server
+        @server
         |> put_subscription(:room_a)
         |> put_subscription(:room_b)
 
@@ -647,9 +631,9 @@ defmodule Hologram.ComponentTest do
              }
     end
 
-    test "deduplicates when the same {channel, cid} key is put again", %{server: server} do
+    test "deduplicates when the same {channel, cid} key is put again" do
       result =
-        server
+        @server
         |> put_subscription(:room_a)
         |> put_subscription(:room_a)
 
@@ -657,8 +641,8 @@ defmodule Hologram.ComponentTest do
       assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :put}
     end
 
-    test "raises ArgumentError for an invalid channel", %{server: server} do
-      assert_raise ArgumentError, fn -> put_subscription(server, "not_a_valid_channel") end
+    test "raises ArgumentError for an invalid channel" do
+      assert_raise ArgumentError, fn -> put_subscription(@server, "not_a_valid_channel") end
     end
   end
 
