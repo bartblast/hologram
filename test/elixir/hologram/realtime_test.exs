@@ -6,7 +6,7 @@ defmodule Hologram.RealtimeTest do
   alias Hologram.Component.Action
   alias Hologram.Server
 
-  describe "broadcast_action/3,4,5" do
+  describe "broadcast_action/3,4" do
     setup do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -77,15 +77,6 @@ defmodule Hologram.RealtimeTest do
                         params: %{},
                         target: "layout"
                       }, []}
-    end
-
-    test "carries the excluded_identities list in the envelope when provided" do
-      instance_id = subscribe_to_identity_channel(:instance)
-      exclude = [{:instance, "other-instance"}, {:user, "user-1"}]
-
-      broadcast_action({:instance, instance_id}, "page", :ping, %{}, exclude)
-
-      assert_receive {:broadcast_action, %Action{name: :ping}, ^exclude}
     end
   end
 
