@@ -158,7 +158,7 @@ defmodule Hologram.RealtimeTest do
       instance_id = subscribe_to_identity_channel(:instance)
 
       # broadcasts is LIFO: head is the most recent put_broadcast call.
-      # Two calls in order :first, :second produce [%Broadcast{action_name: :second, ...}, %Broadcast{action_name: :first, ...}]
+      # Two calls in order :first, :second produce entries in :second, :first order.
       server = %Server{
         broadcasts: [
           %Broadcast{

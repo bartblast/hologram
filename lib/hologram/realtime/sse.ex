@@ -132,7 +132,9 @@ defmodule Hologram.Realtime.SSE do
   end
 
   defp has_excluded_identity?(conn, excluded_identities) do
-    Enum.any?(own_identities(conn), &(&1 in excluded_identities))
+    conn
+    |> own_identities()
+    |> Enum.any?(&(&1 in excluded_identities))
   end
 
   defp message_pump(conn, heartbeat_interval_ms) do
