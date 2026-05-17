@@ -12,6 +12,137 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     :ok
   end
 
+  describe "apply_deltas/4" do
+    test "adds new bindings tagged with authorizing_user_id" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      {add_keys, drop_keys} =
+        apply_deltas(
+          "test-instance-id",
+          [{:room_a, "page"}, {:room_b, "comp_1"}],
+          [],
+          "test-user-id"
+        )
+
+      assert MapSet.new(add_keys) == MapSet.new([{:room_a, "page"}, {:room_b, "comp_1"}])
+      assert drop_keys == []
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{
+               {:room_a, "page"} => "test-user-id",
+               {:room_b, "comp_1"} => "test-user-id"
+             }
+    end
+
+    test "drops existing bindings" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      apply_deltas(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_b, "comp_1"}],
+        [],
+        "test-user-id"
+      )
+
+      {add_keys, drop_keys} =
+        apply_deltas("test-instance-id", [], [{:room_a, "page"}], "test-user-id")
+
+      assert add_keys == []
+      assert MapSet.new(drop_keys) == MapSet.new([{:room_a, "page"}])
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{{:room_b, "comp_1"} => "test-user-id"}
+    end
+
+    test "is a no-op when re-adding an already-present key (does not retag)" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-original-user-id")
+
+      {add_keys, _drop_keys} =
+        apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-different-user-id")
+
+      assert add_keys == []
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{{:room_a, "page"} => "test-original-user-id"}
+    end
+
+    test "is a no-op when dropping a missing key" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      {_add_keys, drop_keys} =
+        apply_deltas("test-instance-id", [], [{:room_b, "comp_1"}], "test-user-id")
+
+      assert drop_keys == []
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{{:room_a, "page"} => "test-user-id"}
+    end
+
+    test "applies mixed adds and drops in a single call" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id", sse_pid)
+
+      apply_deltas(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_b, "comp_1"}],
+        [],
+        "test-user-id"
+      )
+
+      {add_keys, drop_keys} =
+        apply_deltas(
+          "test-instance-id",
+          [{:room_c, "comp_2"}],
+          [{:room_a, "page"}],
+          "test-user-id"
+        )
+
+      assert MapSet.new(add_keys) == MapSet.new([{:room_c, "comp_2"}])
+      assert MapSet.new(drop_keys) == MapSet.new([{:room_a, "page"}])
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{
+               {:room_b, "comp_1"} => "test-user-id",
+               {:room_c, "comp_2"} => "test-user-id"
+             }
+    end
+
+    test "persists authorizing_user_id per binding for both anonymous and authenticated values" do
+      sse_pid_anon = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id-anon", sse_pid_anon)
+
+      apply_deltas("test-instance-id-anon", [{:room_x, "page"}], [], nil)
+
+      [{"test-instance-id-anon", anon_entry}] =
+        :ets.lookup(ets_table_name(), "test-instance-id-anon")
+
+      assert anon_entry.bindings == %{{:room_x, "page"} => nil}
+
+      sse_pid_auth = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register("test-instance-id-auth", sse_pid_auth)
+
+      apply_deltas("test-instance-id-auth", [{:room_y, "page"}], [], "test-user-id")
+
+      [{"test-instance-id-auth", auth_entry}] =
+        :ets.lookup(ets_table_name(), "test-instance-id-auth")
+
+      assert auth_entry.bindings == %{{:room_y, "page"} => "test-user-id"}
+    end
+  end
+
   describe "identity_of/1" do
     test "returns the defaulted {nil, nil} for a freshly registered entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)

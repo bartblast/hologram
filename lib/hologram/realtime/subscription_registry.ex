@@ -6,6 +6,18 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   @table_name :hologram_subscriptions
 
   @doc """
+  Applies the given `adds` and `drops` deltas to the registry's bindings for
+  `instance_id`. Idempotent: re-adding an already-present key does not retag
+  it, and dropping a missing key is a no-op. Returns `{add_keys, drop_keys}`
+  of the actually-applied deltas after idempotence filtering.
+  """
+  @spec apply_deltas(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
+          {[{any, String.t()}], [{any, String.t()}]}
+  def apply_deltas(instance_id, adds, drops, authorizing_user_id) do
+    GenServer.call(__MODULE__, {:apply_deltas, instance_id, adds, drops, authorizing_user_id})
+  end
+
+  @doc """
   Returns the name of the ETS table that backs the registry.
   """
   @spec ets_table_name() :: atom
@@ -39,8 +51,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
       }
 
   `bindings` is initialized to `%{}` and populated later via `transition/4` /
-  `update/4`. `session_id` and `user_id` are initialized to `nil` and populated
-  later via the identity-update helpers.
+  `apply_deltas/4`. `session_id` and `user_id` are initialized to `nil` and
+  populated later via the identity-update helpers.
   """
   @spec register(String.t(), pid) :: :ok
   def register(instance_id, sse_pid) do
@@ -109,6 +121,32 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
 
     {:ok, %{}}
+  end
+
+  @impl GenServer
+  def handle_call({:apply_deltas, instance_id, adds, drops, authorizing_user_id}, _from, refs) do
+    reply =
+      case :ets.lookup(@table_name, instance_id) do
+        [{^instance_id, entry}] ->
+          prior_bindings = entry.bindings
+
+          actually_added = Enum.reject(adds, &Map.has_key?(prior_bindings, &1))
+          actually_dropped = Enum.filter(drops, &Map.has_key?(prior_bindings, &1))
+
+          new_bindings =
+            prior_bindings
+            |> Map.drop(actually_dropped)
+            |> Map.merge(Map.new(actually_added, fn key -> {key, authorizing_user_id} end))
+
+          :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
+
+          {actually_added, actually_dropped}
+
+        [] ->
+          {[], []}
+      end
+
+    {:reply, reply, refs}
   end
 
   @impl GenServer
