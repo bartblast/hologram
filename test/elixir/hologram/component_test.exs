@@ -424,6 +424,50 @@ defmodule Hologram.ComponentTest do
     end
   end
 
+  describe "put_subscription/2" do
+    setup do
+      [server: %Server{cid: "page"}]
+    end
+
+    test "appends {channel, server.cid} to server.subscriptions", %{server: server} do
+      result = put_subscription(server, :room_a)
+
+      assert result.subscriptions == [{:room_a, "page"}]
+    end
+
+    test "records :put in subscription_ops keyed by {channel, server.cid}", %{server: server} do
+      result = put_subscription(server, :room_a)
+
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :put}
+    end
+
+    test "server.subscriptions and __meta__.subscription_ops stay in sync across multiple calls",
+         %{server: server} do
+      result =
+        server
+        |> put_subscription(:room_a)
+        |> put_subscription(:room_b)
+
+      assert MapSet.new(result.subscriptions) ==
+               MapSet.new([{:room_a, "page"}, {:room_b, "page"}])
+
+      assert result.__meta__.subscription_ops == %{
+               {:room_a, "page"} => :put,
+               {:room_b, "page"} => :put
+             }
+    end
+
+    test "deduplicates when the same {channel, cid} key is put again", %{server: server} do
+      result =
+        server
+        |> put_subscription(:room_a)
+        |> put_subscription(:room_a)
+
+      assert result.subscriptions == [{:room_a, "page"}]
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :put}
+    end
+  end
+
   describe "template/0" do
     test "function" do
       assert Module1.template().(%{}) == [text: "Module1 template"]

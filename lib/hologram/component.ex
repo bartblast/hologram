@@ -361,6 +361,38 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Adds a subscription binding for `{channel, server.cid}` to the server struct.
+  The binding is appended to `server.subscriptions` and recorded as `:put` in
+  `__meta__.subscription_ops`. The framework drains `subscription_ops` after the
+  handler returns successfully to drive the `SubscriptionRegistry`. If the
+  handler raises, the queued mutations are discarded along with the rest of the
+  Server state.
+
+  `cid` is taken from `server.cid` - set by the framework at handler entry:
+  `"page"` in a page handler, `"layout"` in a layout handler, or the component's
+  cid in a component handler.
+
+  Idempotent: putting the same `{channel, cid}` key twice does not duplicate it
+  in `server.subscriptions`.
+  """
+  @spec put_subscription(Server.t(), atom | tuple) :: Server.t()
+  def put_subscription(server, channel) do
+    key = {channel, server.cid}
+
+    new_subscriptions =
+      if key in server.subscriptions do
+        server.subscriptions
+      else
+        [key | server.subscriptions]
+      end
+
+    new_subscription_ops = Map.put(server.__meta__.subscription_ops, key, :put)
+    new_meta = %{server.__meta__ | subscription_ops: new_subscription_ops}
+
+    %{server | subscriptions: new_subscriptions, __meta__: new_meta}
+  end
+
+  @doc """
   Returns the AST of code that registers __props__ module attribute.
   """
   @spec register_props_accumulator() :: AST.t()
