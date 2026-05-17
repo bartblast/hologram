@@ -16,6 +16,13 @@ defmodule Hologram.Realtime.SSETest do
   defp conn_with_instance_id(session \\ %{}) do
     instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
 
+    session =
+      Map.put_new(
+        session,
+        :hologram_session_id,
+        "test-session-#{:erlang.unique_integer([:positive])}"
+      )
+
     :get
     |> Plug.Test.conn("/?instance_id=#{instance_id}")
     |> Plug.Test.init_test_session(session)
@@ -230,7 +237,7 @@ defmodule Hologram.Realtime.SSETest do
       assert_receive :hello
     end
 
-    test "subscribes to the session channel when a session ID is present" do
+    test "subscribes to the session channel" do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
 
       %{hologram_session_id: session_id}
@@ -241,16 +248,6 @@ defmodule Hologram.Realtime.SSETest do
       Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hello_session)
 
       assert_receive :hello_session
-    end
-
-    test "does not subscribe to a session channel when no session ID is present" do
-      subscribe_to_identity_channels(conn_with_instance_id())
-
-      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      session_topic = "hologram:channel:session:#{session_id}"
-      Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hello_session)
-
-      refute_receive :hello_session
     end
 
     test "subscribes to the user channel when a user ID is present" do

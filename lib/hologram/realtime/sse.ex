@@ -106,11 +106,18 @@ defmodule Hologram.Realtime.SSE do
     conn = Plug.Conn.fetch_query_params(initial_conn)
 
     instance_id = conn.query_params["instance_id"]
-    instance_topic = "hologram:channel:instance:#{instance_id}"
-    Phoenix.PubSub.subscribe(Hologram.PubSub, instance_topic)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
 
-    maybe_subscribe(:session, Session.fetch_session_id(conn))
-    maybe_subscribe(:user, Session.fetch_user_id(conn))
+    {:ok, session_id} = Session.fetch_session_id(conn)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:session:#{session_id}")
+
+    case Session.fetch_user_id(conn) do
+      {:ok, user_id} ->
+        Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:user:#{user_id}")
+
+      :error ->
+        :ok
+    end
 
     conn
   end
@@ -126,12 +133,6 @@ defmodule Hologram.Realtime.SSE do
 
   defp has_excluded_identity?(conn, excluded_identities) do
     Enum.any?(own_identities(conn), &(&1 in excluded_identities))
-  end
-
-  defp maybe_subscribe(_kind, :error), do: :ok
-
-  defp maybe_subscribe(kind, {:ok, id}) do
-    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:#{kind}:#{id}")
   end
 
   defp message_pump(conn, heartbeat_interval_ms) do
