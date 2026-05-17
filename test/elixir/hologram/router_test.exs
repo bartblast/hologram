@@ -31,6 +31,9 @@ defmodule Hologram.RouterTest do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
+    wait_for_process_cleanup(Hologram.Realtime.SubscriptionRegistry)
+    start_supervised!(Hologram.Realtime.SubscriptionRegistry)
+
     :ok
   end
 
