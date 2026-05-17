@@ -1,14 +1,9 @@
 defmodule Hologram.Server.Broadcast do
   @moduledoc """
-  Represents a single broadcast queued on `server.broadcasts` by `put_broadcast`
-  or `put_broadcast_except`. Flushed by the framework after the handler returns
-  successfully.
+  A single broadcast entry queued on `Hologram.Server`'s `broadcasts` field.
 
-  `except` is the list of identities the dev explicitly excluded from delivery
-  (`{:instance, id}`, `{:session, id}`, or `{:user, id}` tuples). Empty list
-  for entries queued via `put_broadcast`. `put_broadcast_except` accepts a
-  single identity tuple or a list; the mutator wraps a single tuple into a
-  one-element list so storage is uniformly a list.
+  `except` lists identities (`{:instance, id}`, `{:session, id}`, `{:user, id}`)
+  that should not receive the broadcast. Empty list means no exclusions.
   """
 
   @type identity ::
