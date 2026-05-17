@@ -35,7 +35,8 @@ defmodule Hologram.Application do
       Hologram.Router.PageModuleResolver,
       Hologram.Assets.PathRegistry,
       Hologram.Assets.ManifestCache,
-      Hologram.Assets.PageDigestRegistry
+      Hologram.Assets.PageDigestRegistry,
+      Hologram.Realtime.SubscriptionRegistry
     ]
   end
 

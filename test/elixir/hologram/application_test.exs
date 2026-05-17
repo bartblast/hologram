@@ -44,6 +44,7 @@ defmodule Hologram.ApplicationTest do
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules
       assert Hologram.Assets.ManifestCache in child_modules
+      assert Hologram.Realtime.SubscriptionRegistry in child_modules
       assert Hologram.Router.PageModuleResolver in child_modules
     end
 
