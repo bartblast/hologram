@@ -466,6 +466,10 @@ defmodule Hologram.ComponentTest do
       assert result.subscriptions == [{:room_a, "page"}]
       assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :put}
     end
+
+    test "raises ArgumentError for an invalid channel", %{server: server} do
+      assert_raise ArgumentError, fn -> put_subscription(server, "not_a_valid_channel") end
+    end
   end
 
   describe "template/0" do

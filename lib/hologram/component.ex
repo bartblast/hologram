@@ -377,6 +377,8 @@ defmodule Hologram.Component do
   """
   @spec put_subscription(Server.t(), atom | tuple) :: Server.t()
   def put_subscription(server, channel) do
+    Channel.validate!(channel)
+
     key = {channel, server.cid}
 
     new_subscriptions =
