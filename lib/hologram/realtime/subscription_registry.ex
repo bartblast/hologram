@@ -131,6 +131,19 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         new_bindings_map = Map.new(new_bindings, fn key -> {key, authorizing_user_id} end)
         :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings_map}})
 
+        prior_channels =
+          MapSet.new(entry.bindings, fn {{channel, _cid}, _user_id} -> channel end)
+
+        new_channels = MapSet.new(new_bindings, fn {channel, _cid} -> channel end)
+
+        new_channels
+        |> MapSet.difference(prior_channels)
+        |> Enum.each(fn channel -> send(entry.sse_pid, {:sub, channel}) end)
+
+        prior_channels
+        |> MapSet.difference(new_channels)
+        |> Enum.each(fn channel -> send(entry.sse_pid, {:unsub, channel}) end)
+
       [] ->
         :noop
     end

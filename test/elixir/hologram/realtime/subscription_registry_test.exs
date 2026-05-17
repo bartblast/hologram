@@ -157,6 +157,65 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert MapSet.new(add_keys) == MapSet.new([{:room_c, "page"}])
       assert MapSet.new(drop_keys) == MapSet.new([{:room_a, "page"}])
     end
+
+    test "sends {:sub, channel} to sse_pid on the first cid-binding for a channel" do
+      :ok = register("test-instance-id", self())
+
+      transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "sends {:unsub, channel} to sse_pid when the last cid-binding for a channel is dropped" do
+      :ok = register("test-instance-id", self())
+
+      transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+
+      transition("test-instance-id", [], [{:room_a, "page"}], "test-user-id")
+
+      assert_receive {:unsub, :room_a}
+    end
+
+    test "sends no message when the channel still has other cid-bindings after the transition" do
+      :ok = register("test-instance-id", self())
+
+      transition(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_a, "comp_1"}],
+        [],
+        "test-user-id"
+      )
+
+      assert_receive {:sub, :room_a}
+
+      # Drop one cid and add another for the same channel - channel always has >=1 binding
+      transition(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_a, "comp_2"}],
+        [{:room_a, "comp_1"}],
+        "test-user-id"
+      )
+
+      refute_receive {:sub, :room_a}
+      refute_receive {:unsub, :room_a}
+    end
+
+    test "sends no messages when new_bindings fully overlap the registry's bindings" do
+      :ok = register("test-instance-id", self())
+
+      bindings = [{:room_a, "page"}, {:room_b, "comp_1"}]
+      transition("test-instance-id", bindings, [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+      assert_receive {:sub, :room_b}
+
+      transition("test-instance-id", bindings, bindings, "test-user-id")
+
+      refute_receive {:sub, _channel}
+      refute_receive {:unsub, _channel}
+    end
   end
 
   describe "update_identity/3" do
