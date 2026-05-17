@@ -80,7 +80,8 @@ defmodule Hologram.Component do
             put_page: 2,
             put_page: 3,
             put_state: 2,
-            put_state: 3
+            put_state: 3,
+            put_subscription: 2
           ]
 
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]

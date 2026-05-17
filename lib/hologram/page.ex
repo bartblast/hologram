@@ -47,7 +47,8 @@ defmodule Hologram.Page do
             put_page: 2,
             put_page: 3,
             put_state: 2,
-            put_state: 3
+            put_state: 3,
+            put_subscription: 2
           ]
 
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
