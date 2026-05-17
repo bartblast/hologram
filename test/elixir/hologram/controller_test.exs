@@ -62,14 +62,7 @@ defmodule Hologram.ControllerTest do
     |> Map.put(:body_params, %{"_json" => parsed_json})
   end
 
-  defp execute_successful_command_request do
-    payload = %{
-      module: Module6,
-      name: :my_command_a,
-      params: %{},
-      target: "my_target_1"
-    }
-
+  defp execute_command_request(payload) do
     parsed_json =
       payload
       |> serialize_payload()
@@ -79,6 +72,15 @@ defmodule Hologram.ControllerTest do
     |> conn_with_parsed_json("/hologram/command", parsed_json)
     |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
     |> handle_command_request()
+  end
+
+  defp execute_successful_command_request do
+    execute_command_request(%{
+      module: Module6,
+      name: :my_command_a,
+      params: %{},
+      target: "my_target_1"
+    })
   end
 
   defp extract_instance_id(resp_body) do
@@ -473,17 +475,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
@@ -501,17 +493,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
@@ -538,17 +520,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
@@ -566,17 +538,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
@@ -593,16 +555,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
+      conn = execute_command_request(payload)
 
       assert conn.halted == true
       assert conn.state == :sent
@@ -646,17 +599,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
@@ -673,17 +616,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
@@ -700,17 +633,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
       expected_msg =
@@ -793,16 +716,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
+      conn = execute_command_request(payload)
 
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
     end
@@ -815,16 +729,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
+      conn = execute_command_request(payload)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
     end
@@ -837,18 +742,9 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
+      conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
+
       assert [1, _encoded_action] = response
 
       # Only framework-managed entries should be in the session
@@ -905,15 +801,7 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      :post
-      |> conn_with_parsed_json("/hologram/command", parsed_json)
-      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-      |> handle_command_request()
+      execute_command_request(payload)
 
       assert_receive {:broadcast_action,
                       %Action{
