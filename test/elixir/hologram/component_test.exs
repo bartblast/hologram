@@ -15,6 +15,8 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
 
+  @server %Server{cid: "page"}
+
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
   end
@@ -346,6 +348,154 @@ defmodule Hologram.ComponentTest do
                  cid: "my_editor",
                  action_name: :append_message,
                  params: %{text: "hi"}
+               }
+             ]
+    end
+  end
+
+  describe "put_broadcast_except/* (common behavior)" do
+    # Tests here cover what's shared across all put_broadcast_except arities:
+    # the single-tuple-vs-list normalization on except, and validator wiring.
+    # Per-arity tests below focus on the cid / params dispatch surface.
+
+    test "wraps a single identity tuple into a list and stores on except" do
+      result = put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "page",
+                 action_name: :refresh,
+                 params: %{},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+
+    test "stores a list of identities unchanged on except" do
+      except = [{:user, "u1"}, {:session, "s1"}, {:instance, "i1"}]
+
+      result = put_broadcast_except(@server, except, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "page",
+                 action_name: :refresh,
+                 params: %{},
+                 except: except
+               }
+             ]
+    end
+
+    test "raises at the call site when the channel is invalid" do
+      assert_error ArgumentError,
+                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   fn -> put_broadcast_except(@server, {:user, "u1"}, "bad-channel", :foo) end
+    end
+  end
+
+  describe "put_broadcast_except/4" do
+    test "defaults params to an empty map and uses server.cid as the broadcast target" do
+      server = %Server{cid: "my_editor"}
+      result = put_broadcast_except(server, {:user, "u1"}, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :refresh,
+                 params: %{},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+  end
+
+  describe "put_broadcast_except/5" do
+    test "defaulted-cid form appends with keyword params and uses server.cid" do
+      server = %Server{cid: "my_editor"}
+
+      result =
+        put_broadcast_except(server, {:user, "u1"}, {:room, 42}, :append_message, text: "hi")
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :append_message,
+                 params: %{text: "hi"},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+
+    test "explicit-cid form overrides server.cid" do
+      result = put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, "my_editor", :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :refresh,
+                 params: %{},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+
+    test "guard dispatches by position-4 type (string -> cid, atom -> action_name)" do
+      server = %Server{cid: layout}
+
+      # Position 4 is a binary -> explicit-cid clause; param 5 is the action_name atom.
+      cid_form_result =
+        put_broadcast_except(server, {:user, "u1"}, {:room, 42}, "my_editor", :refresh)
+
+      # Position 4 is an atom -> defaulted-cid clause; param 5 is params.
+      action_form_result =
+        put_broadcast_except(server, {:user, "u1"}, {:room, 42}, :refresh, text: "hi")
+
+      assert cid_form_result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :refresh,
+                 params: %{},
+                 except: [{:user, "u1"}]
+               }
+             ]
+
+      assert action_form_result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "layout",
+                 action_name: :refresh,
+                 params: %{text: "hi"},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+  end
+
+  describe "put_broadcast_except/6" do
+    test "explicit-cid form overrides server.cid and accepts params" do
+      result =
+        put_broadcast_except(
+          @server,
+          {:user, "u1"},
+          {:room, 42},
+          "my_editor",
+          :append_message,
+          text: "hi"
+        )
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :append_message,
+                 params: %{text: "hi"},
+                 except: [{:user, "u1"}]
                }
              ]
     end

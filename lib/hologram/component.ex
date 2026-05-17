@@ -75,6 +75,9 @@ defmodule Hologram.Component do
             put_action: 3,
             put_broadcast: 3,
             put_broadcast: 4,
+            put_broadcast_except: 4,
+            put_broadcast_except: 5,
+            put_broadcast_except: 6,
             put_command: 2,
             put_command: 3,
             put_context: 3,
@@ -279,6 +282,66 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Queues an action broadcast that excludes one or more identities from delivery.
+
+  Like `put_broadcast/3` but takes an `except` argument naming identities
+  (`{:instance, id}`, `{:session, id}`, `{:user, id}`) that should not receive
+  the broadcast. `except` accepts either a single identity tuple or a list of
+  identity tuples.
+
+  `cid` defaults to `server.cid` - set by the framework at handler entry.
+  """
+  @spec put_broadcast_except(
+          Server.t(),
+          Broadcast.identity() | [Broadcast.identity()],
+          atom | tuple,
+          atom
+        ) :: Server.t()
+  def put_broadcast_except(server, except, channel, action_name) when is_atom(action_name) do
+    append_broadcast(server, channel, server.cid, action_name, %{}, except)
+  end
+
+  @doc """
+  Like `put_broadcast/4` with an `except` identity (or list). See
+  `put_broadcast_except/4` for the except semantics.
+  """
+  @spec put_broadcast_except(
+          Server.t(),
+          Broadcast.identity() | [Broadcast.identity()],
+          atom | tuple,
+          String.t() | atom,
+          atom | keyword | map
+        ) :: Server.t()
+  def put_broadcast_except(server, except, channel, cid_or_action_name, action_name_or_params)
+
+  def put_broadcast_except(server, except, channel, cid, action_name)
+      when is_binary(cid) and is_atom(action_name) do
+    append_broadcast(server, channel, cid, action_name, %{}, except)
+  end
+
+  def put_broadcast_except(server, except, channel, action_name, params)
+      when is_atom(action_name) do
+    append_broadcast(server, channel, server.cid, action_name, params, except)
+  end
+
+  @doc """
+  Like `put_broadcast/5` with an `except` identity (or list). See
+  `put_broadcast_except/4` for the except semantics.
+  """
+  @spec put_broadcast_except(
+          Server.t(),
+          Broadcast.identity() | [Broadcast.identity()],
+          atom | tuple,
+          String.t(),
+          atom,
+          keyword | map
+        ) :: Server.t()
+  def put_broadcast_except(server, except, channel, cid, action_name, params)
+      when is_binary(cid) and is_atom(action_name) do
+    append_broadcast(server, channel, cid, action_name, params, except)
+  end
+
+  @doc """
   Puts the given command spec to the component's next_command field.
   Next command will be sent asynchronously to the server.
   """
@@ -406,16 +469,21 @@ defmodule Hologram.Component do
     end
   end
 
-  defp append_broadcast(server, channel, cid, action_name, params) do
+  defp append_broadcast(server, channel, cid, action_name, params, except \\ []) do
     Channel.validate!(channel)
 
     broadcast = %Broadcast{
       channel: channel,
       cid: cid,
       action_name: action_name,
-      params: Map.new(params)
+      params: Map.new(params),
+      except: normalize_except(except)
     }
 
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end
+
+  defp normalize_except({_kind, _id} = identity), do: [identity]
+
+  defp normalize_except(list) when is_list(list), do: list
 end
