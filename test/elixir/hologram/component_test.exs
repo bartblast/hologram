@@ -445,7 +445,7 @@ defmodule Hologram.ComponentTest do
     end
 
     test "guard dispatches by position-4 type (string -> cid, atom -> action_name)" do
-      server = %Server{cid: layout}
+      server = %Server{cid: "layout"}
 
       # Position 4 is a binary -> explicit-cid clause; param 5 is the action_name atom.
       cid_form_result =
