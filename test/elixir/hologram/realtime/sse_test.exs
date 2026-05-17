@@ -21,6 +21,18 @@ defmodule Hologram.Realtime.SSETest do
     |> Plug.Test.init_test_session(session)
   end
 
+  defp build_session(opts) do
+    session_id =
+      Keyword.get(opts, :session_id, "test-session-#{:erlang.unique_integer([:positive])}")
+
+    session = %{hologram_session_id: session_id}
+
+    case Keyword.fetch(opts, :user_id) do
+      {:ok, user_id} -> Map.put(session, :hologram_user_id, user_id)
+      :error -> session
+    end
+  end
+
   # Plug.Test.Adapter sends `{:plug_conn, :sent}` to the owner on send_chunked.
   # Consume it so tests that drive process_message/2 directly see only the
   # messages they sent themselves.
@@ -37,6 +49,22 @@ defmodule Hologram.Realtime.SSETest do
       |> prepare()
 
     flush_plug_conn_sent()
+    conn
+  end
+
+  defp prepared_test_conn_with_identities(opts) do
+    instance_id = Keyword.fetch!(opts, :instance_id)
+    session = build_session(opts)
+
+    conn =
+      :get
+      |> Plug.Test.conn("/?instance_id=#{instance_id}")
+      |> Plug.Test.init_test_session(session)
+      |> Plug.Conn.fetch_query_params()
+      |> prepare()
+
+    flush_plug_conn_sent()
+
     conn
   end
 
@@ -103,6 +131,91 @@ defmodule Hologram.Realtime.SSETest do
       send(self(), {:close, :superseded})
 
       assert {:halt, ^conn} = process_message(conn, 30_000)
+    end
+
+    test "dispatches a broadcast action as an SSE chunk when no identity matches the exclude list" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+
+      action = %Action{name: :my_action, target: "c1"}
+      send(self(), {:broadcast_action, action, []})
+
+      {:cont, updated_conn} = process_message(conn, 30_000)
+
+      {:ok, encoded} = Encoder.encode_term(action)
+
+      assert updated_conn.resp_body =~ "event: action\n"
+      assert updated_conn.resp_body =~ "data: #{encoded}\n"
+    end
+
+    test "always dispatches when excluded_identities is empty even if conn has identities" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+
+      conn =
+        prepared_test_conn_with_identities(
+          instance_id: instance_id,
+          session_id: session_id,
+          user_id: user_id
+        )
+
+      action = %Action{name: :my_action, target: "c1"}
+      send(self(), {:broadcast_action, action, []})
+
+      {:cont, updated_conn} = process_message(conn, 30_000)
+
+      assert updated_conn.resp_body =~ "event: action\n"
+    end
+
+    test "drops the broadcast when the conn's instance identity is in excluded_identities" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+
+      action = %Action{name: :my_action, target: "c1"}
+      send(self(), {:broadcast_action, action, [{:instance, instance_id}]})
+
+      {:cont, updated_conn} = process_message(conn, 30_000)
+
+      assert updated_conn.resp_body == ""
+    end
+
+    test "drops the broadcast when the conn's session identity is in excluded_identities" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id, session_id: session_id)
+
+      action = %Action{name: :my_action, target: "c1"}
+      send(self(), {:broadcast_action, action, [{:session, session_id}]})
+
+      {:cont, updated_conn} = process_message(conn, 30_000)
+
+      assert updated_conn.resp_body == ""
+    end
+
+    test "drops the broadcast when the conn's user identity is in excluded_identities" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id, user_id: user_id)
+
+      action = %Action{name: :my_action, target: "c1"}
+      send(self(), {:broadcast_action, action, [{:user, user_id}]})
+
+      {:cont, updated_conn} = process_message(conn, 30_000)
+
+      assert updated_conn.resp_body == ""
+    end
+
+    test "dispatches when excluded_identities contains identities that don't match the conn" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+
+      action = %Action{name: :my_action, target: "c1"}
+      send(self(), {:broadcast_action, action, [{:instance, "other-instance"}]})
+
+      {:cont, updated_conn} = process_message(conn, 30_000)
+
+      assert updated_conn.resp_body =~ "event: action\n"
     end
   end
 

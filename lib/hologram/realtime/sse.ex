@@ -48,8 +48,8 @@ defmodule Hologram.Realtime.SSE do
   @spec process_message(Plug.Conn.t(), non_neg_integer) ::
           {:cont, Plug.Conn.t()} | {:halt, Plug.Conn.t()}
   def process_message(conn, heartbeat_interval_ms) do
-    # TODO: typed message clauses (PubSub broadcasts, sub/unsub,
-    # identity-change) land in future phases.
+    # TODO: remaining typed message clauses (sub/unsub, identity-change) land
+    # in future phases.
     receive do
       :heartbeat ->
         case Plug.Conn.chunk(conn, ":\n\n") do
@@ -63,6 +63,13 @@ defmodule Hologram.Realtime.SSE do
 
       {:close, _reason} ->
         {:halt, conn}
+
+      {:broadcast_action, %Action{} = action, excluded_identities} ->
+        if has_excluded_identity?(conn, excluded_identities) do
+          {:cont, conn}
+        else
+          dispatch_broadcast(conn, action)
+        end
 
       _msg ->
         {:cont, conn}
@@ -108,6 +115,19 @@ defmodule Hologram.Realtime.SSE do
     conn
   end
 
+  defp dispatch_broadcast(conn, action) do
+    id = System.unique_integer([:positive, :monotonic])
+
+    case Plug.Conn.chunk(conn, encode_envelope(id, action)) do
+      {:ok, conn} -> {:cont, conn}
+      {:error, _reason} -> {:halt, conn}
+    end
+  end
+
+  defp has_excluded_identity?(conn, excluded_identities) do
+    Enum.any?(own_identities(conn), &(&1 in excluded_identities))
+  end
+
   defp maybe_subscribe(_kind, :error), do: :ok
 
   defp maybe_subscribe(kind, {:ok, id}) do
@@ -118,6 +138,19 @@ defmodule Hologram.Realtime.SSE do
     case process_message(conn, heartbeat_interval_ms) do
       {:cont, conn} -> message_pump(conn, heartbeat_interval_ms)
       {:halt, conn} -> conn
+    end
+  end
+
+  defp own_identities(conn) do
+    conn = Plug.Conn.fetch_query_params(conn)
+    instance_id = conn.query_params["instance_id"]
+    {:ok, session_id} = Session.fetch_session_id(conn)
+
+    base = [{:instance, instance_id}, {:session, session_id}]
+
+    case Session.fetch_user_id(conn) do
+      {:ok, user_id} -> [{:user, user_id} | base]
+      :error -> base
     end
   end
 
