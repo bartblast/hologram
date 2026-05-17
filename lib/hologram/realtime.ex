@@ -5,6 +5,7 @@ defmodule Hologram.Realtime do
 
   alias Hologram.Component.Action
   alias Hologram.Server
+  alias Hologram.Server.Broadcast
 
   @doc """
   Broadcasts an action to subscribers of the given channel.
@@ -57,8 +58,8 @@ defmodule Hologram.Realtime do
   def flush_broadcasts(%Server{broadcasts: broadcasts} = server) do
     broadcasts
     |> Enum.reverse()
-    |> Enum.each(fn {channel, cid, action_name, params} ->
-      broadcast_action(channel, cid, action_name, params)
+    |> Enum.each(fn %Broadcast{} = entry ->
+      broadcast_action(entry.channel, entry.cid, entry.action_name, entry.params)
     end)
 
     %{server | broadcasts: []}

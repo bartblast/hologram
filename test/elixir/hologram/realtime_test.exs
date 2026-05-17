@@ -5,6 +5,7 @@ defmodule Hologram.RealtimeTest do
 
   alias Hologram.Component.Action
   alias Hologram.Server
+  alias Hologram.Server.Broadcast
 
   describe "broadcast_action/3,4" do
     setup do
@@ -132,7 +133,12 @@ defmodule Hologram.RealtimeTest do
 
       server = %Server{
         broadcasts: [
-          {{:instance, instance_id}, "my_editor", :append_message, %{text: "hi"}}
+          %Broadcast{
+            channel: {:instance, instance_id},
+            cid: "my_editor",
+            action_name: :append_message,
+            params: %{text: "hi"}
+          }
         ]
       }
 
@@ -152,11 +158,21 @@ defmodule Hologram.RealtimeTest do
       instance_id = subscribe_to_identity_channel(:instance)
 
       # broadcasts is LIFO: head is the most recent put_broadcast call.
-      # Two calls in order :first, :second produce [{:second, ...}, {:first, ...}]
+      # Two calls in order :first, :second produce [%Broadcast{action_name: :second, ...}, %Broadcast{action_name: :first, ...}]
       server = %Server{
         broadcasts: [
-          {{:instance, instance_id}, "page", :second, %{}},
-          {{:instance, instance_id}, "page", :first, %{}}
+          %Broadcast{
+            channel: {:instance, instance_id},
+            cid: "page",
+            action_name: :second,
+            params: %{}
+          },
+          %Broadcast{
+            channel: {:instance, instance_id},
+            cid: "page",
+            action_name: :first,
+            params: %{}
+          }
         ]
       }
 

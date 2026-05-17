@@ -3,6 +3,7 @@ defmodule Hologram.Server do
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
+  alias Hologram.Server.Broadcast
   alias Hologram.Server.Metadata
 
   defstruct broadcasts: [],
@@ -15,7 +16,7 @@ defmodule Hologram.Server do
             __meta__: %Metadata{}
 
   @type t :: %__MODULE__{
-          broadcasts: [tuple],
+          broadcasts: [Broadcast.t()],
           cid: String.t() | nil,
           cookies: %{String.t() => any()},
           instance_id: String.t() | nil,

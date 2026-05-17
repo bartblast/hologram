@@ -5,6 +5,7 @@ defmodule Hologram.Component do
   alias Hologram.Component
   alias Hologram.Realtime.Channel
   alias Hologram.Server
+  alias Hologram.Server.Broadcast
 
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
 
@@ -407,7 +408,13 @@ defmodule Hologram.Component do
 
   defp append_broadcast(server, channel, cid, action_name, params) do
     Channel.validate!(channel)
-    broadcast = {channel, cid, action_name, Map.new(params)}
+
+    broadcast = %Broadcast{
+      channel: channel,
+      cid: cid,
+      action_name: action_name,
+      params: Map.new(params)
+    }
 
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end

@@ -8,6 +8,7 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Component.Command
   alias Hologram.Reflection
   alias Hologram.Server
+  alias Hologram.Server.Broadcast
   alias Hologram.Test.Fixtures.Component.Module1
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
@@ -235,8 +236,8 @@ defmodule Hologram.ComponentTest do
         |> put_broadcast({:room, 2}, :second)
 
       assert result.broadcasts == [
-               {{:room, 2}, "page", :second, %{}},
-               {{:room, 1}, "page", :first, %{}}
+               %Broadcast{channel: {:room, 2}, cid: "page", action_name: :second, params: %{}},
+               %Broadcast{channel: {:room, 1}, cid: "page", action_name: :first, params: %{}}
              ]
     end
 
@@ -254,7 +255,9 @@ defmodule Hologram.ComponentTest do
       server = %Server{cid: "layout"}
       result = put_broadcast(server, {:room, 42}, :refresh)
 
-      assert result.broadcasts == [{{:room, 42}, "layout", :refresh, %{}}]
+      assert result.broadcasts == [
+               %Broadcast{channel: {:room, 42}, cid: "layout", action_name: :refresh, params: %{}}
+             ]
     end
   end
 
@@ -264,7 +267,12 @@ defmodule Hologram.ComponentTest do
       result = put_broadcast(server, {:room, 42}, :append_message, text: "hi")
 
       assert result.broadcasts == [
-               {{:room, 42}, "page", :append_message, %{text: "hi"}}
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "page",
+                 action_name: :append_message,
+                 params: %{text: "hi"}
+               }
              ]
     end
 
@@ -273,7 +281,12 @@ defmodule Hologram.ComponentTest do
       result = put_broadcast(server, {:room, 42}, :append_message, %{text: "hi"})
 
       assert result.broadcasts == [
-               {{:room, 42}, "page", :append_message, %{text: "hi"}}
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "page",
+                 action_name: :append_message,
+                 params: %{text: "hi"}
+               }
              ]
     end
 
@@ -281,7 +294,14 @@ defmodule Hologram.ComponentTest do
       server = %Server{cid: "page"}
       result = put_broadcast(server, {:room, 42}, "my_editor", :refresh)
 
-      assert result.broadcasts == [{{:room, 42}, "my_editor", :refresh, %{}}]
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :refresh,
+                 params: %{}
+               }
+             ]
     end
 
     test "guard dispatches by position-3 type (string -> cid, atom -> action_name)" do
@@ -293,8 +313,23 @@ defmodule Hologram.ComponentTest do
       # Position 3 is an atom -> defaulted-cid clause; param 4 is params.
       action_form_result = put_broadcast(server, {:room, 42}, :refresh, text: "hi")
 
-      assert cid_form_result.broadcasts == [{{:room, 42}, "my_editor", :refresh, %{}}]
-      assert action_form_result.broadcasts == [{{:room, 42}, "page", :refresh, %{text: "hi"}}]
+      assert cid_form_result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :refresh,
+                 params: %{}
+               }
+             ]
+
+      assert action_form_result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "page",
+                 action_name: :refresh,
+                 params: %{text: "hi"}
+               }
+             ]
     end
   end
 
@@ -306,7 +341,12 @@ defmodule Hologram.ComponentTest do
         put_broadcast(server, {:room, 42}, "my_editor", :append_message, text: "hi")
 
       assert result.broadcasts == [
-               {{:room, 42}, "my_editor", :append_message, %{text: "hi"}}
+               %Broadcast{
+                 channel: {:room, 42},
+                 cid: "my_editor",
+                 action_name: :append_message,
+                 params: %{text: "hi"}
+               }
              ]
     end
   end

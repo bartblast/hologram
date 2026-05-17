@@ -10,6 +10,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Component
   alias Hologram.Runtime.Cookie
   alias Hologram.Server
+  alias Hologram.Server.Broadcast
   alias Hologram.Server.Metadata
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.LayoutFixture
@@ -1067,10 +1068,30 @@ defmodule Hologram.Template.RendererTest do
       # Render order: page init -> layout init -> comp_1 init -> comp_2 init
       # server.broadcasts is LIFO (head = most recent put_broadcast call):
       assert returned_server.broadcasts == [
-               {{:instance, "test-instance-id"}, "comp_2", :component_broadcast, %{text: "hi"}},
-               {{:instance, "test-instance-id"}, "comp_1", :component_broadcast, %{text: "hi"}},
-               {{:instance, "test-instance-id"}, "layout", :layout_broadcast, %{level: "layout"}},
-               {{:instance, "test-instance-id"}, "page", :page_broadcast, %{level: "page"}}
+               %Broadcast{
+                 channel: {:instance, "test-instance-id"},
+                 cid: "comp_2",
+                 action_name: :component_broadcast,
+                 params: %{text: "hi"}
+               },
+               %Broadcast{
+                 channel: {:instance, "test-instance-id"},
+                 cid: "comp_1",
+                 action_name: :component_broadcast,
+                 params: %{text: "hi"}
+               },
+               %Broadcast{
+                 channel: {:instance, "test-instance-id"},
+                 cid: "layout",
+                 action_name: :layout_broadcast,
+                 params: %{level: "layout"}
+               },
+               %Broadcast{
+                 channel: {:instance, "test-instance-id"},
+                 cid: "page",
+                 action_name: :page_broadcast,
+                 params: %{level: "page"}
+               }
              ]
     end
 
