@@ -863,7 +863,7 @@ defmodule Hologram.ControllerTest do
                         name: :my_broadcast_action,
                         params: %{text: "hi"},
                         target: "my_target_1"
-                      }}
+                      }, []}
     end
 
     test "does not fire broadcasts when command raises" do
@@ -894,7 +894,7 @@ defmodule Hologram.ControllerTest do
         handle_command_request(conn)
       end
 
-      refute_receive {:broadcast_action, _action}
+      refute_receive {:broadcast_action, _action, _excluded_identities}
     end
   end
 
@@ -1103,7 +1103,7 @@ defmodule Hologram.ControllerTest do
                         name: :page_init_broadcast,
                         params: %{text: "hi"},
                         target: "page"
-                      }}
+                      }, []}
     end
   end
 

@@ -17,16 +17,25 @@ defmodule Hologram.Realtime do
   `cid` is the destination component identifier on each receiving connection
   and is always required - the inside-handler `put_broadcast` defaults it to
   the currently-executing handler's cid, but no such context exists here.
-  """
-  @spec broadcast_action(tuple, String.t(), atom, keyword | map) :: :ok
-  def broadcast_action(channel, cid, action_name, params \\ %{})
 
-  def broadcast_action({kind, id}, cid, action_name, params)
+  `excluded_identities` is a list of `{:instance, id}`, `{:session, id}`,
+  and/or `{:user, id}` tuples. Receiving SSE connections drop the broadcast
+  when any of their own identities match an entry in this list. Defaults to
+  `[]` (deliver to every subscriber).
+  """
+  @spec broadcast_action(tuple, String.t(), atom, keyword | map, [tuple]) :: :ok
+  def broadcast_action(channel, cid, action_name, params \\ %{}, excluded_identities \\ [])
+
+  def broadcast_action({kind, id}, cid, action_name, params, excluded_identities)
       when kind in [:instance, :session, :user] and is_binary(cid) do
     action = %Action{name: action_name, params: Map.new(params), target: cid}
     topic = "hologram:channel:#{kind}:#{id}"
 
-    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, {:broadcast_action, action})
+    Phoenix.PubSub.broadcast(
+      Hologram.PubSub,
+      topic,
+      {:broadcast_action, action, excluded_identities}
+    )
   end
 
   # Invoked by the framework (controller / renderer) after a handler returns
