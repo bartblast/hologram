@@ -141,6 +141,75 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
       assert auth_entry.bindings == %{{:room_y, "page"} => "test-user-id"}
     end
+
+    test "sends {:sub, channel} to sse_pid on add of the channel's first cid-binding" do
+      :ok = register("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+    end
+
+    test "sends {:unsub, channel} to sse_pid on drop of the channel's last cid-binding" do
+      :ok = register("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+
+      apply_deltas("test-instance-id", [], [{:room_a, "page"}], "test-user-id")
+
+      assert_receive {:unsub, :room_a}
+    end
+
+    test "sends no message when the channel still has other cid-bindings after the add" do
+      :ok = register("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+
+      apply_deltas("test-instance-id", [{:room_a, "comp_1"}], [], "test-user-id")
+
+      refute_receive {:sub, :room_a}
+    end
+
+    test "sends no message when the channel still has other cid-bindings after the drop" do
+      :ok = register("test-instance-id", self())
+
+      apply_deltas(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_a, "comp_1"}],
+        [],
+        "test-user-id"
+      )
+
+      assert_receive {:sub, :room_a}
+
+      apply_deltas("test-instance-id", [], [{:room_a, "comp_1"}], "test-user-id")
+
+      refute_receive {:unsub, :room_a}
+    end
+
+    test "sends no messages on idempotent re-add or idempotent drop-of-missing" do
+      :ok = register("test-instance-id", self())
+
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert_receive {:sub, :room_a}
+
+      # Re-add an already-present key
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      refute_receive {:sub, _channel}
+      refute_receive {:unsub, _channel}
+
+      # Drop a missing key
+      apply_deltas("test-instance-id", [], [{:room_b, "comp_1"}], "test-user-id")
+
+      refute_receive {:sub, _channel}
+      refute_receive {:unsub, _channel}
+    end
   end
 
   describe "identity_of/1" do
