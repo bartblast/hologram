@@ -80,6 +80,39 @@ defmodule Hologram.RealtimeTest do
     end
   end
 
+  describe "broadcast_action_except/4,5" do
+    setup do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      :ok
+    end
+
+    # Tests here cover only what's unique to broadcast_action_except: the
+    # single-tuple-vs-list dispatch. Channel kinds, cid, and params handling
+    # are exercised in the broadcast_action describe block - both functions
+    # share the same envelope construction via the private publish/5 helper.
+
+    test "wraps a single identity tuple into a list in the envelope" do
+      instance_id = subscribe_to_identity_channel(:instance)
+      excluded_identity = {:user, "user-1"}
+
+      broadcast_action_except(excluded_identity, {:instance, instance_id}, "page", :ping)
+
+      assert_receive {:broadcast_action, %Action{name: :ping}, [^excluded_identity]}
+    end
+
+    test "passes a list of excluded identities through unchanged" do
+      instance_id = subscribe_to_identity_channel(:instance)
+      excluded = [{:instance, "other"}, {:session, "session-1"}, {:user, "user-1"}]
+
+      broadcast_action_except(excluded, {:instance, instance_id}, "page", :ping, text: "hi")
+
+      assert_receive {:broadcast_action,
+                      %Action{name: :ping, params: %{text: "hi"}, target: "page"}, ^excluded}
+    end
+  end
+
   describe "flush_broadcasts/1" do
     setup do
       wait_for_process_cleanup(Hologram.PubSub)

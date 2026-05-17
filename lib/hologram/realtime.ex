@@ -19,14 +19,33 @@ defmodule Hologram.Realtime do
   the currently-executing handler's cid, but no such context exists here.
   """
   @spec broadcast_action(tuple, String.t(), atom, keyword | map) :: :ok
-  def broadcast_action(channel, cid, action_name, params \\ %{})
+  def broadcast_action(channel, cid, action_name, params \\ %{}) do
+    publish(channel, cid, action_name, params, [])
+  end
 
-  def broadcast_action({kind, id}, cid, action_name, params)
-      when kind in [:instance, :session, :user] and is_binary(cid) do
-    action = %Action{name: action_name, params: Map.new(params), target: cid}
-    topic = "hologram:channel:#{kind}:#{id}"
+  @doc """
+  Broadcasts an action to subscribers of the given channel, excluding the
+  listed identities.
 
-    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, {:broadcast_action, action, []})
+  Like `broadcast_action/4` but takes an `excluded_identities` argument first.
+  Pass either a single identity tuple - `{:instance, id}`, `{:session, id}`,
+  or `{:user, id}` - or a list of such tuples. Receiving SSE connections drop
+  the broadcast when any of their own identities match an entry in the list.
+
+  `cid` is the destination component identifier on each receiving connection
+  and is always required - the inside-handler `put_broadcast` defaults it to
+  the currently-executing handler's cid, but no such context exists here.
+  """
+  @spec broadcast_action_except(tuple | [tuple], tuple, String.t(), atom, keyword | map) :: :ok
+  def broadcast_action_except(excluded, channel, cid, action_name, params \\ %{})
+
+  def broadcast_action_except({_kind, _id} = identity, channel, cid, action_name, params) do
+    broadcast_action_except([identity], channel, cid, action_name, params)
+  end
+
+  def broadcast_action_except(excluded_identities, channel, cid, action_name, params)
+      when is_list(excluded_identities) do
+    publish(channel, cid, action_name, params, excluded_identities)
   end
 
   # Invoked by the framework (controller / renderer) after a handler returns
@@ -43,5 +62,17 @@ defmodule Hologram.Realtime do
     end)
 
     %{server | broadcasts: []}
+  end
+
+  defp publish({kind, id}, cid, action_name, params, excluded_identities)
+       when kind in [:instance, :session, :user] and is_binary(cid) do
+    action = %Action{name: action_name, params: Map.new(params), target: cid}
+    topic = "hologram:channel:#{kind}:#{id}"
+
+    Phoenix.PubSub.broadcast(
+      Hologram.PubSub,
+      topic,
+      {:broadcast_action, action, excluded_identities}
+    )
   end
 end
