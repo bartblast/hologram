@@ -6,10 +6,37 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   @table_name :hologram_subscriptions
 
   @doc """
-  Applies the given `adds` and `drops` deltas to the registry's bindings for
-  `instance_id`. Idempotent: re-adding an already-present key does not retag
-  it, and dropping a missing key is a no-op. Returns `{add_keys, drop_keys}`
-  of the actually-applied deltas after idempotence filtering.
+  Applies `adds` and `drops` deltas to the registry's bindings for
+  `instance_id`. Called after a same-page `command/3` returns, to fold the
+  command's subscription changes into the live binding set without
+  disturbing bindings the command didn't touch.
+
+  Idempotent:
+
+    * Re-adding an already-present key is a no-op; the existing binding's
+      `authorizing_user_id` is not retagged.
+
+    * Dropping a missing key is a no-op.
+
+  Returns `{add_keys, drop_keys}` of the actually-applied deltas, after
+  idempotence filtering, so the framework knows which adds need fresh
+  receipts signed and which drops to acknowledge to the client.
+
+  Emits zero-crossing `{:sub, channel}` / `{:unsub, channel}` messages to
+  the entry's `sse_pid`: a channel sees `:sub` only when it gains its first
+  cid-binding, and `:unsub` only when it loses its last. Adding or dropping
+  cids for an already-bound channel is silent.
+
+  Each added binding is tagged with `authorizing_user_id` (the authenticated
+  user_id at handler time, or `nil` for anonymous). The per-binding tag lets
+  later identity changes selectively drop bindings whose authorization no
+  longer holds.
+
+  When no entry exists at call time (the SSE connection has already died and
+  been garbage-collected by the registry's `:DOWN` handler), the call is
+  alive-only: no entry is created and no zero-crossing messages are emitted.
+  The input `adds` and `drops` are returned unchanged so the framework can
+  still sign receipts and ship a coherent response to the client.
   """
   @spec apply_deltas(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
           {[{any, String.t()}], [{any, String.t()}]}
