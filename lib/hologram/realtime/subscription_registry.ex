@@ -156,7 +156,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           {actually_added, actually_dropped}
 
         [] ->
-          {[], []}
+          {adds, drops}
       end
 
     {:reply, reply, refs}

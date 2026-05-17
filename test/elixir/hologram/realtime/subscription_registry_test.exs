@@ -210,6 +210,30 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       refute_receive {:sub, _channel}
       refute_receive {:unsub, _channel}
     end
+
+    test "returns the input adds and drops for an unknown instance_id" do
+      adds = [{:room_a, "page"}, {:room_b, "comp_1"}]
+      drops = [{:room_c, "page"}]
+
+      {add_keys, drop_keys} =
+        apply_deltas("test-unknown-instance-id", adds, drops, "test-user-id")
+
+      assert MapSet.new(add_keys) == MapSet.new(adds)
+      assert MapSet.new(drop_keys) == MapSet.new(drops)
+    end
+
+    test "creates no entry for an unknown instance_id" do
+      apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      assert :ets.lookup(ets_table_name(), "test-unknown-instance-id") == []
+    end
+
+    test "sends no zero-crossing messages for an unknown instance_id" do
+      apply_deltas("test-unknown-instance-id", [{:room_a, "page"}], [], "test-user-id")
+
+      refute_receive {:sub, _channel}
+      refute_receive {:unsub, _channel}
+    end
   end
 
   describe "identity_of/1" do
