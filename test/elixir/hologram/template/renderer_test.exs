@@ -1549,7 +1549,7 @@ defmodule Hologram.Template.RendererTest do
         }
       ]
 
-      result = Hologram.Template.Renderer.interpolate_self_echoes_js(html, actions)
+      result = Renderer.interpolate_self_echoes_js(html, actions)
 
       assert result ==
                ~s'before selfEchoes: Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("page")]])]) after'
@@ -1558,7 +1558,7 @@ defmodule Hologram.Template.RendererTest do
     test "substitutes the placeholder with an empty list when no actions are provided" do
       html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
 
-      result = Hologram.Template.Renderer.interpolate_self_echoes_js(html, [])
+      result = Renderer.interpolate_self_echoes_js(html, [])
 
       assert result == ~s'before selfEchoes: Type.list([]) after'
     end
