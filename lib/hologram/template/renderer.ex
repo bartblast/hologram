@@ -28,6 +28,16 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
+  the encoded list of actions supplied by the caller.
+  """
+  @spec interpolate_self_echoes_js(String.t(), [Component.Action.t()]) :: String.t()
+  def interpolate_self_echoes_js(html, self_echoes) do
+    self_echoes_js = Encoder.encode_term!(self_echoes)
+    String.replace(html, "$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
+  end
+
+  @doc """
   Renders the given DOM.
 
   ## Examples
@@ -175,6 +185,11 @@ defmodule Hologram.Template.Renderer do
         %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
+    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left in `html_with_interpolated_js`
+    # for the caller to substitute via `interpolate_self_echoes_js/2`. The value
+    # depends on the post-render `server.broadcasts`, which is a `Hologram.Realtime`
+    # concern - keeping the renderer Realtime-agnostic means the controller does
+    # the final substitution after `Realtime.get_self_echoes/1`.
     html_with_interpolated_js =
       initial_html
       |> interpolate_asset_manifest_js()

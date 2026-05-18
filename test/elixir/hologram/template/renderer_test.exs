@@ -1168,6 +1168,19 @@ defmodule Hologram.Template.RendererTest do
       assert String.contains?(html, expected)
     end
 
+    test "does not interpolate self_echoes JS" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      assert {html, _component_registry, _server_struct} =
+               render_page(Module48, @params, @server, @opts)
+
+      assert String.contains?(html, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
+    end
+
     test "with DOCTYPE" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
@@ -1521,6 +1534,33 @@ defmodule Hologram.Template.RendererTest do
                    fn ->
                      stringify_for_interpolation({97, 98, 99})
                    end
+    end
+  end
+
+  describe "interpolate_self_echoes_js/2" do
+    test "substitutes the placeholder with the encoded list of actions" do
+      html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
+
+      actions = [
+        %Hologram.Component.Action{
+          name: :my_action,
+          params: %{text: "hi"},
+          target: "page"
+        }
+      ]
+
+      result = Hologram.Template.Renderer.interpolate_self_echoes_js(html, actions)
+
+      assert result ==
+               ~s'before selfEchoes: Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("page")]])]) after'
+    end
+
+    test "substitutes the placeholder with an empty list when no actions are provided" do
+      html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'
+
+      result = Hologram.Template.Renderer.interpolate_self_echoes_js(html, [])
+
+      assert result == ~s'before selfEchoes: Type.list([]) after'
     end
   end
 end
