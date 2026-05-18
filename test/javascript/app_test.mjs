@@ -11,6 +11,20 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("App", () => {
+  const receipt = (channel, cid, token) =>
+    Type.tuple([channel, Type.bitstring(cid), Type.bitstring(token)]);
+
+  const key = (channel, cid) => Type.tuple([channel, Type.bitstring(cid)]);
+  const encodedKey = (channel, cid) => Type.encodeMapKey(key(channel, cid));
+
+  beforeEach(() => {
+    App.subscriptionReceipts.clear();
+  });
+
+  afterEach(() => {
+    App.subscriptionReceipts.clear();
+  });
+
   describe("loadInstanceId()", () => {
     let originalGlobalHologram;
 
@@ -48,20 +62,6 @@ describe("App", () => {
   });
 
   describe("mergeReceipts()", () => {
-    const receipt = (channel, cid, token) =>
-      Type.tuple([channel, Type.bitstring(cid), Type.bitstring(token)]);
-
-    const key = (channel, cid) => Type.tuple([channel, Type.bitstring(cid)]);
-    const encodedKey = (channel, cid) => Type.encodeMapKey(key(channel, cid));
-
-    beforeEach(() => {
-      App.subscriptionReceipts.clear();
-    });
-
-    afterEach(() => {
-      App.subscriptionReceipts.clear();
-    });
-
     it("adds entries from adds list", () => {
       const adds = Type.list([receipt(Type.atom("room_a"), "page", "token-a")]);
 
@@ -140,20 +140,6 @@ describe("App", () => {
   });
 
   describe("purgeReceipts()", () => {
-    const receipt = (channel, cid, token) =>
-      Type.tuple([channel, Type.bitstring(cid), Type.bitstring(token)]);
-
-    const key = (channel, cid) => Type.tuple([channel, Type.bitstring(cid)]);
-    const encodedKey = (channel, cid) => Type.encodeMapKey(key(channel, cid));
-
-    beforeEach(() => {
-      App.subscriptionReceipts.clear();
-    });
-
-    afterEach(() => {
-      App.subscriptionReceipts.clear();
-    });
-
     it("removes the listed keys and leaves other entries in place", () => {
       App.mergeReceipts(
         Type.list([
