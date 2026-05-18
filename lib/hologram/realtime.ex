@@ -50,16 +50,21 @@ defmodule Hologram.Realtime do
   end
 
   # Invoked by the framework (controller / renderer) after a handler returns
-  # successfully. Iterates the LIFO list in call order, fires each entry via
-  # broadcast_action/4, and clears the list. If the handler raises, the server
-  # state is discarded before reaching here.
+  # successfully. Iterates the LIFO list in call order, publishes each entry
+  # via broadcast_action_except/5 with the originator's instance auto-added to
+  # `excluded_identities` (the dev never sees this; it just prevents duplicate
+  # PubSub-side delivery to the originator, who instead receives via the
+  # response payload's self_echoes when subscribed). Returns the server with
+  # broadcasts cleared. If the handler raises, the server state is discarded
+  # before reaching here.
   @doc false
   @spec flush_broadcasts(Server.t()) :: Server.t()
-  def flush_broadcasts(%Server{broadcasts: broadcasts} = server) do
+  def flush_broadcasts(%Server{broadcasts: broadcasts, instance_id: instance_id} = server) do
     broadcasts
     |> Enum.reverse()
     |> Enum.each(fn %Broadcast{} = entry ->
-      broadcast_action(entry.channel, entry.cid, entry.action_name, entry.params)
+      excluded = Enum.uniq([{:instance, instance_id} | entry.except])
+      broadcast_action_except(excluded, entry.channel, entry.cid, entry.action_name, entry.params)
     end)
 
     %{server | broadcasts: []}

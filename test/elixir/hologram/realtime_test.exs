@@ -132,6 +132,7 @@ defmodule Hologram.RealtimeTest do
       instance_id = subscribe_to_identity_channel(:instance)
 
       server = %Server{
+        instance_id: instance_id,
         broadcasts: [
           %Broadcast{
             channel: {:instance, instance_id},
@@ -149,7 +150,7 @@ defmodule Hologram.RealtimeTest do
                         name: :append_message,
                         params: %{text: "hi"},
                         target: "my_editor"
-                      }, []}
+                      }, [{:instance, ^instance_id}]}
 
       assert result.broadcasts == []
     end
@@ -160,6 +161,7 @@ defmodule Hologram.RealtimeTest do
       # broadcasts is LIFO: head is the most recent put_broadcast call.
       # Two calls in order :first, :second produce entries in :second, :first order.
       server = %Server{
+        instance_id: instance_id,
         broadcasts: [
           %Broadcast{
             channel: {:instance, instance_id},
@@ -178,8 +180,74 @@ defmodule Hologram.RealtimeTest do
 
       flush_broadcasts(server)
 
-      assert_receive {:broadcast_action, %Action{name: :first}, []}
-      assert_receive {:broadcast_action, %Action{name: :second}, []}
+      assert_receive {:broadcast_action, %Action{name: :first}, [{:instance, ^instance_id}]}
+      assert_receive {:broadcast_action, %Action{name: :second}, [{:instance, ^instance_id}]}
+    end
+
+    test "auto-excludes the originator's instance via excluded_identities" do
+      instance_id = subscribe_to_identity_channel(:instance)
+
+      server = %Server{
+        instance_id: instance_id,
+        broadcasts: [
+          %Broadcast{
+            channel: {:instance, instance_id},
+            cid: "page",
+            action_name: :ping,
+            params: %{}
+          }
+        ]
+      }
+
+      flush_broadcasts(server)
+
+      assert_receive {:broadcast_action, %Action{name: :ping}, [{:instance, ^instance_id}]}
+    end
+
+    test "merges dev-supplied except identities with the auto-excluded originator instance" do
+      instance_id = subscribe_to_identity_channel(:instance)
+
+      server = %Server{
+        instance_id: instance_id,
+        broadcasts: [
+          %Broadcast{
+            channel: {:instance, instance_id},
+            cid: "page",
+            action_name: :ping,
+            params: %{},
+            except: [{:session, "some-session-id"}]
+          }
+        ]
+      }
+
+      flush_broadcasts(server)
+
+      assert_receive {:broadcast_action, %Action{name: :ping}, excluded}
+
+      assert Enum.sort(excluded) ==
+               Enum.sort([{:instance, instance_id}, {:session, "some-session-id"}])
+    end
+
+    test "dedupes auto-excluded originator instance when dev also excluded it explicitly" do
+      instance_id = subscribe_to_identity_channel(:instance)
+      originator = {:instance, instance_id}
+
+      server = %Server{
+        instance_id: instance_id,
+        broadcasts: [
+          %Broadcast{
+            channel: {:instance, instance_id},
+            cid: "page",
+            action_name: :ping,
+            params: %{},
+            except: [originator]
+          }
+        ]
+      }
+
+      flush_broadcasts(server)
+
+      assert_receive {:broadcast_action, %Action{name: :ping}, [^originator]}
     end
   end
 end
