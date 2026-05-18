@@ -19,6 +19,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module11
   alias Hologram.Test.Fixtures.Controller.Module12
   alias Hologram.Test.Fixtures.Controller.Module13
+  alias Hologram.Test.Fixtures.Controller.Module14
+  alias Hologram.Test.Fixtures.Controller.Module15
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
@@ -88,6 +90,18 @@ defmodule Hologram.ControllerTest do
       Regex.run(~r/globalThis\.Hologram\.instanceId = "([^"]+)";/, resp_body)
 
     instance_id
+  end
+
+  defp render_page_with_instance(page_module, instance_id) do
+    :get
+    |> Plug.Test.conn("/")
+    |> Plug.Test.init_test_session(%{})
+    |> Plug.Conn.fetch_cookies()
+    |> handle_page_request(page_module, %{},
+      initial_page?: true,
+      instance_id: instance_id,
+      csrf_token: @masked_csrf_token
+    )
   end
 
   defp serialize_params(params) when params == %{} do
@@ -1150,6 +1164,44 @@ defmodule Hologram.ControllerTest do
                         params: %{text: "hi"},
                         target: "page"
                       }, [{:instance, _instance_id}]}
+    end
+  end
+
+  describe "handle_page_request/4 subscription wiring" do
+    # handle_page_request/4 is exposed as `@doc false` public solely as a test
+    # seam: tests can drive a render with a known instance_id without going
+    # through the auto-generating handle_initial_page_request/2 wrapper. Its
+    # behavior is otherwise covered implicitly through the public wrappers'
+    # tests (handle_initial_page_request/2, handle_subsequent_page_request/2).
+    # The tests below assert the subscription-wiring slice only.
+
+    setup do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module14, :dummy_module_14_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module15, :dummy_module_15_digest)
+
+      :ok
+    end
+
+    test "drives SubscriptionRegistry.transition with the page's accumulated subscriptions" do
+      :ok = SubscriptionRegistry.register("test-instance-id", self())
+
+      render_page_with_instance(Module14, "test-instance-id")
+
+      bindings = SubscriptionRegistry.bindings_of("test-instance-id")
+
+      assert {:room_page, "page"} in Map.keys(bindings)
+      assert {:room_layout, "layout"} in Map.keys(bindings)
+      assert {:room_component, "my_component"} in Map.keys(bindings)
+    end
+
+    test "does not flush subscriptions when init/3 raises" do
+      :ok = SubscriptionRegistry.register("raising-instance-id", self())
+
+      assert_raise RuntimeError, "boom", fn ->
+        render_page_with_instance(Module15, "raising-instance-id")
+      end
+
+      assert SubscriptionRegistry.bindings_of("raising-instance-id") == %{}
     end
   end
 

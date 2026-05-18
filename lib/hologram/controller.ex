@@ -151,13 +151,15 @@ defmodule Hologram.Controller do
       {processed_server_struct, next_action} =
         process_command_result(command_result, server_struct, target)
 
-      # Apply subscription ops before flushing broadcasts so a registry failure
-      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
-      # effectively infallible, so once apply succeeds both side effects land.
-      apply_subscription_ops(processed_server_struct.__meta__.subscription_ops, instance_id)
+      # Apply subscription deltas before flushing broadcasts so a registry
+      # failure (GenServer.call timeout) leaves no half-done state.
+      # flush_broadcasts is effectively infallible, so once apply succeeds both
+      # side effects land.
+      apply_subscription_deltas(processed_server_struct.__meta__.subscription_ops, instance_id)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
       self_echoes = Realtime.get_self_echoes(processed_server_struct)
+
       flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
       {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
@@ -251,10 +253,10 @@ defmodule Hologram.Controller do
     handle_page_request(conn, page_module, params, initial_page?: false)
   end
 
-  defp apply_subscription_ops(subscription_ops, _instance_id) when subscription_ops == %{},
+  defp apply_subscription_deltas(subscription_ops, _instance_id) when subscription_ops == %{},
     do: :ok
 
-  defp apply_subscription_ops(subscription_ops, instance_id) do
+  defp apply_subscription_deltas(subscription_ops, instance_id) do
     adds = for {key, :put} <- subscription_ops, do: key
     drops = for {key, :delete} <- subscription_ops, do: key
 
@@ -291,8 +293,12 @@ defmodule Hologram.Controller do
     end
   end
 
+  # Public for tests so they can drive a page render with a known instance_id
+  # without going through the auto-generating `handle_initial_page_request/2`.
+  @doc false
   # sobelow_skip ["XSS.HTML"]
-  defp handle_page_request(initial_conn, page_module, params, renderer_opts) do
+  @spec handle_page_request(Plug.Conn.t(), module, map, keyword) :: Plug.Conn.t()
+  def handle_page_request(initial_conn, page_module, params, renderer_opts) do
     conn = Session.init(initial_conn)
 
     server_struct = %{
@@ -303,6 +309,13 @@ defmodule Hologram.Controller do
 
     {html, _component_registry, rendered_server_struct} =
       Renderer.render_page(page_module, params, server_struct, renderer_opts)
+
+    # Transition subscriptions before flushing broadcasts so a registry failure
+    # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
+    # effectively infallible, so once transition succeeds both side effects land.
+    transition_subscriptions(rendered_server_struct)
+
+    # TODO: self-echoes
 
     flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
 
@@ -333,6 +346,24 @@ defmodule Hologram.Controller do
   defp same_site_to_string(:strict), do: "Strict"
 
   defp same_site_to_string(nil), do: nil
+
+  # Called after a successful page render. Reconciles the registry's binding
+  # set for this instance against the union of `put_subscription` calls
+  # accumulated across the page-render tree (page + layout + component init/3).
+  # `client_supplied_keys` is `[]` for the initial render. `authorizing_user_id`
+  # is `nil` until the auth gate is wired.
+  #
+  # TODO: thread the client's prior subscription keys + instance_id through for
+  # subsequent navigations; once that's wired, instance_id is always non-nil and
+  # the nil clause below becomes dead code.
+  defp transition_subscriptions(server)
+
+  defp transition_subscriptions(%Server{instance_id: nil}), do: :ok
+
+  defp transition_subscriptions(%Server{instance_id: instance_id, subscriptions: subscriptions}) do
+    SubscriptionRegistry.transition(instance_id, subscriptions, [], nil)
+    :ok
+  end
 
   defp validate_csrf_token(conn) do
     with {:ok, client_token} <- get_csrf_token_from_header(conn),
