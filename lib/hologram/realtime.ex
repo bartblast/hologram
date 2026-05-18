@@ -70,6 +70,46 @@ defmodule Hologram.Realtime do
     %{server | broadcasts: []}
   end
 
+  # Returns the list of `%Action{}`s the framework should self-echo to the
+  # originator via the HTTP response payload (command POST or pageMountData).
+  # An entry self-echoes iff its channel is in the originator's effective
+  # subscription set (`server.subscriptions` ∪ identity channels) AND its
+  # `except` list does not cover any of the originator's identities. Caller
+  # must invoke this BEFORE `flush_broadcasts/1` clears the broadcasts queue.
+  @doc false
+  @spec get_self_echoes(Server.t()) :: [Action.t()]
+  def get_self_echoes(%Server{broadcasts: broadcasts} = server) do
+    own_identities = identity_channels_for(server)
+    effective_channels = effective_subscriptions(server, own_identities)
+
+    broadcasts
+    |> Enum.reverse()
+    |> Enum.filter(fn %Broadcast{channel: channel, except: except} ->
+      MapSet.member?(effective_channels, channel) and
+        not Enum.any?(except, &(&1 in own_identities))
+    end)
+    |> Enum.map(fn %Broadcast{} = entry ->
+      %Action{name: entry.action_name, params: Map.new(entry.params), target: entry.cid}
+    end)
+  end
+
+  defp effective_subscriptions(%Server{subscriptions: subscriptions}, identity_channels) do
+    subscriptions
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.concat(identity_channels)
+    |> MapSet.new()
+  end
+
+  defp identity_channels_for(%Server{} = server) do
+    [{:instance, server.instance_id}]
+    |> prepend_identity(:session, server.session_id)
+    |> prepend_identity(:user, server.user_id)
+  end
+
+  defp prepend_identity(identities, _kind, nil), do: identities
+
+  defp prepend_identity(identities, kind, id), do: [{kind, id} | identities]
+
   defp publish({kind, id}, cid, action_name, params, excluded_identities)
        when kind in [:instance, :session, :user] and is_binary(cid) do
     action = %Action{name: action_name, params: Map.new(params), target: cid}

@@ -250,4 +250,210 @@ defmodule Hologram.RealtimeTest do
       assert_receive {:broadcast_action, %Action{name: :ping}, [^originator]}
     end
   end
+
+  describe "get_self_echoes/1" do
+    test "returns [] when broadcasts list is empty" do
+      server = %Server{instance_id: "originator", broadcasts: []}
+
+      assert get_self_echoes(server) == []
+    end
+
+    test "includes a put_broadcast targeting a subscribed application channel" do
+      server = %Server{
+        instance_id: "originator",
+        subscriptions: [{{:room, 42}, "msgs"}],
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :append,
+            params: %{text: "hi"}
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == [
+               %Action{name: :append, params: %{text: "hi"}, target: "msgs"}
+             ]
+    end
+
+    test "excludes a put_broadcast targeting an unsubscribed channel" do
+      server = %Server{
+        instance_id: "originator",
+        subscriptions: [],
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :append,
+            params: %{text: "hi"}
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == []
+    end
+
+    test "includes a put_broadcast targeting the originator's auto-subscribed instance channel" do
+      server = %Server{
+        instance_id: "originator",
+        broadcasts: [
+          %Broadcast{
+            channel: {:instance, "originator"},
+            cid: "page",
+            action_name: :ping,
+            params: %{}
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == [
+               %Action{name: :ping, params: %{}, target: "page"}
+             ]
+    end
+
+    test "includes a put_broadcast targeting the originator's auto-subscribed session channel" do
+      server = %Server{
+        instance_id: "originator",
+        session_id: "session-1",
+        broadcasts: [
+          %Broadcast{
+            channel: {:session, "session-1"},
+            cid: "page",
+            action_name: :ping,
+            params: %{}
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == [
+               %Action{name: :ping, params: %{}, target: "page"}
+             ]
+    end
+
+    test "includes a put_broadcast targeting the originator's auto-subscribed user channel" do
+      server = %Server{
+        instance_id: "originator",
+        session_id: "session-1",
+        user_id: "user-1",
+        broadcasts: [
+          %Broadcast{
+            channel: {:user, "user-1"},
+            cid: "page",
+            action_name: :ping,
+            params: %{}
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == [
+               %Action{name: :ping, params: %{}, target: "page"}
+             ]
+    end
+
+    test "excludes a subscribed broadcast when except covers the originator instance" do
+      server = %Server{
+        instance_id: "originator",
+        subscriptions: [{{:room, 42}, "msgs"}],
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :append,
+            params: %{text: "hi"},
+            except: [{:instance, "originator"}]
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == []
+    end
+
+    test "excludes a subscribed broadcast when except covers the originator session" do
+      server = %Server{
+        instance_id: "originator",
+        session_id: "session-1",
+        subscriptions: [{{:room, 42}, "msgs"}],
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :append,
+            params: %{text: "hi"},
+            except: [{:session, "session-1"}]
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == []
+    end
+
+    test "excludes a subscribed broadcast when except covers the originator user" do
+      server = %Server{
+        instance_id: "originator",
+        session_id: "session-1",
+        user_id: "user-1",
+        subscriptions: [{{:room, 42}, "msgs"}],
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :append,
+            params: %{text: "hi"},
+            except: [{:user, "user-1"}]
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == []
+    end
+
+    test "includes a subscribed broadcast when except covers a non-originator identity only" do
+      server = %Server{
+        instance_id: "originator",
+        subscriptions: [{{:room, 42}, "msgs"}],
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :append,
+            params: %{text: "hi"},
+            except: [{:instance, "other-instance"}]
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == [
+               %Action{name: :append, params: %{text: "hi"}, target: "msgs"}
+             ]
+    end
+
+    test "preserves call order across multiple self-echoed broadcasts" do
+      # The broadcasts list is LIFO: head is the most recent call. get_self_echoes/1
+      # walks it in reverse so the returned list matches call order.
+      server = %Server{
+        instance_id: "originator",
+        subscriptions: [{{:room, 42}, "msgs"}],
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :second,
+            params: %{}
+          },
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "msgs",
+            action_name: :first,
+            params: %{}
+          }
+        ]
+      }
+
+      assert get_self_echoes(server) == [
+               %Action{name: :first, params: %{}, target: "msgs"},
+               %Action{name: :second, params: %{}, target: "msgs"}
+             ]
+    end
+  end
 end
