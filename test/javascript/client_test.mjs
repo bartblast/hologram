@@ -514,7 +514,11 @@ describe("Client", () => {
     it("calls fetch with correct URL, options, and payload including CSRF token", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, "Type.nil()", "Type.list([])"]),
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes: "Type.list([])",
+          status: 1,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -550,13 +554,11 @@ describe("Client", () => {
     it("command succeeds, next action is not nil", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon
-          .stub()
-          .resolves([
-            1,
-            'Type.actionStruct({name: Type.atom("dummy_action")})',
-            "Type.list([])",
-          ]),
+        json: sinon.stub().resolves({
+          action: 'Type.actionStruct({name: Type.atom("dummy_action")})',
+          selfEchoes: "Type.list([])",
+          status: 1,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -574,7 +576,11 @@ describe("Client", () => {
     it("command succeeds, next action is nil", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, "Type.nil()", "Type.list([])"]),
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes: "Type.list([])",
+          status: 1,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -610,9 +616,10 @@ describe("Client", () => {
     it("command fails due to result status code", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon
-          .stub()
-          .resolves([0, "error message from server command handler"]),
+        json: sinon.stub().resolves({
+          action: "error message from server command handler",
+          status: 0,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -635,16 +642,15 @@ describe("Client", () => {
       sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
-    it("dispatches each self-echoed action from the third response element", async () => {
+    it("dispatches each self-echoed action from the selfEchoes field", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon
-          .stub()
-          .resolves([
-            1,
-            "Type.nil()",
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes:
             'Type.list([Type.actionStruct({name: Type.atom("self_echo_a")}), Type.actionStruct({name: Type.atom("self_echo_b")})])',
-          ]),
+          status: 1,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -665,10 +671,14 @@ describe("Client", () => {
       );
     });
 
-    it("does not dispatch any self-echo when the third response element is an empty list", async () => {
+    it("does not dispatch any self-echo when the selfEchoes field is an empty list", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, "Type.nil()", "Type.list([])"]),
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes: "Type.list([])",
+          status: 1,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -681,13 +691,12 @@ describe("Client", () => {
     it("dispatches next_action before self-echoed actions", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon
-          .stub()
-          .resolves([
-            1,
-            'Type.actionStruct({name: Type.atom("next_action")})',
+        json: sinon.stub().resolves({
+          action: 'Type.actionStruct({name: Type.atom("next_action")})',
+          selfEchoes:
             'Type.list([Type.actionStruct({name: Type.atom("self_echo")})])',
-          ]),
+          status: 1,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);

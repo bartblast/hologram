@@ -64,8 +64,13 @@ defmodule Hologram.RouterTest do
         |> Plug.Conn.put_req_header("x-csrf-token", masked_csrf_token)
         |> call([])
 
-      assert conn.resp_body ==
-               ~s'[1,"Type.atom(\\\"nil\\\")","Type.list([])","Type.list([])","Type.list([])"]'
+      assert Jason.decode!(conn.resp_body) == %{
+               "action" => ~s'Type.atom("nil")',
+               "selfEchoes" => "Type.list([])",
+               "status" => 1,
+               "subDrops" => "Type.list([])",
+               "subReceipts" => "Type.list([])"
+             }
     end
   end
 

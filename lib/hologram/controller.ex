@@ -173,13 +173,13 @@ defmodule Hologram.Controller do
       conn
       |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
       |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-      |> Controller.json([
-        command_status,
-        encoded_next_action,
-        encoded_self_echoes,
-        encoded_sub_receipts,
-        encoded_sub_drops
-      ])
+      |> Controller.json(%{
+        action: encoded_next_action,
+        selfEchoes: encoded_self_echoes,
+        status: command_status,
+        subDrops: encoded_sub_drops,
+        subReceipts: encoded_sub_receipts
+      })
       |> Plug.Conn.halt()
     else
       Logger.warning("CSRF token validation failed")

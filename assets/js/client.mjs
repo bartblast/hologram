@@ -148,13 +148,17 @@ export default class Client {
         $.#failCommand(response.status);
       }
 
-      const [status, result, encodedSelfEchoes] = await response.json();
+      const {
+        action,
+        selfEchoes: encodedSelfEchoes,
+        status,
+      } = await response.json();
 
       if (status === 0) {
-        $.#failCommand(result);
+        $.#failCommand(action);
       }
 
-      const nextAction = Interpreter.evaluateJavaScriptExpression(result);
+      const nextAction = Interpreter.evaluateJavaScriptExpression(action);
 
       if (!Type.isNil(nextAction)) {
         Hologram.scheduleAction(nextAction);

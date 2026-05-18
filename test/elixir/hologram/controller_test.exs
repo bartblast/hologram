@@ -474,13 +474,13 @@ defmodule Hologram.ControllerTest do
       conn = execute_successful_command_request()
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.atom("nil")',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response == %{
+               "action" => ~s'Type.atom("nil")',
+               "selfEchoes" => "Type.list([])",
+               "status" => 1,
+               "subDrops" => "Type.list([])",
+               "subReceipts" => "Type.list([])"
+             }
     end
 
     test "establishes a Hologram session ID" do
@@ -501,13 +501,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_cid")], [Type.atom("params"), Type.map([[Type.atom("cid"), Type.bitstring("my_target_1")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_cid")], [Type.atom("params"), Type.map([[Type.atom("cid"), Type.bitstring("my_target_1")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "extracts instance_id from payload and exposes it via server.instance_id" do
@@ -522,13 +517,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_instance_id")], [Type.atom("params"), Type.map([[Type.atom("instance_id"), Type.bitstring("my-instance-id")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_instance_id")], [Type.atom("params"), Type.map([[Type.atom("instance_id"), Type.bitstring("my-instance-id")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "pre-populates server.subscriptions from SubscriptionRegistry bindings for the request's instance_id" do
@@ -552,13 +542,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "pre-populates server.subscriptions to an empty list when no registry entry exists" do
@@ -573,13 +558,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls put_subscription" do
@@ -693,8 +673,7 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      [_status, _next_action, _self_echoes, encoded_sub_receipts, _encoded_sub_drops] =
-        Jason.decode!(conn.resp_body)
+      %{"subReceipts" => encoded_sub_receipts} = Jason.decode!(conn.resp_body)
 
       assert String.contains?(encoded_sub_receipts, ~s'Type.atom("room_a")')
       assert String.contains?(encoded_sub_receipts, ~s'Type.bitstring("my_target_1")')
@@ -719,8 +698,7 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      [_status, _next_action, _self_echoes, _encoded_sub_receipts, encoded_sub_drops] =
-        Jason.decode!(conn.resp_body)
+      %{"subDrops" => encoded_sub_drops} = Jason.decode!(conn.resp_body)
 
       assert String.contains?(encoded_sub_drops, ~s'Type.atom("room_a")')
       assert String.contains?(encoded_sub_drops, ~s'Type.bitstring("my_target_1")')
@@ -745,7 +723,7 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      [_status, _next_action, _self_echoes, encoded_sub_receipts, encoded_sub_drops] =
+      %{"subDrops" => encoded_sub_drops, "subReceipts" => encoded_sub_receipts} =
         Jason.decode!(conn.resp_body)
 
       assert String.contains?(encoded_sub_receipts, ~s'Type.atom("room_b")')
@@ -793,13 +771,7 @@ defmodule Hologram.ControllerTest do
       conn = execute_successful_command_request()
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.atom("nil")',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] == ~s'Type.atom("nil")'
     end
 
     test "command with next action target not specified" do
@@ -813,13 +785,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "command with next action target specified" do
@@ -833,13 +800,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
     end
 
     test "command with encoding error for anonymous function" do
@@ -860,7 +822,8 @@ defmodule Hologram.ControllerTest do
           "term contains a function that is not a remote function capture"
         end
 
-      assert response == [0, expected_msg, "Type.list([])", "Type.list([])", "Type.list([])"]
+      assert response["status"] == 0
+      assert response["action"] == expected_msg
     end
 
     test "command handler can read from session" do
@@ -887,13 +850,8 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_session")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_session")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "command handler can read from cookies" do
@@ -922,13 +880,8 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response == [
-               1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
-               "Type.list([])",
-               "Type.list([])",
-               "Type.list([])"
-             ]
+      assert response["action"] ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "command handler can write to session" do
@@ -968,8 +921,7 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert [1, _encoded_action, _encoded_self_echoes, _encoded_sub_receipts, _encoded_sub_drops] =
-               response
+      assert %{"status" => 1} = response
 
       # Only framework-managed entries should be in the session
       # (no app-level session entries since the command made no changes).
@@ -1002,8 +954,7 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert [1, _encoded_action, _encoded_self_echoes, _encoded_sub_receipts, _encoded_sub_drops] =
-               response
+      assert %{"status" => 1} = response
 
       # TODO: uncomment when standalone Hologram is supported
       # Only the session cookie should be set, no additional cookies from the command
@@ -1069,7 +1020,7 @@ defmodule Hologram.ControllerTest do
       refute_receive {:broadcast_action, _action, _excluded_identities}
     end
 
-    test "encodes self_echoes as the third response element when present" do
+    test "encodes self_echoes into the selfEchoes field when present" do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
@@ -1082,14 +1033,13 @@ defmodule Hologram.ControllerTest do
 
       conn = execute_command_request(payload)
 
-      [_status, _encoded_action, encoded_self_echoes, _encoded_sub_receipts, _encoded_sub_drops] =
-        Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
 
       assert encoded_self_echoes ==
                ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])])'
     end
 
-    test "encodes self_echoes as an empty list when absent" do
+    test "sets the selfEchoes field to an empty list when absent" do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
@@ -1102,8 +1052,7 @@ defmodule Hologram.ControllerTest do
 
       conn = execute_command_request(payload)
 
-      [_status, _encoded_action, encoded_self_echoes, _encoded_sub_receipts, _encoded_sub_drops] =
-        Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
 
       assert encoded_self_echoes == "Type.list([])"
     end
