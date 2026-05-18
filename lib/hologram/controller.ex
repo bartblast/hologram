@@ -217,6 +217,39 @@ defmodule Hologram.Controller do
     handle_page_request(conn_with_csrf_token, page_module, params, renderer_opts)
   end
 
+  # Public for tests so they can drive a page render with a known instance_id
+  # without going through the auto-generating `handle_initial_page_request/2`.
+  @doc false
+  # sobelow_skip ["XSS.HTML"]
+  @spec handle_page_request(Plug.Conn.t(), module, map, keyword) :: Plug.Conn.t()
+  def handle_page_request(initial_conn, page_module, params, renderer_opts) do
+    conn = Session.init(initial_conn)
+
+    server_struct = %{
+      Server.from(conn)
+      | cid: "page",
+        instance_id: renderer_opts[:instance_id]
+    }
+
+    {html, _component_registry, rendered_server_struct} =
+      Renderer.render_page(page_module, params, server_struct, renderer_opts)
+
+    # Transition subscriptions before flushing broadcasts so a registry failure
+    # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
+    # effectively infallible, so once transition succeeds both side effects land.
+    transition_subscriptions(rendered_server_struct)
+
+    # TODO: self-echoes
+
+    flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+
+    conn
+    |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
+    |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
+    |> Controller.html(html)
+    |> Plug.Conn.halt()
+  end
+
   @doc """
   Handles the ping HTTP GET request by building HTTP response.
   """
@@ -291,39 +324,6 @@ defmodule Hologram.Controller do
       token when is_binary(token) -> {:ok, token}
       _fallback -> :error
     end
-  end
-
-  # Public for tests so they can drive a page render with a known instance_id
-  # without going through the auto-generating `handle_initial_page_request/2`.
-  @doc false
-  # sobelow_skip ["XSS.HTML"]
-  @spec handle_page_request(Plug.Conn.t(), module, map, keyword) :: Plug.Conn.t()
-  def handle_page_request(initial_conn, page_module, params, renderer_opts) do
-    conn = Session.init(initial_conn)
-
-    server_struct = %{
-      Server.from(conn)
-      | cid: "page",
-        instance_id: renderer_opts[:instance_id]
-    }
-
-    {html, _component_registry, rendered_server_struct} =
-      Renderer.render_page(page_module, params, server_struct, renderer_opts)
-
-    # Transition subscriptions before flushing broadcasts so a registry failure
-    # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
-    # effectively infallible, so once transition succeeds both side effects land.
-    transition_subscriptions(rendered_server_struct)
-
-    # TODO: self-echoes
-
-    flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
-
-    conn
-    |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-    |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-    |> Controller.html(html)
-    |> Plug.Conn.halt()
   end
 
   defp process_command_result(command_result, server_struct, default_target) do
