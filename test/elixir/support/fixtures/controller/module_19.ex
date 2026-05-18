@@ -9,12 +9,9 @@ defmodule Hologram.Test.Fixtures.Controller.Module19 do
 
   @impl Page
   def init(_params, component, server) do
-    server =
-      server
-      |> put_subscription(:room_a)
-      |> delete_subscription(:room_a)
-
-    {component, server}
+    server
+    |> put_subscription(:room_a)
+    |> delete_subscription(:room_a)
   end
 
   @impl Page
