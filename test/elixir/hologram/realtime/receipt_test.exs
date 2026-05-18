@@ -3,49 +3,47 @@ defmodule Hologram.Realtime.ReceiptTest do
 
   import Hologram.Realtime.Receipt
 
-  alias Hologram.Realtime.Receipt
+  describe "issue/4" do
+    test "produces a Phoenix.Token-decodable token for the supplied binding" do
+      token = issue(:room_a, "page", "test-instance-id", nil)
 
-  @receipt %Receipt{
-    channel: :room_a,
-    cid: "page",
-    created_at: 1_700_000_000,
-    instance_id: "test-instance-id",
-    user_id: nil
-  }
-
-  describe "sign/1" do
-    test "produces a token that Phoenix.Token can decode back into the original payload" do
-      token = sign(@receipt)
-
-      assert {:ok, {"test-instance-id", nil, :room_a, "page", 1_700_000_000}} =
+      assert {:ok, {"test-instance-id", nil, :room_a, "page", _created_at}} =
                "SECRET_KEY_BASE"
                |> System.fetch_env!()
                |> Phoenix.Token.verify("hologram subscription receipt", token)
     end
 
-    test "produces a different token for a different receipt payload" do
-      other_receipt = %{@receipt | cid: "comp_1"}
+    test "stamps a fresh created_at on the receipt" do
+      time_before = System.system_time(:millisecond)
+      token = issue(:room_a, "page", "test-instance-id", nil)
+      time_after = System.system_time(:millisecond)
 
-      assert sign(@receipt) != sign(other_receipt)
+      assert {:ok, receipt} = verify(token)
+      assert receipt.created_at >= time_before
+      assert receipt.created_at <= time_after
+    end
+
+    test "round-trips the supplied fields" do
+      token = issue({:room, 42}, "comp_1", "test-instance-id", 7)
+
+      assert {:ok, receipt} = verify(token)
+      assert receipt.channel == {:room, 42}
+      assert receipt.cid == "comp_1"
+      assert receipt.instance_id == "test-instance-id"
+      assert receipt.user_id == 7
     end
   end
 
   describe "verify/2" do
-    test "decodes a freshly-signed token back into the original receipt" do
-      token = sign(@receipt)
-
-      assert verify(token) == {:ok, @receipt}
-    end
-
     test "returns :invalid for a tampered token" do
-      token = sign(@receipt)
+      token = issue(:room_a, "page", "test-instance-id", nil)
       tampered = token <> "x"
 
       assert verify(tampered) == {:error, :invalid}
     end
 
     test "returns :expired when the token is older than max_age" do
-      token = sign(@receipt)
+      token = issue(:room_a, "page", "test-instance-id", nil)
 
       assert verify(token, max_age: -1) == {:error, :expired}
     end
