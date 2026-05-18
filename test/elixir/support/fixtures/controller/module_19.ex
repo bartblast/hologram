@@ -8,7 +8,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module19 do
   layout LayoutFixture
 
   @impl Page
-  def init(_params, component, server) do
+  def init(_params, _component, server) do
     server
     |> put_subscription(:room_a)
     |> delete_subscription(:room_a)

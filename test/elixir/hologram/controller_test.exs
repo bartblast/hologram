@@ -24,6 +24,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module18
   alias Hologram.Test.Fixtures.Controller.Module19
   alias Hologram.Test.Fixtures.Controller.Module2
+  alias Hologram.Test.Fixtures.Controller.Module20
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
@@ -1226,6 +1227,7 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module15, :dummy_module_15_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module18, :dummy_module_18_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module19, :dummy_module_19_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module20, :dummy_module_20_digest)
 
       :ok
     end
@@ -1275,6 +1277,27 @@ defmodule Hologram.ControllerTest do
       bindings = SubscriptionRegistry.bindings_of("test-instance-id")
 
       refute Map.has_key?(bindings, {:room_a, "page"})
+    end
+
+    test "shared layout binding survives a transition between pages with the same layout without PubSub churn" do
+      :ok = SubscriptionRegistry.register("test-instance-id", self())
+
+      # Render page 1 (Module14) - its layout Module16 puts :room_layout.
+      render_page_with_instance(Module14, "test-instance-id")
+
+      # Drain initial sub messages from page 1.
+      assert_receive {:sub, :room_page}
+      assert_receive {:sub, :room_layout}
+      assert_receive {:sub, :room_component}
+
+      # Render page 2 (Module20) - reuses the same Module16 layout, so the
+      # layout's {:room_layout, "layout"} binding is unchanged in the diff.
+      render_page_with_instance(Module20, "test-instance-id")
+
+      # Layout binding is preserved across the transition - no zero-crossing
+      # messages for :room_layout in either direction.
+      refute_receive {:sub, :room_layout}
+      refute_receive {:unsub, :room_layout}
     end
   end
 
