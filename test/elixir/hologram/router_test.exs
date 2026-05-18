@@ -64,7 +64,8 @@ defmodule Hologram.RouterTest do
         |> Plug.Conn.put_req_header("x-csrf-token", masked_csrf_token)
         |> call([])
 
-      assert conn.resp_body == ~s'[1,"Type.atom(\\\"nil\\\")","Type.list([])","Type.list([])"]'
+      assert conn.resp_body ==
+               ~s'[1,"Type.atom(\\\"nil\\\")","Type.list([])","Type.list([])","Type.list([])"]'
     end
   end
 

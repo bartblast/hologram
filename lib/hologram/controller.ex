@@ -156,7 +156,7 @@ defmodule Hologram.Controller do
       # failure (GenServer.call timeout) leaves no half-done state.
       # flush_broadcasts is effectively infallible, so once apply succeeds both
       # side effects land.
-      receipts = apply_subscription_deltas(processed_server_struct)
+      {sub_receipts, sub_drops} = apply_subscription_deltas(processed_server_struct)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
       self_echoes = Realtime.get_self_echoes(processed_server_struct)
@@ -167,7 +167,8 @@ defmodule Hologram.Controller do
       command_status = if encode_status == :ok, do: 1, else: 0
 
       {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
-      {:ok, encoded_receipts} = Encoder.encode_term(receipts)
+      {:ok, encoded_sub_receipts} = Encoder.encode_term(sub_receipts)
+      {:ok, encoded_sub_drops} = Encoder.encode_term(sub_drops)
 
       conn
       |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
@@ -176,7 +177,8 @@ defmodule Hologram.Controller do
         command_status,
         encoded_next_action,
         encoded_self_echoes,
-        encoded_receipts
+        encoded_sub_receipts,
+        encoded_sub_drops
       ])
       |> Plug.Conn.halt()
     else
@@ -300,16 +302,16 @@ defmodule Hologram.Controller do
   end
 
   defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}}) when ops == %{},
-    do: []
+    do: {[], []}
 
   defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}} = server) do
     adds = for {key, :put} <- ops, do: key
     drops = for {key, :delete} <- ops, do: key
 
-    {actually_added, _actually_dropped} =
+    {actually_added, actually_dropped} =
       SubscriptionRegistry.apply_deltas(server.instance_id, adds, drops, server.user_id)
 
-    build_receipts(actually_added, server)
+    {build_receipts(actually_added, server), actually_dropped}
   end
 
   defp build_cookie_opts(cookie_struct) do
