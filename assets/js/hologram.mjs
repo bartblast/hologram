@@ -307,6 +307,13 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
+  static queueSelfEchoes(selfEchoes) {
+    for (const action of selfEchoes.data) {
+      InitActionQueue.enqueue(action);
+    }
+  }
+
+  // Made public to make tests easier
   static render() {
     const startTime = performance.now();
 
@@ -845,6 +852,8 @@ export default class Hologram {
     Hologram.#pageParams = mountData.pageParams;
 
     ComponentRegistry.populate(mountData.componentRegistry);
+
+    return mountData;
   }
 
   static #maybeInitAssetPathRegistry() {
@@ -854,8 +863,10 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    let mountData = null;
+
     if ($.#shouldLoadMountData) {
-      Hologram.#loadMountData();
+      mountData = Hologram.#loadMountData();
     } else {
       $.#shouldLoadMountData = true;
     }
@@ -870,6 +881,10 @@ export default class Hologram {
     Hologram.prefetchedPages.clear();
 
     Hologram.queueActionsFromServerInits();
+
+    if (mountData) {
+      Hologram.queueSelfEchoes(mountData.selfEchoes);
+    }
 
     window.requestAnimationFrame(() => {
       $.render();

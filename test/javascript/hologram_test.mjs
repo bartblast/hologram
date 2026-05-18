@@ -943,6 +943,36 @@ describe("Hologram", () => {
     });
   });
 
+  describe("queueSelfEchoes()", () => {
+    const action1 = Type.actionStruct({
+      name: Type.atom("self_echo_a"),
+      params: Type.map(),
+      target: Type.bitstring("page"),
+    });
+
+    const action2 = Type.actionStruct({
+      name: Type.atom("self_echo_b"),
+      params: Type.map([[Type.atom("text"), Type.bitstring("hi")]]),
+      target: Type.bitstring("page"),
+    });
+
+    beforeEach(() => {
+      InitActionQueue.dequeueAll();
+    });
+
+    it("does not enqueue anything when the list is empty", () => {
+      Hologram.queueSelfEchoes(Type.list([]));
+
+      assert.deepStrictEqual(InitActionQueue.dequeueAll(), []);
+    });
+
+    it("enqueues each action in order", () => {
+      Hologram.queueSelfEchoes(Type.list([action1, action2]));
+
+      assert.deepStrictEqual(InitActionQueue.dequeueAll(), [action1, action2]);
+    });
+  });
+
   describe("scheduleAction()", () => {
     let clock, executeActionStub;
 
