@@ -1572,4 +1572,25 @@ defmodule Hologram.Template.RendererTest do
       assert result == ~s'before selfEchoes: Type.list([]) after'
     end
   end
+
+  describe "interpolate_sub_receipts_js/2" do
+    test "substitutes the placeholder with the encoded list of subscription receipts" do
+      html = ~s'before subReceipts: $SUB_RECEIPTS_JS_PLACEHOLDER after'
+
+      sub_receipts = [{:room_a, "page", "signed-token"}]
+
+      result = Renderer.interpolate_sub_receipts_js(html, sub_receipts)
+
+      assert result ==
+               ~s'before subReceipts: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page"), Type.bitstring("signed-token")])]) after'
+    end
+
+    test "substitutes the placeholder with an empty list when no receipts are provided" do
+      html = ~s'before subReceipts: $SUB_RECEIPTS_JS_PLACEHOLDER after'
+
+      result = Renderer.interpolate_sub_receipts_js(html, [])
+
+      assert result == ~s'before subReceipts: Type.list([]) after'
+    end
+  end
 end

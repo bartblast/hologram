@@ -38,6 +38,16 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Substitutes the `$SUB_RECEIPTS_JS_PLACEHOLDER` token in the given HTML with
+  the encoded list of subscription receipts supplied by the caller.
+  """
+  @spec interpolate_sub_receipts_js(String.t(), list) :: String.t()
+  def interpolate_sub_receipts_js(html, sub_receipts) do
+    sub_receipts_js = Encoder.encode_term!(sub_receipts)
+    String.replace(html, "$SUB_RECEIPTS_JS_PLACEHOLDER", sub_receipts_js)
+  end
+
+  @doc """
   Renders the given DOM.
 
   ## Examples
