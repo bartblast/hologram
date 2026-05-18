@@ -191,6 +191,21 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       refute_receive {:unsub, :room_a}
     end
 
+    test "preserves the surviving cid's binding when another cid for the same channel is dropped" do
+      :ok = register("test-instance-id", self())
+
+      apply_deltas(
+        "test-instance-id",
+        [{:room_a, "page"}, {:room_a, "comp_1"}],
+        [],
+        "test-user-id"
+      )
+
+      apply_deltas("test-instance-id", [], [{:room_a, "comp_1"}], "test-user-id")
+
+      assert bindings_of("test-instance-id") == %{{:room_a, "page"} => "test-user-id"}
+    end
+
     test "sends no messages on idempotent re-add or idempotent drop-of-missing" do
       :ok = register("test-instance-id", self())
 
