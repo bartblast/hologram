@@ -108,15 +108,11 @@ defmodule Hologram.Realtime.SSE do
     instance_id = conn.query_params["instance_id"]
     Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
 
-    {:ok, session_id} = Session.fetch_session_id(conn)
+    session_id = Session.get_session_id(conn)
     Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:session:#{session_id}")
 
-    case Session.fetch_user_id(conn) do
-      {:ok, user_id} ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:user:#{user_id}")
-
-      :error ->
-        :ok
+    if user_id = Session.get_user_id(conn) do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:user:#{user_id}")
     end
 
     conn
@@ -147,13 +143,13 @@ defmodule Hologram.Realtime.SSE do
   defp own_identities(conn) do
     conn = Plug.Conn.fetch_query_params(conn)
     instance_id = conn.query_params["instance_id"]
-    {:ok, session_id} = Session.fetch_session_id(conn)
+    session_id = Session.get_session_id(conn)
 
     base = [{:instance, instance_id}, {:session, session_id}]
 
-    case Session.fetch_user_id(conn) do
-      {:ok, user_id} -> [{:user, user_id} | base]
-      :error -> base
+    case Session.get_user_id(conn) do
+      nil -> base
+      user_id -> [{:user, user_id} | base]
     end
   end
 

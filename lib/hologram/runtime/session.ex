@@ -12,6 +12,23 @@ defmodule Hologram.Runtime.Session do
   @type op :: :delete | {:put, any}
 
   @doc """
+  Returns the Hologram session ID from the Phoenix session, or `nil` if absent.
+  """
+  @spec get_session_id(Plug.Conn.t()) :: String.t() | nil
+  def get_session_id(conn) do
+    Plug.Conn.get_session(conn, @session_id_key)
+  end
+
+  @doc """
+  Returns the authenticated Hologram user ID from the Phoenix session, or
+  `nil` if absent.
+  """
+  @spec get_user_id(Plug.Conn.t()) :: any
+  def get_user_id(conn) do
+    Plug.Conn.get_session(conn, @user_id_key)
+  end
+
+  @doc """
   Ensures a Hologram session ID is present in the Phoenix session.
 
   Mints a UUIDv4 under the `#{inspect(@session_id_key)}` key if absent.
@@ -22,32 +39,6 @@ defmodule Hologram.Runtime.Session do
     case Plug.Conn.get_session(conn, @session_id_key) do
       nil -> Plug.Conn.put_session(conn, @session_id_key, UUID.uuid4())
       _session_id -> conn
-    end
-  end
-
-  @doc """
-  Fetches the Hologram session ID from the Phoenix session.
-
-  Returns `{:ok, session_id}` when present, `:error` otherwise.
-  """
-  @spec fetch_session_id(Plug.Conn.t()) :: {:ok, String.t()} | :error
-  def fetch_session_id(conn) do
-    case Plug.Conn.get_session(conn, @session_id_key) do
-      nil -> :error
-      session_id -> {:ok, session_id}
-    end
-  end
-
-  @doc """
-  Fetches the authenticated Hologram user ID from the Phoenix session.
-
-  Returns `{:ok, user_id}` when present, `:error` otherwise.
-  """
-  @spec fetch_user_id(Plug.Conn.t()) :: {:ok, any} | :error
-  def fetch_user_id(conn) do
-    case Plug.Conn.get_session(conn, @user_id_key) do
-      nil -> :error
-      user_id -> {:ok, user_id}
     end
   end
 end

@@ -24,14 +24,14 @@ defmodule Hologram.Router do
   end
 
   get "/hologram/sse" do
-    case Session.fetch_session_id(conn) do
-      {:ok, _session_id} ->
-        SSE.stream(conn)
-
-      :error ->
+    case Session.get_session_id(conn) do
+      nil ->
         conn
         |> send_resp(401, "Unauthorized")
         |> halt()
+
+      _session_id ->
+        SSE.stream(conn)
     end
   end
 

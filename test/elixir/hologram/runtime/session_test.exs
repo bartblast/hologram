@@ -18,6 +18,32 @@ defmodule Hologram.Runtime.SessionTest do
     |> Plug.Test.init_test_session(session)
   end
 
+  describe "get_session_id/1" do
+    test "returns the session ID when present" do
+      existing_id = "existing-session-id"
+      conn = conn_with_session(%{@session_id_key => existing_id})
+
+      assert get_session_id(conn) == existing_id
+    end
+
+    test "returns nil when no session ID is present" do
+      assert get_session_id(conn_with_empty_session()) == nil
+    end
+  end
+
+  describe "get_user_id/1" do
+    test "returns the user ID when present" do
+      existing_id = "existing-user-id"
+      conn = conn_with_session(%{@user_id_key => existing_id})
+
+      assert get_user_id(conn) == existing_id
+    end
+
+    test "returns nil when no user ID is present" do
+      assert get_user_id(conn_with_empty_session()) == nil
+    end
+  end
+
   describe "init/1" do
     test "mints a UUIDv4 session ID when absent" do
       conn = init(conn_with_empty_session())
@@ -45,32 +71,6 @@ defmodule Hologram.Runtime.SessionTest do
 
       assert Plug.Conn.get_session(conn_1, @session_id_key) !=
                Plug.Conn.get_session(conn_2, @session_id_key)
-    end
-  end
-
-  describe "fetch_session_id/1" do
-    test "returns {:ok, session_id} when a session ID is present" do
-      existing_id = "existing-session-id"
-      conn = conn_with_session(%{@session_id_key => existing_id})
-
-      assert fetch_session_id(conn) == {:ok, existing_id}
-    end
-
-    test "returns :error when no session ID is present" do
-      assert fetch_session_id(conn_with_empty_session()) == :error
-    end
-  end
-
-  describe "fetch_user_id/1" do
-    test "returns {:ok, user_id} when a user ID is present" do
-      existing_id = "existing-user-id"
-      conn = conn_with_session(%{@user_id_key => existing_id})
-
-      assert fetch_user_id(conn) == {:ok, existing_id}
-    end
-
-    test "returns :error when no user ID is present" do
-      assert fetch_user_id(conn_with_empty_session()) == :error
     end
   end
 end
