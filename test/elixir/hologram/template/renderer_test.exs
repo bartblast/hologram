@@ -1182,6 +1182,19 @@ defmodule Hologram.Template.RendererTest do
       assert String.contains?(html, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
     end
 
+    test "does not interpolate sub_receipts JS" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      assert {html, _component_registry, _server_struct} =
+               render_page(Module48, @params, @server, @opts)
+
+      assert String.contains?(html, "subReceipts: $SUB_RECEIPTS_JS_PLACEHOLDER")
+    end
+
     test "with DOCTYPE" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
