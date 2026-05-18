@@ -582,6 +582,50 @@ defmodule Hologram.ControllerTest do
              }
     end
 
+    test "drives SubscriptionRegistry.apply_deltas after a command calls delete_subscription" do
+      :ok = SubscriptionRegistry.register("my-instance-id", self())
+
+      SubscriptionRegistry.apply_deltas(
+        "my-instance-id",
+        [{:room_a, "my_target_1"}],
+        [],
+        "seed-user-id"
+      )
+
+      execute_command_request(%{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_deleting_subscription,
+        params: %{},
+        target: "my_target_1"
+      })
+
+      assert SubscriptionRegistry.bindings_of("my-instance-id") == %{}
+    end
+
+    test "applies adds and drops together when a command calls put_subscription and delete_subscription" do
+      :ok = SubscriptionRegistry.register("my-instance-id", self())
+
+      SubscriptionRegistry.apply_deltas(
+        "my-instance-id",
+        [{:room_a, "my_target_1"}],
+        [],
+        "seed-user-id"
+      )
+
+      execute_command_request(%{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_putting_and_deleting_subscriptions,
+        params: %{},
+        target: "my_target_1"
+      })
+
+      assert SubscriptionRegistry.bindings_of("my-instance-id") == %{
+               {:room_b, "my_target_1"} => nil
+             }
+    end
+
     test "leaves SubscriptionRegistry bindings unchanged when subscription_ops is empty" do
       :ok = SubscriptionRegistry.register("my-instance-id", self())
 

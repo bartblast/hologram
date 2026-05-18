@@ -64,6 +64,16 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     put_action(server, :my_action_echoing_subscriptions, subscriptions: server.subscriptions)
   end
 
+  def command(:my_command_deleting_subscription, _params, server) do
+    delete_subscription(server, :room_a)
+  end
+
+  def command(:my_command_putting_and_deleting_subscriptions, _params, server) do
+    server
+    |> put_subscription(:room_b)
+    |> delete_subscription(:room_a)
+  end
+
   def command(:my_command_putting_subscription, _params, server) do
     put_subscription(server, :room_a)
   end
