@@ -156,15 +156,19 @@ defmodule Hologram.Controller do
       # effectively infallible, so once apply succeeds both side effects land.
       apply_subscription_ops(processed_server_struct.__meta__.subscription_ops, instance_id)
 
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
+      self_echoes = Realtime.get_self_echoes(processed_server_struct)
       flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
       {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
       command_status = if encode_status == :ok, do: 1, else: 0
 
+      {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
+
       conn
       |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
       |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-      |> Controller.json([command_status, encoded_next_action])
+      |> Controller.json([command_status, encoded_next_action, encoded_self_echoes])
       |> Plug.Conn.halt()
     else
       Logger.warning("CSRF token validation failed")
