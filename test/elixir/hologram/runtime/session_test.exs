@@ -18,6 +18,20 @@ defmodule Hologram.Runtime.SessionTest do
     |> Plug.Test.init_test_session(session)
   end
 
+  describe "get_session/1" do
+    test "strips the session_id key while preserving app entries" do
+      conn = conn_with_session(%{@session_id_key => "abc", "role" => "admin"})
+
+      assert get_session(conn) == %{"role" => "admin"}
+    end
+
+    test "strips the user_id key while preserving app entries" do
+      conn = conn_with_session(%{@user_id_key => 42, "role" => "admin"})
+
+      assert get_session(conn) == %{"role" => "admin"}
+    end
+  end
+
   describe "get_session_id/1" do
     test "returns the session ID when present" do
       existing_id = "existing-session-id"

@@ -12,6 +12,17 @@ defmodule Hologram.Runtime.Session do
   @type op :: :delete | {:put, any}
 
   @doc """
+  Returns the application-level entries from the Phoenix session, with
+  Hologram-managed keys (session_id, user_id) excluded.
+  """
+  @spec get_session(Plug.Conn.t()) :: map
+  def get_session(conn) do
+    conn
+    |> Plug.Conn.get_session()
+    |> Map.drop([Atom.to_string(@session_id_key), Atom.to_string(@user_id_key)])
+  end
+
+  @doc """
   Returns the Hologram session ID from the Phoenix session, or `nil` if absent.
   """
   @spec get_session_id(Plug.Conn.t()) :: String.t() | nil
