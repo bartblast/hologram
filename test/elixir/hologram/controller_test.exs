@@ -1020,7 +1020,7 @@ defmodule Hologram.ControllerTest do
       refute_receive {:broadcast_action, _action, _excluded_identities}
     end
 
-    test "encodes self_echoes into the selfEchoes field when present" do
+    test "sets the selfEchoes field to the encoded actions when any self-echoes were queued" do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
@@ -1039,7 +1039,7 @@ defmodule Hologram.ControllerTest do
                ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])])'
     end
 
-    test "sets the selfEchoes field to an empty list when absent" do
+    test "sets the selfEchoes field to an empty list when no self-echoes were queued" do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
