@@ -1317,6 +1317,17 @@ defmodule Hologram.ControllerTest do
       assert String.contains?(conn.resp_body, "selfEchoes: Type.list([])")
     end
 
+    test "substitutes the sub_receipts placeholder with a receipt for each binding put during init/3" do
+      :ok = SubscriptionRegistry.register("test-instance-id", self())
+
+      conn = render_page_with_instance(Module14, "test-instance-id")
+
+      refute String.contains?(conn.resp_body, "$SUB_RECEIPTS_JS_PLACEHOLDER")
+      assert String.contains?(conn.resp_body, ~s'Type.atom("room_page")')
+      assert String.contains?(conn.resp_body, ~s'Type.atom("room_layout")')
+      assert String.contains?(conn.resp_body, ~s'Type.atom("room_component")')
+    end
+
     test "framework sets server.cid to \"page\" during page init/3" do
       conn = render_page_with_instance(Module18, "test-instance-id")
 

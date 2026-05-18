@@ -240,13 +240,13 @@ defmodule Hologram.Controller do
         instance_id: renderer_opts[:instance_id]
     }
 
-    {html, _component_registry, rendered_server_struct} =
+    {rendered_html, _component_registry, rendered_server_struct} =
       Renderer.render_page(page_module, params, server_struct, renderer_opts)
 
     # Transition subscriptions before flushing broadcasts so a registry failure
     # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
     # effectively infallible, so once transition succeeds both side effects land.
-    transition_subscriptions(rendered_server_struct)
+    sub_receipts = transition_subscriptions(rendered_server_struct)
 
     # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
     # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
@@ -256,12 +256,15 @@ defmodule Hologram.Controller do
 
     flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
 
-    html_with_self_echoes = Renderer.interpolate_self_echoes_js(html, self_echoes)
+    final_html =
+      rendered_html
+      |> Renderer.interpolate_self_echoes_js(self_echoes)
+      |> Renderer.interpolate_sub_receipts_js(sub_receipts)
 
     conn
     |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-    |> Controller.html(html_with_self_echoes)
+    |> Controller.html(final_html)
     |> Plug.Conn.halt()
   end
 
@@ -380,11 +383,15 @@ defmodule Hologram.Controller do
   # the nil clause below becomes dead code.
   defp transition_subscriptions(server)
 
-  defp transition_subscriptions(%Server{instance_id: nil}), do: :ok
+  defp transition_subscriptions(%Server{instance_id: nil}), do: []
 
-  defp transition_subscriptions(%Server{instance_id: instance_id, subscriptions: subscriptions}) do
-    SubscriptionRegistry.transition(instance_id, subscriptions, [], nil)
-    :ok
+  defp transition_subscriptions(
+         %Server{instance_id: instance_id, subscriptions: subscriptions} = server
+       ) do
+    {actually_added, _actually_dropped} =
+      SubscriptionRegistry.transition(instance_id, subscriptions, [], server.user_id)
+
+    build_receipts(actually_added, server)
   end
 
   defp validate_csrf_token(conn) do
