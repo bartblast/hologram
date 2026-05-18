@@ -148,7 +148,7 @@ export default class Client {
         $.#failCommand(response.status);
       }
 
-      const [status, result] = await response.json();
+      const [status, result, encodedSelfEchoes] = await response.json();
 
       if (status === 0) {
         $.#failCommand(result);
@@ -158,6 +158,13 @@ export default class Client {
 
       if (!Type.isNil(nextAction)) {
         Hologram.scheduleAction(nextAction);
+      }
+
+      const selfEchoes =
+        Interpreter.evaluateJavaScriptExpression(encodedSelfEchoes);
+
+      for (const action of selfEchoes.data) {
+        Hologram.scheduleAction(action);
       }
     } catch (error) {
       if (error instanceof HologramRuntimeError) {

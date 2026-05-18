@@ -514,7 +514,7 @@ describe("Client", () => {
     it("calls fetch with correct URL, options, and payload including CSRF token", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, "Type.nil()"]),
+        json: sinon.stub().resolves([1, "Type.nil()", "Type.list([])"]),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -555,6 +555,7 @@ describe("Client", () => {
           .resolves([
             1,
             'Type.actionStruct({name: Type.atom("dummy_action")})',
+            "Type.list([])",
           ]),
       };
 
@@ -573,7 +574,7 @@ describe("Client", () => {
     it("command succeeds, next action is nil", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, "Type.nil()"]),
+        json: sinon.stub().resolves([1, "Type.nil()", "Type.list([])"]),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -632,6 +633,79 @@ describe("Client", () => {
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
       sinon.assert.notCalled(hologramScheduleActionStub);
+    });
+
+    it("dispatches each self-echoed action from the third response element", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon
+          .stub()
+          .resolves([
+            1,
+            "Type.nil()",
+            'Type.list([Type.actionStruct({name: Type.atom("self_echo_a")}), Type.actionStruct({name: Type.atom("self_echo_b")})])',
+          ]),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+      await waitForEventLoop();
+
+      sinon.assert.calledTwice(hologramScheduleActionStub);
+
+      sinon.assert.calledWith(
+        hologramScheduleActionStub,
+        Type.actionStruct({name: Type.atom("self_echo_a")}),
+      );
+
+      sinon.assert.calledWith(
+        hologramScheduleActionStub,
+        Type.actionStruct({name: Type.atom("self_echo_b")}),
+      );
+    });
+
+    it("does not dispatch any self-echo when the third response element is an empty list", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon.stub().resolves([1, "Type.nil()", "Type.list([])"]),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+
+      sinon.assert.notCalled(hologramScheduleActionStub);
+    });
+
+    it("dispatches next_action before self-echoed actions", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon
+          .stub()
+          .resolves([
+            1,
+            'Type.actionStruct({name: Type.atom("next_action")})',
+            'Type.list([Type.actionStruct({name: Type.atom("self_echo")})])',
+          ]),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+      await waitForEventLoop();
+
+      sinon.assert.calledTwice(hologramScheduleActionStub);
+
+      assert.deepStrictEqual(
+        hologramScheduleActionStub.firstCall.args[0],
+        Type.actionStruct({name: Type.atom("next_action")}),
+      );
+
+      assert.deepStrictEqual(
+        hologramScheduleActionStub.secondCall.args[0],
+        Type.actionStruct({name: Type.atom("self_echo")}),
+      );
     });
 
     it("command fails due to network error", async () => {
