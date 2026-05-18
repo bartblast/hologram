@@ -7,6 +7,7 @@ defmodule Hologram.Controller do
   alias Hologram.Component.Action
   alias Hologram.Page
   alias Hologram.Realtime
+  alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
@@ -155,7 +156,7 @@ defmodule Hologram.Controller do
       # failure (GenServer.call timeout) leaves no half-done state.
       # flush_broadcasts is effectively infallible, so once apply succeeds both
       # side effects land.
-      apply_subscription_deltas(processed_server_struct.__meta__.subscription_ops, instance_id)
+      receipts = apply_subscription_deltas(processed_server_struct)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
       self_echoes = Realtime.get_self_echoes(processed_server_struct)
@@ -166,11 +167,17 @@ defmodule Hologram.Controller do
       command_status = if encode_status == :ok, do: 1, else: 0
 
       {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
+      {:ok, encoded_receipts} = Encoder.encode_term(receipts)
 
       conn
       |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
       |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-      |> Controller.json([command_status, encoded_next_action, encoded_self_echoes])
+      |> Controller.json([
+        command_status,
+        encoded_next_action,
+        encoded_self_echoes,
+        encoded_receipts
+      ])
       |> Plug.Conn.halt()
     else
       Logger.warning("CSRF token validation failed")
@@ -292,16 +299,17 @@ defmodule Hologram.Controller do
     handle_page_request(conn, page_module, params, initial_page?: false)
   end
 
-  defp apply_subscription_deltas(subscription_ops, _instance_id) when subscription_ops == %{},
-    do: :ok
+  defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}}) when ops == %{},
+    do: []
 
-  defp apply_subscription_deltas(subscription_ops, instance_id) do
-    adds = for {key, :put} <- subscription_ops, do: key
-    drops = for {key, :delete} <- subscription_ops, do: key
+  defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}} = server) do
+    adds = for {key, :put} <- ops, do: key
+    drops = for {key, :delete} <- ops, do: key
 
-    SubscriptionRegistry.apply_deltas(instance_id, adds, drops, nil)
+    {actually_added, _actually_dropped} =
+      SubscriptionRegistry.apply_deltas(server.instance_id, adds, drops, server.user_id)
 
-    :ok
+    build_receipts(actually_added, server)
   end
 
   defp build_cookie_opts(cookie_struct) do
@@ -316,6 +324,12 @@ defmodule Hologram.Controller do
       ]
 
     Enum.filter(opts, fn {_key, value} -> value != nil end)
+  end
+
+  defp build_receipts(add_keys, server) do
+    Enum.map(add_keys, fn {channel, cid} ->
+      {channel, cid, Receipt.issue(channel, cid, server.instance_id, server.user_id)}
+    end)
   end
 
   defp get_csrf_token_from_header(conn) do
