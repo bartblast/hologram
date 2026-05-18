@@ -21,6 +21,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module13
   alias Hologram.Test.Fixtures.Controller.Module14
   alias Hologram.Test.Fixtures.Controller.Module15
+  alias Hologram.Test.Fixtures.Controller.Module18
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
@@ -1167,17 +1168,18 @@ defmodule Hologram.ControllerTest do
     end
   end
 
-  describe "handle_page_request/4 subscription wiring" do
+  describe "handle_page_request/4" do
     # handle_page_request/4 is exposed as `@doc false` public solely as a test
     # seam: tests can drive a render with a known instance_id without going
     # through the auto-generating handle_initial_page_request/2 wrapper. Its
     # behavior is otherwise covered implicitly through the public wrappers'
     # tests (handle_initial_page_request/2, handle_subsequent_page_request/2).
-    # The tests below assert the subscription-wiring slice only.
+    # The tests below assert the subscription-wiring and cid-binding slices.
 
     setup do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module14, :dummy_module_14_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module15, :dummy_module_15_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module18, :dummy_module_18_digest)
 
       :ok
     end
@@ -1211,6 +1213,12 @@ defmodule Hologram.ControllerTest do
 
       refute String.contains?(conn.resp_body, "$SELF_ECHOES_JS_PLACEHOLDER")
       assert String.contains?(conn.resp_body, "selfEchoes: Type.list([])")
+    end
+
+    test "framework sets server.cid to \"page\" during page init/3" do
+      conn = render_page_with_instance(Module18, "test-instance-id")
+
+      assert String.contains?(conn.resp_body, "observed_cid=page")
     end
   end
 

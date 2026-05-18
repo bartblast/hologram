@@ -66,6 +66,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module77
   alias Hologram.Test.Fixtures.Template.Renderer.Module79
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
+  alias Hologram.Test.Fixtures.Template.Renderer.Module80
   alias Hologram.Test.Fixtures.Template.Renderer.Module84
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
@@ -1319,6 +1320,14 @@ defmodule Hologram.Template.RendererTest do
       page_emitted_context = component_registry["page"].struct.emitted_context
 
       refute Map.has_key?(page_emitted_context, {Hologram.Runtime, :instance_id})
+    end
+
+    test "framework sets server.cid to \"layout\" during layout init/3" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module80, :dummy_module_80_digest)
+
+      {_html, registry, _server} = render_page(Module80, @params, @server, @opts)
+
+      assert registry["layout"].struct.state.observed_cid == "layout"
     end
   end
 
