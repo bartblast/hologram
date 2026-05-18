@@ -37,6 +37,7 @@ defmodule Hologram.Page do
       quote do
         import Hologram.Component,
           only: [
+            delete_subscription: 2,
             put_action: 2,
             put_action: 3,
             put_broadcast: 3,

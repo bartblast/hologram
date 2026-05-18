@@ -30,6 +30,42 @@ defmodule Hologram.ComponentTest do
              "/my_dir_1/my_dir_2/my_dir_3/my_file.holo"
   end
 
+  describe "delete_subscription/2" do
+    test "removes {channel, server.cid} from server.subscriptions" do
+      result =
+        @server
+        |> put_subscription(:room_a)
+        |> delete_subscription(:room_a)
+
+      assert result.subscriptions == []
+    end
+
+    test "leaves bindings for other cids intact (encapsulation)" do
+      server_with_layout_binding = %{@server | subscriptions: [{:room_a, "layout"}]}
+
+      result = delete_subscription(server_with_layout_binding, :room_a)
+
+      assert result.subscriptions == [{:room_a, "layout"}]
+    end
+
+    test "records :delete in subscription_ops keyed by {channel, server.cid}" do
+      result = delete_subscription(@server, :room_a)
+
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :delete}
+    end
+
+    test "records :delete even when {channel, cid} is not present in server.subscriptions" do
+      result = delete_subscription(@server, :room_a)
+
+      assert result.subscriptions == []
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :delete}
+    end
+
+    test "raises ArgumentError for an invalid channel" do
+      assert_raise ArgumentError, fn -> delete_subscription(@server, "not_a_valid_channel") end
+    end
+  end
+
   describe "init/2" do
     test "no default implementation" do
       refute Reflection.has_function?(Module1, :init, 2)

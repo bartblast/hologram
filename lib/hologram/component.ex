@@ -69,6 +69,7 @@ defmodule Hologram.Component do
       quote do
         import Hologram.Component,
           only: [
+            delete_subscription: 2,
             prop: 2,
             prop: 3,
             put_action: 2,
@@ -157,6 +158,36 @@ defmodule Hologram.Component do
   @spec colocated_template_path(String.t()) :: String.t()
   def colocated_template_path(templatable_path) do
     Path.rootname(templatable_path) <> ".holo"
+  end
+
+  @doc """
+  Removes the subscription binding for `{channel, server.cid}` from the server
+  struct. The binding is removed from `server.subscriptions` and recorded as
+  `:delete` in `__meta__.subscription_ops`. The framework drains
+  `subscription_ops` after the handler returns successfully to drive the
+  `SubscriptionRegistry`. If the handler raises, the queued mutations are
+  discarded along with the rest of the Server state.
+
+  `cid` is taken from `server.cid` - set by the framework at handler entry:
+  `"page"` in a page handler, `"layout"` in a layout handler, or the component's
+  cid in a component handler.
+
+  Idempotent: deleting a `{channel, cid}` key that is not present in
+  `server.subscriptions` is a no-op on the binding list, but the `:delete` op
+  is still recorded so the framework can flush the deletion to the registry.
+  """
+  @spec delete_subscription(Server.t(), atom | tuple) :: Server.t()
+  def delete_subscription(server, channel) do
+    Channel.validate!(channel)
+
+    key = {channel, server.cid}
+
+    new_subscriptions = List.delete(server.subscriptions, key)
+
+    new_subscription_ops = Map.put(server.__meta__.subscription_ops, key, :delete)
+    new_meta = %{server.__meta__ | subscription_ops: new_subscription_ops}
+
+    %{server | subscriptions: new_subscriptions, __meta__: new_meta}
   end
 
   @doc """
