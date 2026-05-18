@@ -1203,6 +1203,15 @@ defmodule Hologram.ControllerTest do
 
       assert SubscriptionRegistry.bindings_of("raising-instance-id") == %{}
     end
+
+    test "substitutes the self_echoes placeholder in the rendered HTML" do
+      :ok = SubscriptionRegistry.register("test-instance-id", self())
+
+      conn = render_page_with_instance(Module14, "test-instance-id")
+
+      refute String.contains?(conn.resp_body, "$SELF_ECHOES_JS_PLACEHOLDER")
+      assert String.contains?(conn.resp_body, "selfEchoes: Type.list([])")
+    end
   end
 
   describe "handle_ping_request/1" do

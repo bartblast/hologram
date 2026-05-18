@@ -1,6 +1,8 @@
 defmodule Hologram.Test.Fixtures.Controller.Module16 do
   use Hologram.Component
 
+  alias Hologram.UI.Runtime
+
   @impl Component
   def init(_props, component, server) do
     {component, put_subscription(server, :room_layout)}
@@ -8,6 +10,9 @@ defmodule Hologram.Test.Fixtures.Controller.Module16 do
 
   @impl Component
   def template do
-    ~HOLO"<slot />"
+    ~HOLO"""
+    <Runtime />
+    <slot />
+    """
   end
 end

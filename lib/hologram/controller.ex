@@ -239,14 +239,20 @@ defmodule Hologram.Controller do
     # effectively infallible, so once transition succeeds both side effects land.
     transition_subscriptions(rendered_server_struct)
 
-    # TODO: self-echoes
+    # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
+    # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
+    # this Realtime-domain computation lives in the controller; substituting
+    # back into HTML here keeps the renderer Realtime-agnostic.
+    self_echoes = Realtime.get_self_echoes(rendered_server_struct)
 
     flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+
+    html_with_self_echoes = Renderer.interpolate_self_echoes_js(html, self_echoes)
 
     conn
     |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-    |> Controller.html(html)
+    |> Controller.html(html_with_self_echoes)
     |> Plug.Conn.halt()
   end
 
