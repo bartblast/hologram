@@ -144,10 +144,10 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
-  Transitions the registry's binding set for `instance_id` to `new_bindings`.
-  Called after a page render's `init/3` returns to reconcile the new page's
-  subscription set against both the client's previously-known bindings and the
-  registry's prior bindings.
+  Transitions the registry's binding set for `instance_id` to the bindings
+  derived from `new_sub_keys`. Called after a page render's `init/3` returns
+  to reconcile the new page's subscription set against both the client's
+  previously-known bindings and the registry's prior bindings.
 
   Computes two parallel set-differences:
 
@@ -176,10 +176,10 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   """
   @spec transition(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
           {[{any, String.t()}], [{any, String.t()}]}
-  def transition(instance_id, new_bindings, client_claimed_sub_keys, authorizing_user_id) do
+  def transition(instance_id, new_sub_keys, client_claimed_sub_keys, authorizing_user_id) do
     GenServer.call(
       __MODULE__,
-      {:transition, instance_id, new_bindings, client_claimed_sub_keys, authorizing_user_id}
+      {:transition, instance_id, new_sub_keys, client_claimed_sub_keys, authorizing_user_id}
     )
   end
 
@@ -294,11 +294,11 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   @impl GenServer
   def handle_call(
-        {:transition, instance_id, new_bindings, client_claimed_sub_keys, authorizing_user_id},
+        {:transition, instance_id, new_sub_keys, client_claimed_sub_keys, authorizing_user_id},
         _from,
         refs
       ) do
-    new_keys_set = MapSet.new(new_bindings)
+    new_keys_set = MapSet.new(new_sub_keys)
     client_keys_set = MapSet.new(client_claimed_sub_keys)
 
     add_keys =
@@ -313,13 +313,13 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
     case :ets.lookup(@table_name, instance_id) do
       [{^instance_id, entry}] ->
-        new_bindings_map = Map.new(new_bindings, fn key -> {key, authorizing_user_id} end)
+        new_bindings_map = Map.new(new_sub_keys, fn key -> {key, authorizing_user_id} end)
         :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings_map}})
 
         prior_channels =
           MapSet.new(entry.bindings, fn {{channel, _cid}, _user_id} -> channel end)
 
-        new_channels = MapSet.new(new_bindings, fn {channel, _cid} -> channel end)
+        new_channels = MapSet.new(new_sub_keys, fn {channel, _cid} -> channel end)
 
         new_channels
         |> MapSet.difference(prior_channels)

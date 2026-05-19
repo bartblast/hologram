@@ -488,7 +488,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       # Seed the registry's bindings with one set
       transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
-      # new_bindings, client_claimed_sub_keys, and the registry's seeded bindings all differ
+      # new_sub_keys, client_claimed_sub_keys, and the registry's seeded bindings all differ
       {add_keys, drop_keys} =
         transition(
           "test-instance-id",
@@ -535,7 +535,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert auth_entry.bindings == %{{:room_y, "page"} => "test-user-id"}
     end
 
-    test "returns empty add and drop lists when new_bindings fully overlap client_claimed_sub_keys" do
+    test "returns empty add and drop lists when new_sub_keys fully overlap client_claimed_sub_keys" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
       :ok = register_connection("test-instance-id", sse_pid)
 
@@ -606,7 +606,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       refute_receive {:unsub, :room_a}
     end
 
-    test "sends no messages when new_bindings fully overlap the registry's bindings" do
+    test "sends no messages when new_sub_keys fully overlap the registry's bindings" do
       :ok = register_connection("test-instance-id", self())
 
       bindings = [{:room_a, "page"}, {:room_b, "comp_1"}]
