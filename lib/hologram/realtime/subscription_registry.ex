@@ -45,6 +45,32 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Attaches a fresh SSE connection to `instance_id`, populating the canonical
+  binding set from `validated_bindings`. The handshake endpoint owns all
+  signature / identity / tombstone verification ahead of this call -
+  `attach_connection/5` itself trusts the supplied bindings.
+
+  `validated_bindings` is a list of `{{channel, cid}, authorizing_user_id}`
+  pairs (map-compatible). The function monitors `sse_pid` so the entry is
+  cleaned up when the connection dies, and returns the deduped list of
+  channels in the resulting binding set so the caller can subscribe the SSE
+  process to PubSub topics.
+  """
+  # TODO: implement the supersede branch (newest-attach-wins, prior entry
+  # exists). Currently only the no-prior-entry case is supported; calling
+  # when an entry already exists for `instance_id` will crash.
+  @spec attach_connection(String.t(), term | nil, term | nil, pid, [
+          {{any, String.t()}, term | nil}
+        ]) ::
+          [any]
+  def attach_connection(instance_id, session_id, user_id, sse_pid, validated_bindings) do
+    GenServer.call(
+      __MODULE__,
+      {:attach_connection, instance_id, session_id, user_id, sse_pid, validated_bindings}
+    )
+  end
+
+  @doc """
   Returns the `bindings` map (`%{ {channel, cid} => authorizing_user_id | nil }`)
   for the given `instance_id`, or `nil` if no entry exists. Reads ETS directly
   to bypass the registry's GenServer mailbox.
@@ -200,6 +226,38 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
       end
 
     {:reply, reply, refs}
+  end
+
+  @impl GenServer
+  def handle_call(
+        {:attach_connection, instance_id, session_id, user_id, sse_pid, validated_bindings},
+        _from,
+        refs
+      ) do
+    case :ets.lookup(@table_name, instance_id) do
+      [] ->
+        sse_ref = Process.monitor(sse_pid)
+        bindings = Map.new(validated_bindings)
+
+        entry = %{
+          bindings: bindings,
+          session_id: session_id,
+          sse_pid: sse_pid,
+          sse_ref: sse_ref,
+          user_id: user_id
+        }
+
+        :ets.insert(@table_name, {instance_id, entry})
+
+        validated_channels =
+          bindings
+          |> Enum.map(fn {{channel, _cid}, _user_id} -> channel end)
+          |> Enum.uniq()
+
+        {:reply, validated_channels, Map.put(refs, sse_ref, instance_id)}
+
+        # TODO: supersede branch (prior entry exists) is not implemented yet.
+    end
   end
 
   @impl GenServer

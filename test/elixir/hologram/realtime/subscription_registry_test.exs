@@ -251,6 +251,75 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "attach_connection/5" do
+    test "creates a fresh entry whose bindings field equals the supplied validated_bindings" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      attach_connection(
+        "test-instance-id",
+        "test-session-id",
+        "test-user-id",
+        sse_pid,
+        [
+          {{:room_a, "page"}, "test-user-id"},
+          {{:room_b, "comp_1"}, "test-user-id"}
+        ]
+      )
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{
+               {:room_a, "page"} => "test-user-id",
+               {:room_b, "comp_1"} => "test-user-id"
+             }
+
+      assert entry.sse_pid == sse_pid
+      assert entry.session_id == "test-session-id"
+      assert entry.user_id == "test-user-id"
+    end
+
+    test "returns the deduped list of channels in the bindings set" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      validated_channels =
+        attach_connection(
+          "test-instance-id",
+          "test-session-id",
+          "test-user-id",
+          sse_pid,
+          [
+            {{:room_a, "page"}, "test-user-id"},
+            {{:room_a, "comp_1"}, "test-user-id"},
+            {{:room_b, "page"}, "test-user-id"}
+          ]
+        )
+
+      assert Enum.sort(validated_channels) == [:room_a, :room_b]
+    end
+
+    test "persists authorizing_user_id per binding for both anonymous and authenticated values" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      attach_connection(
+        "test-instance-id",
+        "test-session-id",
+        "test-user-id",
+        sse_pid,
+        [
+          {{:room_anon, "page"}, nil},
+          {{:room_auth, "page"}, 7}
+        ]
+      )
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{
+               {:room_anon, "page"} => nil,
+               {:room_auth, "page"} => 7
+             }
+    end
+  end
+
   describe "bindings_of/1" do
     test "returns the bindings map for a registered entry with seeded bindings" do
       :ok = register("test-instance-id", self())
