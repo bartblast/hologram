@@ -130,9 +130,9 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   `apply_deltas/4`. `session_id` and `user_id` are initialized to `nil` and
   populated later via the identity-update helpers.
   """
-  @spec register(String.t(), pid) :: :ok
-  def register(instance_id, sse_pid) do
-    GenServer.call(__MODULE__, {:register, instance_id, sse_pid})
+  @spec register_connection(String.t(), pid) :: :ok
+  def register_connection(instance_id, sse_pid) do
+    GenServer.call(__MODULE__, {:register_connection, instance_id, sse_pid})
   end
 
   @doc """
@@ -276,7 +276,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @impl GenServer
-  def handle_call({:register, instance_id, sse_pid}, _from, refs) do
+  def handle_call({:register_connection, instance_id, sse_pid}, _from, refs) do
     sse_ref = Process.monitor(sse_pid)
 
     entry = %{

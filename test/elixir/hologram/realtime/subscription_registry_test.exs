@@ -15,7 +15,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   describe "apply_deltas/4" do
     test "adds new bindings tagged with authorizing_user_id" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       {add_keys, drop_keys} =
         apply_deltas(
@@ -38,7 +38,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "drops existing bindings" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       apply_deltas(
         "test-instance-id",
@@ -60,7 +60,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "is a no-op when re-adding an already-present key (does not retag)" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-original-user-id")
 
@@ -76,7 +76,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "is a no-op when dropping a missing key" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -92,7 +92,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "applies mixed adds and drops in a single call" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       apply_deltas(
         "test-instance-id",
@@ -122,7 +122,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "persists authorizing_user_id per binding for both anonymous and authenticated values" do
       sse_pid_anon = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id-anon", sse_pid_anon)
+      :ok = register_connection("test-instance-id-anon", sse_pid_anon)
 
       apply_deltas("test-instance-id-anon", [{:room_x, "page"}], [], nil)
 
@@ -132,7 +132,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert anon_entry.bindings == %{{:room_x, "page"} => nil}
 
       sse_pid_auth = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id-auth", sse_pid_auth)
+      :ok = register_connection("test-instance-id-auth", sse_pid_auth)
 
       apply_deltas("test-instance-id-auth", [{:room_y, "page"}], [], "test-user-id")
 
@@ -143,7 +143,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends {:sub, channel} to sse_pid on add of the channel's first cid-binding" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -151,7 +151,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends {:unsub, channel} to sse_pid on drop of the channel's last cid-binding" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -163,7 +163,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends no message when the channel still has other cid-bindings after the add" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -175,7 +175,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends no message when the channel still has other cid-bindings after the drop" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       apply_deltas(
         "test-instance-id",
@@ -192,7 +192,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "preserves the surviving cid's binding when another cid for the same channel is dropped" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       apply_deltas(
         "test-instance-id",
@@ -207,7 +207,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends no messages on idempotent re-add or idempotent drop-of-missing" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       apply_deltas("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -345,7 +345,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       # Prior exits naturally after forwarding its one message; if demonitor
       # had failed, the :DOWN handler would delete the entry. Sync via an
       # unrelated GenServer call so any pending :DOWN has been processed.
-      :ok = register("sync-barrier", spawn(fn -> Process.sleep(:infinity) end))
+      :ok = register_connection("sync-barrier", spawn(fn -> Process.sleep(:infinity) end))
 
       assert :ets.lookup(ets_table_name(), "test-instance-id") != []
     end
@@ -389,7 +389,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
   describe "bindings_of/1" do
     test "returns the bindings map for a registered entry with seeded bindings" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       apply_deltas(
         "test-instance-id",
@@ -406,7 +406,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "returns the default empty map for a freshly registered entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       assert bindings_of("test-instance-id") == %{}
     end
@@ -419,7 +419,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   describe "identity_of/1" do
     test "returns the defaulted {nil, nil} for a freshly registered entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       assert identity_of("test-instance-id") == {nil, nil}
     end
@@ -429,10 +429,10 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
-  describe "register/2" do
+  describe "register_connection/2" do
     test "inserts an entry whose sse_pid and sse_ref round-trip through the documented shape" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
 
@@ -442,7 +442,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "defaults session_id and user_id to nil in the inserted entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
 
@@ -452,7 +452,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "defaults bindings to an empty map in the inserted entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
 
@@ -483,7 +483,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   describe "transition/4" do
     test "client-side diff is driven by client_claimed_sub_keys, not the registry's bindings" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       # Seed the registry's bindings with one set
       transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
@@ -503,7 +503,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "replaces the registry's bindings field with the new set" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       transition("test-instance-id", [{:room_a, "page"}, {:room_b, "comp_1"}], [], "test-user-id")
 
@@ -517,7 +517,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "persists authorizing_user_id per binding for both anonymous and authenticated values" do
       sse_pid_anon = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id-anon", sse_pid_anon)
+      :ok = register_connection("test-instance-id-anon", sse_pid_anon)
       transition("test-instance-id-anon", [{:room_x, "page"}], [], nil)
 
       [{"test-instance-id-anon", anon_entry}] =
@@ -526,7 +526,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert anon_entry.bindings == %{{:room_x, "page"} => nil}
 
       sse_pid_auth = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id-auth", sse_pid_auth)
+      :ok = register_connection("test-instance-id-auth", sse_pid_auth)
       transition("test-instance-id-auth", [{:room_y, "page"}], [], "test-user-id")
 
       [{"test-instance-id-auth", auth_entry}] =
@@ -537,7 +537,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "returns empty add and drop lists when new_bindings fully overlap client_claimed_sub_keys" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       bindings = [{:room_a, "page"}, {:room_b, "comp_1"}]
       {add_keys, drop_keys} = transition("test-instance-id", bindings, bindings, "test-user-id")
@@ -548,7 +548,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "returns correct add and drop lists for partial overlap" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       {add_keys, drop_keys} =
         transition(
@@ -563,7 +563,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends {:sub, channel} to sse_pid on the first cid-binding for a channel" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -571,7 +571,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends {:unsub, channel} to sse_pid when the last cid-binding for a channel is dropped" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
@@ -583,7 +583,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends no message when the channel still has other cid-bindings after the transition" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       transition(
         "test-instance-id",
@@ -607,7 +607,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
 
     test "sends no messages when new_bindings fully overlap the registry's bindings" do
-      :ok = register("test-instance-id", self())
+      :ok = register_connection("test-instance-id", self())
 
       bindings = [{:room_a, "page"}, {:room_b, "comp_1"}]
       transition("test-instance-id", bindings, [], "test-user-id")
@@ -651,7 +651,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   describe "update_identity/3" do
     test "updates session_id and user_id on an existing entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       :ok = update_identity("test-instance-id", "test-session-id", "test-user-id")
 
@@ -668,7 +668,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   describe "{:DOWN, ...} cleanup" do
     test "deletes the entry when the monitored SSE pid dies" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       test_ref = Process.monitor(sse_pid)
       Process.exit(sse_pid, :kill)
@@ -682,10 +682,10 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "leaves entries for other instances untouched when one pid dies" do
       sse_pid_a = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id-a", sse_pid_a)
+      :ok = register_connection("test-instance-id-a", sse_pid_a)
 
       sse_pid_b = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id-b", sse_pid_b)
+      :ok = register_connection("test-instance-id-b", sse_pid_b)
 
       test_ref = Process.monitor(sse_pid_a)
       Process.exit(sse_pid_a, :kill)
@@ -702,7 +702,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "ignores DOWN messages from non-monitored refs and leaves existing entries untouched" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
-      :ok = register("test-instance-id", sse_pid)
+      :ok = register_connection("test-instance-id", sse_pid)
 
       send(
         Process.whereis(SubscriptionRegistry),

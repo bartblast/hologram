@@ -547,7 +547,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "pre-populates server.subscriptions from SubscriptionRegistry bindings for the request's instance_id" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -588,7 +588,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls put_subscription" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       execute_command_request(%{
         instance_id: "my-instance-id",
@@ -604,7 +604,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls delete_subscription" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -625,7 +625,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "applies adds and drops together when a command calls put_subscription and delete_subscription" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -648,7 +648,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "leaves SubscriptionRegistry bindings unchanged when subscription_ops is empty" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -671,7 +671,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not flush subscription_ops when the command raises" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       payload = %{
         instance_id: "my-instance-id",
@@ -687,7 +687,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "embeds a receipt entry in the response for each newly-added subscription" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       conn =
         execute_command_request(%{
@@ -705,7 +705,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "embeds a drop entry in the response for each newly-dropped subscription" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -730,7 +730,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "embeds adds and drops together when a command both puts and deletes subscriptions" do
-      :ok = SubscriptionRegistry.register("my-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -1312,7 +1312,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "drives SubscriptionRegistry.transition with the page's accumulated subscriptions" do
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       render_page_with_instance(Module14, "test-instance-id")
 
@@ -1324,7 +1324,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not flush subscriptions when init/3 raises" do
-      :ok = SubscriptionRegistry.register("raising-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("raising-instance-id", self())
 
       assert_raise RuntimeError, "boom", fn ->
         render_page_with_instance(Module15, "raising-instance-id")
@@ -1334,7 +1334,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "substitutes the self_echoes placeholder in the rendered HTML" do
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn = render_page_with_instance(Module14, "test-instance-id")
 
@@ -1343,7 +1343,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "substitutes the sub_drops placeholder with each client-claimed key the new page no longer puts" do
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       # Module14 puts {:room_page, "page"}, {:room_layout, "layout"},
       # {:room_component, "my_component"}. The client claims two stale bindings
@@ -1360,7 +1360,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "substitutes the sub_receipts placeholder with a receipt for each binding put during init/3" do
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn = render_page_with_instance(Module14, "test-instance-id")
 
@@ -1377,7 +1377,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "delete_subscription during page init/3 cancels a prior put_subscription before transition" do
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       render_page_with_instance(Module19, "test-instance-id")
 
@@ -1387,7 +1387,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "shared layout binding survives a transition between pages with the same layout without PubSub churn" do
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       # Render page 1 (Module14) - its layout Module16 puts :room_layout.
       render_page_with_instance(Module14, "test-instance-id")
@@ -1409,7 +1409,7 @@ defmodule Hologram.ControllerTest do
 
     test "treats client-claimed keys as advisory so a lying client cannot manufacture subscriptions" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       # Client claims a fake key that the server never issued. Module4's
       # init/3 puts no subscriptions.
@@ -1573,7 +1573,7 @@ defmodule Hologram.ControllerTest do
 
     test "drives SubscriptionRegistry.transition with instance_id and client_claimed_sub_keys from the request body" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
-      :ok = SubscriptionRegistry.register("test-instance-id", self())
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       # Seed a canonical {:room_a, "page"} binding so transition's drop path
       # has something to remove on the upcoming navigation.
