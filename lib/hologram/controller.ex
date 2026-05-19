@@ -313,7 +313,7 @@ defmodule Hologram.Controller do
           |> Deserializer.deserialize()
 
         handshake_id = UUID.uuid4()
-        validated_bindings = verify_receipts(receipts, instance_id)
+        validated_bindings = verify_receipts(receipts, instance_id, user_id)
         expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
 
         Handshake.insert(
@@ -478,10 +478,11 @@ defmodule Hologram.Controller do
     end
   end
 
-  defp verify_receipts(receipts, instance_id) do
+  defp verify_receipts(receipts, instance_id, current_user_id) do
     Enum.flat_map(receipts, fn token ->
       case Receipt.verify(token) do
-        {:ok, %Receipt{instance_id: ^instance_id, channel: channel, cid: cid, user_id: user_id}} ->
+        {:ok, %Receipt{instance_id: ^instance_id, channel: channel, cid: cid, user_id: user_id}}
+        when user_id == nil or user_id == current_user_id ->
           [{{channel, cid}, user_id}]
 
         _other ->

@@ -1583,6 +1583,74 @@ defmodule Hologram.ControllerTest do
       assert [{^handshake_id, [], _instance_id, _session_id, _user_id, _expires_at}] =
                :ets.lookup(Handshake.ets_table_name(), handshake_id)
     end
+
+    test "accepts an anonymous-signed receipt for an anonymous connection" do
+      receipt_token = Receipt.issue(:room_a, "page", "test-instance-id", nil)
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id"},
+          [receipt_token]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [
+               {^handshake_id, [{{:room_a, "page"}, nil}], _instance_id, _session_id, _user_id,
+                _expires_at}
+             ] = :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
+
+    test "accepts an anonymous-signed receipt for an authenticated connection (elevation)" do
+      receipt_token = Receipt.issue(:room_a, "page", "test-instance-id", nil)
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          [receipt_token]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [
+               {^handshake_id, [{{:room_a, "page"}, nil}], _instance_id, _session_id, _user_id,
+                _expires_at}
+             ] = :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
+
+    test "drops a receipt signed for a different user_id than the connection's" do
+      receipt_token = Receipt.issue(:room_a, "page", "test-instance-id", "other-user-id")
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          [receipt_token]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [{^handshake_id, [], _instance_id, _session_id, _user_id, _expires_at}] =
+               :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
+
+    test "drops a user-signed receipt when the connection is anonymous (de-elevation)" do
+      receipt_token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id"},
+          [receipt_token]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [{^handshake_id, [], _instance_id, _session_id, _user_id, _expires_at}] =
+               :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
   end
 
   describe "handle_subsequent_page_request/3" do
