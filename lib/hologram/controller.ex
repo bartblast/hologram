@@ -378,16 +378,15 @@ defmodule Hologram.Controller do
     receipts
     |> Enum.flat_map(fn token ->
       case Receipt.verify(token) do
-        {:ok,
-         %Receipt{
-           instance_id: ^instance_id,
-           channel: channel,
-           cid: cid,
-           user_id: authorizing_user_id
-         }}
-        when authorizing_user_id == nil or authorizing_user_id == current_user_id ->
-          fresh_token = Receipt.issue(channel, cid, instance_id, authorizing_user_id)
-          [{{{channel, cid}, authorizing_user_id}, {channel, cid, fresh_token}}]
+        {:ok, %Receipt{instance_id: ^instance_id, user_id: authorizing_user_id} = receipt}
+        when is_nil(authorizing_user_id) or authorizing_user_id == current_user_id ->
+          fresh_token =
+            Receipt.issue(receipt.channel, receipt.cid, instance_id, authorizing_user_id)
+
+          [
+            {{{receipt.channel, receipt.cid}, authorizing_user_id},
+             {receipt.channel, receipt.cid, fresh_token}}
+          ]
 
         _other ->
           []
