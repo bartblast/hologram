@@ -10,6 +10,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Component.Action
+  alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
@@ -95,6 +96,13 @@ defmodule Hologram.ControllerTest do
     instance_id
   end
 
+  defp handshake_request_body(instance_id) do
+    [
+      2,
+      %{"t" => "m", "d" => [["ainstance_id", "b0#{binary_to_hex(instance_id)}"]]}
+    ]
+  end
+
   defp page_request_body(instance_id \\ "test-instance-id", client_claimed_sub_keys \\ []) do
     serialized_keys =
       Enum.map(client_claimed_sub_keys, fn {channel, cid} ->
@@ -111,6 +119,20 @@ defmodule Hologram.ControllerTest do
         ]
       }
     ]
+  end
+
+  defp post_handshake(instance_id, session_data) do
+    parsed_json =
+      instance_id
+      |> handshake_request_body()
+      |> Jason.encode!()
+      |> Jason.decode!()
+
+    :post
+    |> Plug.Test.conn("/hologram/sse/handshake", "")
+    |> Plug.Test.init_test_session(session_data)
+    |> Map.put(:body_params, %{"_json" => parsed_json})
+    |> handle_sse_handshake_request()
   end
 
   defp render_page_with_instance(page_module, instance_id, client_claimed_sub_keys \\ []) do
@@ -1436,6 +1458,53 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 200
 
       assert {"content-type", "text/plain; charset=utf-8"} in conn.resp_headers
+    end
+  end
+
+  describe "handle_sse_handshake_request/1" do
+    setup do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Handshake)
+      start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+
+      :ok
+    end
+
+    test "accepts the POST and returns a freshly minted handshake_id" do
+      conn = post_handshake("test-instance-id", %{hologram_session_id: "test-session-id"})
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 200
+
+      assert {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+      assert {:ok, _info} = UUID.info(handshake_id)
+    end
+
+    test "returns 401 when the session has no Hologram session_id" do
+      conn = post_handshake("test-instance-id", %{})
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 401
+      assert conn.resp_body == "Unauthorized"
+    end
+
+    test "stashes the handshake with empty bindings under the minted id and the identity tuple" do
+      conn =
+        post_handshake("test-instance-id", %{
+          hologram_session_id: "test-session-id",
+          hologram_user_id: "test-user-id"
+        })
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [
+               {^handshake_id, [], "test-instance-id", "test-session-id", "test-user-id",
+                _expires_at}
+             ] = :ets.lookup(Handshake.ets_table_name(), handshake_id)
     end
   end
 

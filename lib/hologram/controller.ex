@@ -7,6 +7,7 @@ defmodule Hologram.Controller do
   alias Hologram.Component.Action
   alias Hologram.Page
   alias Hologram.Realtime
+  alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Cookie
@@ -285,6 +286,43 @@ defmodule Hologram.Controller do
     conn
     |> Controller.text("pong")
     |> Plug.Conn.halt()
+  end
+
+  @doc """
+  Handles the SSE handshake HTTP POST request. Runs the auth gate, mints a
+  fresh `handshake_id`, stashes the validated bindings bound to the client's
+  identity tuple, and returns the `handshake_id` for the client to use when
+  opening the EventSource.
+  """
+  # TODO: receipt verification (signature + instance check) will populate
+  # `validated_bindings`; today it is stashed empty.  
+  @spec handle_sse_handshake_request(Plug.Conn.t()) :: Plug.Conn.t()
+  def handle_sse_handshake_request(initial_conn) do
+    conn = PlugConnUtils.init_conn(initial_conn)
+
+    case Session.get_session_id(conn) do
+      nil ->
+        conn
+        |> Plug.Conn.send_resp(401, "Unauthorized")
+        |> Plug.Conn.halt()
+
+      session_id ->
+        user_id = Session.get_user_id(conn)
+
+        %{instance_id: instance_id} =
+          conn.body_params
+          |> Map.get("_json")
+          |> Deserializer.deserialize()
+
+        handshake_id = UUID.uuid4()
+        expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
+
+        Handshake.insert(handshake_id, [], {instance_id, session_id, user_id}, expires_at)
+
+        conn
+        |> Controller.json(%{handshakeId: handshake_id})
+        |> Plug.Conn.halt()
+    end
   end
 
   @doc """
