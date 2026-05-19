@@ -884,7 +884,11 @@ export default class Hologram {
 
     if (mountData) {
       Hologram.queueSelfEchoes(mountData.selfEchoes);
-      App.subscriptionReceiptRegistry.merge(mountData.subReceipts, Type.list());
+
+      App.subscriptionReceiptRegistry.merge(
+        mountData.subReceipts,
+        mountData.subDrops,
+      );
     }
 
     window.requestAnimationFrame(() => {
