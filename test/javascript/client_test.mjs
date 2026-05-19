@@ -298,7 +298,7 @@ describe("Client", () => {
   });
 
   describe("fetchPage()", () => {
-    let fetchStub, onSuccessStub;
+    let fetchStub, onSuccessStub, originalInstanceId;
 
     const pageModule = Type.alias("MyPage");
 
@@ -309,10 +309,17 @@ describe("Client", () => {
 
     beforeEach(() => {
       onSuccessStub = sinon.stub();
+
+      App.subscriptionReceiptRegistry.entries.clear();
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
     });
 
     afterEach(() => {
       sinon.restore();
+      App.subscriptionReceiptRegistry.entries.clear();
+      App.instanceId = originalInstanceId;
     });
 
     describe("fetch parameters", () => {
@@ -367,6 +374,44 @@ describe("Client", () => {
         assert.deepStrictEqual(options.headers, {
           "Content-Type": "application/json",
         });
+      });
+
+      it("includes instance_id and client_claimed_sub_keys from the subscription receipt registry in the request body", async () => {
+        App.subscriptionReceiptRegistry.entries.set(
+          encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
+          Type.tuple([
+            Type.atom("room_a"),
+            Type.bitstring("page"),
+            Type.bitstring("token-a"),
+          ]),
+        );
+
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().resolves("<html>Response</html>"),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        await Client.fetchPage(pageModule, onSuccessStub);
+
+        const [, options] = fetchStub.firstCall.args;
+
+        assert.deepStrictEqual(
+          options.body,
+          Serializer.serialize(
+            Type.map([
+              [
+                Type.atom("client_claimed_sub_keys"),
+                Type.list([
+                  Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+                ]),
+              ],
+              [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
+            ]),
+            "server",
+          ),
+        );
       });
     });
 

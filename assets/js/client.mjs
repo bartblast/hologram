@@ -78,6 +78,17 @@ export default class Client {
     return queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
   }
 
+  static buildPageRequestPayload() {
+    const clientClaimedSubKeys = Array.from(
+      App.subscriptionReceiptRegistry.entries.values(),
+    ).map((triple) => Type.tuple([triple.data[0], triple.data[1]]));
+
+    return Type.map([
+      [Type.atom("client_claimed_sub_keys"), Type.list(clientClaimedSubKeys)],
+      [Type.atom("instance_id"), Type.bitstring(App.instanceId)],
+    ]);
+  }
+
   static connect(sendImmediatePing) {
     Connection.connect();
     HttpTransport.restartPing(sendImmediatePing);
@@ -101,7 +112,7 @@ export default class Client {
       const response = await fetch(url, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: "{}",
+        body: Serializer.serialize($.buildPageRequestPayload(), "server"),
       });
 
       if (!response.ok) {
