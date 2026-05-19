@@ -1406,6 +1406,21 @@ defmodule Hologram.ControllerTest do
       refute_receive {:sub, :room_layout}
       refute_receive {:unsub, :room_layout}
     end
+
+    test "treats client-claimed keys as advisory so a lying client cannot manufacture subscriptions" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+      :ok = SubscriptionRegistry.register("test-instance-id", self())
+
+      # Client claims a fake key that the server never issued. Module4's
+      # init/3 puts no subscriptions.
+      render_page_with_instance(Module4, "test-instance-id", [
+        {:fake_room, "page"}
+      ])
+
+      # The fake key never lands in the canonical bindings - adds come from
+      # init/3 only, not from the client's claimed list.
+      assert SubscriptionRegistry.bindings_of("test-instance-id") == %{}
+    end
   end
 
   describe "handle_ping_request/1" do
