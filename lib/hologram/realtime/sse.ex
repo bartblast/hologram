@@ -6,7 +6,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.Handshake
   alias Hologram.Runtime.Session
 
-  @default_heartbeat_interval_ms 15_000
+  @heartbeat_interval_ms 15_000
 
   @doc """
   Builds the SSE event envelope for a broadcast `%Action{}`.
@@ -97,7 +97,7 @@ defmodule Hologram.Realtime.SSE do
     case Handshake.redeem(handshake_id, server_wait_ms) do
       {:ok, _validated_bindings, _identity} ->
         heartbeat_interval_ms =
-          Keyword.get(opts, :heartbeat_interval_ms, @default_heartbeat_interval_ms)
+          Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
         schedule_heartbeat(heartbeat_interval_ms)
 
