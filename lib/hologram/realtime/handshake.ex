@@ -5,6 +5,7 @@ defmodule Hologram.Realtime.Handshake do
 
   @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:sse_handshakes"
+  @server_wait_ms 500
   @stash_ttl_ms 60_000
   @table_name :hologram_sse_handshakes
 
@@ -58,6 +59,14 @@ defmodule Hologram.Realtime.Handshake do
   def redeem(handshake_id, timeout) do
     GenServer.call(__MODULE__, {:redeem, handshake_id, timeout}, timeout + 1_000)
   end
+
+  @doc """
+  Returns the GET-side wait budget (in milliseconds) for `redeem/2` when the
+  caller does not pass an explicit timeout. Covers the worst legitimate
+  cross-region gossip race with margin.
+  """
+  @spec server_wait_ms() :: pos_integer
+  def server_wait_ms, do: @server_wait_ms
 
   @doc """
   Starts the handshake stash process.
