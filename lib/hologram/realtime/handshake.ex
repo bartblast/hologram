@@ -4,6 +4,7 @@ defmodule Hologram.Realtime.Handshake do
   use GenServer
 
   @gossip_topic "hologram:gossip:sse_handshakes"
+  @sse_handshake_stash_ttl_ms 60_000
   @table_name :hologram_sse_handshakes
 
   @doc """
@@ -51,9 +52,20 @@ defmodule Hologram.Realtime.Handshake do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Sweeps the ETS table and deletes every entry whose `expires_at` is in the
+  past. Called periodically by the GenServer's internal timer; also exposed
+  as a synchronous API so callers (and tests) can trigger a sweep on demand.
+  """
+  @spec sweep_expired() :: :ok
+  def sweep_expired do
+    GenServer.call(__MODULE__, :sweep_expired)
+  end
+
   @impl GenServer
   def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
+    schedule_sweep()
 
     {:ok, %{}}
   end
@@ -77,5 +89,33 @@ defmodule Hologram.Realtime.Handshake do
     )
 
     {:reply, :ok, state}
+  end
+
+  def handle_call(:sweep_expired, _from, state) do
+    delete_expired()
+
+    {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_info(:sweep_expired, state) do
+    delete_expired()
+    schedule_sweep()
+
+    {:noreply, state}
+  end
+
+  defp delete_expired do
+    now = System.system_time(:millisecond)
+
+    match_spec = [
+      {{:_, :_, :_, :_, :_, :"$1"}, [{:<, :"$1", now}], [true]}
+    ]
+
+    :ets.select_delete(@table_name, match_spec)
+  end
+
+  defp schedule_sweep do
+    Process.send_after(self(), :sweep_expired, @sse_handshake_stash_ttl_ms)
   end
 end

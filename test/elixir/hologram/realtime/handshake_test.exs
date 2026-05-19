@@ -57,4 +57,39 @@ defmodule Hologram.Realtime.HandshakeTest do
       }
     end
   end
+
+  describe "sweep_expired/0" do
+    test "deletes entries whose expires_at is in the past" do
+      past = System.system_time(:millisecond) - 1_000
+
+      insert(
+        "expired-handshake-id",
+        [],
+        {"test-instance-id", "test-session-id", "test-user-id"},
+        past
+      )
+
+      :ok = sweep_expired()
+
+      assert :ets.lookup(ets_table_name(), "expired-handshake-id") == []
+    end
+
+    test "preserves entries whose expires_at is in the future" do
+      future = System.system_time(:millisecond) + 60_000
+
+      insert(
+        "live-handshake-id",
+        [],
+        {"test-instance-id", "test-session-id", "test-user-id"},
+        future
+      )
+
+      :ok = sweep_expired()
+
+      assert [
+               {"live-handshake-id", _validated_bindings, _instance_id, _session_id, _user_id,
+                ^future}
+             ] = :ets.lookup(ets_table_name(), "live-handshake-id")
+    end
+  end
 end
