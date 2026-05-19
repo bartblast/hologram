@@ -78,14 +78,27 @@ defmodule Hologram.RouterTest do
     test "routes POST subsequent page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
+      # Simulate that JSON has already been parsed upstream by Plug.Parsers
+      parsed_json = [
+        2,
+        %{
+          "t" => "m",
+          "d" => [
+            ["aclient_claimed_sub_keys", %{"t" => "l", "d" => []}],
+            ["ainstance_id", "b074657374696e7374616e6365"]
+          ]
+        }
+      ]
+
       conn =
         :post
         |> Plug.Test.conn(
           "/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz",
-          "{}"
+          ""
         )
         |> Plug.Conn.put_req_header("content-type", "application/json")
         |> Plug.Test.init_test_session(%{})
+        |> Map.put(:body_params, %{"_json" => parsed_json})
         |> call([])
 
       assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")

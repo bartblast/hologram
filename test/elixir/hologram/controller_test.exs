@@ -95,12 +95,30 @@ defmodule Hologram.ControllerTest do
     instance_id
   end
 
+  defp page_request_body(instance_id \\ "test-instance-id", client_claimed_sub_keys \\ []) do
+    serialized_keys =
+      Enum.map(client_claimed_sub_keys, fn {channel, cid} ->
+        %{"t" => "t", "d" => ["a#{channel}", "b0#{binary_to_hex(cid)}"]}
+      end)
+
+    [
+      2,
+      %{
+        "t" => "m",
+        "d" => [
+          ["aclient_claimed_sub_keys", %{"t" => "l", "d" => serialized_keys}],
+          ["ainstance_id", "b0#{binary_to_hex(instance_id)}"]
+        ]
+      }
+    ]
+  end
+
   defp render_page_with_instance(page_module, instance_id) do
     :get
     |> Plug.Test.conn("/")
     |> Plug.Test.init_test_session(%{})
     |> Plug.Conn.fetch_cookies()
-    |> handle_page_request(page_module, %{},
+    |> handle_page_request(page_module, %{}, [],
       initial_page?: true,
       instance_id: instance_id,
       csrf_token: @masked_csrf_token
@@ -134,6 +152,13 @@ defmodule Hologram.ControllerTest do
     ]
 
     Jason.encode!([2, %{"t" => "m", "d" => serialized_map_data}])
+  end
+
+  defp subsequent_page_request_conn(path, session_data \\ %{}) do
+    :post
+    |> Plug.Test.conn(path, "")
+    |> Plug.Test.init_test_session(session_data)
+    |> Map.put(:body_params, %{"_json" => page_request_body()})
   end
 
   setup do
@@ -1387,9 +1412,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module4)
 
       assert conn.halted == true
@@ -1413,9 +1437,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module4)
 
       session_id = Session.get_session_id(conn)
@@ -1427,11 +1450,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn(
-          "/hologram/page/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
-        )
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module1)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
@@ -1442,11 +1462,8 @@ defmodule Hologram.ControllerTest do
 
       # URL encoded: "hello world" -> "hello%20world", "foo/bar" -> "foo%2Fbar"
       conn =
-        :get
-        |> Plug.Test.conn(
-          "/hologram/page/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
-        )
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module11)
 
       assert conn.resp_body == "param_a = hello world, param_b = foo/bar"
@@ -1456,9 +1473,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module9")
-        |> Plug.Test.init_test_session(%{"my_session_key" => "my_session_value"})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module9"
+        |> subsequent_page_request_conn(%{"my_session_key" => "my_session_value"})
         |> handle_subsequent_page_request(Module9)
 
       assert conn.resp_body == "session = my_session_value"
@@ -1468,9 +1484,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module2")
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module2"
+        |> subsequent_page_request_conn()
         |> Map.put(:req_headers, [{"cookie", "my_cookie_name=my_cookie_value"}])
         |> handle_subsequent_page_request(Module2)
 
@@ -1481,9 +1496,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module5")
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module5"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module5)
 
       # Initial pages include runtime script
@@ -1494,9 +1508,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module4)
 
       # Should not have a CSRF token in the session for subsequent page requests
@@ -1508,9 +1521,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module10, :dummy_module_10_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module10")
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module10"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module10)
 
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
@@ -1520,12 +1532,34 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module3")
-        |> Plug.Test.init_test_session(%{})
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module3"
+        |> subsequent_page_request_conn()
         |> handle_subsequent_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
+    end
+
+    test "drives SubscriptionRegistry.transition with instance_id and client_claimed_sub_keys from the request body" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+      :ok = SubscriptionRegistry.register("test-instance-id", self())
+
+      # Seed a canonical {:room_a, "page"} binding so transition's drop path
+      # has something to remove on the upcoming navigation.
+      SubscriptionRegistry.transition("test-instance-id", [{:room_a, "page"}], [], nil)
+
+      assert_receive {:sub, :room_a}
+
+      # Client claims it currently holds {:room_a, "page"}. Module4 puts no
+      # subscriptions, so transition's drop_keys ends up as [{:room_a, "page"}].
+      body = page_request_body("test-instance-id", [{:room_a, "page"}])
+
+      :post
+      |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4", "")
+      |> Plug.Test.init_test_session(%{})
+      |> Map.put(:body_params, %{"_json" => body})
+      |> handle_subsequent_page_request(Module4)
+
+      assert_receive {:unsub, :room_a}
     end
   end
 end

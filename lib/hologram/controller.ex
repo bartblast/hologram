@@ -223,15 +223,22 @@ defmodule Hologram.Controller do
       instance_id: instance_id
     ]
 
-    handle_page_request(conn_with_csrf_token, page_module, params, renderer_opts)
+    handle_page_request(conn_with_csrf_token, page_module, params, [], renderer_opts)
   end
 
   # Public for tests so they can drive a page render with a known instance_id
   # without going through the auto-generating `handle_initial_page_request/2`.
   @doc false
   # sobelow_skip ["XSS.HTML"]
-  @spec handle_page_request(Plug.Conn.t(), module, map, keyword) :: Plug.Conn.t()
-  def handle_page_request(initial_conn, page_module, params, renderer_opts) do
+  @spec handle_page_request(Plug.Conn.t(), module, map, [{any, String.t()}], keyword) ::
+          Plug.Conn.t()
+  def handle_page_request(
+        initial_conn,
+        page_module,
+        params,
+        client_claimed_sub_keys,
+        renderer_opts
+      ) do
     conn = Session.init(initial_conn)
 
     server_struct = %{
@@ -246,7 +253,8 @@ defmodule Hologram.Controller do
     # Transition subscriptions before flushing broadcasts so a registry failure
     # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
     # effectively infallible, so once transition succeeds both side effects land.
-    sub_receipts = transition_subscriptions(rendered_server_struct)
+    sub_receipts =
+      transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
     # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
     # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
@@ -295,13 +303,22 @@ defmodule Hologram.Controller do
   def handle_subsequent_page_request(initial_conn, page_module) do
     conn = PlugConnUtils.init_conn(initial_conn)
 
+    {instance_id, client_claimed_sub_keys} = extract_page_request_payload(conn)
+
     params =
       conn
       |> Plug.Conn.fetch_query_params()
       |> Map.get(:query_params)
       |> Page.cast_params(page_module)
 
-    handle_page_request(conn, page_module, params, initial_page?: false)
+    handle_page_request(
+      conn,
+      page_module,
+      params,
+      client_claimed_sub_keys,
+      initial_page?: false,
+      instance_id: instance_id
+    )
   end
 
   defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}}) when ops == %{},
@@ -335,6 +352,17 @@ defmodule Hologram.Controller do
     Enum.map(add_keys, fn {channel, cid} ->
       {channel, cid, Receipt.issue(channel, cid, server.instance_id, server.user_id)}
     end)
+  end
+
+  # Reads the Hologram-serialized JSON body produced by `Client.fetchPage` and
+  # pulls out the two fields the page-render path needs from the client:
+  # the stable JS-context `instance_id` and the subscription keys the client claims to
+  # currently hold in its subscription receipt registry.
+  defp extract_page_request_payload(%Plug.Conn{body_params: %{"_json" => json}}) do
+    %{instance_id: instance_id, client_claimed_sub_keys: client_claimed_sub_keys} =
+      Deserializer.deserialize(json)
+
+    {instance_id, client_claimed_sub_keys}
   end
 
   defp get_csrf_token_from_header(conn) do
@@ -375,21 +403,24 @@ defmodule Hologram.Controller do
   # Called after a successful page render. Reconciles the registry's binding
   # set for this instance against the union of `put_subscription` calls
   # accumulated across the page-render tree (page + layout + component init/3).
-  # `client_supplied_keys` is `[]` for the initial render. `authorizing_user_id`
-  # is `nil` until the auth gate is wired.
-  #
-  # TODO: thread the client's prior subscription keys + instance_id through for
-  # subsequent navigations; once that's wired, instance_id is always non-nil and
-  # the nil clause below becomes dead code.
-  defp transition_subscriptions(server)
+  # `client_claimed_sub_keys` is `[]` for the initial render and the keys the
+  # client claims to currently hold for subsequent navigations.
+  # `authorizing_user_id` is `nil` until the auth gate is wired.
+  defp transition_subscriptions(server, client_claimed_sub_keys)
 
-  defp transition_subscriptions(%Server{instance_id: nil}), do: []
+  defp transition_subscriptions(%Server{instance_id: nil}, _client_claimed_sub_keys), do: []
 
   defp transition_subscriptions(
-         %Server{instance_id: instance_id, subscriptions: subscriptions} = server
+         %Server{instance_id: instance_id, subscriptions: subscriptions} = server,
+         client_claimed_sub_keys
        ) do
     {actually_added, _actually_dropped} =
-      SubscriptionRegistry.transition(instance_id, subscriptions, [], server.user_id)
+      SubscriptionRegistry.transition(
+        instance_id,
+        subscriptions,
+        client_claimed_sub_keys,
+        server.user_id
+      )
 
     build_receipts(actually_added, server)
   end
