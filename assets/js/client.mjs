@@ -152,11 +152,21 @@ export default class Client {
         action,
         selfEchoes: encodedSelfEchoes,
         status,
+        subDrops: encodedSubDrops,
+        subReceipts: encodedSubReceipts,
       } = await response.json();
 
       if (status === 0) {
         $.#failCommand(action);
       }
+
+      const subReceipts =
+        Interpreter.evaluateJavaScriptExpression(encodedSubReceipts);
+
+      const subDrops =
+        Interpreter.evaluateJavaScriptExpression(encodedSubDrops);
+
+      App.subscriptionReceiptRegistry.merge(subReceipts, subDrops);
 
       const nextAction = Interpreter.evaluateJavaScriptExpression(action);
 
