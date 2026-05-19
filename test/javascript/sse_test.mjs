@@ -17,9 +17,9 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("Sse", () => {
+  let fetchStub;
   let mockEventSource;
   let originalInstanceId;
-  let fetchStub;
 
   function stubHandshakeResponse({
     handshakeId = "test-handshake-id",
