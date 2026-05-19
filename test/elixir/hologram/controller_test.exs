@@ -1651,6 +1651,22 @@ defmodule Hologram.ControllerTest do
       assert [{^handshake_id, [], _instance_id, _session_id, _user_id, _expires_at}] =
                :ets.lookup(Handshake.ets_table_name(), handshake_id)
     end
+
+    test "wires refreshedReceipts into the response body" do
+      receipt_token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          [receipt_token]
+        )
+
+      %{"refreshedReceipts" => encoded} = Jason.decode!(conn.resp_body)
+
+      assert String.contains?(encoded, ~s'Type.atom("room_a")')
+      assert String.contains?(encoded, ~s'Type.bitstring("page")')
+    end
   end
 
   describe "handle_subsequent_page_request/3" do
@@ -1806,6 +1822,38 @@ defmodule Hologram.ControllerTest do
       |> handle_subsequent_page_request(Module4)
 
       assert_receive {:unsub, :room_a}
+    end
+  end
+
+  describe "verify_and_refresh_receipts/3" do
+    test "refreshes the created_at on a passing receipt" do
+      original_token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+      {:ok, %Receipt{created_at: original_created_at}} = Receipt.verify(original_token)
+
+      Process.sleep(1)
+
+      {_bindings, refreshed} =
+        verify_and_refresh_receipts([original_token], "test-instance-id", "test-user-id")
+
+      assert [{:room_a, "page", fresh_token}] = refreshed
+
+      {:ok, %Receipt{created_at: refreshed_created_at}} = Receipt.verify(fresh_token)
+
+      assert refreshed_created_at > original_created_at
+    end
+
+    test "omits failed receipts from the refreshed list" do
+      valid_token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+      forged_token = "forged-token-not-a-valid-signature"
+
+      {_bindings, refreshed} =
+        verify_and_refresh_receipts(
+          [forged_token, valid_token],
+          "test-instance-id",
+          "test-user-id"
+        )
+
+      assert [{:room_a, "page", _fresh_token}] = refreshed
     end
   end
 end

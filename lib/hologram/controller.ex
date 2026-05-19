@@ -312,8 +312,10 @@ defmodule Hologram.Controller do
           |> Map.get("_json")
           |> Deserializer.deserialize()
 
+        {validated_bindings, refreshed_receipts} =
+          verify_and_refresh_receipts(receipts, instance_id, user_id)
+
         handshake_id = UUID.uuid4()
-        validated_bindings = verify_receipts(receipts, instance_id, user_id)
         expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
 
         Handshake.insert(
@@ -323,8 +325,13 @@ defmodule Hologram.Controller do
           expires_at
         )
 
+        {:ok, encoded_refreshed_receipts} = Encoder.encode_term(refreshed_receipts)
+
         conn
-        |> Controller.json(%{handshakeId: handshake_id})
+        |> Controller.json(%{
+          handshakeId: handshake_id,
+          refreshedReceipts: encoded_refreshed_receipts
+        })
         |> Plug.Conn.halt()
     end
   end
@@ -362,6 +369,25 @@ defmodule Hologram.Controller do
       initial_page?: false,
       instance_id: instance_id
     )
+  end
+
+  @doc false
+  @spec verify_and_refresh_receipts([String.t()], String.t(), term | nil) ::
+          {[{{any, String.t()}, term | nil}], [{any, String.t(), String.t()}]}
+  def verify_and_refresh_receipts(receipts, instance_id, current_user_id) do
+    receipts
+    |> Enum.flat_map(fn token ->
+      case Receipt.verify(token) do
+        {:ok, %Receipt{instance_id: ^instance_id, channel: channel, cid: cid, user_id: user_id}}
+        when user_id == nil or user_id == current_user_id ->
+          fresh_token = Receipt.issue(channel, cid, instance_id, user_id)
+          [{{{channel, cid}, user_id}, {channel, cid, fresh_token}}]
+
+        _other ->
+          []
+      end
+    end)
+    |> Enum.unzip()
   end
 
   defp apply_subscription_deltas(%Server{__meta__: %{subscription_ops: ops}}) when ops == %{},
@@ -476,18 +502,5 @@ defmodule Hologram.Controller do
     else
       _fallback -> false
     end
-  end
-
-  defp verify_receipts(receipts, instance_id, current_user_id) do
-    Enum.flat_map(receipts, fn token ->
-      case Receipt.verify(token) do
-        {:ok, %Receipt{instance_id: ^instance_id, channel: channel, cid: cid, user_id: user_id}}
-        when user_id == nil or user_id == current_user_id ->
-          [{{channel, cid}, user_id}]
-
-        _other ->
-          []
-      end
-    end)
   end
 end
