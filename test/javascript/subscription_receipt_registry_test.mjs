@@ -3,6 +3,7 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  encodedSubscriptionReceiptKey,
 } from "./support/helpers.mjs";
 
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
@@ -15,7 +16,6 @@ describe("SubscriptionReceiptRegistry", () => {
     Type.tuple([channel, Type.bitstring(cid), Type.bitstring(token)]);
 
   const key = (channel, cid) => Type.tuple([channel, Type.bitstring(cid)]);
-  const encodedKey = (channel, cid) => Type.encodeMapKey(key(channel, cid));
 
   beforeEach(() => {
     SubscriptionReceiptRegistry.entries.clear();
@@ -32,7 +32,7 @@ describe("SubscriptionReceiptRegistry", () => {
       SubscriptionReceiptRegistry.merge(adds, Type.list());
 
       const stored = SubscriptionReceiptRegistry.entries.get(
-        encodedKey(Type.atom("room_a"), "page"),
+        encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
       );
 
       assert.equal(stored.data[2].text, "token-a");
@@ -51,7 +51,7 @@ describe("SubscriptionReceiptRegistry", () => {
 
       assert.isFalse(
         SubscriptionReceiptRegistry.entries.has(
-          encodedKey(Type.atom("room_a"), "page"),
+          encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
         ),
       );
     });
@@ -71,7 +71,7 @@ describe("SubscriptionReceiptRegistry", () => {
       );
 
       const surviving = SubscriptionReceiptRegistry.entries.get(
-        encodedKey(Type.atom("room_b"), "comp_1"),
+        encodedSubscriptionReceiptKey(Type.atom("room_b"), "comp_1"),
       );
 
       assert.equal(surviving.data[2].text, "token-b");
@@ -89,7 +89,7 @@ describe("SubscriptionReceiptRegistry", () => {
       );
 
       const stored = SubscriptionReceiptRegistry.entries.get(
-        encodedKey(Type.atom("room_a"), "page"),
+        encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
       );
 
       assert.equal(stored.data[2].text, "new-token");
@@ -121,12 +121,12 @@ describe("SubscriptionReceiptRegistry", () => {
 
       assert.isFalse(
         SubscriptionReceiptRegistry.entries.has(
-          encodedKey(Type.atom("room_a"), "page"),
+          encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
         ),
       );
 
       const surviving = SubscriptionReceiptRegistry.entries.get(
-        encodedKey(Type.atom("room_b"), "comp_1"),
+        encodedSubscriptionReceiptKey(Type.atom("room_b"), "comp_1"),
       );
 
       assert.equal(surviving.data[2].text, "token-b");

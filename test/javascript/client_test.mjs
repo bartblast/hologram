@@ -4,6 +4,7 @@ import {
   assert,
   componentRegistryEntryFixture,
   defineGlobalErlangAndElixirModules,
+  encodedSubscriptionReceiptKey,
   registerWebApis,
   sinon,
   waitForEventLoop,
@@ -753,9 +754,6 @@ describe("Client", () => {
     });
 
     it("merges adds and drops from the subReceipts and subDrops fields into the registry", async () => {
-      const encodedKey = (channel, cid) =>
-        Type.encodeMapKey(Type.tuple([channel, Type.bitstring(cid)]));
-
       App.subscriptionReceiptRegistry.entries.clear();
 
       App.subscriptionReceiptRegistry.merge(
@@ -788,12 +786,12 @@ describe("Client", () => {
 
       assert.isFalse(
         App.subscriptionReceiptRegistry.entries.has(
-          encodedKey(Type.atom("room_a"), "page"),
+          encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
         ),
       );
 
       const stored = App.subscriptionReceiptRegistry.entries.get(
-        encodedKey(Type.atom("room_b"), "page"),
+        encodedSubscriptionReceiptKey(Type.atom("room_b"), "page"),
       );
 
       assert.equal(stored.data[2].text, "token-b");
