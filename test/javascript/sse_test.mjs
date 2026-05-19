@@ -11,6 +11,7 @@ import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Logger from "../../assets/js/logger.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -21,6 +22,7 @@ describe("Sse", () => {
 
   beforeEach(() => {
     Sse.eventSource = null;
+    SubscriptionReceiptRegistry.entries.clear();
 
     mockEventSource = {
       close: sinon.spy(),
@@ -37,8 +39,50 @@ describe("Sse", () => {
   afterEach(() => {
     sinon.restore();
     delete globalThis.EventSource;
-
     App.instanceId = originalInstanceId;
+    SubscriptionReceiptRegistry.entries.clear();
+  });
+
+  describe("buildHandshakePayload()", () => {
+    it("returns an empty receipts list when no receipts are stored", () => {
+      const payload = Sse.buildHandshakePayload();
+
+      const expected = Type.map([
+        [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
+        [Type.atom("receipts"), Type.list()],
+      ]);
+
+      assert.deepStrictEqual(payload, expected);
+    });
+
+    it("extracts the token from each stored receipt triple", () => {
+      const tripleA = Type.tuple([
+        Type.atom("room_a"),
+        Type.bitstring("page"),
+        Type.bitstring("token-a"),
+      ]);
+
+      const tripleB = Type.tuple([
+        Type.atom("room_b"),
+        Type.bitstring("widget"),
+        Type.bitstring("token-b"),
+      ]);
+
+      SubscriptionReceiptRegistry.entries.set("key-a", tripleA);
+      SubscriptionReceiptRegistry.entries.set("key-b", tripleB);
+
+      const payload = Sse.buildHandshakePayload();
+
+      const expected = Type.map([
+        [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
+        [
+          Type.atom("receipts"),
+          Type.list([Type.bitstring("token-a"), Type.bitstring("token-b")]),
+        ],
+      ]);
+
+      assert.deepStrictEqual(payload, expected);
+    });
   });
 
   describe("connect()", () => {
