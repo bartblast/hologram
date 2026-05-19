@@ -9,6 +9,9 @@ defmodule Hologram.Realtime.HandshakeTest do
     wait_for_process_cleanup(Handshake)
     start_supervised!(Handshake)
 
+    wait_for_process_cleanup(Hologram.PubSub)
+    start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
     :ok
   end
 
@@ -31,6 +34,27 @@ defmodule Hologram.Realtime.HandshakeTest do
                  1_700_000_000_000
                }
              ]
+    end
+
+    test "broadcasts the insert on the gossip topic with the flattened wire shape" do
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+
+      insert(
+        "test-handshake-id",
+        [{{:room_a, "page"}, "test-user-id"}],
+        {"test-instance-id", "test-session-id", "test-user-id"},
+        1_700_000_000_000
+      )
+
+      assert_receive {
+        :insert,
+        "test-handshake-id",
+        [{{:room_a, "page"}, "test-user-id"}],
+        "test-instance-id",
+        "test-session-id",
+        "test-user-id",
+        1_700_000_000_000
+      }
     end
   end
 end

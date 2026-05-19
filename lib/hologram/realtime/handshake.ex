@@ -3,6 +3,7 @@ defmodule Hologram.Realtime.Handshake do
 
   use GenServer
 
+  @gossip_topic "hologram:gossip:sse_handshakes"
   @table_name :hologram_sse_handshakes
 
   @doc """
@@ -12,15 +13,22 @@ defmodule Hologram.Realtime.Handshake do
   def ets_table_name, do: @table_name
 
   @doc """
-  Stashes a handshake entry locally so the GET-time SSE handler can later
-  consume it by `handshake_id`.
+  Returns the PubSub topic used for cluster-wide gossip of stash inserts.
+  """
+  @spec gossip_topic() :: String.t()
+  def gossip_topic, do: @gossip_topic
+
+  @doc """
+  Stashes a handshake entry locally and broadcasts it on the gossip topic so
+  peer nodes can mirror it into their own stash.
 
   `identity` is the `{instance_id, session_id, user_id}` tuple of the POSTing
   client, used at GET-time consume to verify the consumer is the same client
   that completed the POST.
 
   The stashed entry is `{handshake_id, validated_bindings, instance_id,
-  session_id, user_id, expires_at}` (flat ETS tuple).
+  session_id, user_id, expires_at}` (flat ETS tuple); the gossip message
+  mirrors the same shape under the `:insert` tag.
   """
   @spec insert(
           String.t(),
@@ -60,6 +68,12 @@ defmodule Hologram.Realtime.Handshake do
     :ets.insert(
       @table_name,
       {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
+    )
+
+    Phoenix.PubSub.broadcast(
+      Hologram.PubSub,
+      @gossip_topic,
+      {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
     )
 
     {:reply, :ok, state}
