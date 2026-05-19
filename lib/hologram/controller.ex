@@ -294,8 +294,6 @@ defmodule Hologram.Controller do
   identity tuple, and returns the `handshake_id` for the client to use when
   opening the EventSource.
   """
-  # TODO: instance check (verify receipt.instance_id == request.instance_id)
-  # is not yet enforced; today any valid signature is accepted.
   @spec handle_sse_handshake_request(Plug.Conn.t()) :: Plug.Conn.t()
   def handle_sse_handshake_request(initial_conn) do
     conn = PlugConnUtils.init_conn(initial_conn)
@@ -315,7 +313,7 @@ defmodule Hologram.Controller do
           |> Deserializer.deserialize()
 
         handshake_id = UUID.uuid4()
-        validated_bindings = verify_receipt_signatures(receipts)
+        validated_bindings = verify_receipts(receipts, instance_id)
         expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
 
         Handshake.insert(
@@ -480,13 +478,13 @@ defmodule Hologram.Controller do
     end
   end
 
-  defp verify_receipt_signatures(receipts) do
+  defp verify_receipts(receipts, instance_id) do
     Enum.flat_map(receipts, fn token ->
       case Receipt.verify(token) do
-        {:ok, %Receipt{channel: channel, cid: cid, user_id: user_id}} ->
+        {:ok, %Receipt{instance_id: ^instance_id, channel: channel, cid: cid, user_id: user_id}} ->
           [{{channel, cid}, user_id}]
 
-        {:error, _reason} ->
+        _other ->
           []
       end
     end)

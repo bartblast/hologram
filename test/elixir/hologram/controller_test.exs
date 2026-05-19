@@ -1567,6 +1567,22 @@ defmodule Hologram.ControllerTest do
       assert [{^handshake_id, [], _instance_id, _session_id, _user_id, _expires_at}] =
                :ets.lookup(Handshake.ets_table_name(), handshake_id)
     end
+
+    test "drops a receipt whose signed instance_id does not match the request's" do
+      receipt_token = Receipt.issue(:room_a, "page", "other-instance-id", "test-user-id")
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          [receipt_token]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [{^handshake_id, [], _instance_id, _session_id, _user_id, _expires_at}] =
+               :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
   end
 
   describe "handle_subsequent_page_request/3" do
