@@ -68,6 +68,13 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   @doc """
+  Returns the per-entry stash TTL in milliseconds. Used by callers of `insert/4`
+  to compute `expires_at`, and by the GenServer's internal sweep timer.
+  """
+  @spec stash_ttl_ms() :: pos_integer
+  def stash_ttl_ms, do: @sse_handshake_stash_ttl_ms
+
+  @doc """
   Sweeps the ETS table and deletes every entry whose `expires_at` is in the
   past. Called periodically by the GenServer's internal timer; also exposed
   as a synchronous API so callers (and tests) can trigger a sweep on demand.
