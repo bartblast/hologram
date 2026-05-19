@@ -45,20 +45,30 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
-  Attaches a fresh SSE connection to `instance_id`, populating the canonical
-  binding set from `validated_bindings`. The handshake endpoint owns all
-  signature / identity / tombstone verification ahead of this call -
-  `attach_connection/5` itself trusts the supplied bindings.
+  Attaches a fresh SSE connection to `instance_id`. The handshake endpoint
+  owns all signature / identity / tombstone verification ahead of this
+  call - `attach_connection/5` itself trusts the supplied bindings.
 
   `validated_bindings` is a list of `{{channel, cid}, authorizing_user_id}`
   pairs (map-compatible). The function monitors `sse_pid` so the entry is
   cleaned up when the connection dies, and returns the deduped list of
   channels in the resulting binding set so the caller can subscribe the SSE
   process to PubSub topics.
+
+  Two paths:
+
+    * **No prior entry** (initial attach, or reconnect after the prior entry
+      was garbage-collected): create a fresh entry whose `bindings` field
+      equals exactly the supplied `validated_bindings`.
+
+    * **Prior entry exists** (newest-attach-wins): demonitor the prior
+      `sse_pid`, send it `{:close, :superseded}` for graceful shutdown, and
+      swap the entry to the new pid + monitor. The prior canonical binding
+      set (including each binding's `authorizing_user_id`) is preserved so
+      PubSub subs don't churn through zero-crossings during the swap; the
+      new client's `validated_bindings` is intentionally ignored in this
+      path because the live registry's state is the source of truth.
   """
-  # TODO: implement the supersede branch (newest-attach-wins, prior entry
-  # exists). Currently only the no-prior-entry case is supported; calling
-  # when an entry already exists for `instance_id` will crash.
   @spec attach_connection(String.t(), term | nil, term | nil, pid, [
           {{any, String.t()}, term | nil}
         ]) ::
@@ -234,30 +244,35 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         _from,
         refs
       ) do
-    case :ets.lookup(@table_name, instance_id) do
-      [] ->
-        sse_ref = Process.monitor(sse_pid)
-        bindings = Map.new(validated_bindings)
+    {bindings, refs_without_prior} =
+      case :ets.lookup(@table_name, instance_id) do
+        [] ->
+          {Map.new(validated_bindings), refs}
 
-        entry = %{
-          bindings: bindings,
-          session_id: session_id,
-          sse_pid: sse_pid,
-          sse_ref: sse_ref,
-          user_id: user_id
-        }
+        [{^instance_id, %{sse_pid: prior_pid, sse_ref: prior_ref, bindings: prior_bindings}}] ->
+          Process.demonitor(prior_ref, [:flush])
+          send(prior_pid, {:close, :superseded})
+          {prior_bindings, Map.delete(refs, prior_ref)}
+      end
 
-        :ets.insert(@table_name, {instance_id, entry})
+    sse_ref = Process.monitor(sse_pid)
 
-        validated_channels =
-          bindings
-          |> Enum.map(fn {{channel, _cid}, _user_id} -> channel end)
-          |> Enum.uniq()
+    entry = %{
+      bindings: bindings,
+      session_id: session_id,
+      sse_pid: sse_pid,
+      sse_ref: sse_ref,
+      user_id: user_id
+    }
 
-        {:reply, validated_channels, Map.put(refs, sse_ref, instance_id)}
+    :ets.insert(@table_name, {instance_id, entry})
 
-        # TODO: supersede branch (prior entry exists) is not implemented yet.
-    end
+    validated_channels =
+      bindings
+      |> Enum.map(fn {{channel, _cid}, _user_id} -> channel end)
+      |> Enum.uniq()
+
+    {:reply, validated_channels, Map.put(refs_without_prior, sse_ref, instance_id)}
   end
 
   @impl GenServer

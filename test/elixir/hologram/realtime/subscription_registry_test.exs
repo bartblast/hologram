@@ -318,6 +318,73 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
                {:room_auth, "page"} => 7
              }
     end
+
+    test "supersedes a prior live attachment: demonitors prior, sends :superseded, swaps the pid" do
+      test_pid = self()
+
+      # Forwards the first message it receives back to the test so we can
+      # observe what the registry sent it.
+      prior_pid =
+        spawn(fn ->
+          receive do
+            msg -> send(test_pid, {:prior_received, msg})
+          end
+        end)
+
+      new_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      attach_connection("test-instance-id", nil, nil, prior_pid, [])
+      attach_connection("test-instance-id", nil, nil, new_pid, [])
+
+      assert_receive {:prior_received, {:close, :superseded}}
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.sse_pid == new_pid
+
+      # Prior exits naturally after forwarding its one message; if demonitor
+      # had failed, the :DOWN handler would delete the entry. Sync via an
+      # unrelated GenServer call so any pending :DOWN has been processed.
+      :ok = register("sync-barrier", spawn(fn -> Process.sleep(:infinity) end))
+
+      assert :ets.lookup(ets_table_name(), "test-instance-id") != []
+    end
+
+    test "preserves the prior bindings across a supersede" do
+      prior_pid = spawn(fn -> Process.sleep(:infinity) end)
+      new_pid = spawn(fn -> Process.sleep(:infinity) end)
+
+      attach_connection(
+        "test-instance-id",
+        "old-session",
+        "old-user",
+        prior_pid,
+        [
+          {{:room_a, "page"}, "old-user"},
+          {{:room_b, "comp_1"}, "old-user"}
+        ]
+      )
+
+      # New client claims different bindings - registry should ignore them
+      # and keep the prior canonical set.
+      attach_connection(
+        "test-instance-id",
+        "new-session",
+        "new-user",
+        new_pid,
+        [{{:room_c, "page"}, "new-user"}]
+      )
+
+      [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
+
+      assert entry.bindings == %{
+               {:room_a, "page"} => "old-user",
+               {:room_b, "comp_1"} => "old-user"
+             }
+
+      assert entry.session_id == "new-session"
+      assert entry.user_id == "new-user"
+    end
   end
 
   describe "bindings_of/1" do
