@@ -75,12 +75,16 @@ defmodule Hologram.RouterTest do
   end
 
   describe "/hologram/page" do
-    test "routes GET subsequent page request" do
+    test "routes POST subsequent page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz")
+        :post
+        |> Plug.Test.conn(
+          "/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz",
+          "{}"
+        )
+        |> Plug.Conn.put_req_header("content-type", "application/json")
         |> Plug.Test.init_test_session(%{})
         |> call([])
 

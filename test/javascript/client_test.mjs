@@ -347,6 +347,27 @@ describe("Client", () => {
         const [url] = fetchStub.firstCall.args;
         assert.equal(url, "/hologram/page/MyPage?user_id=123&status=active");
       });
+
+      it("issues a POST request with a JSON content-type header", async () => {
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().resolves("<html>Response</html>"),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        await Client.fetchPage(pageModule, onSuccessStub);
+
+        sinon.assert.calledOnce(fetchStub);
+
+        const [, options] = fetchStub.firstCall.args;
+
+        assert.equal(options.method, "POST");
+
+        assert.deepStrictEqual(options.headers, {
+          "Content-Type": "application/json",
+        });
+      });
     });
 
     describe("response handling", () => {

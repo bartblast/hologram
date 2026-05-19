@@ -97,7 +97,12 @@ export default class Client {
     try {
       const pageModuleName = Interpreter.moduleExName(pageModule);
       const url = `/hologram/page/${pageModuleName}${queryString}`;
-      const response = await fetch(url);
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: "{}",
+      });
 
       if (!response.ok) {
         $.#handleFetchPageError(response.status);
