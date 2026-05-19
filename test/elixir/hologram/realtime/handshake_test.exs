@@ -5,6 +5,17 @@ defmodule Hologram.Realtime.HandshakeTest do
 
   alias Hologram.Realtime.Handshake
 
+  defp wait_for_waiter(handshake_id) do
+    case :sys.get_state(Handshake).waiters do
+      %{^handshake_id => _waiters} ->
+        :ok
+
+      _no_match ->
+        Process.sleep(1)
+        wait_for_waiter(handshake_id)
+    end
+  end
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -82,6 +93,42 @@ defmodule Hologram.Realtime.HandshakeTest do
       assert redeem("missing-handshake-id", 50) == :error
 
       assert :sys.get_state(Handshake) == %{waiters: %{}}
+    end
+
+    test "resolves a pending waiter when a local insert lands" do
+      task = Task.async(fn -> redeem("late-handshake-id", 1_000) end)
+
+      wait_for_waiter("late-handshake-id")
+
+      insert(
+        "late-handshake-id",
+        [{{:room_a, "page"}, "test-user-id"}],
+        {"test-instance-id", "test-session-id", "test-user-id"},
+        System.system_time(:millisecond) + 60_000
+      )
+
+      assert Task.await(task) ==
+               {:ok, [{{:room_a, "page"}, "test-user-id"}],
+                {"test-instance-id", "test-session-id", "test-user-id"}}
+    end
+
+    test "resolves a pending waiter when a peer gossip insert arrives" do
+      task = Task.async(fn -> redeem("late-handshake-id", 1_000) end)
+
+      wait_for_waiter("late-handshake-id")
+
+      future = System.system_time(:millisecond) + 60_000
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:insert, "late-handshake-id", [{{:room_a, "page"}, "test-user-id"}], "peer-instance-id",
+         "peer-session-id", "peer-user-id", future}
+      )
+
+      assert Task.await(task) ==
+               {:ok, [{{:room_a, "page"}, "test-user-id"}],
+                {"peer-instance-id", "peer-session-id", "peer-user-id"}}
     end
   end
 

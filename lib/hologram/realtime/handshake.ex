@@ -100,7 +100,7 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   def handle_call(
-        {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id},
+        {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id} = identity,
          expires_at},
         _from,
         state
@@ -117,7 +117,9 @@ defmodule Hologram.Realtime.Handshake do
       {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
     )
 
-    {:reply, :ok, state}
+    new_state = notify_waiters(state, handshake_id, validated_bindings, identity)
+
+    {:reply, :ok, new_state}
   end
 
   @impl GenServer
@@ -152,7 +154,10 @@ defmodule Hologram.Realtime.Handshake do
       {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
     )
 
-    {:noreply, state}
+    new_state =
+      notify_waiters(state, handshake_id, validated_bindings, {instance_id, session_id, user_id})
+
+    {:noreply, new_state}
   end
 
   @impl GenServer
@@ -211,6 +216,23 @@ defmodule Hologram.Realtime.Handshake do
     ]
 
     :ets.select_delete(@table_name, match_spec)
+  end
+
+  defp notify_waiters(state, handshake_id, validated_bindings, identity) do
+    case Map.pop(state.waiters, handshake_id) do
+      {nil, _no_waiters} ->
+        state
+
+      {waiter_list, remaining_waiters} ->
+        reply = {:ok, validated_bindings, identity}
+
+        Enum.each(waiter_list, fn {from, ref} ->
+          Process.cancel_timer(ref)
+          GenServer.reply(from, reply)
+        end)
+
+        %{state | waiters: remaining_waiters}
+    end
   end
 
   defp schedule_sweep do
