@@ -106,6 +106,7 @@ defmodule Hologram.Realtime.Handshake do
     {:ok, %{waiters: %{}}}
   end
 
+  @impl GenServer
   def handle_call(
         {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id} = identity,
          expires_at},
@@ -146,12 +147,14 @@ defmodule Hologram.Realtime.Handshake do
     end
   end
 
+  @impl GenServer
   def handle_call(:sweep_expired, _from, state) do
     delete_expired()
 
     {:reply, :ok, state}
   end
 
+  @impl GenServer
   def handle_info(
         {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at},
         state
@@ -189,6 +192,7 @@ defmodule Hologram.Realtime.Handshake do
     end
   end
 
+  @impl GenServer
   def handle_info(:sweep_expired, state) do
     delete_expired()
     schedule_sweep()
@@ -196,6 +200,7 @@ defmodule Hologram.Realtime.Handshake do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_info({:sync_request, requester_pid}, state) do
     entries = :ets.tab2list(@table_name)
     send(requester_pid, {:sync_reply, entries})
