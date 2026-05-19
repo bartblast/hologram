@@ -4,6 +4,7 @@ defmodule Hologram.Realtime.Handshake do
   use GenServer
 
   @gossip_topic "hologram:gossip:sse_handshakes"
+  @sse_handshake_boot_sync_timeout_ms 5_000
   @sse_handshake_stash_ttl_ms 60_000
   @table_name :hologram_sse_handshakes
 
@@ -63,9 +64,22 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   @impl GenServer
-  def init(_opts) do
+  def init(opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
+
+    boot_sync_timeout_ms =
+      Keyword.get(opts, :boot_sync_timeout_ms, @sse_handshake_boot_sync_timeout_ms)
+
+    Phoenix.PubSub.broadcast_from(
+      Hologram.PubSub,
+      self(),
+      @gossip_topic,
+      {:sync_request, self()}
+    )
+
+    collect_sync_replies(System.monotonic_time(:millisecond) + boot_sync_timeout_ms)
+
     schedule_sweep()
 
     {:ok, %{}}
@@ -119,15 +133,23 @@ defmodule Hologram.Realtime.Handshake do
     {:noreply, state}
   end
 
-  # TODO: when the boot-sync broadcast lands, it must use
-  # `Phoenix.PubSub.broadcast_from(Hologram.PubSub, self(), ...)` so that the
-  # local Handshake never receives its own `{:sync_request, self()}` - this
-  # handler assumes `requester_pid` is always a peer pid.
   def handle_info({:sync_request, requester_pid}, state) do
     entries = :ets.tab2list(@table_name)
     send(requester_pid, {:sync_reply, entries})
 
     {:noreply, state}
+  end
+
+  defp collect_sync_replies(deadline) do
+    remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {:sync_reply, entries} ->
+        :ets.insert(@table_name, entries)
+        collect_sync_replies(deadline)
+    after
+      remaining_ms -> :ok
+    end
   end
 
   defp delete_expired do

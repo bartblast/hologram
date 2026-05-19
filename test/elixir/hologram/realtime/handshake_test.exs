@@ -10,7 +10,7 @@ defmodule Hologram.Realtime.HandshakeTest do
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     wait_for_process_cleanup(Handshake)
-    start_supervised!(Handshake)
+    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
 
     :ok
   end
@@ -55,6 +55,77 @@ defmodule Hologram.Realtime.HandshakeTest do
         "test-user-id",
         1_700_000_000_000
       }
+    end
+  end
+
+  describe "start_link/1" do
+    test "merges entries from a peer that replies to the boot-sync request" do
+      :ok = stop_supervised(Handshake)
+
+      test_pid = self()
+      future = System.system_time(:millisecond) + 60_000
+
+      peer_entry =
+        {"peer-entry-id", [], "peer-instance-id", "peer-session-id", "peer-user-id", future}
+
+      spawn_link(fn ->
+        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+        send(test_pid, :peer_ready)
+
+        receive do
+          {:sync_request, requester_pid} ->
+            send(requester_pid, {:sync_reply, [peer_entry]})
+        end
+      end)
+
+      assert_receive :peer_ready
+
+      start_supervised!({Handshake, boot_sync_timeout_ms: 200})
+
+      assert :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_entry]
+    end
+
+    test "returns with an empty stash when no peers reply before the timeout" do
+      :ok = stop_supervised(Handshake)
+
+      start_supervised!({Handshake, boot_sync_timeout_ms: 50})
+
+      assert :ets.tab2list(ets_table_name()) == []
+    end
+
+    test "still receives a steady-state {:insert, ...} a peer publishes after the sync_request" do
+      :ok = stop_supervised(Handshake)
+
+      test_pid = self()
+      future = System.system_time(:millisecond) + 60_000
+
+      spawn_link(fn ->
+        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+        send(test_pid, :peer_ready)
+
+        receive do
+          {:sync_request, _requester_pid} ->
+            Phoenix.PubSub.broadcast(
+              Hologram.PubSub,
+              gossip_topic(),
+              {:insert, "post-sync-handshake-id", [], "peer-instance-id", "peer-session-id",
+               "peer-user-id", future}
+            )
+        end
+      end)
+
+      assert_receive :peer_ready
+
+      start_supervised!({Handshake, boot_sync_timeout_ms: 50})
+
+      # Drain the GenServer mailbox so the {:insert, ...} delivered during
+      # boot-sync has been merged before we read ETS.
+      :ok = sweep_expired()
+
+      assert [
+               {"post-sync-handshake-id", [], "peer-instance-id", "peer-session-id",
+                "peer-user-id", ^future}
+             ] = :ets.lookup(ets_table_name(), "post-sync-handshake-id")
     end
   end
 
@@ -117,7 +188,7 @@ defmodule Hologram.Realtime.HandshakeTest do
     end
   end
 
-  describe "{:sync_request, ...} handling" do
+  describe "{:sync_request, ...} reply" do
     test "replies with the current ETS dump via direct send" do
       future = System.system_time(:millisecond) + 60_000
 
