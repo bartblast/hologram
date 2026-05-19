@@ -25,7 +25,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
           "test-user-id"
         )
 
-      assert MapSet.new(add_keys) == MapSet.new([{:room_a, "page"}, {:room_b, "comp_1"}])
+      assert Enum.sort(add_keys) == [{:room_a, "page"}, {:room_b, "comp_1"}]
       assert drop_keys == []
 
       [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
@@ -51,7 +51,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
         apply_deltas("test-instance-id", [], [{:room_a, "page"}], "test-user-id")
 
       assert add_keys == []
-      assert MapSet.new(drop_keys) == MapSet.new([{:room_a, "page"}])
+      assert Enum.sort(drop_keys) == [{:room_a, "page"}]
 
       [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
 
@@ -109,8 +109,8 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
           "test-user-id"
         )
 
-      assert MapSet.new(add_keys) == MapSet.new([{:room_c, "comp_2"}])
-      assert MapSet.new(drop_keys) == MapSet.new([{:room_a, "page"}])
+      assert Enum.sort(add_keys) == [{:room_c, "comp_2"}]
+      assert Enum.sort(drop_keys) == [{:room_a, "page"}]
 
       [{"test-instance-id", entry}] = :ets.lookup(ets_table_name(), "test-instance-id")
 
@@ -233,8 +233,8 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       {add_keys, drop_keys} =
         apply_deltas("test-unknown-instance-id", adds, drops, "test-user-id")
 
-      assert MapSet.new(add_keys) == MapSet.new(adds)
-      assert MapSet.new(drop_keys) == MapSet.new(drops)
+      assert Enum.sort(add_keys) == Enum.sort(adds)
+      assert Enum.sort(drop_keys) == Enum.sort(drops)
     end
 
     test "creates no entry for an unknown instance_id" do
@@ -497,8 +497,8 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
           "test-user-id"
         )
 
-      assert MapSet.new(add_keys) == MapSet.new([{:room_b, "page"}])
-      assert MapSet.new(drop_keys) == MapSet.new([{:room_c, "page"}])
+      assert Enum.sort(add_keys) == [{:room_b, "page"}]
+      assert Enum.sort(drop_keys) == [{:room_c, "page"}]
     end
 
     test "replaces the registry's bindings field with the new set" do
@@ -558,8 +558,8 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
           "test-user-id"
         )
 
-      assert MapSet.new(add_keys) == MapSet.new([{:room_c, "page"}])
-      assert MapSet.new(drop_keys) == MapSet.new([{:room_a, "page"}])
+      assert Enum.sort(add_keys) == [{:room_c, "page"}]
+      assert Enum.sort(drop_keys) == [{:room_a, "page"}]
     end
 
     test "sends {:sub, channel} to sse_pid on the first cid-binding for a channel" do
@@ -630,8 +630,8 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
           "test-user-id"
         )
 
-      assert MapSet.new(add_keys) == MapSet.new([{:room_a, "page"}])
-      assert MapSet.new(drop_keys) == MapSet.new([{:room_c, "page"}])
+      assert Enum.sort(add_keys) == [{:room_a, "page"}]
+      assert Enum.sort(drop_keys) == [{:room_c, "page"}]
     end
 
     test "creates no entry for an unknown instance_id" do
