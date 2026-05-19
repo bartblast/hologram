@@ -3,9 +3,11 @@ defmodule Hologram.Realtime.SSE do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Realtime.Handshake
   alias Hologram.Runtime.Session
 
   @default_heartbeat_interval_ms 15_000
+  @sse_handshake_server_wait_ms 500
 
   @doc """
   Builds the SSE event envelope for a broadcast `%Action{}`.
@@ -87,15 +89,29 @@ defmodule Hologram.Realtime.SSE do
   """
   @spec stream(Plug.Conn.t(), keyword) :: Plug.Conn.t()
   def stream(conn, opts \\ []) do
-    heartbeat_interval_ms =
-      Keyword.get(opts, :heartbeat_interval_ms, @default_heartbeat_interval_ms)
+    conn = Plug.Conn.fetch_query_params(conn)
+    handshake_id = conn.query_params["handshake_id"]
 
-    schedule_heartbeat(heartbeat_interval_ms)
+    server_wait_ms =
+      Keyword.get(opts, :server_wait_ms, @sse_handshake_server_wait_ms)
 
-    conn
-    |> subscribe_to_identity_channels()
-    |> prepare()
-    |> message_pump(heartbeat_interval_ms)
+    case Handshake.redeem(handshake_id, server_wait_ms) do
+      {:ok, _validated_bindings, _identity} ->
+        heartbeat_interval_ms =
+          Keyword.get(opts, :heartbeat_interval_ms, @default_heartbeat_interval_ms)
+
+        schedule_heartbeat(heartbeat_interval_ms)
+
+        conn
+        |> subscribe_to_identity_channels()
+        |> prepare()
+        |> message_pump(heartbeat_interval_ms)
+
+      :error ->
+        conn
+        |> Plug.Conn.send_resp(400, "Handshake redemption failed")
+        |> Plug.Conn.halt()
+    end
   end
 
   # Public so tests can exercise subscription wiring without entering the

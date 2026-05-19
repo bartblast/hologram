@@ -5,10 +5,14 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Realtime.Handshake
 
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+    wait_for_process_cleanup(Handshake)
+    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
 
     :ok
   end
@@ -16,15 +20,23 @@ defmodule Hologram.Realtime.SSETest do
   defp conn_with_instance_id(session \\ %{}) do
     instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
 
-    session =
-      Map.put_new(
+    session_id =
+      Map.get(
         session,
         :hologram_session_id,
         "test-session-#{:erlang.unique_integer([:positive])}"
       )
 
+    user_id = Map.get(session, :hologram_user_id)
+
+    handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
+    expires_at = System.system_time(:millisecond) + 60_000
+    Handshake.insert(handshake_id, [], {instance_id, session_id, user_id}, expires_at)
+
+    session = Map.put(session, :hologram_session_id, session_id)
+
     :get
-    |> Plug.Test.conn("/?instance_id=#{instance_id}")
+    |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
     |> Plug.Test.init_test_session(session)
   end
 
@@ -275,6 +287,46 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "stream/2" do
+    test "returns 4xx when no handshake matches within the wait budget" do
+      conn =
+        :get
+        |> Plug.Test.conn("/?instance_id=test-instance-id&handshake_id=unknown-handshake-id")
+        |> Plug.Test.init_test_session(%{hologram_session_id: "test-session-id"})
+
+      result = stream(conn, server_wait_ms: 50)
+
+      assert result.halted == true
+      assert result.status == 400
+    end
+
+    test "redeems a handshake whose gossip arrives within the wait budget" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
+
+      conn =
+        :get
+        |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+
+      pid = spawn(fn -> stream(conn, server_wait_ms: 200) end)
+
+      Process.sleep(50)
+
+      Handshake.insert(
+        handshake_id,
+        [],
+        {instance_id, session_id, nil},
+        System.system_time(:millisecond) + 60_000
+      )
+
+      Process.sleep(50)
+
+      assert Process.alive?(pid)
+
+      Process.exit(pid, :kill)
+    end
+
     test "blocks on receive after preparing the stream" do
       conn = conn_with_instance_id()
       pid = spawn(fn -> stream(conn) end)
