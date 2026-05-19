@@ -4,9 +4,11 @@ import App from "./app.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import Logger from "./logger.mjs";
+import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Sse {
+  static HANDSHAKE_PATH = "/hologram/sse/handshake";
   static SSE_PATH = "/hologram/sse";
 
   static eventSource = null;
@@ -22,17 +24,45 @@ export default class Sse {
     ]);
   }
 
-  static connect() {
-    const params = new URLSearchParams({instance_id: App.instanceId});
-    $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
+  static async connect() {
+    try {
+      const response = await fetch($.HANDSHAKE_PATH, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: Serializer.serialize($.buildHandshakePayload(), "server"),
+      });
 
-    $.eventSource.onmessage = (event) => {
-      const action = Interpreter.evaluateJavaScriptExpression(event.data);
-      Hologram.scheduleAction(action);
-    };
+      if (!response.ok) {
+        Logger.debug(`SSE handshake error: ${response.status}`);
+        return;
+      }
 
-    // Log and let the browser auto-reconnect; JS-driven reconnect lands later.
-    $.eventSource.onerror = (event) => Logger.debug(`SSE error: ${event.type}`);
+      const {handshakeId, refreshedReceipts: encodedRefreshed} =
+        await response.json();
+
+      const refreshed =
+        Interpreter.evaluateJavaScriptExpression(encodedRefreshed);
+
+      App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
+
+      const params = new URLSearchParams({
+        instance_id: App.instanceId,
+        handshake_id: handshakeId,
+      });
+
+      $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
+
+      $.eventSource.onmessage = (event) => {
+        const action = Interpreter.evaluateJavaScriptExpression(event.data);
+        Hologram.scheduleAction(action);
+      };
+
+      // Log and let the browser auto-reconnect; JS-driven reconnect lands later.
+      $.eventSource.onerror = (event) =>
+        Logger.debug(`SSE error: ${event.type}`);
+    } catch (error) {
+      Logger.debug(`SSE handshake error: ${error}`);
+    }
   }
 }
 

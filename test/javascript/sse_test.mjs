@@ -19,6 +19,33 @@ defineGlobalErlangAndElixirModules();
 describe("Sse", () => {
   let mockEventSource;
   let originalInstanceId;
+  let fetchStub;
+
+  function stubHandshakeResponse({
+    handshakeId = "test-handshake-id",
+    refreshedReceipts = Type.list(),
+    ok = true,
+    status = 200,
+  } = {}) {
+    fetchStub.resolves({
+      ok,
+      status,
+      json: async () => ({
+        handshakeId,
+        refreshedReceipts: "encoded-refreshed-receipts",
+      }),
+    });
+
+    return sinon
+      .stub(Interpreter, "evaluateJavaScriptExpression")
+      .callsFake((expression) => {
+        if (expression === "encoded-refreshed-receipts") {
+          return refreshedReceipts;
+        }
+
+        return Type.atom("noop");
+      });
+  }
 
   beforeEach(() => {
     Sse.eventSource = null;
@@ -31,6 +58,7 @@ describe("Sse", () => {
     };
 
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
+    fetchStub = sinon.stub(globalThis, "fetch");
 
     originalInstanceId = App.instanceId;
     App.instanceId = "test-instance-id";
@@ -86,34 +114,84 @@ describe("Sse", () => {
   });
 
   describe("connect()", () => {
-    it("instantiates an EventSource at the SSE path with the current instance_id", () => {
-      Sse.connect();
+    it("POSTs the handshake payload to the handshake endpoint before opening the EventSource", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+
+      sinon.assert.calledWithMatch(fetchStub, "/hologram/sse/handshake", {
+        method: "POST",
+      });
+    });
+
+    it("opens the EventSource with both instance_id and handshake_id", async () => {
+      stubHandshakeResponse({handshakeId: "abc-handshake-id"});
+
+      await Sse.connect();
 
       sinon.assert.calledOnceWithExactly(
         globalThis.EventSource,
-        "/hologram/sse?instance_id=test-instance-id",
+        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id",
       );
     });
 
-    it("stores the EventSource instance on the static field", () => {
-      Sse.connect();
+    it("merges refreshed receipts into the subscription receipt registry before opening", async () => {
+      const refreshedReceipts = Type.list([
+        Type.tuple([
+          Type.atom("room_a"),
+          Type.bitstring("page"),
+          Type.bitstring("fresh-token"),
+        ]),
+      ]);
+
+      stubHandshakeResponse({refreshedReceipts});
+
+      await Sse.connect();
+
+      assert.strictEqual(SubscriptionReceiptRegistry.entries.size, 1);
+    });
+
+    it("does not open an EventSource when the handshake POST returns a non-2xx", async () => {
+      stubHandshakeResponse({ok: false, status: 401});
+
+      await Sse.connect();
+
+      sinon.assert.notCalled(globalThis.EventSource);
+    });
+
+    it("does not open an EventSource when fetch throws", async () => {
+      fetchStub.rejects(new Error("network down"));
+
+      await Sse.connect();
+
+      sinon.assert.notCalled(globalThis.EventSource);
+    });
+
+    it("exposes the opened EventSource as Sse.eventSource", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
 
       assert.strictEqual(Sse.eventSource, mockEventSource);
     });
   });
 
   describe("onerror", () => {
-    it("logs the error", () => {
+    it("logs the error", async () => {
+      stubHandshakeResponse();
+
       const loggerDebugStub = sinon.stub(Logger, "debug");
 
-      Sse.connect();
+      await Sse.connect();
       Sse.eventSource.onerror({type: "error"});
 
-      sinon.assert.calledOnceWithExactly(loggerDebugStub, "SSE error: error");
+      sinon.assert.calledWithExactly(loggerDebugStub, "SSE error: error");
     });
 
-    it("does not close the EventSource (relies on native browser reconnect)", () => {
-      Sse.connect();
+    it("does not close the EventSource", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
       Sse.eventSource.onerror({type: "error"});
 
       sinon.assert.notCalled(mockEventSource.close);
@@ -121,22 +199,21 @@ describe("Sse", () => {
   });
 
   describe("onmessage", () => {
-    it("decodes the event data and schedules the resulting action", () => {
+    it("decodes the event data and schedules the resulting action", async () => {
       const decodedAction = Type.actionStruct({
         name: Type.atom("my_action"),
         target: Type.bitstring("c1"),
       });
 
-      const evalStub = sinon
-        .stub(Interpreter, "evaluateJavaScriptExpression")
-        .returns(decodedAction);
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-action-expression").returns(decodedAction);
 
       const scheduleStub = sinon.stub(Hologram, "scheduleAction");
 
-      Sse.connect();
+      await Sse.connect();
       Sse.eventSource.onmessage({data: "encoded-action-expression"});
 
-      sinon.assert.calledOnceWithExactly(evalStub, "encoded-action-expression");
+      sinon.assert.calledWith(evalStub, "encoded-action-expression");
 
       sinon.assert.calledOnceWithExactly(scheduleStub, decodedAction);
     });
