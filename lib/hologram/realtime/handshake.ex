@@ -3,9 +3,9 @@ defmodule Hologram.Realtime.Handshake do
 
   use GenServer
 
+  @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:sse_handshakes"
-  @sse_handshake_boot_sync_timeout_ms 5_000
-  @sse_handshake_stash_ttl_ms 60_000
+  @stash_ttl_ms 60_000
   @table_name :hologram_sse_handshakes
 
   @doc """
@@ -72,7 +72,7 @@ defmodule Hologram.Realtime.Handshake do
   to compute `expires_at`, and by the GenServer's internal sweep timer.
   """
   @spec stash_ttl_ms() :: pos_integer
-  def stash_ttl_ms, do: @sse_handshake_stash_ttl_ms
+  def stash_ttl_ms, do: @stash_ttl_ms
 
   @doc """
   Sweeps the ETS table and deletes every entry whose `expires_at` is in the
@@ -90,7 +90,7 @@ defmodule Hologram.Realtime.Handshake do
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
 
     boot_sync_timeout_ms =
-      Keyword.get(opts, :boot_sync_timeout_ms, @sse_handshake_boot_sync_timeout_ms)
+      Keyword.get(opts, :boot_sync_timeout_ms, @boot_sync_timeout_ms)
 
     Phoenix.PubSub.broadcast_from(
       Hologram.PubSub,
@@ -243,6 +243,6 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   defp schedule_sweep do
-    Process.send_after(self(), :sweep_expired, @sse_handshake_stash_ttl_ms)
+    Process.send_after(self(), :sweep_expired, @stash_ttl_ms)
   end
 end
