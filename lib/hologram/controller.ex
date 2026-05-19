@@ -305,7 +305,7 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       session_id ->
-        user_id = Session.get_user_id(conn)
+        current_user_id = Session.get_user_id(conn)
 
         %{instance_id: instance_id, receipts: receipts} =
           conn.body_params
@@ -313,7 +313,7 @@ defmodule Hologram.Controller do
           |> Deserializer.deserialize()
 
         {validated_bindings, refreshed_receipts} =
-          verify_and_refresh_receipts(receipts, instance_id, user_id)
+          verify_and_refresh_receipts(receipts, instance_id, current_user_id)
 
         handshake_id = UUID.uuid4()
         expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
@@ -321,7 +321,7 @@ defmodule Hologram.Controller do
         Handshake.insert(
           handshake_id,
           validated_bindings,
-          {instance_id, session_id, user_id},
+          {instance_id, session_id, current_user_id},
           expires_at
         )
 
@@ -378,10 +378,16 @@ defmodule Hologram.Controller do
     receipts
     |> Enum.flat_map(fn token ->
       case Receipt.verify(token) do
-        {:ok, %Receipt{instance_id: ^instance_id, channel: channel, cid: cid, user_id: user_id}}
-        when user_id == nil or user_id == current_user_id ->
-          fresh_token = Receipt.issue(channel, cid, instance_id, user_id)
-          [{{{channel, cid}, user_id}, {channel, cid, fresh_token}}]
+        {:ok,
+         %Receipt{
+           instance_id: ^instance_id,
+           channel: channel,
+           cid: cid,
+           user_id: authorizing_user_id
+         }}
+        when authorizing_user_id == nil or authorizing_user_id == current_user_id ->
+          fresh_token = Receipt.issue(channel, cid, instance_id, authorizing_user_id)
+          [{{{channel, cid}, authorizing_user_id}, {channel, cid, fresh_token}}]
 
         _other ->
           []
