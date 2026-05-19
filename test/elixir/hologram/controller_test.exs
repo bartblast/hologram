@@ -11,6 +11,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Component.Action
   alias Hologram.Realtime.Handshake
+  alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
@@ -96,10 +97,19 @@ defmodule Hologram.ControllerTest do
     instance_id
   end
 
-  defp handshake_request_body(instance_id) do
+  defp handshake_request_body(instance_id, receipts) do
+    serialized_receipts =
+      Enum.map(receipts, fn token -> "b0#{binary_to_hex(token)}" end)
+
     [
       2,
-      %{"t" => "m", "d" => [["ainstance_id", "b0#{binary_to_hex(instance_id)}"]]}
+      %{
+        "t" => "m",
+        "d" => [
+          ["ainstance_id", "b0#{binary_to_hex(instance_id)}"],
+          ["areceipts", %{"t" => "l", "d" => serialized_receipts}]
+        ]
+      }
     ]
   end
 
@@ -121,10 +131,10 @@ defmodule Hologram.ControllerTest do
     ]
   end
 
-  defp post_handshake(instance_id, session_data) do
+  defp post_handshake(instance_id, session_data, receipts \\ []) do
     parsed_json =
       instance_id
-      |> handshake_request_body()
+      |> handshake_request_body(receipts)
       |> Jason.encode!()
       |> Jason.decode!()
 
@@ -1505,6 +1515,57 @@ defmodule Hologram.ControllerTest do
                {^handshake_id, [], "test-instance-id", "test-session-id", "test-user-id",
                 _expires_at}
              ] = :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
+
+    test "collects the binding from a receipt with a valid signature" do
+      receipt_token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          [receipt_token]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [
+               {^handshake_id, [{{:room_a, "page"}, "test-user-id"}], _instance_id, _session_id,
+                _user_id, _expires_at}
+             ] = :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
+
+    test "drops a receipt with a forged signature while keeping a valid one" do
+      valid_token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+      forged_token = "forged-token-not-a-valid-signature"
+
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id", hologram_user_id: "test-user-id"},
+          [forged_token, valid_token]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [
+               {^handshake_id, [{{:room_a, "page"}, "test-user-id"}], _instance_id, _session_id,
+                _user_id, _expires_at}
+             ] = :ets.lookup(Handshake.ets_table_name(), handshake_id)
+    end
+
+    test "stashes empty bindings when every receipt has an invalid signature" do
+      conn =
+        post_handshake(
+          "test-instance-id",
+          %{hologram_session_id: "test-session-id"},
+          ["forged-1", "forged-2"]
+        )
+
+      {:ok, %{"handshakeId" => handshake_id}} = Jason.decode(conn.resp_body)
+
+      assert [{^handshake_id, [], _instance_id, _session_id, _user_id, _expires_at}] =
+               :ets.lookup(Handshake.ets_table_name(), handshake_id)
     end
   end
 

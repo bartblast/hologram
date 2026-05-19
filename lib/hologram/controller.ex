@@ -294,8 +294,8 @@ defmodule Hologram.Controller do
   identity tuple, and returns the `handshake_id` for the client to use when
   opening the EventSource.
   """
-  # TODO: receipt verification (signature + instance check) will populate
-  # `validated_bindings`; today it is stashed empty.  
+  # TODO: instance check (verify receipt.instance_id == request.instance_id)
+  # is not yet enforced; today any valid signature is accepted.
   @spec handle_sse_handshake_request(Plug.Conn.t()) :: Plug.Conn.t()
   def handle_sse_handshake_request(initial_conn) do
     conn = PlugConnUtils.init_conn(initial_conn)
@@ -309,15 +309,21 @@ defmodule Hologram.Controller do
       session_id ->
         user_id = Session.get_user_id(conn)
 
-        %{instance_id: instance_id} =
+        %{instance_id: instance_id, receipts: receipts} =
           conn.body_params
           |> Map.get("_json")
           |> Deserializer.deserialize()
 
         handshake_id = UUID.uuid4()
+        validated_bindings = verify_receipt_signatures(receipts)
         expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
 
-        Handshake.insert(handshake_id, [], {instance_id, session_id, user_id}, expires_at)
+        Handshake.insert(
+          handshake_id,
+          validated_bindings,
+          {instance_id, session_id, user_id},
+          expires_at
+        )
 
         conn
         |> Controller.json(%{handshakeId: handshake_id})
@@ -472,5 +478,17 @@ defmodule Hologram.Controller do
     else
       _fallback -> false
     end
+  end
+
+  defp verify_receipt_signatures(receipts) do
+    Enum.flat_map(receipts, fn token ->
+      case Receipt.verify(token) do
+        {:ok, %Receipt{channel: channel, cid: cid, user_id: user_id}} ->
+          [{{channel, cid}, user_id}]
+
+        {:error, _reason} ->
+          []
+      end
+    end)
   end
 end
