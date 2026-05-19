@@ -113,12 +113,12 @@ defmodule Hologram.ControllerTest do
     ]
   end
 
-  defp render_page_with_instance(page_module, instance_id) do
+  defp render_page_with_instance(page_module, instance_id, client_claimed_sub_keys \\ []) do
     :get
     |> Plug.Test.conn("/")
     |> Plug.Test.init_test_session(%{})
     |> Plug.Conn.fetch_cookies()
-    |> handle_page_request(page_module, %{}, [],
+    |> handle_page_request(page_module, %{}, client_claimed_sub_keys,
       initial_page?: true,
       instance_id: instance_id,
       csrf_token: @masked_csrf_token
@@ -1340,6 +1340,23 @@ defmodule Hologram.ControllerTest do
 
       refute String.contains?(conn.resp_body, "$SELF_ECHOES_JS_PLACEHOLDER")
       assert String.contains?(conn.resp_body, "selfEchoes: Type.list([])")
+    end
+
+    test "substitutes the sub_drops placeholder with each client-claimed key the new page no longer puts" do
+      :ok = SubscriptionRegistry.register("test-instance-id", self())
+
+      # Module14 puts {:room_page, "page"}, {:room_layout, "layout"},
+      # {:room_component, "my_component"}. The client claims two stale bindings
+      # that aren't in the new set, so transition's drop_keys contains both.
+      conn =
+        render_page_with_instance(Module14, "test-instance-id", [
+          {:room_dropped_a, "page"},
+          {:room_dropped_b, "layout"}
+        ])
+
+      refute String.contains?(conn.resp_body, "$SUB_DROPS_JS_PLACEHOLDER")
+      assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_a")')
+      assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_b")')
     end
 
     test "substitutes the sub_receipts placeholder with a receipt for each binding put during init/3" do

@@ -253,7 +253,7 @@ defmodule Hologram.Controller do
     # Transition subscriptions before flushing broadcasts so a registry failure
     # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
     # effectively infallible, so once transition succeeds both side effects land.
-    sub_receipts =
+    {sub_receipts, sub_drops} =
       transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
     # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
@@ -267,6 +267,7 @@ defmodule Hologram.Controller do
     final_html =
       rendered_html
       |> Renderer.interpolate_self_echoes_js(self_echoes)
+      |> Renderer.interpolate_sub_drops_js(sub_drops)
       |> Renderer.interpolate_sub_receipts_js(sub_receipts)
 
     conn
@@ -408,13 +409,13 @@ defmodule Hologram.Controller do
   # `authorizing_user_id` is `nil` until the auth gate is wired.
   defp transition_subscriptions(server, client_claimed_sub_keys)
 
-  defp transition_subscriptions(%Server{instance_id: nil}, _client_claimed_sub_keys), do: []
+  defp transition_subscriptions(%Server{instance_id: nil}, _client_claimed_sub_keys), do: {[], []}
 
   defp transition_subscriptions(
          %Server{instance_id: instance_id, subscriptions: subscriptions} = server,
          client_claimed_sub_keys
        ) do
-    {actually_added, _actually_dropped} =
+    {actually_added, actually_dropped} =
       SubscriptionRegistry.transition(
         instance_id,
         subscriptions,
@@ -422,7 +423,7 @@ defmodule Hologram.Controller do
         server.user_id
       )
 
-    build_receipts(actually_added, server)
+    {build_receipts(actually_added, server), actually_dropped}
   end
 
   defp validate_csrf_token(conn) do
