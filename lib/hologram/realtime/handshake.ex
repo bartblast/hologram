@@ -65,6 +65,7 @@ defmodule Hologram.Realtime.Handshake do
   @impl GenServer
   def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
+    Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
     schedule_sweep()
 
     {:ok, %{}}
@@ -82,8 +83,9 @@ defmodule Hologram.Realtime.Handshake do
       {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
     )
 
-    Phoenix.PubSub.broadcast(
+    Phoenix.PubSub.broadcast_from(
       Hologram.PubSub,
+      self(),
       @gossip_topic,
       {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
     )
@@ -98,9 +100,32 @@ defmodule Hologram.Realtime.Handshake do
   end
 
   @impl GenServer
+  def handle_info(
+        {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at},
+        state
+      ) do
+    :ets.insert(
+      @table_name,
+      {handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}
+    )
+
+    {:noreply, state}
+  end
+
   def handle_info(:sweep_expired, state) do
     delete_expired()
     schedule_sweep()
+
+    {:noreply, state}
+  end
+
+  # TODO: when the boot-sync broadcast lands, it must use
+  # `Phoenix.PubSub.broadcast_from(Hologram.PubSub, self(), ...)` so that the
+  # local Handshake never receives its own `{:sync_request, self()}` - this
+  # handler assumes `requester_pid` is always a peer pid.
+  def handle_info({:sync_request, requester_pid}, state) do
+    entries = :ets.tab2list(@table_name)
+    send(requester_pid, {:sync_reply, entries})
 
     {:noreply, state}
   end
