@@ -345,14 +345,14 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
   end
 
   describe "transition/4" do
-    test "client-side diff is driven by client_supplied_keys, not the registry's bindings" do
+    test "client-side diff is driven by client_claimed_sub_keys, not the registry's bindings" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
       :ok = register("test-instance-id", sse_pid)
 
       # Seed the registry's bindings with one set
       transition("test-instance-id", [{:room_a, "page"}], [], "test-user-id")
 
-      # new_bindings, client_supplied_keys, and the registry's seeded bindings all differ
+      # new_bindings, client_claimed_sub_keys, and the registry's seeded bindings all differ
       {add_keys, drop_keys} =
         transition(
           "test-instance-id",
@@ -399,7 +399,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       assert auth_entry.bindings == %{{:room_y, "page"} => "test-user-id"}
     end
 
-    test "returns empty add and drop lists when new_bindings fully overlap client_supplied_keys" do
+    test "returns empty add and drop lists when new_bindings fully overlap client_claimed_sub_keys" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
       :ok = register("test-instance-id", sse_pid)
 

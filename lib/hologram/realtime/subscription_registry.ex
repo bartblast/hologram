@@ -115,7 +115,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   Computes two parallel set-differences:
 
-    * **Client-side diff** against `client_supplied_keys` - returned as
+    * **Client-side diff** against `client_claimed_sub_keys` - returned as
       `{add_keys, drop_keys}` so the caller can hand the client an
       `{adds, drops}` payload to update its local subscription tracking.
 
@@ -140,10 +140,10 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   """
   @spec transition(String.t(), [{any, String.t()}], [{any, String.t()}], term | nil) ::
           {[{any, String.t()}], [{any, String.t()}]}
-  def transition(instance_id, new_bindings, client_supplied_keys, authorizing_user_id) do
+  def transition(instance_id, new_bindings, client_claimed_sub_keys, authorizing_user_id) do
     GenServer.call(
       __MODULE__,
-      {:transition, instance_id, new_bindings, client_supplied_keys, authorizing_user_id}
+      {:transition, instance_id, new_bindings, client_claimed_sub_keys, authorizing_user_id}
     )
   end
 
@@ -221,12 +221,12 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   @impl GenServer
   def handle_call(
-        {:transition, instance_id, new_bindings, client_supplied_keys, authorizing_user_id},
+        {:transition, instance_id, new_bindings, client_claimed_sub_keys, authorizing_user_id},
         _from,
         refs
       ) do
     new_keys_set = MapSet.new(new_bindings)
-    client_keys_set = MapSet.new(client_supplied_keys)
+    client_keys_set = MapSet.new(client_claimed_sub_keys)
 
     add_keys =
       new_keys_set
