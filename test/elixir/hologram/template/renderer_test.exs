@@ -1182,6 +1182,19 @@ defmodule Hologram.Template.RendererTest do
       assert String.contains?(html, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
     end
 
+    test "does not interpolate sub_drops JS" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      assert {html, _component_registry, _server_struct} =
+               render_page(Module48, @params, @server, @opts)
+
+      assert String.contains?(html, "subDrops: $SUB_DROPS_JS_PLACEHOLDER")
+    end
+
     test "does not interpolate sub_receipts JS" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
@@ -1583,6 +1596,27 @@ defmodule Hologram.Template.RendererTest do
       result = Renderer.interpolate_self_echoes_js(html, [])
 
       assert result == ~s'before selfEchoes: Type.list([]) after'
+    end
+  end
+
+  describe "interpolate_sub_drops_js/2" do
+    test "substitutes the placeholder with the encoded list of subscription drops" do
+      html = ~s'before subDrops: $SUB_DROPS_JS_PLACEHOLDER after'
+
+      sub_drops = [{:room_a, "page"}]
+
+      result = Renderer.interpolate_sub_drops_js(html, sub_drops)
+
+      assert result ==
+               ~s'before subDrops: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])]) after'
+    end
+
+    test "substitutes the placeholder with an empty list when no drops are provided" do
+      html = ~s'before subDrops: $SUB_DROPS_JS_PLACEHOLDER after'
+
+      result = Renderer.interpolate_sub_drops_js(html, [])
+
+      assert result == ~s'before subDrops: Type.list([]) after'
     end
   end
 
