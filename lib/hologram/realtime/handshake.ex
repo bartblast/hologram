@@ -25,7 +25,7 @@ defmodule Hologram.Realtime.Handshake do
   peer nodes can mirror it into their own stash.
 
   `identity` is the `{instance_id, session_id, user_id}` tuple of the POSTing
-  client, used at GET-time consume to verify the consumer is the same client
+  client, used at GET-time redemption to verify the redeemer is the same client
   that completed the POST.
 
   The stashed entry is `{handshake_id, validated_bindings, instance_id,
@@ -43,6 +43,20 @@ defmodule Hologram.Realtime.Handshake do
       __MODULE__,
       {:insert, handshake_id, validated_bindings, identity, expires_at}
     )
+  end
+
+  @doc """
+  Looks up a stashed handshake entry by `handshake_id` and returns its
+  `validated_bindings` and identity tuple. If the entry is not yet in the
+  local ETS (the gossip from a peer has not arrived yet), the caller is
+  registered as a waiter for up to `timeout` milliseconds. Replies `:error`
+  if the entry never lands within the wait window.
+  """
+  @spec redeem(String.t(), pos_integer) ::
+          {:ok, [{{any, String.t()}, term | nil}], {String.t() | nil, term | nil, term | nil}}
+          | :error
+  def redeem(handshake_id, timeout) do
+    GenServer.call(__MODULE__, {:redeem, handshake_id, timeout}, timeout + 1_000)
   end
 
   @doc """
@@ -82,10 +96,9 @@ defmodule Hologram.Realtime.Handshake do
 
     schedule_sweep()
 
-    {:ok, %{}}
+    {:ok, %{waiters: %{}}}
   end
 
-  @impl GenServer
   def handle_call(
         {:insert, handshake_id, validated_bindings, {instance_id, session_id, user_id},
          expires_at},
@@ -107,13 +120,29 @@ defmodule Hologram.Realtime.Handshake do
     {:reply, :ok, state}
   end
 
+  @impl GenServer
+  def handle_call({:redeem, handshake_id, timeout}, from, state) do
+    case :ets.lookup(@table_name, handshake_id) do
+      [{^handshake_id, validated_bindings, instance_id, session_id, user_id, _expires_at}] ->
+        {:reply, {:ok, validated_bindings, {instance_id, session_id, user_id}}, state}
+
+      [] ->
+        ref = make_ref()
+        Process.send_after(self(), {:redeem_timeout, handshake_id, ref}, timeout)
+
+        waiters =
+          Map.update(state.waiters, handshake_id, [{from, ref}], &[{from, ref} | &1])
+
+        {:noreply, %{state | waiters: waiters}}
+    end
+  end
+
   def handle_call(:sweep_expired, _from, state) do
     delete_expired()
 
     {:reply, :ok, state}
   end
 
-  @impl GenServer
   def handle_info(
         {:insert, handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at},
         state
@@ -124,6 +153,28 @@ defmodule Hologram.Realtime.Handshake do
     )
 
     {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:redeem_timeout, handshake_id, ref}, state) do
+    case Map.get(state.waiters, handshake_id) do
+      nil ->
+        {:noreply, state}
+
+      waiter_list ->
+        {matching, remaining} =
+          Enum.split_with(waiter_list, fn {_from, waiter_ref} -> waiter_ref == ref end)
+
+        Enum.each(matching, fn {from, _waiter_ref} -> GenServer.reply(from, :error) end)
+
+        new_waiters =
+          case remaining do
+            [] -> Map.delete(state.waiters, handshake_id)
+            _remaining_waiters -> Map.put(state.waiters, handshake_id, remaining)
+          end
+
+        {:noreply, %{state | waiters: new_waiters}}
+    end
   end
 
   def handle_info(:sweep_expired, state) do

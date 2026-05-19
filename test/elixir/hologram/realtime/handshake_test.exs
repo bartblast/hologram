@@ -58,6 +58,33 @@ defmodule Hologram.Realtime.HandshakeTest do
     end
   end
 
+  describe "redeem/2" do
+    test "returns the stashed entry's bindings and identity immediately on ETS hit" do
+      future = System.system_time(:millisecond) + 60_000
+
+      insert(
+        "stashed-handshake-id",
+        [{{:room_a, "page"}, "test-user-id"}],
+        {"test-instance-id", "test-session-id", "test-user-id"},
+        future
+      )
+
+      assert redeem("stashed-handshake-id", 1_000) ==
+               {:ok, [{{:room_a, "page"}, "test-user-id"}],
+                {"test-instance-id", "test-session-id", "test-user-id"}}
+    end
+
+    test "returns :error after the per-call timeout when the entry never arrives" do
+      assert redeem("missing-handshake-id", 50) == :error
+    end
+
+    test "removes the timed-out waiter from state" do
+      assert redeem("missing-handshake-id", 50) == :error
+
+      assert :sys.get_state(Handshake) == %{waiters: %{}}
+    end
+  end
+
   describe "start_link/1" do
     test "merges entries from a peer that replies to the boot-sync request" do
       :ok = stop_supervised(Handshake)
