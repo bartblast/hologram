@@ -403,6 +403,16 @@ defmodule Hologram.ControllerTest do
   end
 
   describe "handle_command_request/1" do
+    setup do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
+      :ok
+    end
+
     test "returns 403 when CSRF token is missing from header" do
       payload = %{
         module: Module6,
@@ -640,12 +650,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls delete_subscription" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
-
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -667,12 +671,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "applies adds and drops together when a command calls put_subscription and delete_subscription" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
-
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -696,12 +694,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "writes an instance-level binding-shape tombstone for each dropped key" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
-
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -726,12 +718,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "writes no tombstones when the command handler raises before subscription_ops flushes" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
-
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -812,12 +798,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "embeds a drop entry in the response for each newly-dropped subscription" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
-
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -843,12 +823,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "embeds adds and drops together when a command both puts and deletes subscriptions" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
-
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -1113,9 +1087,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "fires broadcasts queued during command after successful return" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       instance_id = subscribe_to_identity_channel(:instance)
 
       payload = %{
@@ -1137,9 +1108,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not fire broadcasts when command raises" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       instance_id = subscribe_to_identity_channel(:instance)
 
       payload = %{
@@ -1168,9 +1136,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "sets the selfEchoes field to the encoded actions when any self-echoes were queued" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       payload = %{
         module: Module6,
         name: :my_command_self_echo_put_broadcast_subscribed,
@@ -1187,9 +1152,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "sets the selfEchoes field to an empty list when no self-echoes were queued" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       payload = %{
         module: Module6,
         name: :my_command_self_echo_put_broadcast_unsubscribed,
@@ -1205,9 +1167,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session topic when the handler changes identity" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       topic = Realtime.identity_topic(:session, session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
@@ -1234,9 +1193,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not broadcast {:identity_changed, ...} when the handler leaves identity unchanged" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       topic = Realtime.identity_topic(:session, session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
@@ -1263,9 +1219,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "does not broadcast {:identity_changed, ...} when the handler changes identity but raises" do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       topic = Realtime.identity_topic(:session, session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
