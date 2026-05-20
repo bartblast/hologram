@@ -1117,6 +1117,95 @@ defmodule Hologram.ControllerTest do
 
       assert encoded_self_echoes == "Type.list([])"
     end
+
+    test "broadcasts {:identity_changed, ...} on the pre session topic when the handler changes identity" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.identity_topic(:session, session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      :post
+      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+      |> handle_command_request()
+
+      assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when the handler leaves identity unchanged" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.identity_topic(:session, session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_a,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      :post
+      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+      |> handle_command_request()
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when the handler changes identity but raises" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.identity_topic(:session, session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id_then_raising,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      assert_raise RuntimeError, "boom", fn ->
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+      end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
   end
 
   describe "handle_initial_page_request/2" do

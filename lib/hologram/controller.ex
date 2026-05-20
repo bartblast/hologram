@@ -159,6 +159,8 @@ defmodule Hologram.Controller do
       # side effects land.
       {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
 
+      Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
+
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
       self_echoes = Realtime.get_self_echoes(processed_server_struct)
 
