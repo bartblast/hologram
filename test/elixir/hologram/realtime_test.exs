@@ -7,14 +7,14 @@ defmodule Hologram.RealtimeTest do
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
+  setup do
+    wait_for_process_cleanup(Hologram.PubSub)
+    start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+    :ok
+  end
+
   describe "broadcast_action/3,4" do
-    setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      :ok
-    end
-
     test "broadcasts to the instance channel topic with a custom cid (keyword params)" do
       instance_id = subscribe_to_identity_channel(:instance)
 
@@ -82,13 +82,6 @@ defmodule Hologram.RealtimeTest do
   end
 
   describe "broadcast_action_except/4,5" do
-    setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      :ok
-    end
-
     # Tests here cover only what's unique to broadcast_action_except: the
     # single-tuple-vs-list dispatch. Channel kinds, cid, and params handling
     # are exercised in the broadcast_action describe block - both functions
@@ -115,13 +108,6 @@ defmodule Hologram.RealtimeTest do
   end
 
   describe "flush_broadcasts/1" do
-    setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      :ok
-    end
-
     test "is a no-op for an empty broadcasts list and returns the server unchanged" do
       server = %Server{broadcasts: []}
 
@@ -458,13 +444,6 @@ defmodule Hologram.RealtimeTest do
   end
 
   describe "maybe_announce_identity_change/2" do
-    setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      :ok
-    end
-
     test "broadcasts on the pre session topic when session_id changes" do
       pre_session_id = subscribe_to_identity_channel(:session)
       post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
