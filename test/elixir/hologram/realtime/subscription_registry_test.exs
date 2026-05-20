@@ -478,6 +478,69 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "drop_keys/2" do
+    test "drops the given keys from bindings and returns them as actually_dropped" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}, {:room_b, "comp_1"}], [], 7)
+
+      {actually_dropped, _zero_crossings} =
+        drop_keys("test-instance-id", [{:room_a, "page"}])
+
+      assert actually_dropped == [{:room_a, "page"}]
+      assert bindings_of("test-instance-id") == %{{:room_b, "comp_1"} => 7}
+    end
+
+    test "returns a zero-crossing channel when its last cid-binding is dropped" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], 7)
+
+      {_actually_dropped, zero_crossing_channels} =
+        drop_keys("test-instance-id", [{:room_a, "page"}])
+
+      assert zero_crossing_channels == [:room_a]
+    end
+
+    test "does not return a channel that still has a surviving cid-binding" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}, {:room_a, "comp_1"}], [], 7)
+
+      {_actually_dropped, zero_crossing_channels} =
+        drop_keys("test-instance-id", [{:room_a, "comp_1"}])
+
+      assert zero_crossing_channels == []
+    end
+
+    test "filters keys that don't exist in the bindings" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], 7)
+
+      {actually_dropped, _zero_crossings} =
+        drop_keys("test-instance-id", [{:room_b, "missing"}])
+
+      assert actually_dropped == []
+      assert bindings_of("test-instance-id") == %{{:room_a, "page"} => 7}
+    end
+
+    test "does not send {:unsub, channel} self-messages on zero-crossing" do
+      :ok = register_connection("test-instance-id", self())
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], 7)
+
+      assert_receive {:sub, :room_a}
+
+      drop_keys("test-instance-id", [{:room_a, "page"}])
+
+      refute_receive {:unsub, :room_a}
+    end
+
+    test "returns {[], []} for an unknown instance_id" do
+      assert drop_keys("test-unknown-instance-id", [{:room_a, "page"}]) == {[], []}
+    end
+  end
+
   describe "identity_of/1" do
     test "returns the defaulted {nil, nil} for a freshly registered entry" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)

@@ -117,6 +117,30 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Drops the given `keys` from the entry's `bindings` for `instance_id`.
+
+  Returns `{actually_dropped, zero_crossing_channels}`:
+
+    * `actually_dropped` is the subset of `keys` that were present in the
+      bindings before the call.
+
+    * `zero_crossing_channels` is the list of channels whose last cid-binding
+      was dropped.
+
+  Unlike `apply_deltas/4`, this function does *not* emit `{:unsub, channel}`
+  self-messages to the SSE process - the caller drives synchronous PubSub
+  unsubscribe based on the returned `zero_crossing_channels` to control
+  ordering against downstream notifications.
+
+  When no entry exists for `instance_id`, returns `{[], []}`.
+  """
+  @spec drop_keys(String.t(), [{any, String.t()}]) ::
+          {[{any, String.t()}], [any]}
+  def drop_keys(instance_id, keys) do
+    GenServer.call(__MODULE__, {:drop_keys, instance_id, keys})
+  end
+
+  @doc """
   Returns the name of the ETS table that backs the registry.
   """
   @spec ets_table_name() :: atom
@@ -364,6 +388,38 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
             |> Enum.to_list()
 
           {dropped_keys, zero_crossing_channels}
+
+        [] ->
+          {[], []}
+      end
+
+    {:reply, reply, refs}
+  end
+
+  @impl GenServer
+  def handle_call({:drop_keys, instance_id, keys}, _from, refs) do
+    reply =
+      case :ets.lookup(@table_name, instance_id) do
+        [{^instance_id, entry}] ->
+          prior_bindings = entry.bindings
+
+          actually_dropped = Enum.filter(keys, &Map.has_key?(prior_bindings, &1))
+          new_bindings = Map.drop(prior_bindings, actually_dropped)
+
+          :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
+
+          prior_channels =
+            MapSet.new(prior_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+
+          new_channels =
+            MapSet.new(new_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+
+          zero_crossing_channels =
+            prior_channels
+            |> MapSet.difference(new_channels)
+            |> Enum.to_list()
+
+          {actually_dropped, zero_crossing_channels}
 
         [] ->
           {[], []}
