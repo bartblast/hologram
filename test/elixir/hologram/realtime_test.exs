@@ -6,6 +6,7 @@ defmodule Hologram.RealtimeTest do
   alias Hologram.Component.Action
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Realtime.Tombstone
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
@@ -585,6 +586,26 @@ defmodule Hologram.RealtimeTest do
       SubscriptionRegistry.update_identity("instance-1", "session-1", 999)
 
       assert SubscriptionRegistry.bindings_of("instance-1") == %{}
+    end
+
+    test "gossips both binding-level and channel-wide purges on the tombstone topic for connected targets" do
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      SubscriptionRegistry.update_identity("instance-1", "session-1", 7)
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, Tombstone.gossip_topic())
+
+      subscribe({:user, 7}, :notifications, "c1")
+
+      assert_receive {:purge, {{:user, 7}, :notifications, "c1"}}
+      assert_receive {:purge, {{:user, 7}, :notifications}}
+    end
+
+    test "gossips both binding-level and channel-wide purges on the tombstone topic for offline targets" do
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, Tombstone.gossip_topic())
+
+      subscribe({:user, 999}, :notifications, "c1")
+
+      assert_receive {:purge, {{:user, 999}, :notifications, "c1"}}
+      assert_receive {:purge, {{:user, 999}, :notifications}}
     end
   end
 end

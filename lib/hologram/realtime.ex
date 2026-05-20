@@ -7,6 +7,7 @@ defmodule Hologram.Realtime do
   alias Hologram.Realtime.Channel
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Realtime.Tombstone
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
@@ -167,6 +168,13 @@ defmodule Hologram.Realtime do
     |> Enum.each(fn {instance_id, sse_pid} ->
       subscribe_target(instance_id, sse_pid, channel, cid)
     end)
+
+    gossip_topic = Tombstone.gossip_topic()
+    binding_key = {identity, channel, cid}
+    channel_key = {identity, channel}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, binding_key})
+    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, channel_key})
 
     :ok
   end
