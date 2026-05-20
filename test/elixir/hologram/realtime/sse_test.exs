@@ -5,6 +5,7 @@ defmodule Hologram.Realtime.SSETest do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
@@ -482,7 +483,7 @@ defmodule Hologram.Realtime.SSETest do
     test "subscribes to the instance channel" do
       conn = subscribe_to_identity_channels(conn_with_instance_id())
       instance_id = conn.query_params["instance_id"]
-      instance_topic = "hologram:channel:instance:#{instance_id}"
+      instance_topic = Realtime.identity_topic(:instance, instance_id)
 
       Phoenix.PubSub.broadcast(Hologram.PubSub, instance_topic, :hello)
 
@@ -496,7 +497,7 @@ defmodule Hologram.Realtime.SSETest do
       |> conn_with_instance_id()
       |> subscribe_to_identity_channels()
 
-      session_topic = "hologram:channel:session:#{session_id}"
+      session_topic = Realtime.identity_topic(:session, session_id)
       Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hello_session)
 
       assert_receive :hello_session
@@ -509,7 +510,7 @@ defmodule Hologram.Realtime.SSETest do
       |> conn_with_instance_id()
       |> subscribe_to_identity_channels()
 
-      user_topic = "hologram:channel:user:#{user_id}"
+      user_topic = Realtime.identity_topic(:user, user_id)
       Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello_user)
 
       assert_receive :hello_user
@@ -519,7 +520,7 @@ defmodule Hologram.Realtime.SSETest do
       subscribe_to_identity_channels(conn_with_instance_id())
 
       user_id = "test-user-#{:erlang.unique_integer([:positive])}"
-      user_topic = "hologram:channel:user:#{user_id}"
+      user_topic = Realtime.identity_topic(:user, user_id)
       Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello_user)
 
       refute_receive :hello_user

@@ -10,6 +10,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Component.Action
+  alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
@@ -1312,7 +1313,8 @@ defmodule Hologram.ControllerTest do
 
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module12, :dummy_module_12_digest)
 
-      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:user:test-broadcast-user")
+      topic = Realtime.identity_topic(:user, "test-broadcast-user")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       :get
       |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module12")

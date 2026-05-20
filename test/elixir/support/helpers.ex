@@ -13,6 +13,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
+  alias Hologram.Realtime
   alias Hologram.Server
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
@@ -245,7 +246,8 @@ defmodule Hologram.Test.Helpers do
   @spec subscribe_to_identity_channel(:instance | :session | :user) :: String.t()
   def subscribe_to_identity_channel(kind) when kind in [:instance, :session, :user] do
     id = "test-#{kind}-#{:erlang.unique_integer([:positive])}"
-    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:#{kind}:#{id}")
+    topic = Realtime.identity_topic(kind, id)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
     id
   end

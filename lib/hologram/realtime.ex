@@ -117,9 +117,11 @@ defmodule Hologram.Realtime do
     identity_changed? = pre.session_id != post.session_id or pre.user_id != post.user_id
 
     if identity_changed? and pre.session_id != nil do
+      topic = identity_topic(:session, pre.session_id)
+
       Phoenix.PubSub.broadcast(
         Hologram.PubSub,
-        identity_topic(:session, pre.session_id),
+        topic,
         {:identity_changed, post.session_id, post.user_id}
       )
     end
@@ -146,8 +148,8 @@ defmodule Hologram.Realtime do
 
   defp publish({kind, id}, cid, action_name, params, excluded_identities)
        when kind in [:instance, :session, :user] and is_binary(cid) do
+    topic = identity_topic(kind, id)
     action = %Action{name: action_name, params: Map.new(params), target: cid}
-    topic = "hologram:channel:#{kind}:#{id}"
 
     Phoenix.PubSub.broadcast(
       Hologram.PubSub,

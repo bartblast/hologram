@@ -3,6 +3,7 @@ defmodule Hologram.Realtime.SSE do
 
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
@@ -205,13 +206,16 @@ defmodule Hologram.Realtime.SSE do
     conn = Plug.Conn.fetch_query_params(initial_conn)
 
     instance_id = conn.query_params["instance_id"]
-    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:instance:#{instance_id}")
+    instance_topic = Realtime.identity_topic(:instance, instance_id)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, instance_topic)
 
     session_id = Session.get_session_id(conn)
-    Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:session:#{session_id}")
+    session_topic = Realtime.identity_topic(:session, session_id)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, session_topic)
 
     if user_id = Session.get_user_id(conn) do
-      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:user:#{user_id}")
+      user_topic = Realtime.identity_topic(:user, user_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
     end
 
     conn
