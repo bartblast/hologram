@@ -390,7 +390,7 @@ defmodule Hologram.Realtime.SSETest do
       result =
         stream_with_identities(
           {instance_id, session_id, nil},
-          {instance_id, session_id, "consumer-user"}
+          {instance_id, session_id, "claimed-user"}
         )
 
       assert result.halted == true
