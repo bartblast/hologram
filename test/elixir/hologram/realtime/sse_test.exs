@@ -187,8 +187,8 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "process_message/2" do
-    test "pushes an add_sub_receipts SSE event on {:add_sub_receipts, receipts}" do
+  describe "process_message/4 on {:add_sub_receipts, ...}" do
+    test "pushes an add_sub_receipts SSE event" do
       conn = prepared_test_conn()
       receipts = [{:notifications, "c1", "token-a"}]
       send(self(), {:add_sub_receipts, receipts})
@@ -198,341 +198,10 @@ defmodule Hologram.Realtime.SSETest do
       assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
       assert updated_conn.resp_body =~ "\ndata: "
     end
+  end
 
-    test "drops every cid bound to the channel and pushes a drop_sub_receipts SSE event on {:drop_channel, channel}" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        nil,
-        nil,
-        self(),
-        [
-          {{:notifications, "c1"}, nil},
-          {{:notifications, "c2"}, nil},
-          {{:other_channel, "c3"}, nil}
-        ]
-      )
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:drop_channel, :notifications})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
-      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:other_channel, "c3"} => nil}
-    end
-
-    test "unsubscribes from the channel's PubSub topic on {:drop_channel, channel}" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      channel_topic = "hologram:channel:notifications"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        nil,
-        nil,
-        self(),
-        [{{:notifications, "c1"}, nil}]
-      )
-
-      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:drop_channel, :notifications})
-
-      process_message(conn, nil, nil)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
-
-      refute_receive :hello
-    end
-
-    test "is a no-op when no bindings exist for the channel on {:drop_channel, channel}" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        nil,
-        nil,
-        self(),
-        [{{:other_channel, "c1"}, nil}]
-      )
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:drop_channel, :notifications})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      refute updated_conn.resp_body =~ "event: drop_sub_receipts"
-      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:other_channel, "c1"} => nil}
-    end
-
-    test "drops the binding and pushes a drop_sub_receipts SSE event on {:drop_sub_receipts, keys}" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        nil,
-        nil,
-        self(),
-        [{{:notifications, "c1"}, nil}]
-      )
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:drop_sub_receipts, [{:notifications, "c1"}]})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
-      assert SubscriptionRegistry.bindings_of(instance_id) == %{}
-    end
-
-    test "unsubscribes from the zero-crossing channel's PubSub topic on {:drop_sub_receipts, keys}" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      channel_topic = "hologram:channel:notifications"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        nil,
-        nil,
-        self(),
-        [{{:notifications, "c1"}, nil}]
-      )
-
-      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:drop_sub_receipts, [{:notifications, "c1"}]})
-
-      process_message(conn, nil, nil)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
-
-      refute_receive :hello
-    end
-
-    test "writes an SSE comment line on :heartbeat" do
-      conn = prepared_test_conn()
-      send(self(), :heartbeat)
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body == ":\n\n"
-    end
-
-    test "schedules the next heartbeat after handling :heartbeat" do
-      conn = prepared_test_conn()
-      send(self(), :heartbeat)
-
-      process_message(conn, nil, nil, heartbeat_interval_ms: 30)
-
-      assert_receive :heartbeat
-    end
-
-    test "schedules the next :refresh_receipts after handling one" do
-      conn = prepared_test_conn()
-      send(self(), :refresh_receipts)
-
-      process_message(conn, nil, nil, receipts_refresh_interval_ms: 30)
-
-      assert_receive :refresh_receipts
-    end
-
-    test "carries the new identity in the return tuple on {:identity_changed, ...}" do
-      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
-      send(self(), {:identity_changed, "new-session-id", 7})
-
-      assert {:cont, ^conn, "new-session-id", 7} =
-               process_message(conn, "old-session-id", nil)
-    end
-
-    test "subscribes to the user identity topic on login (nil -> 7)" do
-      conn = prepared_test_conn()
-      send(self(), {:identity_changed, "session-1", 7})
-
-      process_message(conn, "session-1", nil)
-
-      user_topic = Realtime.identity_topic(:user, 7)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello)
-
-      assert_receive :hello
-    end
-
-    test "unsubscribes from the user identity topic on logout (7 -> nil)" do
-      conn = prepared_test_conn()
-      user_topic = Realtime.identity_topic(:user, 7)
-      Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
-
-      send(self(), {:identity_changed, "session-1", nil})
-
-      process_message(conn, "session-1", 7)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello)
-
-      refute_receive :hello
-    end
-
-    test "swaps the user identity topic on account switch (7 -> 8)" do
-      conn = prepared_test_conn()
-      old_topic = Realtime.identity_topic(:user, 7)
-      new_topic = Realtime.identity_topic(:user, 8)
-
-      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
-
-      send(self(), {:identity_changed, "session-1", 8})
-
-      process_message(conn, "session-1", 7)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
-
-      refute_receive :hello_old
-      assert_receive :hello_new
-    end
-
-    test "swaps the session identity topic on session rotation (S -> S' with user_id unchanged)" do
-      conn = prepared_test_conn()
-      old_topic = Realtime.identity_topic(:session, "session-old")
-      new_topic = Realtime.identity_topic(:session, "session-new")
-
-      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
-
-      send(self(), {:identity_changed, "session-new", 7})
-
-      process_message(conn, "session-old", 7)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
-
-      refute_receive :hello_old
-      assert_receive :hello_new
-    end
-
-    test "updates the registry's identity record on {:identity_changed, ...}" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      SubscriptionRegistry.attach_connection(instance_id, "old-session", 7, self(), [])
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "new-session", 8})
-
-      process_message(conn, "old-session", 7)
-
-      assert SubscriptionRegistry.identity_of(instance_id) == {"new-session", 8}
-    end
-
-    test "pushes a drop_sub_receipts SSE event when user_id change drops bindings" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        "session-1",
-        7,
-        self(),
-        [{{:notifications, "c1"}, 7}]
-      )
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "session-1", 8})
-
-      {:cont, updated_conn, _session, _user} = process_message(conn, "session-1", 7)
-
-      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
-      assert SubscriptionRegistry.bindings_of(instance_id) == %{}
-    end
-
-    test "does not push a drop_sub_receipts SSE event on session rotation alone" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        "session-old",
-        7,
-        self(),
-        [{{:notifications, "c1"}, 7}]
-      )
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "session-new", 7})
-
-      {:cont, updated_conn, _session, _user} = process_message(conn, "session-old", 7)
-
-      refute updated_conn.resp_body =~ "event: drop_sub_receipts"
-      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:notifications, "c1"} => 7}
-    end
-
-    test "unsubscribes from the zero-crossing channel's PubSub topic on identity drop" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      channel_topic = "hologram:channel:notifications"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        "session-1",
-        7,
-        self(),
-        [{{:notifications, "c1"}, 7}]
-      )
-
-      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), {:identity_changed, "session-1", 8})
-
-      process_message(conn, "session-1", 7)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
-
-      refute_receive :hello
-    end
-
-    test "pushes a refresh_sub_receipts SSE event when the instance has bindings" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      SubscriptionRegistry.attach_connection(
-        instance_id,
-        nil,
-        nil,
-        self(),
-        [{{:notifications, "c1"}, nil}]
-      )
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), :refresh_receipts)
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: refresh_sub_receipts\nid: "
-      assert updated_conn.resp_body =~ "\ndata: "
-    end
-
-    test "writes nothing on :refresh_receipts when the instance has no bindings" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-
-      conn = prepared_test_conn_with_identities(instance_id: instance_id)
-      send(self(), :refresh_receipts)
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body == ""
-    end
-
-    test "continues without writing on unknown messages" do
-      conn = prepared_test_conn()
-      send(self(), :some_unknown_message)
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body == ""
-    end
-
-    test "halts on {:close, reason}" do
-      conn = prepared_test_conn()
-      send(self(), {:close, :superseded})
-
-      assert {:halt, ^conn} = process_message(conn, nil, nil)
-    end
-
-    test "dispatches a broadcast action as an SSE chunk when no identity matches the exclude list" do
+  describe "process_message/4 on {:broadcast_action, ...}" do
+    test "dispatches as an SSE chunk when no identity matches the exclude list" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
 
@@ -616,8 +285,346 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: action\n"
     end
+  end
 
-    test "subscribes to the channel's PubSub topic on {:sub, channel}" do
+  describe "process_message/4 on {:close, ...}" do
+    test "halts" do
+      conn = prepared_test_conn()
+      send(self(), {:close, :superseded})
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil)
+    end
+  end
+
+  describe "process_message/4 on {:drop_channel, ...}" do
+    test "drops every cid bound to the channel and pushes a drop_sub_receipts SSE event" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [
+          {{:notifications, "c1"}, nil},
+          {{:notifications, "c2"}, nil},
+          {{:other_channel, "c3"}, nil}
+        ]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_channel, :notifications})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:other_channel, "c3"} => nil}
+    end
+
+    test "unsubscribes from the channel's PubSub topic" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      channel_topic = "hologram:channel:notifications"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_channel, :notifications})
+
+      process_message(conn, nil, nil)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+
+      refute_receive :hello
+    end
+
+    test "is a no-op when no bindings exist for the channel" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:other_channel, "c1"}, nil}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_channel, :notifications})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      refute updated_conn.resp_body =~ "event: drop_sub_receipts"
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:other_channel, "c1"} => nil}
+    end
+  end
+
+  describe "process_message/4 on {:drop_sub_receipts, ...}" do
+    test "drops the binding and pushes a drop_sub_receipts SSE event" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_sub_receipts, [{:notifications, "c1"}]})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{}
+    end
+
+    test "unsubscribes from the zero-crossing channel's PubSub topic" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      channel_topic = "hologram:channel:notifications"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_sub_receipts, [{:notifications, "c1"}]})
+
+      process_message(conn, nil, nil)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+
+      refute_receive :hello
+    end
+  end
+
+  describe "process_message/4 on :heartbeat" do
+    test "writes an SSE comment line" do
+      conn = prepared_test_conn()
+      send(self(), :heartbeat)
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body == ":\n\n"
+    end
+
+    test "schedules the next heartbeat after handling one" do
+      conn = prepared_test_conn()
+      send(self(), :heartbeat)
+
+      process_message(conn, nil, nil, heartbeat_interval_ms: 30)
+
+      assert_receive :heartbeat
+    end
+  end
+
+  describe "process_message/4 on {:identity_changed, ...}" do
+    test "carries the new identity in the return tuple" do
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
+      send(self(), {:identity_changed, "new-session-id", 7})
+
+      assert {:cont, ^conn, "new-session-id", 7} =
+               process_message(conn, "old-session-id", nil)
+    end
+
+    test "subscribes to the user identity topic on login (nil -> 7)" do
+      conn = prepared_test_conn()
+      send(self(), {:identity_changed, "session-1", 7})
+
+      process_message(conn, "session-1", nil)
+
+      user_topic = Realtime.identity_topic(:user, 7)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello)
+
+      assert_receive :hello
+    end
+
+    test "unsubscribes from the user identity topic on logout (7 -> nil)" do
+      conn = prepared_test_conn()
+      user_topic = Realtime.identity_topic(:user, 7)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
+
+      send(self(), {:identity_changed, "session-1", nil})
+
+      process_message(conn, "session-1", 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello)
+
+      refute_receive :hello
+    end
+
+    test "swaps the user identity topic on account switch (7 -> 8)" do
+      conn = prepared_test_conn()
+      old_topic = Realtime.identity_topic(:user, 7)
+      new_topic = Realtime.identity_topic(:user, 8)
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      process_message(conn, "session-1", 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
+
+      refute_receive :hello_old
+      assert_receive :hello_new
+    end
+
+    test "swaps the session identity topic on session rotation (S -> S' with user_id unchanged)" do
+      conn = prepared_test_conn()
+      old_topic = Realtime.identity_topic(:session, "session-old")
+      new_topic = Realtime.identity_topic(:session, "session-new")
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      send(self(), {:identity_changed, "session-new", 7})
+
+      process_message(conn, "session-old", 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
+
+      refute_receive :hello_old
+      assert_receive :hello_new
+    end
+
+    test "updates the registry's identity record" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(instance_id, "old-session", 7, self(), [])
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:identity_changed, "new-session", 8})
+
+      process_message(conn, "old-session", 7)
+
+      assert SubscriptionRegistry.identity_of(instance_id) == {"new-session", 8}
+    end
+
+    test "pushes a drop_sub_receipts SSE event when user_id change drops bindings" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        "session-1",
+        7,
+        self(),
+        [{{:notifications, "c1"}, 7}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:identity_changed, "session-1", 8})
+
+      {:cont, updated_conn, _session, _user} = process_message(conn, "session-1", 7)
+
+      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{}
+    end
+
+    test "does not push a drop_sub_receipts SSE event on session rotation alone" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        "session-old",
+        7,
+        self(),
+        [{{:notifications, "c1"}, 7}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:identity_changed, "session-new", 7})
+
+      {:cont, updated_conn, _session, _user} = process_message(conn, "session-old", 7)
+
+      refute updated_conn.resp_body =~ "event: drop_sub_receipts"
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:notifications, "c1"} => 7}
+    end
+
+    test "unsubscribes from the zero-crossing channel's PubSub topic on identity drop" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      channel_topic = "hologram:channel:notifications"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        "session-1",
+        7,
+        self(),
+        [{{:notifications, "c1"}, 7}]
+      )
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:identity_changed, "session-1", 8})
+
+      process_message(conn, "session-1", 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+
+      refute_receive :hello
+    end
+  end
+
+  describe "process_message/4 on :refresh_receipts" do
+    test "pushes a refresh_sub_receipts SSE event when the instance has bindings" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), :refresh_receipts)
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: refresh_sub_receipts\nid: "
+      assert updated_conn.resp_body =~ "\ndata: "
+    end
+
+    test "writes nothing when the instance has no bindings" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), :refresh_receipts)
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body == ""
+    end
+
+    test "schedules the next refresh after handling one" do
+      conn = prepared_test_conn()
+      send(self(), :refresh_receipts)
+
+      process_message(conn, nil, nil, receipts_refresh_interval_ms: 30)
+
+      assert_receive :refresh_receipts
+    end
+  end
+
+  describe "process_message/4 on {:sub, ...}" do
+    test "subscribes to the channel's PubSub topic" do
       conn = prepared_test_conn()
       send(self(), {:sub, :notifications})
 
@@ -627,8 +634,10 @@ defmodule Hologram.Realtime.SSETest do
 
       assert_receive :hello
     end
+  end
 
-    test "unsubscribes from the channel's PubSub topic on {:unsub, channel}" do
+  describe "process_message/4 on {:unsub, ...}" do
+    test "unsubscribes from the channel's PubSub topic" do
       conn = prepared_test_conn()
       Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:notifications")
       send(self(), {:unsub, :notifications})
@@ -638,6 +647,17 @@ defmodule Hologram.Realtime.SSETest do
       Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
 
       refute_receive :hello
+    end
+  end
+
+  describe "process_message/4 on unknown messages" do
+    test "continues without writing" do
+      conn = prepared_test_conn()
+      send(self(), :some_unknown_message)
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body == ""
     end
   end
 
