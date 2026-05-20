@@ -10,6 +10,7 @@ defmodule Hologram.Controller do
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Realtime.Tombstone
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
@@ -317,7 +318,7 @@ defmodule Hologram.Controller do
           |> Deserializer.deserialize()
 
         {validated_bindings, refreshed_receipts} =
-          verify_and_refresh_receipts(receipts, instance_id, current_user_id)
+          verify_and_refresh_receipts(receipts, instance_id, session_id, current_user_id)
 
         handshake_id = UUID.uuid4()
         expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
@@ -376,21 +377,25 @@ defmodule Hologram.Controller do
   end
 
   @doc false
-  @spec verify_and_refresh_receipts([String.t()], String.t(), term | nil) ::
+  @spec verify_and_refresh_receipts([String.t()], String.t(), term | nil, term | nil) ::
           {[{{any, String.t()}, term | nil}], [{any, String.t(), String.t()}]}
-  def verify_and_refresh_receipts(receipts, instance_id, current_user_id) do
+  def verify_and_refresh_receipts(receipts, instance_id, session_id, current_user_id) do
     receipts
     |> Enum.flat_map(fn token ->
       case Receipt.verify(token) do
         {:ok, %Receipt{instance_id: ^instance_id, user_id: authorizing_user_id} = receipt}
         when is_nil(authorizing_user_id) or authorizing_user_id == current_user_id ->
-          fresh_token =
-            Receipt.issue(receipt.channel, receipt.cid, instance_id, authorizing_user_id)
+          if tombstoned?(receipt, instance_id, session_id, authorizing_user_id) do
+            []
+          else
+            fresh_token =
+              Receipt.issue(receipt.channel, receipt.cid, instance_id, authorizing_user_id)
 
-          [
-            {{{receipt.channel, receipt.cid}, authorizing_user_id},
-             {receipt.channel, receipt.cid, fresh_token}}
-          ]
+            [
+              {{{receipt.channel, receipt.cid}, authorizing_user_id},
+               {receipt.channel, receipt.cid, fresh_token}}
+            ]
+          end
 
         _other ->
           []
@@ -477,6 +482,31 @@ defmodule Hologram.Controller do
   defp same_site_to_string(:strict), do: "Strict"
 
   defp same_site_to_string(nil), do: nil
+
+  defp tombstone_at_or_after?(key, threshold) do
+    case :ets.lookup(Tombstone.ets_table_name(), key) do
+      [{^key, tombstone_at}] -> tombstone_at >= threshold
+      [] -> false
+    end
+  end
+
+  defp tombstoned?(receipt, instance_id, session_id, authorizing_user_id) do
+    identities = [
+      {:instance, instance_id},
+      {:session, session_id},
+      {:user, authorizing_user_id}
+    ]
+
+    identities
+    |> Enum.reject(fn {_kind, id} -> is_nil(id) end)
+    |> Enum.any?(fn identity ->
+      binding_key = {identity, receipt.channel, receipt.cid}
+      channel_key = {identity, receipt.channel}
+
+      tombstone_at_or_after?(binding_key, receipt.created_at) or
+        tombstone_at_or_after?(channel_key, receipt.created_at)
+    end)
+  end
 
   # Called after a successful page render. Reconciles the registry's binding
   # set for this instance against the union of `put_subscription` calls

@@ -14,6 +14,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Realtime.Tombstone
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
@@ -1645,6 +1646,9 @@ defmodule Hologram.ControllerTest do
       wait_for_process_cleanup(Handshake)
       start_supervised!({Handshake, boot_sync_timeout_ms: 0})
 
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
       :ok
     end
 
@@ -1991,7 +1995,17 @@ defmodule Hologram.ControllerTest do
     end
   end
 
-  describe "verify_and_refresh_receipts/3" do
+  describe "verify_and_refresh_receipts/4" do
+    setup do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
+      :ok
+    end
+
     test "refreshes the created_at on a passing receipt" do
       original_token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
       {:ok, %Receipt{created_at: original_created_at}} = Receipt.verify(original_token)
@@ -1999,7 +2013,12 @@ defmodule Hologram.ControllerTest do
       Process.sleep(1)
 
       {_bindings, refreshed} =
-        verify_and_refresh_receipts([original_token], "test-instance-id", "test-user-id")
+        verify_and_refresh_receipts(
+          [original_token],
+          "test-instance-id",
+          "test-session-id",
+          "test-user-id"
+        )
 
       assert [{:room_a, "page", fresh_token}] = refreshed
 
@@ -2016,10 +2035,91 @@ defmodule Hologram.ControllerTest do
         verify_and_refresh_receipts(
           [forged_token, valid_token],
           "test-instance-id",
+          "test-session-id",
           "test-user-id"
         )
 
       assert [{:room_a, "page", _fresh_token}] = refreshed
+    end
+
+    test "rejects a receipt when a binding-level user tombstone exists at or after the receipt's created_at" do
+      token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+      {:ok, %Receipt{created_at: receipt_created_at}} = Receipt.verify(token)
+
+      Tombstone.insert({{:user, "test-user-id"}, :room_a, "page"}, receipt_created_at + 1)
+
+      {bindings, refreshed} =
+        verify_and_refresh_receipts(
+          [token],
+          "test-instance-id",
+          "test-session-id",
+          "test-user-id"
+        )
+
+      assert bindings == []
+      assert refreshed == []
+    end
+
+    test "rejects a receipt when a channel-wide session tombstone exists at or after the receipt's created_at" do
+      token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+      {:ok, %Receipt{created_at: receipt_created_at}} = Receipt.verify(token)
+
+      Tombstone.insert({{:session, "test-session-id"}, :room_a}, receipt_created_at + 1)
+
+      {bindings, refreshed} =
+        verify_and_refresh_receipts(
+          [token],
+          "test-instance-id",
+          "test-session-id",
+          "test-user-id"
+        )
+
+      assert bindings == []
+      assert refreshed == []
+    end
+
+    test "skips nil identity levels when checking tombstones" do
+      token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+
+      {_bindings, refreshed} =
+        verify_and_refresh_receipts([token], "test-instance-id", nil, "test-user-id")
+
+      assert [{:room_a, "page", _fresh_token}] = refreshed
+    end
+
+    test "passes a post-unsub receipt whose created_at is greater than the tombstone's" do
+      token = Receipt.issue(:room_a, "page", "test-instance-id", "test-user-id")
+      {:ok, %Receipt{created_at: receipt_created_at}} = Receipt.verify(token)
+
+      Tombstone.insert({{:user, "test-user-id"}, :room_a, "page"}, receipt_created_at - 1)
+
+      {_bindings, refreshed} =
+        verify_and_refresh_receipts(
+          [token],
+          "test-instance-id",
+          "test-session-id",
+          "test-user-id"
+        )
+
+      assert [{:room_a, "page", _fresh_token}] = refreshed
+    end
+
+    test "applies tombstone check to elevated (anonymous-authorized) receipts" do
+      token = Receipt.issue(:room_a, "page", "test-instance-id", nil)
+      {:ok, %Receipt{created_at: receipt_created_at}} = Receipt.verify(token)
+
+      Tombstone.insert({{:instance, "test-instance-id"}, :room_a, "page"}, receipt_created_at + 1)
+
+      {bindings, refreshed} =
+        verify_and_refresh_receipts(
+          [token],
+          "test-instance-id",
+          "test-session-id",
+          "test-user-id"
+        )
+
+      assert bindings == []
+      assert refreshed == []
     end
   end
 end
