@@ -7,6 +7,7 @@ defmodule Hologram.RouterTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.Realtime.Handshake
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Router.Module1
   alias Hologram.Test.Fixtures.Router.Module2
@@ -33,6 +34,9 @@ defmodule Hologram.RouterTest do
 
     wait_for_process_cleanup(Hologram.Realtime.SubscriptionRegistry)
     start_supervised!(Hologram.Realtime.SubscriptionRegistry)
+
+    wait_for_process_cleanup(Handshake)
+    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
 
     :ok
   end
@@ -133,10 +137,21 @@ defmodule Hologram.RouterTest do
     end
 
     test "opens an SSE stream when a Hologram session ID is present" do
+      instance_id = "test-instance-id"
+      session_id = "some-session-id"
+      handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
+
+      Handshake.insert(
+        handshake_id,
+        [],
+        {instance_id, session_id, nil},
+        System.system_time(:millisecond) + Handshake.stash_ttl_ms()
+      )
+
       conn =
         :get
-        |> Plug.Test.conn("/hologram/sse?instance_id=test-instance-id")
-        |> Plug.Test.init_test_session(%{hologram_session_id: "some-session-id"})
+        |> Plug.Test.conn("/hologram/sse?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
 
       # SSE.stream/1 blocks in a receive loop forever; run it in a Task so the
       # test process can drive it, then send {:close, _reason} to terminate the
