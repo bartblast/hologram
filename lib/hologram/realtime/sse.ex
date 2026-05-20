@@ -97,21 +97,24 @@ defmodule Hologram.Realtime.SSE do
 
     claimed = claimed_identity(conn)
 
-    with {:ok, validated_bindings, ^claimed} <-
-           Handshake.redeem(handshake_id, server_wait_ms) do
-      heartbeat_interval_ms =
-        Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
+    case Handshake.redeem(handshake_id, server_wait_ms) do
+      {:ok, validated_bindings, ^claimed} ->
+        heartbeat_interval_ms =
+          Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
-      schedule_heartbeat(heartbeat_interval_ms)
+        schedule_heartbeat(heartbeat_interval_ms)
 
-      conn
-      |> attach_validated_subscriptions(validated_bindings)
-      |> subscribe_to_identity_channels()
-      |> prepare()
-      |> message_pump(heartbeat_interval_ms)
-    else
-      :error -> reject_4xx(conn, "Handshake redemption failed")
-      {:ok, _bindings, _stashed} -> reject_4xx(conn, "Handshake identity mismatch")
+        conn
+        |> attach_validated_subscriptions(validated_bindings)
+        |> subscribe_to_identity_channels()
+        |> prepare()
+        |> message_pump(heartbeat_interval_ms)
+
+      :error ->
+        reject_4xx(conn, "Handshake redemption failed")
+
+      {:ok, _bindings, _stashed} ->
+        reject_4xx(conn, "Handshake identity mismatch")
     end
   end
 
