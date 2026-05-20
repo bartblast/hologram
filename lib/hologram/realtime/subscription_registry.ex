@@ -94,6 +94,29 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Drops every binding from the entry for `instance_id` whose
+  `authorizing_user_id` is non-nil and does not equal `new_user_id`.
+  Anonymous-authorized bindings (`authorizing_user_id == nil`) stay live -
+  the elevation rule means they apply equally to any subsequent identity.
+
+  Returns `{dropped_keys, zero_crossing_channels}`:
+
+    * `dropped_keys` is the list of `{channel, cid}` pairs that were removed.
+
+    * `zero_crossing_channels` is the list of channels whose last cid-binding
+      was dropped (i.e., the channel is no longer present in the resulting
+      binding set). Channels that still have surviving cid-bindings under
+      anonymous or matching-user authorization are not included.
+
+  When no entry exists for `instance_id`, returns `{[], []}`.
+  """
+  @spec drop_for_identity_change(String.t(), term | nil) ::
+          {[{any, String.t()}], [any]}
+  def drop_for_identity_change(instance_id, new_user_id) do
+    GenServer.call(__MODULE__, {:drop_for_identity_change, instance_id, new_user_id})
+  end
+
+  @doc """
   Returns the name of the ETS table that backs the registry.
   """
   @spec ets_table_name() :: atom
@@ -273,6 +296,44 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
       |> Enum.uniq()
 
     {:reply, validated_channels, Map.put(refs_without_prior, sse_ref, instance_id)}
+  end
+
+  @impl GenServer
+  def handle_call({:drop_for_identity_change, instance_id, new_user_id}, _from, refs) do
+    reply =
+      case :ets.lookup(@table_name, instance_id) do
+        [{^instance_id, entry}] ->
+          prior_bindings = entry.bindings
+
+          dropped_keys =
+            prior_bindings
+            |> Enum.filter(fn {_key, authorizing_user_id} ->
+              authorizing_user_id != nil and authorizing_user_id != new_user_id
+            end)
+            |> Enum.map(fn {key, _user_id} -> key end)
+
+          new_bindings = Map.drop(prior_bindings, dropped_keys)
+
+          :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
+
+          prior_channels =
+            MapSet.new(prior_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+
+          new_channels =
+            MapSet.new(new_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+
+          zero_crossing_channels =
+            prior_channels
+            |> MapSet.difference(new_channels)
+            |> Enum.to_list()
+
+          {dropped_keys, zero_crossing_channels}
+
+        [] ->
+          {[], []}
+      end
+
+    {:reply, reply, refs}
   end
 
   @impl GenServer

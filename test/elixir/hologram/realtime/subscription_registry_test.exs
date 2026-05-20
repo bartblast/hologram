@@ -1,4 +1,4 @@
-defmodule Hologram.Realtime.SubscriptionRegistryTest do
+gdefmodule Hologram.Realtime.SubscriptionRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Realtime.SubscriptionRegistry
@@ -413,6 +413,68 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
 
     test "returns nil for an unknown instance_id" do
       assert bindings_of("test-unknown-instance-id") == nil
+    end
+  end
+
+  describe "drop_for_identity_change/2" do
+    test "drops bindings whose authorizing_user_id is non-nil and not equal to new_user_id" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}, {:room_b, "comp_1"}], [], 7)
+
+      {dropped_keys, _zero_crossings} = drop_for_identity_change("test-instance-id", 8)
+
+      assert Enum.sort(dropped_keys) == [{:room_a, "page"}, {:room_b, "comp_1"}]
+      assert bindings_of("test-instance-id") == %{}
+    end
+
+    test "keeps anonymous-authorized bindings across the identity change" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], nil)
+      apply_deltas("test-instance-id", [{:room_b, "comp_1"}], [], 7)
+
+      {dropped_keys, _zero_crossings} = drop_for_identity_change("test-instance-id", 8)
+
+      assert dropped_keys == [{:room_b, "comp_1"}]
+      assert bindings_of("test-instance-id") == %{{:room_a, "page"} => nil}
+    end
+
+    test "keeps bindings already authorized by the new user_id" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], 7)
+      apply_deltas("test-instance-id", [{:room_b, "comp_1"}], [], 8)
+
+      {dropped_keys, _zero_crossings} = drop_for_identity_change("test-instance-id", 8)
+
+      assert dropped_keys == [{:room_a, "page"}]
+      assert bindings_of("test-instance-id") == %{{:room_b, "comp_1"} => 8}
+    end
+
+    test "returns a zero-crossing channel when its last cid-binding is dropped" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], 7)
+
+      {_dropped_keys, zero_crossing_channels} = drop_for_identity_change("test-instance-id", 8)
+
+      assert zero_crossing_channels == [:room_a]
+    end
+
+    test "does not return a channel that still has a surviving cid-binding" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      apply_deltas("test-instance-id", [{:room_a, "page"}], [], 7)
+      apply_deltas("test-instance-id", [{:room_a, "comp_1"}], [], nil)
+
+      {_dropped_keys, zero_crossing_channels} = drop_for_identity_change("test-instance-id", 8)
+
+      assert zero_crossing_channels == []
+    end
+
+    test "returns {[], []} for an unknown instance_id" do
+      assert drop_for_identity_change("test-unknown-instance-id", 8) == {[], []}
     end
   end
 
