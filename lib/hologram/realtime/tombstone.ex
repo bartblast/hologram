@@ -5,6 +5,7 @@ defmodule Hologram.Realtime.Tombstone do
 
   @gossip_topic "hologram:gossip:tombstones"
   @table_name :hologram_tombstones
+  @tombstone_ttl_ms 72 * 60 * 60 * 1000
 
   @doc """
   Returns the name of the ETS table that backs the tombstone store.
@@ -44,10 +45,18 @@ defmodule Hologram.Realtime.Tombstone do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Returns the tombstone TTL in milliseconds.
+  """
+  @spec tombstone_ttl_ms() :: pos_integer
+  def tombstone_ttl_ms, do: @tombstone_ttl_ms
+
   @impl GenServer
   def init(_opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
+
+    schedule_sweep()
 
     {:ok, %{}}
   end
@@ -73,6 +82,24 @@ defmodule Hologram.Realtime.Tombstone do
     {:noreply, state}
   end
 
+  @impl GenServer
+  def handle_info(:sweep_expired, state) do
+    delete_expired()
+    schedule_sweep()
+
+    {:noreply, state}
+  end
+
+  defp delete_expired do
+    cutoff = System.system_time(:millisecond) - @tombstone_ttl_ms
+
+    match_spec = [
+      {{:_, :"$1"}, [{:<, :"$1", cutoff}], [true]}
+    ]
+
+    :ets.select_delete(@table_name, match_spec)
+  end
+
   defp merge_insert(key, created_at) do
     case :ets.lookup(@table_name, key) do
       [{^key, existing_at}] when existing_at >= created_at ->
@@ -81,5 +108,9 @@ defmodule Hologram.Realtime.Tombstone do
       _other ->
         :ets.insert(@table_name, {key, created_at})
     end
+  end
+
+  defp schedule_sweep do
+    Process.send_after(self(), :sweep_expired, @tombstone_ttl_ms)
   end
 end

@@ -87,6 +87,29 @@ defmodule Hologram.Realtime.TombstoneTest do
     end
   end
 
+  describe "handle :sweep_expired" do
+    test "deletes entries whose created_at is older than the TTL" do
+      key = {{:user, 7}, :notifications, "c1"}
+      :ok = insert(key, @timestamp)
+
+      send(Tombstone, :sweep_expired)
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == []
+    end
+
+    test "preserves entries within the TTL" do
+      key = {{:user, 7}, :notifications, "c1"}
+      now = System.system_time(:millisecond)
+      :ok = insert(key, now)
+
+      send(Tombstone, :sweep_expired)
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, now}]
+    end
+  end
+
   describe "start_link/1" do
     test "starts under a supervisor and registers itself by module name" do
       assert process_name_registered?(Tombstone)
