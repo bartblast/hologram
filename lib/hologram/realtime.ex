@@ -151,9 +151,9 @@ defmodule Hologram.Realtime do
       for client-side merge.
 
   When `identity` resolves to no live connection, returns `:ok` without any
-  side effect. Raises `ArgumentError` on an invalid channel.
+  side effect - no receipt is signed, no binding is registered, no future
+  state is established. Raises `ArgumentError` on an invalid channel.
   """
-  # TODO: offline-target path
   @spec subscribe(
           {:instance, String.t()} | {:session, term} | {:user, term},
           atom | tuple,

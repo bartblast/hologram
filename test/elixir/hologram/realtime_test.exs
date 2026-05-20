@@ -570,5 +570,21 @@ defmodule Hologram.RealtimeTest do
         subscribe({:user, 7}, "string-channel", "c1")
       end
     end
+
+    test "is a no-op when the identity resolves to no live SSE process" do
+      assert subscribe({:user, 999}, :notifications, "c1") == :ok
+
+      refute_receive {:add_sub_receipts, _receipts}
+      refute_receive {:sub, _channel}
+    end
+
+    test "a later-connecting target with the matched identity receives no binding from the no-op subscribe" do
+      subscribe({:user, 999}, :notifications, "c1")
+
+      :ok = SubscriptionRegistry.register_connection("instance-1", self())
+      SubscriptionRegistry.update_identity("instance-1", "session-1", 999)
+
+      assert SubscriptionRegistry.bindings_of("instance-1") == %{}
+    end
   end
 end
