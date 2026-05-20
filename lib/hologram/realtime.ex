@@ -49,6 +49,16 @@ defmodule Hologram.Realtime do
     publish(channel, cid, action_name, params, excluded_identities)
   end
 
+  @doc """
+  Returns the PubSub topic string for an identity channel.
+
+  `kind` must be one of `:instance`, `:session`, or `:user`.
+  """
+  @spec identity_topic(:instance | :session | :user, term) :: String.t()
+  def identity_topic(kind, id) when kind in [:instance, :session, :user] do
+    "hologram:channel:#{kind}:#{id}"
+  end
+
   # Invoked by the framework (controller / renderer) after a handler returns
   # successfully. Iterates the LIFO list in call order, publishes each entry
   # via broadcast_action_except/5 with the originator's instance auto-added to
@@ -109,7 +119,7 @@ defmodule Hologram.Realtime do
     if identity_changed? and pre.session_id != nil do
       Phoenix.PubSub.broadcast(
         Hologram.PubSub,
-        "hologram:channel:session:#{pre.session_id}",
+        identity_topic(:session, pre.session_id),
         {:identity_changed, post.session_id, post.user_id}
       )
     end
