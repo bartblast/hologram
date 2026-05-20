@@ -456,4 +456,67 @@ defmodule Hologram.RealtimeTest do
              ]
     end
   end
+
+  describe "maybe_announce_identity_change/2" do
+    setup do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      :ok
+    end
+
+    test "broadcasts on the pre session topic when session_id changes" do
+      pre_session_id = subscribe_to_identity_channel(:session)
+      post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      pre = %Server{session_id: pre_session_id, user_id: 7}
+      post = %Server{session_id: post_session_id, user_id: 7}
+
+      maybe_announce_identity_change(pre, post)
+
+      assert_receive {:identity_changed, ^post_session_id, 7}
+    end
+
+    test "broadcasts on the pre session topic when user_id changes" do
+      session_id = subscribe_to_identity_channel(:session)
+      pre = %Server{session_id: session_id, user_id: nil}
+      post = %Server{session_id: session_id, user_id: 7}
+
+      maybe_announce_identity_change(pre, post)
+
+      assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "broadcasts post identity when both session_id and user_id change" do
+      pre_session_id = subscribe_to_identity_channel(:session)
+      post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      pre = %Server{session_id: pre_session_id, user_id: 7}
+      post = %Server{session_id: post_session_id, user_id: 8}
+
+      maybe_announce_identity_change(pre, post)
+
+      assert_receive {:identity_changed, ^post_session_id, 8}
+    end
+
+    test "emits no broadcast when nothing changed" do
+      session_id = subscribe_to_identity_channel(:session)
+      server = %Server{session_id: session_id, user_id: 7}
+
+      maybe_announce_identity_change(server, server)
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "emits no broadcast when pre.session_id is nil even if user_id changes" do
+      subscribe_to_identity_channel(:session)
+
+      pre = %Server{session_id: nil, user_id: nil}
+      post = %Server{session_id: nil, user_id: 7}
+
+      maybe_announce_identity_change(pre, post)
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+  end
 end

@@ -93,6 +93,30 @@ defmodule Hologram.Realtime do
     end)
   end
 
+  @doc """
+  Announces an identity change on the session topic when the post-handler
+  identity differs from the pre-handler identity.
+
+  Compares `session_id` and `user_id` between `pre` and `post`. If either
+  field differs and `pre.session_id` is not `nil`, broadcasts
+  `{:identity_changed, post.session_id, post.user_id}` on
+  `"hologram:channel:session:<pre.session_id>"`. Returns `:ok` either way.
+  """
+  @spec maybe_announce_identity_change(Server.t(), Server.t()) :: :ok
+  def maybe_announce_identity_change(%Server{} = pre, %Server{} = post) do
+    identity_changed? = pre.session_id != post.session_id or pre.user_id != post.user_id
+
+    if identity_changed? and pre.session_id != nil do
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        "hologram:channel:session:#{pre.session_id}",
+        {:identity_changed, post.session_id, post.user_id}
+      )
+    end
+
+    :ok
+  end
+
   defp effective_subscriptions(%Server{subscriptions: subscriptions}, identity_channels) do
     subscriptions
     |> Enum.map(&elem(&1, 0))
