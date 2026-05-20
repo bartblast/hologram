@@ -53,7 +53,7 @@ defmodule Hologram.Realtime.TombstoneTest do
     end
   end
 
-  describe "{:insert, ...} gossip merge" do
+  describe "handle {:insert, ...}" do
     test "merges a peer-broadcast {:insert, ...} into local ETS" do
       key = {{:user, 7}, :notifications, "c1"}
 

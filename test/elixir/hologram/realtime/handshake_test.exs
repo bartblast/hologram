@@ -238,7 +238,7 @@ defmodule Hologram.Realtime.HandshakeTest do
     end
   end
 
-  describe "{:insert, ...} gossip" do
+  describe "handle {:insert, ...}" do
     test "merges a peer-broadcasted entry into ETS" do
       future = System.system_time(:millisecond) + 60_000
 
@@ -262,7 +262,7 @@ defmodule Hologram.Realtime.HandshakeTest do
     end
   end
 
-  describe "{:sync_request, ...} reply" do
+  describe "handle {:sync_request, ...}" do
     test "replies with the current ETS dump via direct send" do
       future = System.system_time(:millisecond) + 60_000
 

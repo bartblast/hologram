@@ -781,7 +781,7 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
-  describe "{:DOWN, ...} cleanup" do
+  describe "handle {:DOWN, ...}" do
     test "deletes the entry when the monitored SSE pid dies" do
       sse_pid = spawn(fn -> Process.sleep(:infinity) end)
       :ok = register_connection("test-instance-id", sse_pid)
