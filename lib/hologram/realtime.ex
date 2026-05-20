@@ -204,6 +204,30 @@ defmodule Hologram.Realtime do
     :ok
   end
 
+  @doc """
+  Unsubscribes every cid binding under `identity` on `channel`.
+
+  Raises `ArgumentError` on an invalid channel.
+  """
+  @spec unsubscribe_all(
+          {:instance, String.t()} | {:session, term} | {:user, term},
+          atom | tuple
+        ) :: :ok
+  def unsubscribe_all({kind, id} = identity, channel)
+      when kind in [:instance, :session, :user] do
+    Channel.validate!(channel)
+
+    tombstone_key = {identity, channel}
+    Tombstone.insert(tombstone_key, System.system_time(:millisecond))
+
+    topic = identity_topic(kind, id)
+    envelope = {:drop_channel, channel}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
+
+    :ok
+  end
+
   defp effective_subscriptions(%Server{subscriptions: subscriptions}, identity_channels) do
     subscriptions
     |> Enum.map(&elem(&1, 0))

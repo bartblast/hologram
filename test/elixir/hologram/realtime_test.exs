@@ -640,4 +640,33 @@ defmodule Hologram.RealtimeTest do
       end
     end
   end
+
+  describe "unsubscribe_all/2" do
+    test "writes a channel-wide tombstone for the identity/channel key" do
+      identity = {:user, 7}
+
+      unsubscribe_all(identity, :notifications)
+
+      tombstone_key = {identity, :notifications}
+
+      assert [{^tombstone_key, _created_at}] =
+               :ets.lookup(Tombstone.ets_table_name(), tombstone_key)
+    end
+
+    test "broadcasts {:drop_channel, channel} on the target identity's channel topic" do
+      identity = {:user, 7}
+      topic = identity_topic(:user, 7)
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      unsubscribe_all(identity, :notifications)
+
+      assert_receive {:drop_channel, :notifications}
+    end
+
+    test "raises ArgumentError on an invalid channel" do
+      assert_raise ArgumentError, fn ->
+        unsubscribe_all({:user, 7}, "string-channel")
+      end
+    end
+  end
 end
