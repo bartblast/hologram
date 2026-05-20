@@ -1,4 +1,4 @@
-gdefmodule Hologram.Realtime.SubscriptionRegistryTest do
+defmodule Hologram.Realtime.SubscriptionRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Realtime.SubscriptionRegistry
