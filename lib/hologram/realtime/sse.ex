@@ -94,7 +94,6 @@ defmodule Hologram.Realtime.SSE do
       :refresh_receipts ->
         case dispatch_receipts_refresh(conn) do
           {:cont, conn} ->
-            j
             schedule_receipts_refresh(receipts_refresh_interval_ms)
             {:cont, conn}
 
