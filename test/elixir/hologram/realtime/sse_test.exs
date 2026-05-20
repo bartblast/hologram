@@ -199,6 +199,50 @@ defmodule Hologram.Realtime.SSETest do
       assert updated_conn.resp_body =~ "\ndata: "
     end
 
+    test "drops the binding and pushes a drop_sub_receipts SSE event on {:drop_sub_receipts, keys}" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_sub_receipts, [{:notifications, "c1"}]})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{}
+    end
+
+    test "unsubscribes from the zero-crossing channel's PubSub topic on {:drop_sub_receipts, keys}" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      channel_topic = "hologram:channel:notifications"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_sub_receipts, [{:notifications, "c1"}]})
+
+      process_message(conn, nil, nil)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+
+      refute_receive :hello
+    end
+
     test "writes an SSE comment line on :heartbeat" do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
