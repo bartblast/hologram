@@ -12,7 +12,7 @@ defmodule Hologram.Realtime.TombstoneTest do
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     wait_for_process_cleanup(Tombstone)
-    start_supervised!(Tombstone)
+    start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
 
     :ok
   end
@@ -134,6 +134,67 @@ defmodule Hologram.Realtime.TombstoneTest do
 
     test "creates the backing ETS table" do
       assert :ets.info(ets_table_name()) != :undefined
+    end
+
+    test "merges entries from a peer that replies to the boot-sync request" do
+      :ok = stop_supervised(Tombstone)
+
+      test_pid = self()
+      key = {{:user, 7}, :notifications, "c1"}
+      peer_entry = {key, @timestamp}
+
+      spawn_link(fn ->
+        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+        send(test_pid, :peer_ready)
+
+        receive do
+          {:sync_request, requester_pid} ->
+            send(requester_pid, {:sync_reply, [peer_entry]})
+        end
+      end)
+
+      assert_receive :peer_ready
+
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 200})
+
+      assert :ets.lookup(ets_table_name(), key) == [peer_entry]
+    end
+
+    test "returns with an empty table when no peers reply before the timeout" do
+      :ok = stop_supervised(Tombstone)
+
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
+
+      assert :ets.tab2list(ets_table_name()) == []
+    end
+
+    test "still receives a steady-state {:insert, ...} a peer publishes after the sync_request" do
+      :ok = stop_supervised(Tombstone)
+
+      test_pid = self()
+      key = {{:user, 7}, :notifications, "c1"}
+
+      spawn_link(fn ->
+        Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+        send(test_pid, :peer_ready)
+
+        receive do
+          {:sync_request, _requester_pid} ->
+            Phoenix.PubSub.broadcast(
+              Hologram.PubSub,
+              gossip_topic(),
+              {:insert, key, @timestamp}
+            )
+        end
+      end)
+
+      assert_receive :peer_ready
+
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
     end
   end
 end

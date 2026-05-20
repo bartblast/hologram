@@ -3,6 +3,7 @@ defmodule Hologram.Realtime.Tombstone do
 
   use GenServer
 
+  @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:tombstones"
   @table_name :hologram_tombstones
   @tombstone_ttl_ms 72 * 60 * 60 * 1000
@@ -52,9 +53,21 @@ defmodule Hologram.Realtime.Tombstone do
   def tombstone_ttl_ms, do: @tombstone_ttl_ms
 
   @impl GenServer
-  def init(_opts) do
+  def init(opts) do
     :ets.new(@table_name, [:set, :public, :named_table, read_concurrency: true])
     Phoenix.PubSub.subscribe(Hologram.PubSub, @gossip_topic)
+
+    boot_sync_timeout_ms =
+      Keyword.get(opts, :boot_sync_timeout_ms, @boot_sync_timeout_ms)
+
+    Phoenix.PubSub.broadcast_from(
+      Hologram.PubSub,
+      self(),
+      @gossip_topic,
+      {:sync_request, self()}
+    )
+
+    collect_sync_replies(System.monotonic_time(:millisecond) + boot_sync_timeout_ms)
 
     schedule_sweep()
 
@@ -96,6 +109,18 @@ defmodule Hologram.Realtime.Tombstone do
     send(requester_pid, {:sync_reply, entries})
 
     {:noreply, state}
+  end
+
+  defp collect_sync_replies(deadline) do
+    remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {:sync_reply, entries} ->
+        Enum.each(entries, fn {key, created_at} -> merge_insert(key, created_at) end)
+        collect_sync_replies(deadline)
+    after
+      remaining_ms -> :ok
+    end
   end
 
   defp delete_expired do
