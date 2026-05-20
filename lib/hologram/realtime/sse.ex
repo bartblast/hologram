@@ -24,6 +24,18 @@ defmodule Hologram.Realtime.SSE do
   end
 
   @doc """
+  Builds the SSE event-stream chunk for an `add_sub_receipts` event: the
+  standard `event:`/`id:`/`data:` framing with the given id and the encoded
+  list of `{channel, cid, token}` triples as the data payload.
+  """
+  @spec encode_add_sub_receipts_envelope(integer, [{any, String.t(), String.t()}]) ::
+          String.t()
+  def encode_add_sub_receipts_envelope(id, receipts) do
+    {:ok, data} = Encoder.encode_term(receipts)
+    "event: add_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
+  end
+
+  @doc """
   Builds the SSE event-stream chunk for a `drop_sub_receipts` event: the
   standard `event:`/`id:`/`data:` framing with the given id and the encoded
   list of `{channel, cid}` keys as the data payload.
