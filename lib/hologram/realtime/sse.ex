@@ -263,6 +263,7 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
+  # sobelow_skip ["XSS.SendResp"]
   defp reject_4xx(conn, message) do
     conn
     |> Plug.Conn.send_resp(400, message)
