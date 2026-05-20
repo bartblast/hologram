@@ -199,6 +199,74 @@ defmodule Hologram.Realtime.SSETest do
       assert updated_conn.resp_body =~ "\ndata: "
     end
 
+    test "drops every cid bound to the channel and pushes a drop_sub_receipts SSE event on {:drop_channel, channel}" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [
+          {{:notifications, "c1"}, nil},
+          {{:notifications, "c2"}, nil},
+          {{:other_channel, "c3"}, nil}
+        ]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_channel, :notifications})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: drop_sub_receipts\nid: "
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:other_channel, "c3"} => nil}
+    end
+
+    test "unsubscribes from the channel's PubSub topic on {:drop_channel, channel}" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      channel_topic = "hologram:channel:notifications"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_channel, :notifications})
+
+      process_message(conn, nil, nil)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+
+      refute_receive :hello
+    end
+
+    test "is a no-op when no bindings exist for the channel on {:drop_channel, channel}" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:other_channel, "c1"}, nil}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:drop_channel, :notifications})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      refute updated_conn.resp_body =~ "event: drop_sub_receipts"
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:other_channel, "c1"} => nil}
+    end
+
     test "drops the binding and pushes a drop_sub_receipts SSE event on {:drop_sub_receipts, keys}" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
 

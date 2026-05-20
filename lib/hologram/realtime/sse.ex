@@ -109,6 +109,18 @@ defmodule Hologram.Realtime.SSE do
       {:close, _reason} ->
         {:halt, conn}
 
+      {:drop_channel, channel} ->
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+        bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+
+        keys =
+          bindings
+          |> Map.keys()
+          |> Enum.filter(fn {ch, _cid} -> ch == channel end)
+
+        drop_keys_and_emit(conn, instance_id, keys)
+
       {:drop_sub_receipts, keys} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
@@ -346,6 +358,8 @@ defmodule Hologram.Realtime.SSE do
       end
     end
   end
+
+  defp drop_keys_and_emit(conn, _instance_id, []), do: {:cont, conn}
 
   defp drop_keys_and_emit(conn, instance_id, keys) do
     {_actually_dropped, zero_crossing_channels} =
