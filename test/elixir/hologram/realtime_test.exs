@@ -17,6 +17,9 @@ defmodule Hologram.RealtimeTest do
     wait_for_process_cleanup(SubscriptionRegistry)
     start_supervised!(SubscriptionRegistry)
 
+    wait_for_process_cleanup(Tombstone)
+    start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
     :ok
   end
 
@@ -606,6 +609,35 @@ defmodule Hologram.RealtimeTest do
 
       assert_receive {:purge, {{:user, 999}, :notifications, "c1"}}
       assert_receive {:purge, {{:user, 999}, :notifications}}
+    end
+  end
+
+  describe "unsubscribe/3" do
+    test "writes a binding-level tombstone for the identity/channel/cid key" do
+      identity = {:user, 7}
+
+      unsubscribe(identity, :notifications, "c1")
+
+      tombstone_key = {identity, :notifications, "c1"}
+
+      assert [{^tombstone_key, _created_at}] =
+               :ets.lookup(Tombstone.ets_table_name(), tombstone_key)
+    end
+
+    test "broadcasts {:drop_sub_receipts, ...} on the target identity's channel topic" do
+      identity = {:user, 7}
+      topic = identity_topic(:user, 7)
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      unsubscribe(identity, :notifications, "c1")
+
+      assert_receive {:drop_sub_receipts, [{:notifications, "c1"}]}
+    end
+
+    test "raises ArgumentError on an invalid channel" do
+      assert_raise ArgumentError, fn ->
+        unsubscribe({:user, 7}, "string-channel", "c1")
+      end
     end
   end
 end
