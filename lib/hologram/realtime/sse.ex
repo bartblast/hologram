@@ -58,7 +58,7 @@ defmodule Hologram.Realtime.SSE do
           {:cont, Plug.Conn.t()}
           | {:cont, Plug.Conn.t(), term | nil, term | nil}
           | {:halt, Plug.Conn.t()}
-  def process_message(conn, _session_id, _user_id, opts \\ []) do
+  def process_message(conn, session_id, user_id, opts \\ []) do
     heartbeat_interval_ms =
       Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
@@ -87,11 +87,14 @@ defmodule Hologram.Realtime.SSE do
         end
 
       {:identity_changed, new_session_id, new_user_id} ->
+        maybe_reconcile_identity_subs(:session, session_id, new_session_id)
+        maybe_reconcile_identity_subs(:user, user_id, new_user_id)
         {:cont, conn, new_session_id, new_user_id}
 
       :refresh_receipts ->
         case dispatch_receipts_refresh(conn) do
           {:cont, conn} ->
+            j
             schedule_receipts_refresh(receipts_refresh_interval_ms)
             {:cont, conn}
 

@@ -203,6 +203,68 @@ defmodule Hologram.Realtime.SSETest do
                process_message(conn, "old-session-id", nil)
     end
 
+    test "subscribes to the user identity topic on login (nil -> 7)" do
+      conn = prepared_test_conn()
+      send(self(), {:identity_changed, "session-1", 7})
+
+      process_message(conn, "session-1", nil)
+
+      user_topic = Realtime.identity_topic(:user, 7)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello)
+
+      assert_receive :hello
+    end
+
+    test "unsubscribes from the user identity topic on logout (7 -> nil)" do
+      conn = prepared_test_conn()
+      user_topic = Realtime.identity_topic(:user, 7)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
+
+      send(self(), {:identity_changed, "session-1", nil})
+
+      process_message(conn, "session-1", 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello)
+
+      refute_receive :hello
+    end
+
+    test "swaps the user identity topic on account switch (7 -> 8)" do
+      conn = prepared_test_conn()
+      old_topic = Realtime.identity_topic(:user, 7)
+      new_topic = Realtime.identity_topic(:user, 8)
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      send(self(), {:identity_changed, "session-1", 8})
+
+      process_message(conn, "session-1", 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
+
+      refute_receive :hello_old
+      assert_receive :hello_new
+    end
+
+    test "swaps the session identity topic on session rotation (S -> S' with user_id unchanged)" do
+      conn = prepared_test_conn()
+      old_topic = Realtime.identity_topic(:session, "session-old")
+      new_topic = Realtime.identity_topic(:session, "session-new")
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      send(self(), {:identity_changed, "session-new", 7})
+
+      process_message(conn, "session-old", 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
+
+      refute_receive :hello_old
+      assert_receive :hello_new
+    end
+
     test "pushes a refresh_sub_receipts SSE event when the instance has bindings" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
 
