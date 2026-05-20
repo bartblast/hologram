@@ -28,6 +28,14 @@ defmodule Hologram.Realtime.SSE do
     "event: action\nid: #{id}\ndata: #{data}\n\n"
   end
 
+  @doc """
+  Returns the SSE heartbeat interval (milliseconds between proxy-keep-alive
+  comment-line writes) when `stream/2` is called without a `:heartbeat_interval_ms`
+  override.
+  """
+  @spec heartbeat_interval_ms() :: pos_integer
+  def heartbeat_interval_ms, do: @heartbeat_interval_ms
+
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.
   @doc false
@@ -50,8 +58,8 @@ defmodule Hologram.Realtime.SSE do
   @spec process_message(Plug.Conn.t(), non_neg_integer) ::
           {:cont, Plug.Conn.t()} | {:halt, Plug.Conn.t()}
   def process_message(conn, heartbeat_interval_ms) do
-    # TODO: remaining typed message clauses (sub/unsub, identity-change) land
-    # in future phases.
+    # TODO: remaining typed message clauses (unsub, identity-change) land in
+    # future phases.
     receive do
       :heartbeat ->
         case Plug.Conn.chunk(conn, ":\n\n") do
@@ -65,6 +73,10 @@ defmodule Hologram.Realtime.SSE do
 
       {:close, _reason} ->
         {:halt, conn}
+
+      {:sub, channel} ->
+        Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
+        {:cont, conn}
 
       {:broadcast_action, %Action{} = action, excluded_identities} ->
         if has_excluded_identity?(conn, excluded_identities) do
