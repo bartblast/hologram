@@ -39,6 +39,10 @@ defmodule Hologram.Router do
     Controller.handle_sse_handshake_request(conn)
   end
 
+  post "/hologram/sse/instance_closing" do
+    Controller.handle_instance_closing_request(conn)
+  end
+
   get "/hologram/websocket" do
     conn
     |> WebSockAdapter.upgrade(Connection, conn, timeout: 60_000)
