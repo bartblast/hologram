@@ -30,7 +30,7 @@ defmodule Hologram.Realtime.SSETest do
     user_id = Map.get(session, :hologram_user_id)
 
     handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
-    expires_at = System.system_time(:millisecond) + 60_000
+    expires_at = System.system_time(:millisecond) + Handshake.stash_ttl_ms()
     Handshake.insert(handshake_id, [], {instance_id, session_id, user_id}, expires_at)
 
     session = Map.put(session, :hologram_session_id, session_id)
@@ -416,7 +416,7 @@ defmodule Hologram.Realtime.SSETest do
         handshake_id,
         [],
         {instance_id, session_id, nil},
-        System.system_time(:millisecond) + 60_000
+        System.system_time(:millisecond) + Handshake.stash_ttl_ms()
       )
 
       Process.sleep(50)
