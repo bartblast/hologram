@@ -94,22 +94,21 @@ defmodule Hologram.Realtime.SSE do
     server_wait_ms =
       Keyword.get(opts, :server_wait_ms, Handshake.server_wait_ms())
 
-    case Handshake.redeem(handshake_id, server_wait_ms) do
-      {:ok, _validated_bindings, _identity} ->
-        heartbeat_interval_ms =
-          Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
+    with {:ok, _validated_bindings, stashed_identity} <-
+           Handshake.redeem(handshake_id, server_wait_ms),
+         true <- stashed_identity == claimed_identity(conn) do
+      heartbeat_interval_ms =
+        Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
-        schedule_heartbeat(heartbeat_interval_ms)
+      schedule_heartbeat(heartbeat_interval_ms)
 
-        conn
-        |> subscribe_to_identity_channels()
-        |> prepare()
-        |> message_pump(heartbeat_interval_ms)
-
-      :error ->
-        conn
-        |> Plug.Conn.send_resp(400, "Handshake redemption failed")
-        |> Plug.Conn.halt()
+      conn
+      |> subscribe_to_identity_channels()
+      |> prepare()
+      |> message_pump(heartbeat_interval_ms)
+    else
+      :error -> reject_4xx(conn, "Handshake redemption failed")
+      false -> reject_4xx(conn, "Handshake identity mismatch")
     end
   end
 
@@ -131,6 +130,14 @@ defmodule Hologram.Realtime.SSE do
     end
 
     conn
+  end
+
+  defp claimed_identity(conn) do
+    {
+      conn.query_params["instance_id"],
+      Session.get_session_id(conn),
+      Session.get_user_id(conn)
+    }
   end
 
   defp dispatch_broadcast(conn, action) do
@@ -166,6 +173,12 @@ defmodule Hologram.Realtime.SSE do
       nil -> base
       user_id -> [{:user, user_id} | base]
     end
+  end
+
+  defp reject_4xx(conn, message) do
+    conn
+    |> Plug.Conn.send_resp(400, message)
+    |> Plug.Conn.halt()
   end
 
   defp schedule_heartbeat(heartbeat_interval_ms) do

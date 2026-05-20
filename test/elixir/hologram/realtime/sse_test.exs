@@ -87,6 +87,31 @@ defmodule Hologram.Realtime.SSETest do
     conn
   end
 
+  defp stream_with_identities(stash_identity, claimed_identity) do
+    handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
+
+    Handshake.insert(
+      handshake_id,
+      [],
+      stash_identity,
+      System.system_time(:millisecond) + Handshake.stash_ttl_ms()
+    )
+
+    {instance_id, session_id, user_id} = claimed_identity
+
+    session =
+      if user_id do
+        %{hologram_session_id: session_id, hologram_user_id: user_id}
+      else
+        %{hologram_session_id: session_id}
+      end
+
+    :get
+    |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
+    |> Plug.Test.init_test_session(session)
+    |> stream(server_wait_ms: 50)
+  end
+
   describe "encode_envelope/2" do
     test "wraps an encoded action in the SSE event envelope" do
       action = %Action{name: :my_action, target: "c1"}
@@ -297,6 +322,80 @@ defmodule Hologram.Realtime.SSETest do
 
       assert result.halted == true
       assert result.status == 400
+    end
+
+    test "returns 4xx when the claimed instance_id differs from the stashed identity" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      result =
+        stream_with_identities(
+          {"stashed-instance", session_id, nil},
+          {"different-instance", session_id, nil}
+        )
+
+      assert result.halted == true
+      assert result.status == 400
+      assert result.resp_body == "Handshake identity mismatch"
+    end
+
+    test "returns 4xx when the claimed session_id differs from the stashed identity (same user_id)" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+
+      result =
+        stream_with_identities(
+          {instance_id, "stashed-session", user_id},
+          {instance_id, "different-session", user_id}
+        )
+
+      assert result.halted == true
+      assert result.status == 400
+      assert result.resp_body == "Handshake identity mismatch"
+    end
+
+    test "returns 4xx when the claimed user_id differs from the stashed identity" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      result =
+        stream_with_identities(
+          {instance_id, session_id, "stashed-user"},
+          {instance_id, session_id, "different-user"}
+        )
+
+      assert result.halted == true
+      assert result.status == 400
+      assert result.resp_body == "Handshake identity mismatch"
+    end
+
+    test "returns 4xx when the claimed identity is anonymous but the stash was authenticated" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      result =
+        stream_with_identities(
+          {instance_id, session_id, "stashed-user"},
+          {instance_id, session_id, nil}
+        )
+
+      assert result.halted == true
+      assert result.status == 400
+      assert result.resp_body == "Handshake identity mismatch"
+    end
+
+    test "returns 4xx when the claimed identity is authenticated but the stash was anonymous" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      result =
+        stream_with_identities(
+          {instance_id, session_id, nil},
+          {instance_id, session_id, "consumer-user"}
+        )
+
+      assert result.halted == true
+      assert result.status == 400
+      assert result.resp_body == "Handshake identity mismatch"
     end
 
     test "redeems a handshake whose gossip arrives within the wait budget" do
