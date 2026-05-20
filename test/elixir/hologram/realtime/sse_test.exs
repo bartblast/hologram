@@ -136,6 +136,16 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "encode_drop_sub_receipts_envelope/2" do
+    test "wraps the keys list in a drop_sub_receipts SSE event envelope" do
+      keys = [{:notifications, "c1"}]
+      {:ok, encoded} = Encoder.encode_term(keys)
+
+      assert encode_drop_sub_receipts_envelope(42, keys) ==
+               "event: drop_sub_receipts\nid: 42\ndata: #{encoded}\n\n"
+    end
+  end
+
   describe "encode_refresh_sub_receipts_envelope/2" do
     test "wraps the receipts list in a refresh_sub_receipts SSE event envelope" do
       receipts = [{:notifications, "c1", "token-a"}]
