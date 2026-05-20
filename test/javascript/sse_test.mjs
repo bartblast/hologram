@@ -60,14 +60,20 @@ describe("Sse", () => {
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
     fetchStub = sinon.stub(globalThis, "fetch");
 
+    globalThis.window = {location: {reload: sinon.spy()}};
+
     originalInstanceId = App.instanceId;
     App.instanceId = "test-instance-id";
   });
 
   afterEach(() => {
     sinon.restore();
+
     delete globalThis.EventSource;
+    delete globalThis.window;
+
     App.instanceId = originalInstanceId;
+
     SubscriptionReceiptRegistry.entries.clear();
   });
 
@@ -173,6 +179,59 @@ describe("Sse", () => {
       await Sse.connect();
 
       assert.strictEqual(Sse.eventSource, mockEventSource);
+    });
+
+    it("triggers a full reload when every stored receipt was rejected", async () => {
+      SubscriptionReceiptRegistry.entries.set(
+        "key-a",
+        Type.tuple([
+          Type.atom("room_a"),
+          Type.bitstring("page"),
+          Type.bitstring("stale-token"),
+        ]),
+      );
+
+      stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+      await Sse.connect();
+
+      sinon.assert.calledOnce(globalThis.window.location.reload);
+      sinon.assert.notCalled(globalThis.EventSource);
+    });
+
+    it("does not reload on the initial fresh load with no stored receipts", async () => {
+      stubHandshakeResponse({refreshedReceipts: Type.list()});
+
+      await Sse.connect();
+
+      sinon.assert.notCalled(globalThis.window.location.reload);
+      sinon.assert.calledOnce(globalThis.EventSource);
+    });
+
+    it("does not reload when at least one stored receipt was validated", async () => {
+      SubscriptionReceiptRegistry.entries.set(
+        "key-a",
+        Type.tuple([
+          Type.atom("room_a"),
+          Type.bitstring("page"),
+          Type.bitstring("stale-token"),
+        ]),
+      );
+
+      const refreshedReceipts = Type.list([
+        Type.tuple([
+          Type.atom("room_a"),
+          Type.bitstring("page"),
+          Type.bitstring("fresh-token"),
+        ]),
+      ]);
+
+      stubHandshakeResponse({refreshedReceipts});
+
+      await Sse.connect();
+
+      sinon.assert.notCalled(globalThis.window.location.reload);
+      sinon.assert.calledOnce(globalThis.EventSource);
     });
   });
 

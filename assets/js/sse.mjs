@@ -26,6 +26,9 @@ export default class Sse {
 
   static async connect() {
     try {
+      const preHandshakeReceiptCount =
+        App.subscriptionReceiptRegistry.entries.size;
+
       const response = await fetch($.HANDSHAKE_PATH, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -42,6 +45,11 @@ export default class Sse {
 
       const refreshed =
         Interpreter.evaluateJavaScriptExpression(encodedRefreshed);
+
+      if (preHandshakeReceiptCount > 0 && refreshed.data.length === 0) {
+        window.location.reload();
+        return;
+      }
 
       App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
 
