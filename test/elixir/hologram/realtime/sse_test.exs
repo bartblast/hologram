@@ -6,6 +6,7 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Realtime.Handshake
+  alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
 
   setup do
@@ -384,6 +385,55 @@ defmodule Hologram.Realtime.SSETest do
       Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
 
       assert_receive :hello
+    end
+  end
+
+  describe "build_refresh_receipts/2" do
+    test "returns an empty list when bindings is empty" do
+      assert build_refresh_receipts("test-instance-id", %{}) == []
+    end
+
+    test "produces one {channel, cid, token} triple per binding" do
+      bindings = %{
+        {:notifications, "c1"} => nil,
+        {{:room, "lobby"}, "c2"} => "user-7"
+      }
+
+      result = build_refresh_receipts("test-instance-id", bindings)
+
+      assert length(result) == 2
+
+      Enum.each(result, fn triple ->
+        assert {channel, cid, token} = triple
+        assert channel in [:notifications, {:room, "lobby"}]
+        assert cid in ["c1", "c2"]
+        assert is_binary(token)
+      end)
+    end
+
+    test "each token round-trips channel, cid, instance_id, and the binding's authorizing_user_id" do
+      bindings = %{
+        {:notifications, "c1"} => nil,
+        {{:room, "lobby"}, "c2"} => "user-7"
+      }
+
+      result = build_refresh_receipts("test-instance-id", bindings)
+
+      receipts =
+        Enum.map(result, fn {_channel, _cid, token} ->
+          {:ok, receipt} = Receipt.verify(token)
+          receipt
+        end)
+
+      anonymous = Enum.find(receipts, &(&1.channel == :notifications))
+      assert anonymous.cid == "c1"
+      assert anonymous.instance_id == "test-instance-id"
+      assert anonymous.user_id == nil
+
+      authenticated = Enum.find(receipts, &(&1.channel == {:room, "lobby"}))
+      assert authenticated.cid == "c2"
+      assert authenticated.instance_id == "test-instance-id"
+      assert authenticated.user_id == "user-7"
     end
   end
 

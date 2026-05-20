@@ -4,6 +4,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Realtime.Handshake
+  alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
 
@@ -172,6 +173,18 @@ defmodule Hologram.Realtime.SSE do
     end)
 
     conn
+  end
+
+  # Public so tests can exercise the pure refresh-list build without entering
+  # the blocking message-pump loop.
+  @doc false
+  @spec build_refresh_receipts(String.t(), %{{any, String.t()} => term | nil}) ::
+          [{any, String.t(), String.t()}]
+  def build_refresh_receipts(instance_id, bindings) do
+    Enum.map(bindings, fn {{channel, cid}, authorizing_user_id} ->
+      token = Receipt.issue(channel, cid, instance_id, authorizing_user_id)
+      {channel, cid, token}
+    end)
   end
 
   # Public so tests can exercise subscription wiring without entering the
