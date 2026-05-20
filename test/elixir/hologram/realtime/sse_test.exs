@@ -160,7 +160,7 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       assert updated_conn.resp_body == ":\n\n"
     end
@@ -178,7 +178,7 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :some_unknown_message)
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       assert updated_conn.resp_body == ""
     end
@@ -187,7 +187,7 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), {:close, :superseded})
 
-      assert {:halt, ^conn} = process_message(conn, 30_000)
+      assert {:halt, ^conn} = process_message(conn)
     end
 
     test "dispatches a broadcast action as an SSE chunk when no identity matches the exclude list" do
@@ -197,7 +197,7 @@ defmodule Hologram.Realtime.SSETest do
       action = %Action{name: :my_action, target: "c1"}
       send(self(), {:broadcast_action, action, []})
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       {:ok, encoded} = Encoder.encode_term(action)
 
@@ -220,7 +220,7 @@ defmodule Hologram.Realtime.SSETest do
       action = %Action{name: :my_action, target: "c1"}
       send(self(), {:broadcast_action, action, []})
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       assert updated_conn.resp_body =~ "event: action\n"
     end
@@ -232,7 +232,7 @@ defmodule Hologram.Realtime.SSETest do
       action = %Action{name: :my_action, target: "c1"}
       send(self(), {:broadcast_action, action, [{:instance, instance_id}]})
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       assert updated_conn.resp_body == ""
     end
@@ -245,7 +245,7 @@ defmodule Hologram.Realtime.SSETest do
       action = %Action{name: :my_action, target: "c1"}
       send(self(), {:broadcast_action, action, [{:session, session_id}]})
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       assert updated_conn.resp_body == ""
     end
@@ -258,7 +258,7 @@ defmodule Hologram.Realtime.SSETest do
       action = %Action{name: :my_action, target: "c1"}
       send(self(), {:broadcast_action, action, [{:user, user_id}]})
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       assert updated_conn.resp_body == ""
     end
@@ -270,7 +270,7 @@ defmodule Hologram.Realtime.SSETest do
       action = %Action{name: :my_action, target: "c1"}
       send(self(), {:broadcast_action, action, [{:instance, "other-instance"}]})
 
-      {:cont, updated_conn} = process_message(conn, 30_000)
+      {:cont, updated_conn} = process_message(conn)
 
       assert updated_conn.resp_body =~ "event: action\n"
     end
@@ -279,7 +279,7 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), {:sub, :notifications})
 
-      {:cont, _updated_conn} = process_message(conn, 30_000)
+      {:cont, _updated_conn} = process_message(conn)
 
       Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
 
