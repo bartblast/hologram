@@ -53,6 +53,16 @@ defmodule Hologram.Realtime.SSE do
     # TODO: remaining typed message clauses (identity-change) land in future
     # phases.
     receive do
+      {:broadcast_action, %Action{} = action, excluded_identities} ->
+        if has_excluded_identity?(conn, excluded_identities) do
+          {:cont, conn}
+        else
+          dispatch_broadcast(conn, action)
+        end
+
+      {:close, _reason} ->
+        {:halt, conn}
+
       :heartbeat ->
         case Plug.Conn.chunk(conn, ":\n\n") do
           {:ok, conn} ->
@@ -63,9 +73,6 @@ defmodule Hologram.Realtime.SSE do
             {:halt, conn}
         end
 
-      {:close, _reason} ->
-        {:halt, conn}
-
       {:sub, channel} ->
         Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
         {:cont, conn}
@@ -73,13 +80,6 @@ defmodule Hologram.Realtime.SSE do
       {:unsub, channel} ->
         Phoenix.PubSub.unsubscribe(Hologram.PubSub, channel_topic(channel))
         {:cont, conn}
-
-      {:broadcast_action, %Action{} = action, excluded_identities} ->
-        if has_excluded_identity?(conn, excluded_identities) do
-          {:cont, conn}
-        else
-          dispatch_broadcast(conn, action)
-        end
 
       _msg ->
         {:cont, conn}
