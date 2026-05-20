@@ -385,17 +385,7 @@ defmodule Hologram.Controller do
       case Receipt.verify(token) do
         {:ok, %Receipt{instance_id: ^instance_id, user_id: authorizing_user_id} = receipt}
         when is_nil(authorizing_user_id) or authorizing_user_id == current_user_id ->
-          if tombstoned?(receipt, instance_id, session_id, authorizing_user_id) do
-            []
-          else
-            fresh_token =
-              Receipt.issue(receipt.channel, receipt.cid, instance_id, authorizing_user_id)
-
-            [
-              {{{receipt.channel, receipt.cid}, authorizing_user_id},
-               {receipt.channel, receipt.cid, fresh_token}}
-            ]
-          end
+          refresh_unless_tombstoned(receipt, instance_id, session_id, authorizing_user_id)
 
         _other ->
           []
@@ -472,6 +462,20 @@ defmodule Hologram.Controller do
 
       _fallback ->
         {server_struct, nil}
+    end
+  end
+
+  defp refresh_unless_tombstoned(receipt, instance_id, session_id, authorizing_user_id) do
+    if tombstoned?(receipt, instance_id, session_id, authorizing_user_id) do
+      []
+    else
+      fresh_token =
+        Receipt.issue(receipt.channel, receipt.cid, instance_id, authorizing_user_id)
+
+      [
+        {{{receipt.channel, receipt.cid}, authorizing_user_id},
+         {receipt.channel, receipt.cid, fresh_token}}
+      ]
     end
   end
 
