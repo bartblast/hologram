@@ -522,6 +522,60 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
     end
   end
 
+  describe "resolve_identity/1" do
+    test "resolves {:instance, instance_id} to the matching entry" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+
+      assert resolve_identity({:instance, "test-instance-id"}) ==
+               [{"test-instance-id", sse_pid}]
+    end
+
+    test "returns [] for {:instance, instance_id} when no entry exists" do
+      assert resolve_identity({:instance, "test-unknown-instance-id"}) == []
+    end
+
+    test "resolves {:user, user_id} to every entry whose user_id matches" do
+      pid_a = spawn(fn -> Process.sleep(:infinity) end)
+      pid_b = spawn(fn -> Process.sleep(:infinity) end)
+      pid_c = spawn(fn -> Process.sleep(:infinity) end)
+
+      :ok = register_connection("instance-a", pid_a)
+      :ok = register_connection("instance-b", pid_b)
+      :ok = register_connection("instance-c", pid_c)
+      update_identity("instance-a", "session-a", 7)
+      update_identity("instance-b", "session-b", 7)
+      update_identity("instance-c", "session-c", 8)
+
+      assert Enum.sort(resolve_identity({:user, 7})) ==
+               Enum.sort([{"instance-a", pid_a}, {"instance-b", pid_b}])
+    end
+
+    test "resolves {:session, session_id} to every entry whose session_id matches" do
+      pid_a = spawn(fn -> Process.sleep(:infinity) end)
+      pid_b = spawn(fn -> Process.sleep(:infinity) end)
+      pid_c = spawn(fn -> Process.sleep(:infinity) end)
+
+      :ok = register_connection("instance-a", pid_a)
+      :ok = register_connection("instance-b", pid_b)
+      :ok = register_connection("instance-c", pid_c)
+      update_identity("instance-a", "session-1", 7)
+      update_identity("instance-b", "session-1", 8)
+      update_identity("instance-c", "session-2", 9)
+
+      assert Enum.sort(resolve_identity({:session, "session-1"})) ==
+               Enum.sort([{"instance-a", pid_a}, {"instance-b", pid_b}])
+    end
+
+    test "returns [] when no entries match the user_id" do
+      sse_pid = spawn(fn -> Process.sleep(:infinity) end)
+      :ok = register_connection("test-instance-id", sse_pid)
+      update_identity("test-instance-id", "session-1", 7)
+
+      assert resolve_identity({:user, 8}) == []
+    end
+  end
+
   describe "start_link/1" do
     test "starts under a supervisor and registers itself by module name" do
       assert process_name_registered?(SubscriptionRegistry)

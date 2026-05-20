@@ -159,6 +159,42 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
   end
 
   @doc """
+  Resolves an identity tuple to the list of live `{instance_id, sse_pid}`
+  entries whose registry record matches.
+
+  Accepted identity shapes:
+
+    * `{:instance, instance_id}` - returns the matching entry (single-element
+      list) or an empty list.
+
+    * `{:session, session_id}` - returns every entry whose `session_id` equals
+      the given value.
+
+    * `{:user, user_id}` - returns every entry whose `user_id` equals the
+      given value.
+
+  Reads ETS directly. The returned `sse_pid` values may already be down between
+  the lookup and the caller's subsequent `send/2`; the registry cleans up dead
+  pids asynchronously via its `:DOWN` handler.
+  """
+  @spec resolve_identity({:instance, String.t()} | {:session, term} | {:user, term}) ::
+          [{String.t(), pid}]
+  def resolve_identity({:instance, instance_id}) do
+    case :ets.lookup(@table_name, instance_id) do
+      [{^instance_id, entry}] -> [{instance_id, entry.sse_pid}]
+      [] -> []
+    end
+  end
+
+  def resolve_identity({:session, session_id}) do
+    resolve_by_field(:session_id, session_id)
+  end
+
+  def resolve_identity({:user, user_id}) do
+    resolve_by_field(:user_id, user_id)
+  end
+
+  @doc """
   Starts the subscription registry process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
@@ -421,5 +457,12 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         :ets.delete(@table_name, instance_id)
         {:noreply, new_refs}
     end
+  end
+
+  defp resolve_by_field(field, value) do
+    @table_name
+    |> :ets.tab2list()
+    |> Enum.filter(fn {_instance_id, entry} -> Map.get(entry, field) == value end)
+    |> Enum.map(fn {instance_id, entry} -> {instance_id, entry.sse_pid} end)
   end
 end
