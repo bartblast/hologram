@@ -54,17 +54,17 @@ defmodule Hologram.Realtime.SSE do
   # Public so tests can step the pump one message at a time without spawning
   # the blocking loop.
   @doc false
-  @spec process_message(Plug.Conn.t(), keyword) ::
-          {:cont, Plug.Conn.t()} | {:halt, Plug.Conn.t()}
-  def process_message(conn, opts \\ []) do
+  @spec process_message(Plug.Conn.t(), term | nil, term | nil, keyword) ::
+          {:cont, Plug.Conn.t()}
+          | {:cont, Plug.Conn.t(), term | nil, term | nil}
+          | {:halt, Plug.Conn.t()}
+  def process_message(conn, _session_id, _user_id, opts \\ []) do
     heartbeat_interval_ms =
       Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
     receipts_refresh_interval_ms =
       Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
 
-    # TODO: remaining typed message clauses (identity-change) land in future
-    # phases.
     receive do
       {:broadcast_action, %Action{} = action, excluded_identities} ->
         if has_excluded_identity?(conn, excluded_identities) do
@@ -85,6 +85,9 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} ->
             {:halt, conn}
         end
+
+      {:identity_changed, new_session_id, new_user_id} ->
+        {:cont, conn, new_session_id, new_user_id}
 
       :refresh_receipts ->
         case dispatch_receipts_refresh(conn) do
@@ -144,11 +147,13 @@ defmodule Hologram.Realtime.SSE do
           receipts_refresh_interval_ms: receipts_refresh_interval_ms
         ]
 
+        {_instance_id, session_id, user_id} = claimed
+
         conn
         |> attach_validated_subscriptions(validated_bindings)
         |> subscribe_to_identity_channels()
         |> prepare()
-        |> message_pump(message_pump_opts)
+        |> message_pump(session_id, user_id, message_pump_opts)
 
       :error ->
         reject_4xx(conn, "Handshake redemption failed")
@@ -300,10 +305,16 @@ defmodule Hologram.Realtime.SSE do
     |> Enum.any?(&(&1 in excluded_identities))
   end
 
-  defp message_pump(conn, opts) do
-    case process_message(conn, opts) do
-      {:cont, conn} -> message_pump(conn, opts)
-      {:halt, conn} -> conn
+  defp message_pump(conn, session_id, user_id, opts) do
+    case process_message(conn, session_id, user_id, opts) do
+      {:cont, conn} ->
+        message_pump(conn, session_id, user_id, opts)
+
+      {:cont, conn, new_session_id, new_user_id} ->
+        message_pump(conn, new_session_id, new_user_id, opts)
+
+      {:halt, conn} ->
+        conn
     end
   end
 
