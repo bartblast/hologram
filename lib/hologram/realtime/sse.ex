@@ -94,9 +94,10 @@ defmodule Hologram.Realtime.SSE do
     server_wait_ms =
       Keyword.get(opts, :server_wait_ms, Handshake.server_wait_ms())
 
-    with {:ok, _validated_bindings, stashed_identity} <-
-           Handshake.redeem(handshake_id, server_wait_ms),
-         true <- stashed_identity == claimed_identity(conn) do
+    claimed = claimed_identity(conn)
+
+    with {:ok, _validated_bindings, ^claimed} <-
+           Handshake.redeem(handshake_id, server_wait_ms) do
       heartbeat_interval_ms =
         Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
@@ -108,7 +109,7 @@ defmodule Hologram.Realtime.SSE do
       |> message_pump(heartbeat_interval_ms)
     else
       :error -> reject_4xx(conn, "Handshake redemption failed")
-      false -> reject_4xx(conn, "Handshake identity mismatch")
+      {:ok, _bindings, _stashed} -> reject_4xx(conn, "Handshake identity mismatch")
     end
   end
 
