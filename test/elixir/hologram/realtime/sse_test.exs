@@ -126,12 +126,22 @@ defmodule Hologram.Realtime.SSETest do
     |> stream(server_wait_ms: 50)
   end
 
-  describe "encode_envelope/2" do
+  describe "encode_action_envelope/2" do
     test "wraps an encoded action in the SSE event envelope" do
       action = %Action{name: :my_action, target: "c1"}
       {:ok, encoded} = Encoder.encode_term(action)
 
-      assert encode_envelope(42, action) == "event: action\nid: 42\ndata: #{encoded}\n\n"
+      assert encode_action_envelope(42, action) == "event: action\nid: 42\ndata: #{encoded}\n\n"
+    end
+  end
+
+  describe "encode_refresh_sub_receipts_envelope/2" do
+    test "wraps the receipts list in a refresh_sub_receipts SSE event envelope" do
+      receipts = [{:notifications, "c1", "token-a"}]
+      {:ok, encoded} = Encoder.encode_term(receipts)
+
+      assert encode_refresh_sub_receipts_envelope(42, receipts) ==
+               "event: refresh_sub_receipts\nid: 42\ndata: #{encoded}\n\n"
     end
   end
 
