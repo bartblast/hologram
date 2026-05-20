@@ -39,6 +39,17 @@ defmodule Hologram.Realtime.Tombstone do
   end
 
   @doc """
+  Purges every tombstone entry under `{:instance, instance_id}` (both
+  binding-level and channel-wide shapes) and gossips the purge cluster-wide.
+
+  Idempotent.
+  """
+  @spec purge_for_instance(String.t()) :: :ok
+  def purge_for_instance(instance_id) do
+    GenServer.call(__MODULE__, {:purge_for_instance, instance_id})
+  end
+
+  @doc """
   Starts the tombstone store process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
@@ -89,6 +100,20 @@ defmodule Hologram.Realtime.Tombstone do
   end
 
   @impl GenServer
+  def handle_call({:purge_for_instance, instance_id}, _from, state) do
+    delete_for_instance(instance_id)
+
+    Phoenix.PubSub.broadcast_from(
+      Hologram.PubSub,
+      self(),
+      @gossip_topic,
+      {:purge_for_instance, instance_id}
+    )
+
+    {:reply, :ok, state}
+  end
+
+  @impl GenServer
   def handle_info({:insert, key, created_at}, state) do
     merge_insert(key, created_at)
 
@@ -98,6 +123,13 @@ defmodule Hologram.Realtime.Tombstone do
   @impl GenServer
   def handle_info({:purge, key}, state) do
     :ets.delete(@table_name, key)
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_info({:purge_for_instance, instance_id}, state) do
+    delete_for_instance(instance_id)
 
     {:noreply, state}
   end
@@ -138,6 +170,15 @@ defmodule Hologram.Realtime.Tombstone do
     ]
 
     :ets.select_delete(@table_name, match_spec)
+  end
+
+  defp delete_for_instance(instance_id) do
+    identity = {:instance, instance_id}
+
+    :ets.match_delete(@table_name, {{identity, :_, :_}, :_})
+    :ets.match_delete(@table_name, {{identity, :_}, :_})
+
+    :ok
   end
 
   defp merge_insert(key, created_at) do

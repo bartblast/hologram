@@ -64,6 +64,63 @@ defmodule Hologram.Realtime.TombstoneTest do
     end
   end
 
+  describe "purge_for_instance/1" do
+    test "removes both binding-level and channel-wide tombstones for the target instance" do
+      instance = {:instance, "instance-a"}
+      binding_key = {instance, :notifications, "c1"}
+      channel_key = {instance, :notifications}
+
+      :ok = insert(binding_key, @timestamp)
+      :ok = insert(channel_key, @timestamp)
+
+      :ok = purge_for_instance("instance-a")
+
+      assert :ets.lookup(ets_table_name(), binding_key) == []
+      assert :ets.lookup(ets_table_name(), channel_key) == []
+    end
+
+    test "leaves tombstones for other instances untouched" do
+      target_key = {{:instance, "instance-a"}, :notifications, "c1"}
+      other_key = {{:instance, "instance-b"}, :notifications, "c1"}
+
+      :ok = insert(target_key, @timestamp)
+      :ok = insert(other_key, @timestamp)
+
+      :ok = purge_for_instance("instance-a")
+
+      assert :ets.lookup(ets_table_name(), target_key) == []
+      assert :ets.lookup(ets_table_name(), other_key) == [{other_key, @timestamp}]
+    end
+
+    test "leaves tombstones at non-instance identity levels untouched" do
+      instance_key = {{:instance, "instance-a"}, :notifications, "c1"}
+      session_key = {{:session, "session-1"}, :notifications, "c1"}
+      user_key = {{:user, 7}, :notifications, "c1"}
+
+      :ok = insert(instance_key, @timestamp)
+      :ok = insert(session_key, @timestamp)
+      :ok = insert(user_key, @timestamp)
+
+      :ok = purge_for_instance("instance-a")
+
+      assert :ets.lookup(ets_table_name(), instance_key) == []
+      assert :ets.lookup(ets_table_name(), session_key) == [{session_key, @timestamp}]
+      assert :ets.lookup(ets_table_name(), user_key) == [{user_key, @timestamp}]
+    end
+
+    test "is a no-op when no tombstones match" do
+      assert :ok = purge_for_instance("unknown-instance")
+    end
+
+    test "broadcasts the purge on the gossip topic" do
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+
+      purge_for_instance("instance-a")
+
+      assert_receive {:purge_for_instance, "instance-a"}
+    end
+  end
+
   describe "handle {:insert, ...}" do
     test "merges a peer-broadcast {:insert, ...} into local ETS" do
       key = {{:user, 7}, :notifications, "c1"}
@@ -116,6 +173,27 @@ defmodule Hologram.Realtime.TombstoneTest do
       :sys.get_state(Tombstone)
 
       assert :ets.lookup(ets_table_name(), key) == []
+    end
+  end
+
+  describe "handle {:purge_for_instance, ...}" do
+    test "removes both binding-level and channel-wide tombstones for the target instance" do
+      binding_key = {{:instance, "instance-a"}, :notifications, "c1"}
+      channel_key = {{:instance, "instance-a"}, :notifications}
+
+      :ok = insert(binding_key, @timestamp)
+      :ok = insert(channel_key, @timestamp)
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:purge_for_instance, "instance-a"}
+      )
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), binding_key) == []
+      assert :ets.lookup(ets_table_name(), channel_key) == []
     end
   end
 
