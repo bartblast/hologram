@@ -4,6 +4,9 @@ defmodule Hologram.Realtime do
   """
 
   alias Hologram.Component.Action
+  alias Hologram.Realtime.Channel
+  alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
@@ -129,6 +132,45 @@ defmodule Hologram.Realtime do
     :ok
   end
 
+  @doc """
+  Subscribes the connections matching `identity` to a `{channel, cid}` binding.
+
+  Validates the channel via `Channel.validate!/1`, resolves the identity tuple
+  to live SSE processes through `SubscriptionRegistry.resolve_identity/1`, and
+  for each matched connection:
+
+    * registers the binding via `SubscriptionRegistry.apply_deltas/4` (which
+      emits a `{:sub, channel}` self-message to the SSE process on a
+      zero-crossing channel),
+
+    * signs a fresh receipt under the entry's current `user_id` (so the
+      authorization stamp tracks the connection's identity at issue time,
+      consistent with the elevation rule), and
+
+    * sends `{:add_sub_receipts, [{channel, cid, token}]}` to the SSE process
+      for client-side merge.
+
+  When `identity` resolves to no live connection, returns `:ok` without any
+  side effect. Raises `ArgumentError` on an invalid channel.
+  """
+  # TODO: offline-target path
+  @spec subscribe(
+          {:instance, String.t()} | {:session, term} | {:user, term},
+          atom | tuple,
+          String.t()
+        ) :: :ok
+  def subscribe(identity, channel, cid) when is_binary(cid) do
+    Channel.validate!(channel)
+
+    identity
+    |> SubscriptionRegistry.resolve_identity()
+    |> Enum.each(fn {instance_id, sse_pid} ->
+      subscribe_target(instance_id, sse_pid, channel, cid)
+    end)
+
+    :ok
+  end
+
   defp effective_subscriptions(%Server{subscriptions: subscriptions}, identity_channels) do
     subscriptions
     |> Enum.map(&elem(&1, 0))
@@ -156,5 +198,23 @@ defmodule Hologram.Realtime do
       topic,
       {:broadcast_action, action, excluded_identities}
     )
+  end
+
+  defp subscribe_target(instance_id, sse_pid, channel, cid) do
+    case SubscriptionRegistry.identity_of(instance_id) do
+      {_session_id, authorizing_user_id} ->
+        SubscriptionRegistry.apply_deltas(
+          instance_id,
+          [{channel, cid}],
+          [],
+          authorizing_user_id
+        )
+
+        token = Receipt.issue(channel, cid, instance_id, authorizing_user_id)
+        send(sse_pid, {:add_sub_receipts, [{channel, cid, token}]})
+
+      nil ->
+        :ok
+    end
   end
 end
