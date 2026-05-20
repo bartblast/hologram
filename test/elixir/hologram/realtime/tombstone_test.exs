@@ -5,6 +5,8 @@ defmodule Hologram.Realtime.TombstoneTest do
 
   alias Hologram.Realtime.Tombstone
 
+  @timestamp 1_700_000_000_000
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -13,6 +15,33 @@ defmodule Hologram.Realtime.TombstoneTest do
     start_supervised!(Tombstone)
 
     :ok
+  end
+
+  describe "insert/2" do
+    test "writes a binding-level tombstone {identity, channel, cid} to ETS with the timestamp" do
+      key = {{:user, 7}, :notifications, "c1"}
+      :ok = insert(key, @timestamp)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
+    end
+
+    test "writes a channel-wide tombstone {identity, channel} to ETS with the timestamp" do
+      key = {{:user, 7}, :notifications}
+      :ok = insert(key, @timestamp)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
+    end
+
+    test "binding-level and channel-wide tombstones at the same identity level coexist" do
+      binding_key = {{:user, 7}, :notifications, "c1"}
+      channel_key = {{:user, 7}, :notifications}
+
+      :ok = insert(binding_key, @timestamp)
+      :ok = insert(channel_key, @timestamp + 1)
+
+      assert :ets.lookup(ets_table_name(), binding_key) == [{binding_key, @timestamp}]
+      assert :ets.lookup(ets_table_name(), channel_key) == [{channel_key, @timestamp + 1}]
+    end
   end
 
   describe "start_link/1" do
