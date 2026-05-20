@@ -81,6 +81,7 @@ defmodule Hologram.Realtime.SSE do
           {:cont, Plug.Conn.t()}
           | {:cont, Plug.Conn.t(), term | nil, term | nil}
           | {:halt, Plug.Conn.t()}
+  # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def process_message(conn, session_id, user_id, opts \\ []) do
     heartbeat_interval_ms =
       Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
