@@ -640,6 +640,12 @@ defmodule Hologram.ControllerTest do
     end
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls delete_subscription" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -661,6 +667,12 @@ defmodule Hologram.ControllerTest do
     end
 
     test "applies adds and drops together when a command calls put_subscription and delete_subscription" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -681,6 +693,65 @@ defmodule Hologram.ControllerTest do
       assert SubscriptionRegistry.bindings_of("my-instance-id") == %{
                {:room_b, "my_target_1"} => nil
              }
+    end
+
+    test "writes an instance-level binding-shape tombstone for each dropped key" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+
+      SubscriptionRegistry.apply_deltas(
+        "my-instance-id",
+        [{:room_a, "my_target_1"}],
+        [],
+        "seed-user-id"
+      )
+
+      execute_command_request(%{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_deleting_subscription,
+        params: %{},
+        target: "my_target_1"
+      })
+
+      tombstone_key = {{:instance, "my-instance-id"}, :room_a, "my_target_1"}
+
+      assert [{^tombstone_key, _created_at}] =
+               :ets.lookup(Tombstone.ets_table_name(), tombstone_key)
+    end
+
+    test "writes no tombstones when the command handler raises before subscription_ops flushes" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+
+      SubscriptionRegistry.apply_deltas(
+        "my-instance-id",
+        [{:room_a, "my_target_1"}],
+        [],
+        "seed-user-id"
+      )
+
+      payload = %{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_deleting_subscription_then_raising,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      assert_raise RuntimeError, "boom", fn -> execute_command_request(payload) end
+
+      assert :ets.tab2list(Tombstone.ets_table_name()) == []
     end
 
     test "leaves SubscriptionRegistry bindings unchanged when subscription_ops is empty" do
@@ -741,6 +812,12 @@ defmodule Hologram.ControllerTest do
     end
 
     test "embeds a drop entry in the response for each newly-dropped subscription" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(
@@ -766,6 +843,12 @@ defmodule Hologram.ControllerTest do
     end
 
     test "embeds adds and drops together when a command both puts and deletes subscriptions" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      wait_for_process_cleanup(Tombstone)
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
+
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
 
       SubscriptionRegistry.apply_deltas(

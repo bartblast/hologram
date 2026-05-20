@@ -78,6 +78,12 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     delete_subscription(server, :room_a)
   end
 
+  def command(:my_command_deleting_subscription_then_raising, _params, server) do
+    server = delete_subscription(server, :room_a)
+    raise "boom"
+    server
+  end
+
   def command(:my_command_putting_and_deleting_subscriptions, _params, server) do
     server
     |> put_subscription(:room_b)

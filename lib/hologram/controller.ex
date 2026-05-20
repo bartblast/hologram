@@ -404,6 +404,12 @@ defmodule Hologram.Controller do
     {actually_added, actually_dropped} =
       SubscriptionRegistry.apply_deltas(server.instance_id, adds, drops, server.user_id)
 
+    now = System.system_time(:millisecond)
+
+    Enum.each(actually_dropped, fn {channel, cid} ->
+      Tombstone.insert({{:instance, server.instance_id}, channel, cid}, now)
+    end)
+
     {build_receipts(actually_added, server), actually_dropped}
   end
 
