@@ -42,6 +42,49 @@ defmodule Hologram.Realtime.TombstoneTest do
       assert :ets.lookup(ets_table_name(), binding_key) == [{binding_key, @timestamp}]
       assert :ets.lookup(ets_table_name(), channel_key) == [{channel_key, @timestamp + 1}]
     end
+
+    test "broadcasts the insert on the gossip topic" do
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+      key = {{:user, 7}, :notifications, "c1"}
+
+      insert(key, @timestamp)
+
+      assert_receive {:insert, ^key, @timestamp}
+    end
+  end
+
+  describe "{:insert, ...} gossip merge" do
+    test "merges a peer-broadcast {:insert, ...} into local ETS" do
+      key = {{:user, 7}, :notifications, "c1"}
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:insert, key, @timestamp})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
+    end
+
+    test "keeps the later timestamp when an older peer insert arrives for an existing key" do
+      key = {{:user, 7}, :notifications, "c1"}
+      :ok = insert(key, @timestamp + 10)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:insert, key, @timestamp})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}]
+    end
+
+    test "takes the later timestamp when a newer peer insert arrives for an existing key" do
+      key = {{:user, 7}, :notifications, "c1"}
+      :ok = insert(key, @timestamp)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:insert, key, @timestamp + 10})
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}]
+    end
   end
 
   describe "start_link/1" do

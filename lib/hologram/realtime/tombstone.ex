@@ -54,8 +54,32 @@ defmodule Hologram.Realtime.Tombstone do
 
   @impl GenServer
   def handle_call({:insert, key, created_at}, _from, state) do
-    :ets.insert(@table_name, {key, created_at})
+    merge_insert(key, created_at)
+
+    Phoenix.PubSub.broadcast_from(
+      Hologram.PubSub,
+      self(),
+      @gossip_topic,
+      {:insert, key, created_at}
+    )
 
     {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_info({:insert, key, created_at}, state) do
+    merge_insert(key, created_at)
+
+    {:noreply, state}
+  end
+
+  defp merge_insert(key, created_at) do
+    case :ets.lookup(@table_name, key) do
+      [{^key, existing_at}] when existing_at >= created_at ->
+        :ok
+
+      _other ->
+        :ets.insert(@table_name, {key, created_at})
+    end
   end
 end
