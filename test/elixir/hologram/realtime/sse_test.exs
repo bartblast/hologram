@@ -188,6 +188,17 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "process_message/2" do
+    test "pushes an add_sub_receipts SSE event on {:add_sub_receipts, receipts}" do
+      conn = prepared_test_conn()
+      receipts = [{:notifications, "c1", "token-a"}]
+      send(self(), {:add_sub_receipts, receipts})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: add_sub_receipts\nid: "
+      assert updated_conn.resp_body =~ "\ndata: "
+    end
+
     test "writes an SSE comment line on :heartbeat" do
       conn = prepared_test_conn()
       send(self(), :heartbeat)

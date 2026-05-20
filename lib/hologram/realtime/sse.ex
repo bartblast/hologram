@@ -89,6 +89,15 @@ defmodule Hologram.Realtime.SSE do
       Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
 
     receive do
+      {:add_sub_receipts, receipts} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_add_sub_receipts_envelope(id, receipts)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
       {:broadcast_action, %Action{} = action, excluded_identities} ->
         if has_excluded_identity?(conn, excluded_identities) do
           {:cont, conn}
