@@ -105,7 +105,10 @@ defmodule Hologram.Realtime.SSE do
         instance_id = conn.query_params["instance_id"]
         SubscriptionRegistry.update_identity(instance_id, new_session_id, new_user_id)
 
-        {:cont, conn, new_session_id, new_user_id}
+        case maybe_drop_identity_change_bindings(conn, instance_id, user_id, new_user_id) do
+          {:cont, conn} -> {:cont, conn, new_session_id, new_user_id}
+          {:halt, conn} -> {:halt, conn}
+        end
 
       :refresh_receipts ->
         case dispatch_receipts_refresh(conn) do
@@ -321,6 +324,33 @@ defmodule Hologram.Realtime.SSE do
     conn
     |> own_identities()
     |> Enum.any?(&(&1 in excluded_identities))
+  end
+
+  defp maybe_drop_identity_change_bindings(conn, _instance_id, user_id, user_id),
+    do: {:cont, conn}
+
+  defp maybe_drop_identity_change_bindings(conn, instance_id, _old_user_id, new_user_id) do
+    {dropped_keys, zero_crossing_channels} =
+      SubscriptionRegistry.drop_for_identity_change(instance_id, new_user_id)
+
+    Enum.each(zero_crossing_channels, fn channel ->
+      topic = channel_topic(channel)
+      Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
+    end)
+
+    case dropped_keys do
+      [] ->
+        {:cont, conn}
+
+      _keys ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_drop_sub_receipts_envelope(id, dropped_keys)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+    end
   end
 
   defp message_pump(conn, session_id, user_id, opts) do
