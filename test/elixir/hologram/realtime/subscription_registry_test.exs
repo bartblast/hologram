@@ -547,8 +547,9 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       update_identity("instance-b", "session-b", 7)
       update_identity("instance-c", "session-c", 8)
 
-      assert Enum.sort(resolve_identity({:user, 7})) ==
-               Enum.sort([{"instance-a", pid_a}, {"instance-b", pid_b}])
+      result = resolve_identity({:user, 7})
+
+      assert Enum.sort(result) == Enum.sort([{"instance-a", pid_a}, {"instance-b", pid_b}])
     end
 
     test "resolves {:session, session_id} to every entry whose session_id matches" do
@@ -563,8 +564,9 @@ defmodule Hologram.Realtime.SubscriptionRegistryTest do
       update_identity("instance-b", "session-1", 8)
       update_identity("instance-c", "session-2", 9)
 
-      assert Enum.sort(resolve_identity({:session, "session-1"})) ==
-               Enum.sort([{"instance-a", pid_a}, {"instance-b", pid_b}])
+      result = resolve_identity({:session, "session-1"})
+
+      assert Enum.sort(result) == Enum.sort([{"instance-a", pid_a}, {"instance-b", pid_b}])
     end
 
     test "returns [] when no entries match the user_id" do
