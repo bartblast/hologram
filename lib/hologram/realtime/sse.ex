@@ -112,22 +112,7 @@ defmodule Hologram.Realtime.SSE do
       {:drop_sub_receipts, keys} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
-
-        {_actually_dropped, zero_crossing_channels} =
-          SubscriptionRegistry.drop_keys(instance_id, keys)
-
-        Enum.each(zero_crossing_channels, fn channel ->
-          topic = channel_topic(channel)
-          Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
-        end)
-
-        id = System.unique_integer([:positive, :monotonic])
-        chunk_data = encode_drop_sub_receipts_envelope(id, keys)
-
-        case Plug.Conn.chunk(conn, chunk_data) do
-          {:ok, conn} -> {:cont, conn}
-          {:error, _reason} -> {:halt, conn}
-        end
+        drop_keys_and_emit(conn, instance_id, keys)
 
       :heartbeat ->
         case Plug.Conn.chunk(conn, ":\n\n") do
@@ -359,6 +344,24 @@ defmodule Hologram.Realtime.SSE do
         {:ok, conn} -> {:cont, conn}
         {:error, _reason} -> {:halt, conn}
       end
+    end
+  end
+
+  defp drop_keys_and_emit(conn, instance_id, keys) do
+    {_actually_dropped, zero_crossing_channels} =
+      SubscriptionRegistry.drop_keys(instance_id, keys)
+
+    Enum.each(zero_crossing_channels, fn channel ->
+      topic = channel_topic(channel)
+      Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
+    end)
+
+    id = System.unique_integer([:positive, :monotonic])
+    chunk_data = encode_drop_sub_receipts_envelope(id, keys)
+
+    case Plug.Conn.chunk(conn, chunk_data) do
+      {:ok, conn} -> {:cont, conn}
+      {:error, _reason} -> {:halt, conn}
     end
   end
 
