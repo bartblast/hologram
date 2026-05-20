@@ -8,6 +8,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Runtime.Session
 
   @heartbeat_interval_ms 15_000
+  @receipts_refresh_interval_ms 12 * 60 * 60 * 1000
 
   @doc """
   Builds the SSE event envelope for a broadcast `%Action{}`.
@@ -47,9 +48,15 @@ defmodule Hologram.Realtime.SSE do
   # Public so tests can step the pump one message at a time without spawning
   # the blocking loop.
   @doc false
-  @spec process_message(Plug.Conn.t(), non_neg_integer) ::
+  @spec process_message(Plug.Conn.t(), keyword) ::
           {:cont, Plug.Conn.t()} | {:halt, Plug.Conn.t()}
-  def process_message(conn, heartbeat_interval_ms \\ @heartbeat_interval_ms) do
+  def process_message(conn, opts \\ []) do
+    heartbeat_interval_ms =
+      Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
+
+    receipts_refresh_interval_ms =
+      Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
+
     # TODO: remaining typed message clauses (identity-change) land in future
     # phases.
     receive do
@@ -72,6 +79,10 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} ->
             {:halt, conn}
         end
+
+      :refresh_receipts ->
+        schedule_receipts_refresh(receipts_refresh_interval_ms)
+        {:cont, conn}
 
       {:sub, channel} ->
         Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
@@ -110,13 +121,22 @@ defmodule Hologram.Realtime.SSE do
         heartbeat_interval_ms =
           Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
+        receipts_refresh_interval_ms =
+          Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
+
         schedule_heartbeat(heartbeat_interval_ms)
+        schedule_receipts_refresh(receipts_refresh_interval_ms)
+
+        message_pump_opts = [
+          heartbeat_interval_ms: heartbeat_interval_ms,
+          receipts_refresh_interval_ms: receipts_refresh_interval_ms
+        ]
 
         conn
         |> attach_validated_subscriptions(validated_bindings)
         |> subscribe_to_identity_channels()
         |> prepare()
-        |> message_pump(heartbeat_interval_ms)
+        |> message_pump(message_pump_opts)
 
       :error ->
         reject_4xx(conn, "Handshake redemption failed")
@@ -210,9 +230,9 @@ defmodule Hologram.Realtime.SSE do
     |> Enum.any?(&(&1 in excluded_identities))
   end
 
-  defp message_pump(conn, heartbeat_interval_ms) do
-    case process_message(conn, heartbeat_interval_ms) do
-      {:cont, conn} -> message_pump(conn, heartbeat_interval_ms)
+  defp message_pump(conn, opts) do
+    case process_message(conn, opts) do
+      {:cont, conn} -> message_pump(conn, opts)
       {:halt, conn} -> conn
     end
   end
@@ -238,5 +258,9 @@ defmodule Hologram.Realtime.SSE do
 
   defp schedule_heartbeat(heartbeat_interval_ms) do
     Process.send_after(self(), :heartbeat, heartbeat_interval_ms)
+  end
+
+  defp schedule_receipts_refresh(interval_ms) do
+    Process.send_after(self(), :refresh_receipts, interval_ms)
   end
 end

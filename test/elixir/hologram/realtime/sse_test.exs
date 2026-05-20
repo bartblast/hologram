@@ -169,9 +169,18 @@ defmodule Hologram.Realtime.SSETest do
       conn = prepared_test_conn()
       send(self(), :heartbeat)
 
-      process_message(conn, 30)
+      process_message(conn, heartbeat_interval_ms: 30)
 
       assert_receive :heartbeat
+    end
+
+    test "schedules the next :refresh_receipts after handling one" do
+      conn = prepared_test_conn()
+      send(self(), :refresh_receipts)
+
+      process_message(conn, receipts_refresh_interval_ms: 30)
+
+      assert_receive :refresh_receipts
     end
 
     test "continues without writing on unknown messages" do
