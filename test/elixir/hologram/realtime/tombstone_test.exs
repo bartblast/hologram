@@ -98,6 +98,27 @@ defmodule Hologram.Realtime.TombstoneTest do
     end
   end
 
+  describe "handle {:purge, ...}" do
+    test "deletes the matching entry from local ETS" do
+      key = {{:user, 7}, :notifications, "c1"}
+      :ok = insert(key, @timestamp)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:purge, key})
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == []
+    end
+
+    test "is a no-op when no entry matches the key" do
+      key = {{:user, 7}, :notifications, "c1"}
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:purge, key})
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), key) == []
+    end
+  end
+
   describe "handle :sweep_expired" do
     test "deletes entries whose created_at is older than the TTL" do
       key = {{:user, 7}, :notifications, "c1"}

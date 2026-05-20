@@ -96,6 +96,13 @@ defmodule Hologram.Realtime.Tombstone do
   end
 
   @impl GenServer
+  def handle_info({:purge, key}, state) do
+    :ets.delete(@table_name, key)
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
   def handle_info(:sweep_expired, state) do
     delete_expired()
     schedule_sweep()
