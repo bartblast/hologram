@@ -72,8 +72,8 @@ defmodule Hologram.RouterTest do
                "action" => ~s'Type.atom("nil")',
                "selfEchoes" => "Type.list([])",
                "status" => 1,
-               "subDrops" => "Type.list([])",
-               "subReceipts" => "Type.list([])"
+               "subReceiptAdds" => "Type.list([])",
+               "subReceiptDrops" => "Type.list([])"
              }
     end
   end

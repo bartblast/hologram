@@ -168,21 +168,21 @@ export default class Client {
         action,
         selfEchoes: encodedSelfEchoes,
         status,
-        subDrops: encodedSubDrops,
-        subReceipts: encodedSubReceipts,
+        subReceiptAdds: encodedSubReceipts,
+        subReceiptDrops: encodedSubDrops,
       } = await response.json();
 
       if (status === 0) {
         $.#failCommand(action);
       }
 
-      const subReceipts =
+      const subReceiptAdds =
         Interpreter.evaluateJavaScriptExpression(encodedSubReceipts);
 
-      const subDrops =
+      const subReceiptDrops =
         Interpreter.evaluateJavaScriptExpression(encodedSubDrops);
 
-      App.subscriptionReceiptRegistry.merge(subReceipts, subDrops);
+      App.subscriptionReceiptRegistry.merge(subReceiptAdds, subReceiptDrops);
 
       const nextAction = Interpreter.evaluateJavaScriptExpression(action);
 

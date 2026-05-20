@@ -886,8 +886,8 @@ export default class Hologram {
       Hologram.queueSelfEchoes(mountData.selfEchoes);
 
       App.subscriptionReceiptRegistry.merge(
-        mountData.subReceipts,
-        mountData.subDrops,
+        mountData.subReceiptAdds,
+        mountData.subReceiptDrops,
       );
     }
 

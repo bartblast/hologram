@@ -1182,7 +1182,7 @@ defmodule Hologram.Template.RendererTest do
       assert String.contains?(html, "selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER")
     end
 
-    test "does not interpolate sub_drops JS" do
+    test "does not interpolate sub_receipt_adds JS" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
@@ -1192,10 +1192,10 @@ defmodule Hologram.Template.RendererTest do
       assert {html, _component_registry, _server_struct} =
                render_page(Module48, @params, @server, @opts)
 
-      assert String.contains?(html, "subDrops: $SUB_DROPS_JS_PLACEHOLDER")
+      assert String.contains?(html, "subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER")
     end
 
-    test "does not interpolate sub_receipts JS" do
+    test "does not interpolate sub_receipt_drops JS" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
@@ -1205,7 +1205,7 @@ defmodule Hologram.Template.RendererTest do
       assert {html, _component_registry, _server_struct} =
                render_page(Module48, @params, @server, @opts)
 
-      assert String.contains?(html, "subReceipts: $SUB_RECEIPTS_JS_PLACEHOLDER")
+      assert String.contains?(html, "subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER")
     end
 
     test "with DOCTYPE" do
@@ -1599,45 +1599,45 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
-  describe "interpolate_sub_drops_js/2" do
-    test "substitutes the placeholder with the encoded list of subscription drops" do
-      html = ~s'before subDrops: $SUB_DROPS_JS_PLACEHOLDER after'
-
-      sub_drops = [{:room_a, "page"}]
-
-      result = Renderer.interpolate_sub_drops_js(html, sub_drops)
-
-      assert result ==
-               ~s'before subDrops: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])]) after'
-    end
-
-    test "substitutes the placeholder with an empty list when no drops are provided" do
-      html = ~s'before subDrops: $SUB_DROPS_JS_PLACEHOLDER after'
-
-      result = Renderer.interpolate_sub_drops_js(html, [])
-
-      assert result == ~s'before subDrops: Type.list([]) after'
-    end
-  end
-
-  describe "interpolate_sub_receipts_js/2" do
+  describe "interpolate_sub_receipt_adds_js/2" do
     test "substitutes the placeholder with the encoded list of subscription receipts" do
-      html = ~s'before subReceipts: $SUB_RECEIPTS_JS_PLACEHOLDER after'
+      html = ~s'before subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER after'
 
-      sub_receipts = [{:room_a, "page", "signed-token"}]
+      sub_receipt_adds = [{:room_a, "page", "signed-token"}]
 
-      result = Renderer.interpolate_sub_receipts_js(html, sub_receipts)
+      result = Renderer.interpolate_sub_receipt_adds_js(html, sub_receipt_adds)
 
       assert result ==
-               ~s'before subReceipts: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page"), Type.bitstring("signed-token")])]) after'
+               ~s'before subReceiptAdds: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page"), Type.bitstring("signed-token")])]) after'
     end
 
     test "substitutes the placeholder with an empty list when no receipts are provided" do
-      html = ~s'before subReceipts: $SUB_RECEIPTS_JS_PLACEHOLDER after'
+      html = ~s'before subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER after'
 
-      result = Renderer.interpolate_sub_receipts_js(html, [])
+      result = Renderer.interpolate_sub_receipt_adds_js(html, [])
 
-      assert result == ~s'before subReceipts: Type.list([]) after'
+      assert result == ~s'before subReceiptAdds: Type.list([]) after'
+    end
+  end
+
+  describe "interpolate_sub_receipt_drops_js/2" do
+    test "substitutes the placeholder with the encoded list of subscription drops" do
+      html = ~s'before subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER after'
+
+      sub_receipt_drops = [{:room_a, "page"}]
+
+      result = Renderer.interpolate_sub_receipt_drops_js(html, sub_receipt_drops)
+
+      assert result ==
+               ~s'before subReceiptDrops: Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])]) after'
+    end
+
+    test "substitutes the placeholder with an empty list when no drops are provided" do
+      html = ~s'before subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER after'
+
+      result = Renderer.interpolate_sub_receipt_drops_js(html, [])
+
+      assert result == ~s'before subReceiptDrops: Type.list([]) after'
     end
   end
 end

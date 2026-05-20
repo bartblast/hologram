@@ -36,8 +36,8 @@ defmodule Hologram.UI.Runtime do
               pageModule: $PAGE_MODULE_JS_PLACEHOLDER,
               pageParams: $PAGE_PARAMS_JS_PLACEHOLDER,
               selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER,
-              subDrops: $SUB_DROPS_JS_PLACEHOLDER,
-              subReceipts: $SUB_RECEIPTS_JS_PLACEHOLDER
+              subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER,
+              subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER
             };
           };
         {/raw}

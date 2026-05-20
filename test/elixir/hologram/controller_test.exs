@@ -535,8 +535,8 @@ defmodule Hologram.ControllerTest do
                "action" => ~s'Type.atom("nil")',
                "selfEchoes" => "Type.list([])",
                "status" => 1,
-               "subDrops" => "Type.list([])",
-               "subReceipts" => "Type.list([])"
+               "subReceiptAdds" => "Type.list([])",
+               "subReceiptDrops" => "Type.list([])"
              }
     end
 
@@ -730,10 +730,10 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      %{"subReceipts" => encoded_sub_receipts} = Jason.decode!(conn.resp_body)
+      %{"subReceiptAdds" => encoded_sub_receipt_adds} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipts, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded_sub_receipts, ~s'Type.bitstring("my_target_1")')
+      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.atom("room_a")')
+      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.bitstring("my_target_1")')
     end
 
     test "embeds a drop entry in the response for each newly-dropped subscription" do
@@ -755,10 +755,10 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      %{"subDrops" => encoded_sub_drops} = Jason.decode!(conn.resp_body)
+      %{"subReceiptDrops" => encoded_sub_receipt_drops} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_drops, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded_sub_drops, ~s'Type.bitstring("my_target_1")')
+      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.atom("room_a")')
+      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.bitstring("my_target_1")')
     end
 
     test "embeds adds and drops together when a command both puts and deletes subscriptions" do
@@ -780,11 +780,14 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      %{"subDrops" => encoded_sub_drops, "subReceipts" => encoded_sub_receipts} =
+      %{
+        "subReceiptAdds" => encoded_sub_receipt_adds,
+        "subReceiptDrops" => encoded_sub_receipt_drops
+      } =
         Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipts, ~s'Type.atom("room_b")')
-      assert String.contains?(encoded_sub_drops, ~s'Type.atom("room_a")')
+      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.atom("room_b")')
+      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.atom("room_a")')
     end
 
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
@@ -1374,7 +1377,7 @@ defmodule Hologram.ControllerTest do
       assert String.contains?(conn.resp_body, "selfEchoes: Type.list([])")
     end
 
-    test "substitutes the sub_drops placeholder with each client-claimed key the new page no longer puts" do
+    test "substitutes the sub_receipt_drops placeholder with each client-claimed key the new page no longer puts" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       # Module14 puts {:room_page, "page"}, {:room_layout, "layout"},
@@ -1386,17 +1389,17 @@ defmodule Hologram.ControllerTest do
           {:room_dropped_b, "layout"}
         ])
 
-      refute String.contains?(conn.resp_body, "$SUB_DROPS_JS_PLACEHOLDER")
+      refute String.contains?(conn.resp_body, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER")
       assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_a")')
       assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_b")')
     end
 
-    test "substitutes the sub_receipts placeholder with a receipt for each binding put during init/3" do
+    test "substitutes the sub_receipt_adds placeholder with a receipt for each binding put during init/3" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn = render_page_with_instance(Module14, "test-instance-id")
 
-      refute String.contains?(conn.resp_body, "$SUB_RECEIPTS_JS_PLACEHOLDER")
+      refute String.contains?(conn.resp_body, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER")
       assert String.contains?(conn.resp_body, ~s'Type.atom("room_page")')
       assert String.contains?(conn.resp_body, ~s'Type.atom("room_layout")')
       assert String.contains?(conn.resp_body, ~s'Type.atom("room_component")')

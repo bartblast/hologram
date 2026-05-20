@@ -38,23 +38,23 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
-  Substitutes the `$SUB_DROPS_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of subscription drops supplied by the caller.
+  Substitutes the `$SUB_RECEIPT_ADDS_JS_PLACEHOLDER` token in the given HTML with
+  the encoded list of subscription receipts supplied by the caller.
   """
-  @spec interpolate_sub_drops_js(String.t(), list) :: String.t()
-  def interpolate_sub_drops_js(html, sub_drops) do
-    sub_drops_js = Encoder.encode_term!(sub_drops)
-    String.replace(html, "$SUB_DROPS_JS_PLACEHOLDER", sub_drops_js)
+  @spec interpolate_sub_receipt_adds_js(String.t(), list) :: String.t()
+  def interpolate_sub_receipt_adds_js(html, sub_receipt_adds) do
+    sub_receipt_adds_js = Encoder.encode_term!(sub_receipt_adds)
+    String.replace(html, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER", sub_receipt_adds_js)
   end
 
   @doc """
-  Substitutes the `$SUB_RECEIPTS_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of subscription receipts supplied by the caller.
+  Substitutes the `$SUB_RECEIPT_DROPS_JS_PLACEHOLDER` token in the given HTML with
+  the encoded list of subscription drops supplied by the caller.
   """
-  @spec interpolate_sub_receipts_js(String.t(), list) :: String.t()
-  def interpolate_sub_receipts_js(html, sub_receipts) do
-    sub_receipts_js = Encoder.encode_term!(sub_receipts)
-    String.replace(html, "$SUB_RECEIPTS_JS_PLACEHOLDER", sub_receipts_js)
+  @spec interpolate_sub_receipt_drops_js(String.t(), list) :: String.t()
+  def interpolate_sub_receipt_drops_js(html, sub_receipt_drops) do
+    sub_receipt_drops_js = Encoder.encode_term!(sub_receipt_drops)
+    String.replace(html, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER", sub_receipt_drops_js)
   end
 
   @doc """

@@ -585,8 +585,8 @@ describe("Client", () => {
           action: "Type.nil()",
           selfEchoes: "Type.list([])",
           status: 1,
-          subDrops: "Type.list([])",
-          subReceipts: "Type.list([])",
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
         }),
       };
 
@@ -627,8 +627,8 @@ describe("Client", () => {
           action: 'Type.actionStruct({name: Type.atom("dummy_action")})',
           selfEchoes: "Type.list([])",
           status: 1,
-          subDrops: "Type.list([])",
-          subReceipts: "Type.list([])",
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
         }),
       };
 
@@ -651,8 +651,8 @@ describe("Client", () => {
           action: "Type.nil()",
           selfEchoes: "Type.list([])",
           status: 1,
-          subDrops: "Type.list([])",
-          subReceipts: "Type.list([])",
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
         }),
       };
 
@@ -723,8 +723,8 @@ describe("Client", () => {
           selfEchoes:
             'Type.list([Type.actionStruct({name: Type.atom("self_echo_a")}), Type.actionStruct({name: Type.atom("self_echo_b")})])',
           status: 1,
-          subDrops: "Type.list([])",
-          subReceipts: "Type.list([])",
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
         }),
       };
 
@@ -753,8 +753,8 @@ describe("Client", () => {
           action: "Type.nil()",
           selfEchoes: "Type.list([])",
           status: 1,
-          subDrops: "Type.list([])",
-          subReceipts: "Type.list([])",
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
         }),
       };
 
@@ -773,8 +773,8 @@ describe("Client", () => {
           selfEchoes:
             'Type.list([Type.actionStruct({name: Type.atom("self_echo")})])',
           status: 1,
-          subDrops: "Type.list([])",
-          subReceipts: "Type.list([])",
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
         }),
       };
 
@@ -819,7 +819,7 @@ describe("Client", () => {
       sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
-    it("merges adds and drops from the subReceipts and subDrops fields into the registry", async () => {
+    it("merges adds and drops from the subReceiptAdds and subReceiptDrops fields into the registry", async () => {
       App.subscriptionReceiptRegistry.entries.clear();
 
       App.subscriptionReceiptRegistry.merge(
@@ -839,10 +839,10 @@ describe("Client", () => {
           action: "Type.nil()",
           selfEchoes: "Type.list([])",
           status: 1,
-          subDrops:
-            'Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])',
-          subReceipts:
+          subReceiptAdds:
             'Type.list([Type.tuple([Type.atom("room_b"), Type.bitstring("page"), Type.bitstring("token-b")])])',
+          subReceiptDrops:
+            'Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])',
         }),
       };
 

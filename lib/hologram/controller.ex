@@ -157,7 +157,7 @@ defmodule Hologram.Controller do
       # failure (GenServer.call timeout) leaves no half-done state.
       # flush_broadcasts is effectively infallible, so once apply succeeds both
       # side effects land.
-      {sub_receipts, sub_drops} = apply_subscription_deltas(processed_server_struct)
+      {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
 
       # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
       self_echoes = Realtime.get_self_echoes(processed_server_struct)
@@ -168,8 +168,8 @@ defmodule Hologram.Controller do
       command_status = if encode_status == :ok, do: 1, else: 0
 
       {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
-      {:ok, encoded_sub_receipts} = Encoder.encode_term(sub_receipts)
-      {:ok, encoded_sub_drops} = Encoder.encode_term(sub_drops)
+      {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
+      {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
 
       conn
       |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
@@ -178,8 +178,8 @@ defmodule Hologram.Controller do
         action: encoded_next_action,
         selfEchoes: encoded_self_echoes,
         status: command_status,
-        subDrops: encoded_sub_drops,
-        subReceipts: encoded_sub_receipts
+        subReceiptAdds: encoded_sub_receipt_adds,
+        subReceiptDrops: encoded_sub_receipt_drops
       })
       |> Plug.Conn.halt()
     else
@@ -254,7 +254,7 @@ defmodule Hologram.Controller do
     # Transition subscriptions before flushing broadcasts so a registry failure
     # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
     # effectively infallible, so once transition succeeds both side effects land.
-    {sub_receipts, sub_drops} =
+    {sub_receipt_adds, sub_receipt_drops} =
       transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
     # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
@@ -268,8 +268,8 @@ defmodule Hologram.Controller do
     final_html =
       rendered_html
       |> Renderer.interpolate_self_echoes_js(self_echoes)
-      |> Renderer.interpolate_sub_drops_js(sub_drops)
-      |> Renderer.interpolate_sub_receipts_js(sub_receipts)
+      |> Renderer.interpolate_sub_receipt_adds_js(sub_receipt_adds)
+      |> Renderer.interpolate_sub_receipt_drops_js(sub_receipt_drops)
 
     conn
     |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
