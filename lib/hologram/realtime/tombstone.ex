@@ -90,6 +90,14 @@ defmodule Hologram.Realtime.Tombstone do
     {:noreply, state}
   end
 
+  @impl GenServer
+  def handle_info({:sync_request, requester_pid}, state) do
+    entries = :ets.tab2list(@table_name)
+    send(requester_pid, {:sync_reply, entries})
+
+    {:noreply, state}
+  end
+
   defp delete_expired do
     cutoff = System.system_time(:millisecond) - @tombstone_ttl_ms
 

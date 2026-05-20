@@ -110,6 +110,23 @@ defmodule Hologram.Realtime.TombstoneTest do
     end
   end
 
+  describe "handle {:sync_request, ...}" do
+    test "replies to the requester via direct send/2 with the current ETS dump" do
+      key = {{:user, 7}, :notifications, "c1"}
+      :ok = insert(key, @timestamp)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:sync_request, self()})
+
+      assert_receive {:sync_reply, [{^key, @timestamp}]}
+    end
+
+    test "replies with an empty list when the ETS table is empty" do
+      Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic(), {:sync_request, self()})
+
+      assert_receive {:sync_reply, []}
+    end
+  end
+
   describe "start_link/1" do
     test "starts under a supervisor and registers itself by module name" do
       assert process_name_registered?(Tombstone)
