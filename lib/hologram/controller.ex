@@ -230,6 +230,49 @@ defmodule Hologram.Controller do
     handle_page_request(conn_with_csrf_token, page_module, params, [], renderer_opts)
   end
 
+  @doc """
+  Handles the SSE instance-closing HTTP POST request.
+
+  Runs the auth gate and an identity cross-check against the subscription
+  registry, then purges every tombstone under `{:instance, instance_id}`
+  cluster-wide.
+
+  Response status:
+
+    * `401` when the request has no session.
+    * `403` when a registry entry exists for `instance_id` and its identity
+      does not match the caller's `{session_id, user_id}`.
+    * `200` on a successful purge (registry entry matches OR no entry).
+  """
+  @spec handle_instance_closing_request(Plug.Conn.t()) :: Plug.Conn.t()
+  def handle_instance_closing_request(initial_conn) do
+    conn = PlugConnUtils.init_conn(initial_conn)
+
+    case Session.get_session_id(conn) do
+      nil ->
+        conn
+        |> Plug.Conn.send_resp(401, "Unauthorized")
+        |> Plug.Conn.halt()
+
+      session_id ->
+        current_user_id = Session.get_user_id(conn)
+        %{"instance_id" => instance_id} = conn.body_params
+        identity = SubscriptionRegistry.identity_of(instance_id)
+
+        if identity == nil or identity == {session_id, current_user_id} do
+          Tombstone.purge_for_instance(instance_id)
+
+          conn
+          |> Plug.Conn.send_resp(200, "")
+          |> Plug.Conn.halt()
+        else
+          conn
+          |> Plug.Conn.send_resp(403, "Forbidden")
+          |> Plug.Conn.halt()
+        end
+    end
+  end
+
   # Public for tests so they can drive a page render with a known instance_id
   # without going through the auto-generating `handle_initial_page_request/2`.
   @doc false
