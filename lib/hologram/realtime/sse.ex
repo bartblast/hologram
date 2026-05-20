@@ -89,6 +89,11 @@ defmodule Hologram.Realtime.SSE do
       {:identity_changed, new_session_id, new_user_id} ->
         maybe_reconcile_identity_subs(:session, session_id, new_session_id)
         maybe_reconcile_identity_subs(:user, user_id, new_user_id)
+
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+        SubscriptionRegistry.update_identity(instance_id, new_session_id, new_user_id)
+
         {:cont, conn, new_session_id, new_user_id}
 
       :refresh_receipts ->

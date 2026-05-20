@@ -196,7 +196,7 @@ defmodule Hologram.Realtime.SSETest do
     end
 
     test "carries the new identity in the return tuple on {:identity_changed, ...}" do
-      conn = prepared_test_conn()
+      conn = Plug.Conn.fetch_query_params(prepared_test_conn())
       send(self(), {:identity_changed, "new-session-id", 7})
 
       assert {:cont, ^conn, "new-session-id", 7} =
@@ -263,6 +263,19 @@ defmodule Hologram.Realtime.SSETest do
 
       refute_receive :hello_old
       assert_receive :hello_new
+    end
+
+    test "updates the registry's identity record on {:identity_changed, ...}" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(instance_id, "old-session", 7, self(), [])
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), {:identity_changed, "new-session", 8})
+
+      process_message(conn, "old-session", 7)
+
+      assert SubscriptionRegistry.identity_of(instance_id) == {"new-session", 8}
     end
 
     test "pushes a refresh_sub_receipts SSE event when the instance has bindings" do
