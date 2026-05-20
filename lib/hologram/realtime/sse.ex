@@ -198,6 +198,31 @@ defmodule Hologram.Realtime.SSE do
     end)
   end
 
+  # Public so tests can exercise the identity-topic diff without entering the
+  # blocking message-pump loop.
+  @doc false
+  @spec maybe_reconcile_identity_subs(:session | :user, term | nil, term | nil) :: :ok
+  def maybe_reconcile_identity_subs(kind, old, new) when kind in [:session, :user] and old == new,
+    do: :ok
+
+  def maybe_reconcile_identity_subs(kind, nil, new) when kind in [:session, :user] do
+    new_topic = Realtime.identity_topic(kind, new)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, new_topic)
+  end
+
+  def maybe_reconcile_identity_subs(kind, old, nil) when kind in [:session, :user] do
+    old_topic = Realtime.identity_topic(kind, old)
+    Phoenix.PubSub.unsubscribe(Hologram.PubSub, old_topic)
+  end
+
+  def maybe_reconcile_identity_subs(kind, old, new) when kind in [:session, :user] do
+    old_topic = Realtime.identity_topic(kind, old)
+    new_topic = Realtime.identity_topic(kind, new)
+
+    Phoenix.PubSub.unsubscribe(Hologram.PubSub, old_topic)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, new_topic)
+  end
+
   # Public so tests can exercise subscription wiring without entering the
   # blocking message-pump loop.
   @doc false

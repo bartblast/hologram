@@ -479,6 +479,66 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "maybe_reconcile_identity_subs/3" do
+    test "is a no-op when both old and new are nil" do
+      :ok = maybe_reconcile_identity_subs(:user, nil, nil)
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.identity_topic(:user, "anything"),
+        :hello
+      )
+
+      refute_receive :hello
+    end
+
+    test "is a no-op when old and new are the same value" do
+      :ok = maybe_reconcile_identity_subs(:session, "session-a", "session-a")
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.identity_topic(:session, "session-a"),
+        :hello
+      )
+
+      refute_receive :hello
+    end
+
+    test "subscribes to the new topic when old is nil and new is non-nil" do
+      maybe_reconcile_identity_subs(:user, nil, 7)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, Realtime.identity_topic(:user, 7), :hello)
+
+      assert_receive :hello
+    end
+
+    test "unsubscribes from the old topic when old is non-nil and new is nil" do
+      old_topic = Realtime.identity_topic(:user, 7)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      maybe_reconcile_identity_subs(:user, 7, nil)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello)
+
+      refute_receive :hello
+    end
+
+    test "unsubscribes from the old topic and subscribes to the new topic when both differ" do
+      old_topic = Realtime.identity_topic(:user, 7)
+      new_topic = Realtime.identity_topic(:user, 8)
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      maybe_reconcile_identity_subs(:user, 7, 8)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
+
+      refute_receive :hello_old
+      assert_receive :hello_new
+    end
+  end
+
   describe "subscribe_to_identity_channels/1" do
     test "subscribes to the instance channel" do
       conn = subscribe_to_identity_channels(conn_with_instance_id())
