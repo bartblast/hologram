@@ -4,6 +4,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Realtime.Handshake
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
 
   @heartbeat_interval_ms 15_000
@@ -96,7 +97,7 @@ defmodule Hologram.Realtime.SSE do
 
     claimed = claimed_identity(conn)
 
-    with {:ok, _validated_bindings, ^claimed} <-
+    with {:ok, validated_bindings, ^claimed} <-
            Handshake.redeem(handshake_id, server_wait_ms) do
       heartbeat_interval_ms =
         Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
@@ -104,6 +105,7 @@ defmodule Hologram.Realtime.SSE do
       schedule_heartbeat(heartbeat_interval_ms)
 
       conn
+      |> attach_validated_subscriptions(validated_bindings)
       |> subscribe_to_identity_channels()
       |> prepare()
       |> message_pump(heartbeat_interval_ms)
@@ -111,6 +113,34 @@ defmodule Hologram.Realtime.SSE do
       :error -> reject_4xx(conn, "Handshake redemption failed")
       {:ok, _bindings, _stashed} -> reject_4xx(conn, "Handshake identity mismatch")
     end
+  end
+
+  # Public so tests can exercise the registry attach + per-channel PubSub
+  # subscribes without entering the blocking message-pump loop.
+  @doc false
+  @spec attach_validated_subscriptions(Plug.Conn.t(), [{{any, String.t()}, term | nil}]) ::
+          Plug.Conn.t()
+  def attach_validated_subscriptions(initial_conn, validated_bindings) do
+    conn = Plug.Conn.fetch_query_params(initial_conn)
+
+    instance_id = conn.query_params["instance_id"]
+    session_id = Session.get_session_id(conn)
+    user_id = Session.get_user_id(conn)
+
+    validated_channels =
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        session_id,
+        user_id,
+        self(),
+        validated_bindings
+      )
+
+    Enum.each(validated_channels, fn channel ->
+      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
+    end)
+
+    conn
   end
 
   # Public so tests can exercise subscription wiring without entering the
@@ -131,6 +161,19 @@ defmodule Hologram.Realtime.SSE do
     end
 
     conn
+  end
+
+  defp channel_topic(channel) when is_atom(channel) do
+    "hologram:channel:#{channel}"
+  end
+
+  defp channel_topic(channel) when is_tuple(channel) do
+    parts =
+      channel
+      |> Tuple.to_list()
+      |> Enum.join(":")
+
+    "hologram:channel:#{parts}"
   end
 
   defp claimed_identity(conn) do

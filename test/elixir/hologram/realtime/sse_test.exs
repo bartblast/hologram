@@ -6,6 +6,7 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Realtime.Handshake
+  alias Hologram.Realtime.SubscriptionRegistry
 
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
@@ -14,7 +15,19 @@ defmodule Hologram.Realtime.SSETest do
     wait_for_process_cleanup(Handshake)
     start_supervised!({Handshake, boot_sync_timeout_ms: 0})
 
+    wait_for_process_cleanup(SubscriptionRegistry)
+    start_supervised!(SubscriptionRegistry)
+
     :ok
+  end
+
+  defp conn_with_identities(opts) do
+    instance_id = Keyword.fetch!(opts, :instance_id)
+    session = build_session(opts)
+
+    :get
+    |> Plug.Test.conn("/?instance_id=#{instance_id}")
+    |> Plug.Test.init_test_session(session)
   end
 
   defp conn_with_instance_id(session \\ %{}) do
@@ -260,6 +273,85 @@ defmodule Hologram.Realtime.SSETest do
       {:cont, updated_conn} = process_message(conn, 30_000)
 
       assert updated_conn.resp_body =~ "event: action\n"
+    end
+  end
+
+  describe "attach_validated_subscriptions/2" do
+    test "round-trips the validated bindings into the registry" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = conn_with_identities(instance_id: instance_id)
+
+      bindings = [{{:notifications, "c1"}, nil}]
+
+      attach_validated_subscriptions(conn, bindings)
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{{:notifications, "c1"} => nil}
+    end
+
+    test "subscribes to every distinct validated channel" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = conn_with_identities(instance_id: instance_id)
+
+      bindings = [
+        {{:notifications, "c1"}, nil},
+        {{{:room, "lobby"}, "c2"}, nil}
+      ]
+
+      attach_validated_subscriptions(conn, bindings)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello_atom)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:room:lobby", :hello_tuple)
+
+      assert_receive :hello_atom
+      assert_receive :hello_tuple
+    end
+
+    test "subscribes once per channel even when multiple cids bind to the same channel" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = conn_with_identities(instance_id: instance_id)
+
+      bindings = [
+        {{:notifications, "c1"}, nil},
+        {{:notifications, "c2"}, nil},
+        {{:notifications, "c3"}, nil}
+      ]
+
+      attach_validated_subscriptions(conn, bindings)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+
+      assert_receive :hello
+      refute_receive :hello
+    end
+
+    test "creates a registry entry but does not subscribe when validated_bindings is empty" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = conn_with_identities(instance_id: instance_id)
+
+      attach_validated_subscriptions(conn, [])
+
+      assert SubscriptionRegistry.bindings_of(instance_id) == %{}
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+
+      refute_receive :hello
+    end
+
+    test "attaches with nil session_id and user_id when the conn has none" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      conn =
+        :get
+        |> Plug.Test.conn("/?instance_id=#{instance_id}")
+        |> Plug.Test.init_test_session(%{})
+
+      attach_validated_subscriptions(conn, [{{:notifications, "c1"}, nil}])
+
+      assert SubscriptionRegistry.identity_of(instance_id) == {nil, nil}
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+
+      assert_receive :hello
     end
   end
 
