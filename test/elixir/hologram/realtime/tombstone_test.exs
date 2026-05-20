@@ -7,6 +7,17 @@ defmodule Hologram.Realtime.TombstoneTest do
 
   @timestamp 1_700_000_000_000
 
+  defp spawn_peer(test_pid, on_sync_request) do
+    spawn_link(fn ->
+      Phoenix.PubSub.subscribe(Hologram.PubSub, gossip_topic())
+      send(test_pid, :peer_ready)
+
+      receive do
+        {:sync_request, requester_pid} -> on_sync_request.(requester_pid)
+      end
+    end)
+  end
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -195,6 +206,55 @@ defmodule Hologram.Realtime.TombstoneTest do
       :sys.get_state(Tombstone)
 
       assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
+    end
+
+    test "takes the later timestamp when multiple peers reply with the same key at different timestamps" do
+      :ok = stop_supervised(Tombstone)
+
+      test_pid = self()
+      key = {{:user, 7}, :notifications, "c1"}
+
+      spawn_peer(test_pid, fn requester_pid ->
+        send(requester_pid, {:sync_reply, [{key, @timestamp}]})
+      end)
+
+      spawn_peer(test_pid, fn requester_pid ->
+        send(requester_pid, {:sync_reply, [{key, @timestamp + 10}]})
+      end)
+
+      assert_receive :peer_ready
+      assert_receive :peer_ready
+
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 200})
+
+      assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}]
+    end
+
+    test "subsequent gossip lands in ETS after boot-sync completes" do
+      :ok = stop_supervised(Tombstone)
+
+      test_pid = self()
+      synced_key = {{:user, 7}, :notifications, "c1"}
+      gossip_key = {{:user, 7}, :notifications, "c2"}
+
+      spawn_peer(test_pid, fn requester_pid ->
+        send(requester_pid, {:sync_reply, [{synced_key, @timestamp}]})
+      end)
+
+      assert_receive :peer_ready
+
+      start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        gossip_topic(),
+        {:insert, gossip_key, @timestamp + 1}
+      )
+
+      :sys.get_state(Tombstone)
+
+      assert :ets.lookup(ets_table_name(), synced_key) == [{synced_key, @timestamp}]
+      assert :ets.lookup(ets_table_name(), gossip_key) == [{gossip_key, @timestamp + 1}]
     end
   end
 end
