@@ -28,6 +28,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module19
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module20
+  alias Hologram.Test.Fixtures.Controller.Module21
+  alias Hologram.Test.Fixtures.Controller.Module22
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
@@ -1433,6 +1435,8 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module18, :dummy_module_18_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module19, :dummy_module_19_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module20, :dummy_module_20_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module22, :dummy_module_22_digest)
 
       :ok
     end
@@ -1546,6 +1550,74 @@ defmodule Hologram.ControllerTest do
       # The fake key never lands in the canonical bindings - adds come from
       # init/3 only, not from the client's claimed list.
       assert SubscriptionRegistry.bindings_of("test-instance-id") == %{}
+    end
+
+    test "broadcasts {:identity_changed, ...} on the pre session topic when init/3 changes identity" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.identity_topic(:session, session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+      |> Plug.Conn.fetch_cookies()
+      |> handle_page_request(Module21, %{}, [],
+        initial_page?: true,
+        instance_id: "test-instance-id",
+        csrf_token: @masked_csrf_token
+      )
+
+      assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when init/3 leaves identity unchanged" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.identity_topic(:session, session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+      |> Plug.Conn.fetch_cookies()
+      |> handle_page_request(Module14, %{}, [],
+        initial_page?: true,
+        instance_id: "test-instance-id",
+        csrf_token: @masked_csrf_token
+      )
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when init/3 changes identity but raises" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.identity_topic(:session, session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      assert_raise RuntimeError, "boom", fn ->
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module22, %{}, [],
+          initial_page?: true,
+          instance_id: "test-instance-id",
+          csrf_token: @masked_csrf_token
+        )
+      end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
     end
   end
 

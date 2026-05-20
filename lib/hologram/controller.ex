@@ -259,6 +259,8 @@ defmodule Hologram.Controller do
     {sub_receipt_adds, sub_receipt_drops} =
       transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
+    Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
+
     # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
     # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
     # this Realtime-domain computation lives in the controller; substituting
