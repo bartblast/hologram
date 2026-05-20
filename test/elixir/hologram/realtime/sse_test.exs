@@ -285,6 +285,18 @@ defmodule Hologram.Realtime.SSETest do
 
       assert_receive :hello
     end
+
+    test "unsubscribes from the channel's PubSub topic on {:unsub, channel}" do
+      conn = prepared_test_conn()
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:notifications")
+      send(self(), {:unsub, :notifications})
+
+      {:cont, _updated_conn} = process_message(conn)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+
+      refute_receive :hello
+    end
   end
 
   describe "attach_validated_subscriptions/2" do

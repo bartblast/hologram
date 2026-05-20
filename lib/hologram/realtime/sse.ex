@@ -50,8 +50,8 @@ defmodule Hologram.Realtime.SSE do
   @spec process_message(Plug.Conn.t(), non_neg_integer) ::
           {:cont, Plug.Conn.t()} | {:halt, Plug.Conn.t()}
   def process_message(conn, heartbeat_interval_ms \\ @heartbeat_interval_ms) do
-    # TODO: remaining typed message clauses (unsub, identity-change) land in
-    # future phases.
+    # TODO: remaining typed message clauses (identity-change) land in future
+    # phases.
     receive do
       :heartbeat ->
         case Plug.Conn.chunk(conn, ":\n\n") do
@@ -68,6 +68,10 @@ defmodule Hologram.Realtime.SSE do
 
       {:sub, channel} ->
         Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
+        {:cont, conn}
+
+      {:unsub, channel} ->
+        Phoenix.PubSub.unsubscribe(Hologram.PubSub, channel_topic(channel))
         {:cont, conn}
 
       {:broadcast_action, %Action{} = action, excluded_identities} ->
