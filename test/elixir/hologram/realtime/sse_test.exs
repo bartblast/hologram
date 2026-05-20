@@ -194,6 +194,37 @@ defmodule Hologram.Realtime.SSETest do
       assert_receive :refresh_receipts
     end
 
+    test "pushes a refresh_sub_receipts SSE event when the instance has bindings" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{:notifications, "c1"}, nil}]
+      )
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), :refresh_receipts)
+
+      {:cont, updated_conn} = process_message(conn)
+
+      assert updated_conn.resp_body =~ "event: refresh_sub_receipts\nid: "
+      assert updated_conn.resp_body =~ "\ndata: "
+    end
+
+    test "writes nothing on :refresh_receipts when the instance has no bindings" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      send(self(), :refresh_receipts)
+
+      {:cont, updated_conn} = process_message(conn)
+
+      assert updated_conn.resp_body == ""
+    end
+
     test "continues without writing on unknown messages" do
       conn = prepared_test_conn()
       send(self(), :some_unknown_message)

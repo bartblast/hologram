@@ -86,8 +86,14 @@ defmodule Hologram.Realtime.SSE do
         end
 
       :refresh_receipts ->
-        schedule_receipts_refresh(receipts_refresh_interval_ms)
-        {:cont, conn}
+        case dispatch_receipts_refresh(conn) do
+          {:cont, conn} ->
+            schedule_receipts_refresh(receipts_refresh_interval_ms)
+            {:cont, conn}
+
+          {:halt, conn} ->
+            {:halt, conn}
+        end
 
       {:sub, channel} ->
         Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
@@ -238,6 +244,24 @@ defmodule Hologram.Realtime.SSE do
     case Plug.Conn.chunk(conn, encode_action_envelope(id, action)) do
       {:ok, conn} -> {:cont, conn}
       {:error, _reason} -> {:halt, conn}
+    end
+  end
+
+  defp dispatch_receipts_refresh(initial_conn) do
+    conn = Plug.Conn.fetch_query_params(initial_conn)
+    instance_id = conn.query_params["instance_id"]
+    bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+
+    if map_size(bindings) == 0 do
+      {:cont, conn}
+    else
+      receipts = build_refresh_receipts(instance_id, bindings)
+      id = System.unique_integer([:positive, :monotonic])
+
+      case Plug.Conn.chunk(conn, encode_refresh_sub_receipts_envelope(id, receipts)) do
+        {:ok, conn} -> {:cont, conn}
+        {:error, _reason} -> {:halt, conn}
+      end
     end
   end
 
