@@ -10,6 +10,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Runtime.Session
 
   @heartbeat_interval_ms 15_000
+  @max_heap_size_words 1_000_000
   @receipts_refresh_interval_ms 12 * 60 * 60 * 1000
 
   @doc """
@@ -195,6 +196,8 @@ defmodule Hologram.Realtime.SSE do
 
     case Handshake.redeem(handshake_id, server_wait_ms) do
       {:ok, validated_bindings, ^claimed} ->
+        configure_backpressure_safety_net()
+
         heartbeat_interval_ms =
           Keyword.get(opts, :heartbeat_interval_ms, @heartbeat_interval_ms)
 
@@ -320,6 +323,19 @@ defmodule Hologram.Realtime.SSE do
       Session.get_session_id(conn),
       Session.get_user_id(conn)
     }
+  end
+
+  # Caps the SSE process's heap so a slow consumer can't bloat the BEAM by
+  # accumulating broadcasts in its mailbox. Depends on the default `:on_heap`
+  # mailbox - do NOT switch the SSE process to `message_queue_data: :off_heap`
+  # without revisiting this guard, since off-heap message data is not counted
+  # against `:max_heap_size`.
+  defp configure_backpressure_safety_net do
+    Process.flag(:max_heap_size, %{
+      size: @max_heap_size_words,
+      kill: true,
+      error_logger: true
+    })
   end
 
   defp dispatch_broadcast(conn, action) do

@@ -1056,5 +1056,18 @@ defmodule Hologram.Realtime.SSETest do
 
       refute Process.alive?(pid)
     end
+
+    test "configures the SSE process's max_heap_size flag" do
+      conn = conn_with_instance_id()
+      pid = spawn(fn -> stream(conn) end)
+      Process.sleep(50)
+
+      {:max_heap_size, settings} = Process.info(pid, :max_heap_size)
+      assert settings.size == 1_000_000
+      assert settings.kill == true
+      assert settings.error_logger == true
+
+      Process.exit(pid, :kill)
+    end
   end
 end
