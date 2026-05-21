@@ -796,6 +796,7 @@ export default class Hologram {
 
     await $.#restoreEts();
 
+    App.maybeLoadInstanceId();
     Client.connect(false);
     Sse.connect();
 
@@ -809,8 +810,6 @@ export default class Hologram {
     $.#pendingJsInteropActions = globalThis.Hologram._pendingJsInteropActions;
     globalThis.Hologram.dispatchAction = $.dispatchAction;
     delete globalThis.Hologram._pendingJsInteropActions;
-
-    App.maybeLoadInstanceId();
 
     Hologram.#isInitiated = true;
   }
