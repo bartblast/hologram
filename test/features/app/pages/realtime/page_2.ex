@@ -26,7 +26,7 @@ defmodule HologramFeatureTests.Realtime.Page2 do
     ~HOLO"""
     <p>Channel 1: <strong id="received-1">{@received_1}</strong></p>
     <p>Channel 2: <strong id="received-2">{@received_2}</strong></p>
-    <button $click={command: :unsubscribe}> Unsubscribe </button>
+    <button $click={command: :unsubscribe_and_broadcast}> Unsubscribe and broadcast </button>
     """
   end
 
@@ -38,7 +38,10 @@ defmodule HologramFeatureTests.Realtime.Page2 do
     put_state(component, :received_2, params[:message])
   end
 
-  def command(:unsubscribe, _params, server) do
-    delete_subscription(server, @channel_1)
+  def command(:unsubscribe_and_broadcast, _params, server) do
+    server
+    |> delete_subscription(@channel_1)
+    |> put_broadcast(@channel_1, :show_1, message: "delivered")
+    |> put_broadcast(@channel_2, :show_2, message: "delivered")
   end
 end
