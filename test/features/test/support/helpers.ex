@@ -91,7 +91,8 @@ defmodule HologramFeatureTests.Helpers do
     session
     |> wait_for_path(path)
     |> wait_for_page_mounting(page_module, opts)
-    |> wait_for_server_connection()
+    |> wait_for_ws_connection()
+    |> wait_for_sse_connection()
   end
 
   def assert_public_comment(session, comment) do
@@ -289,7 +290,8 @@ defmodule HologramFeatureTests.Helpers do
     session
     |> Browser.visit(path)
     |> wait_for_page_mounting(page_module)
-    |> wait_for_server_connection()
+    |> wait_for_ws_connection()
+    |> wait_for_sse_connection()
   end
 
   @doc """
@@ -451,17 +453,32 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
-  defp wait_for_server_connection(session, start_time \\ nil) do
+  defp wait_for_sse_connection(session, start_time \\ nil) do
     start_time = start_time || current_time()
 
     callback = fn connected? ->
       if !connected? && !timed_out?(start_time) do
         :timer.sleep(100)
-        wait_for_server_connection(session, start_time)
+        wait_for_sse_connection(session, start_time)
       end
     end
 
-    script = "return globalThis.Hologram?.['connected?'];"
+    script = "return globalThis.Hologram?.['sseConnected?'];"
+
+    Browser.execute_script(session, script, [], callback)
+  end
+
+  defp wait_for_ws_connection(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    callback = fn connected? ->
+      if !connected? && !timed_out?(start_time) do
+        :timer.sleep(100)
+        wait_for_ws_connection(session, start_time)
+      end
+    end
+
+    script = "return globalThis.Hologram?.['wsConnected?'];"
 
     Browser.execute_script(session, script, [], callback)
   end
