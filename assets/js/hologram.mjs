@@ -808,7 +808,7 @@ export default class Hologram {
     globalThis.Hologram.dispatchAction = $.dispatchAction;
     delete globalThis.Hologram._pendingJsInteropActions;
 
-    App.loadInstanceId();
+    App.maybeLoadInstanceId();
 
     Hologram.#isInitiated = true;
   }

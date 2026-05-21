@@ -10,7 +10,7 @@ import App from "../../assets/js/app.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("App", () => {
-  describe("loadInstanceId()", () => {
+  describe("maybeLoadInstanceId()", () => {
     let originalGlobalHologram;
 
     beforeEach(() => {
@@ -30,19 +30,18 @@ describe("App", () => {
     it("reads instanceId from globalThis.Hologram into App.instanceId", () => {
       globalThis.Hologram = {instanceId: "abc-123"};
 
-      App.loadInstanceId();
+      App.maybeLoadInstanceId();
 
       assert.equal(App.instanceId, "abc-123");
     });
 
-    it("overwrites a previously loaded instanceId on subsequent calls", () => {
-      globalThis.Hologram = {instanceId: "first"};
-      App.loadInstanceId();
+    it("is a no-op when App.instanceId is already set", () => {
+      App.instanceId = "stashed-instance";
+      globalThis.Hologram = {instanceId: "html-embedded-instance"};
 
-      globalThis.Hologram = {instanceId: "second"};
-      App.loadInstanceId();
+      App.maybeLoadInstanceId();
 
-      assert.equal(App.instanceId, "second");
+      assert.equal(App.instanceId, "stashed-instance");
     });
   });
 });

@@ -9,7 +9,14 @@ export default class App {
 
   static subscriptionReceiptRegistry = SubscriptionReceiptRegistry;
 
-  static loadInstanceId() {
+  // Idempotent: returns early when `App.instanceId` is already set so a
+  // snapshot-restored value survives the boot sequence even though
+  // `#restorePageSnapshot` runs before `App.maybeLoadInstanceId()`.
+  static maybeLoadInstanceId() {
+    if (App.instanceId !== null) {
+      return;
+    }
+
     App.instanceId = globalThis.Hologram.instanceId;
   }
 }
