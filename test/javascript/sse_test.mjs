@@ -23,6 +23,20 @@ describe("Sse", () => {
   let mockEventSource;
   let originalInstanceId;
 
+  const binding = (channel, cid) => Type.tuple([channel, Type.bitstring(cid)]);
+
+  const receipt = (channel, cid, token) =>
+    Type.tuple([channel, Type.bitstring(cid), Type.bitstring(token)]);
+
+  const bindingA = binding(Type.atom("room_a"), "page");
+  const bindingB = binding(Type.atom("room_b"), "widget");
+
+  const encodedBindingA = Type.encodeMapKey(bindingA);
+  const encodedBindingB = Type.encodeMapKey(bindingB);
+
+  const receiptA = receipt(Type.atom("room_a"), "page", "token-a");
+  const receiptB = receipt(Type.atom("room_b"), "widget", "token-b");
+
   function stubHandshakeResponse({
     handshakeId = "test-handshake-id",
     refreshedReceipts = Type.list(),
@@ -96,21 +110,9 @@ describe("Sse", () => {
       assert.deepStrictEqual(payload, expected);
     });
 
-    it("extracts the token from each stored receipt triple", () => {
-      const tripleA = Type.tuple([
-        Type.atom("room_a"),
-        Type.bitstring("page"),
-        Type.bitstring("token-a"),
-      ]);
-
-      const tripleB = Type.tuple([
-        Type.atom("room_b"),
-        Type.bitstring("widget"),
-        Type.bitstring("token-b"),
-      ]);
-
-      SubscriptionReceiptRegistry.entries.set("key-a", tripleA);
-      SubscriptionReceiptRegistry.entries.set("key-b", tripleB);
+    it("extracts the token from each stored receipt", () => {
+      SubscriptionReceiptRegistry.entries.set("key-a", receiptA);
+      SubscriptionReceiptRegistry.entries.set("key-b", receiptB);
 
       const payload = Sse.buildHandshakePayload();
 
@@ -150,11 +152,7 @@ describe("Sse", () => {
 
     it("merges refreshed receipts into the subscription receipt registry before opening", async () => {
       const refreshedReceipts = Type.list([
-        Type.tuple([
-          Type.atom("room_a"),
-          Type.bitstring("page"),
-          Type.bitstring("fresh-token"),
-        ]),
+        receipt(Type.atom("room_a"), "page", "fresh-token"),
       ]);
 
       stubHandshakeResponse({refreshedReceipts});
@@ -191,11 +189,7 @@ describe("Sse", () => {
     it("triggers a full reload when every stored receipt was rejected", async () => {
       SubscriptionReceiptRegistry.entries.set(
         "key-a",
-        Type.tuple([
-          Type.atom("room_a"),
-          Type.bitstring("page"),
-          Type.bitstring("stale-token"),
-        ]),
+        receipt(Type.atom("room_a"), "page", "stale-token"),
       );
 
       stubHandshakeResponse({refreshedReceipts: Type.list()});
@@ -218,19 +212,11 @@ describe("Sse", () => {
     it("does not reload when at least one stored receipt was validated", async () => {
       SubscriptionReceiptRegistry.entries.set(
         "key-a",
-        Type.tuple([
-          Type.atom("room_a"),
-          Type.bitstring("page"),
-          Type.bitstring("stale-token"),
-        ]),
+        receipt(Type.atom("room_a"), "page", "stale-token"),
       );
 
       const refreshedReceipts = Type.list([
-        Type.tuple([
-          Type.atom("room_a"),
-          Type.bitstring("page"),
-          Type.bitstring("fresh-token"),
-        ]),
+        receipt(Type.atom("room_a"), "page", "fresh-token"),
       ]);
 
       stubHandshakeResponse({refreshedReceipts});
@@ -306,43 +292,21 @@ describe("Sse", () => {
   });
 
   describe("drop_sub_receipts event", () => {
-    const tripleA = Type.tuple([
-      Type.atom("room_a"),
-      Type.bitstring("page"),
-      Type.bitstring("token-a"),
-    ]);
-
-    const tripleB = Type.tuple([
-      Type.atom("room_b"),
-      Type.bitstring("widget"),
-      Type.bitstring("token-b"),
-    ]);
-
-    const encodedKeyA = Type.encodeMapKey(
-      Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
-    );
-
-    const encodedKeyB = Type.encodeMapKey(
-      Type.tuple([Type.atom("room_b"), Type.bitstring("widget")]),
-    );
-
     it("purges the named entries from the receipt registry", async () => {
-      const dropKeys = Type.list([
-        Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
-      ]);
+      const dropBindings = Type.list([bindingA]);
 
       const evalStub = stubHandshakeResponse();
-      evalStub.withArgs("encoded-drop-keys").returns(dropKeys);
+      evalStub.withArgs("encoded-drop-keys").returns(dropBindings);
 
       await Sse.connect();
 
-      SubscriptionReceiptRegistry.entries.set(encodedKeyA, tripleA);
-      SubscriptionReceiptRegistry.entries.set(encodedKeyB, tripleB);
+      SubscriptionReceiptRegistry.entries.set(encodedBindingA, receiptA);
+      SubscriptionReceiptRegistry.entries.set(encodedBindingB, receiptB);
 
       Sse.eventSource.listeners.drop_sub_receipts({data: "encoded-drop-keys"});
 
-      assert.isFalse(SubscriptionReceiptRegistry.entries.has(encodedKeyA));
-      assert.isTrue(SubscriptionReceiptRegistry.entries.has(encodedKeyB));
+      assert.isFalse(SubscriptionReceiptRegistry.entries.has(encodedBindingA));
+      assert.isTrue(SubscriptionReceiptRegistry.entries.has(encodedBindingB));
     });
 
     it("is a no-op when the keys list is empty", async () => {
@@ -351,64 +315,41 @@ describe("Sse", () => {
 
       await Sse.connect();
 
-      SubscriptionReceiptRegistry.entries.set(encodedKeyA, tripleA);
+      SubscriptionReceiptRegistry.entries.set(encodedBindingA, receiptA);
 
       Sse.eventSource.listeners.drop_sub_receipts({data: "encoded-drop-keys"});
 
-      assert.isTrue(SubscriptionReceiptRegistry.entries.has(encodedKeyA));
+      assert.isTrue(SubscriptionReceiptRegistry.entries.has(encodedBindingA));
     });
   });
 
   describe("refresh_sub_receipts event", () => {
-    const staleTripleA = Type.tuple([
-      Type.atom("room_a"),
-      Type.bitstring("page"),
-      Type.bitstring("stale-token-a"),
-    ]);
-
-    const tripleB = Type.tuple([
-      Type.atom("room_b"),
-      Type.bitstring("widget"),
-      Type.bitstring("token-b"),
-    ]);
-
-    const freshTripleA = Type.tuple([
-      Type.atom("room_a"),
-      Type.bitstring("page"),
-      Type.bitstring("fresh-token-a"),
-    ]);
-
-    const encodedKeyA = Type.encodeMapKey(
-      Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
-    );
-
-    const encodedKeyB = Type.encodeMapKey(
-      Type.tuple([Type.atom("room_b"), Type.bitstring("widget")]),
-    );
+    const staleReceiptA = receipt(Type.atom("room_a"), "page", "stale-token-a");
+    const freshReceiptA = receipt(Type.atom("room_a"), "page", "fresh-token-a");
 
     it("replaces matching entries with refreshed receipts and leaves non-matching entries intact", async () => {
-      const refreshed = Type.list([freshTripleA]);
+      const refreshed = Type.list([freshReceiptA]);
 
       const evalStub = stubHandshakeResponse();
       evalStub.withArgs("encoded-refreshed").returns(refreshed);
 
       await Sse.connect();
 
-      SubscriptionReceiptRegistry.entries.set(encodedKeyA, staleTripleA);
-      SubscriptionReceiptRegistry.entries.set(encodedKeyB, tripleB);
+      SubscriptionReceiptRegistry.entries.set(encodedBindingA, staleReceiptA);
+      SubscriptionReceiptRegistry.entries.set(encodedBindingB, receiptB);
 
       Sse.eventSource.listeners.refresh_sub_receipts({
         data: "encoded-refreshed",
       });
 
       assert.strictEqual(
-        SubscriptionReceiptRegistry.entries.get(encodedKeyA),
-        freshTripleA,
+        SubscriptionReceiptRegistry.entries.get(encodedBindingA),
+        freshReceiptA,
       );
 
       assert.strictEqual(
-        SubscriptionReceiptRegistry.entries.get(encodedKeyB),
-        tripleB,
+        SubscriptionReceiptRegistry.entries.get(encodedBindingB),
+        receiptB,
       );
     });
 
@@ -418,15 +359,15 @@ describe("Sse", () => {
 
       await Sse.connect();
 
-      SubscriptionReceiptRegistry.entries.set(encodedKeyA, staleTripleA);
+      SubscriptionReceiptRegistry.entries.set(encodedBindingA, staleReceiptA);
 
       Sse.eventSource.listeners.refresh_sub_receipts({
         data: "encoded-refreshed",
       });
 
       assert.strictEqual(
-        SubscriptionReceiptRegistry.entries.get(encodedKeyA),
-        staleTripleA,
+        SubscriptionReceiptRegistry.entries.get(encodedBindingA),
+        staleReceiptA,
       );
     });
   });
