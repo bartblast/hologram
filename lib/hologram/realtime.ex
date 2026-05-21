@@ -23,8 +23,9 @@ defmodule Hologram.Realtime do
   and is always required - the inside-handler `put_broadcast` defaults it to
   the currently-executing handler's cid, but no such context exists here.
   """
-  @spec broadcast_action(tuple, String.t(), atom, keyword | map) :: :ok
+  @spec broadcast_action(atom | tuple, String.t(), atom, keyword | map) :: :ok
   def broadcast_action(channel, cid, action_name, params \\ %{}) do
+    Channel.validate!(channel)
     publish(channel, cid, action_name, params, [])
   end
 
@@ -41,7 +42,8 @@ defmodule Hologram.Realtime do
   and is always required - the inside-handler `put_broadcast` defaults it to
   the currently-executing handler's cid, but no such context exists here.
   """
-  @spec broadcast_action_except(tuple | [tuple], tuple, String.t(), atom, keyword | map) :: :ok
+  @spec broadcast_action_except(tuple | [tuple], atom | tuple, String.t(), atom, keyword | map) ::
+          :ok
   def broadcast_action_except(excluded, channel, cid, action_name, params \\ %{})
 
   def broadcast_action_except({_kind, _id} = identity, channel, cid, action_name, params) do
@@ -50,7 +52,28 @@ defmodule Hologram.Realtime do
 
   def broadcast_action_except(excluded_identities, channel, cid, action_name, params)
       when is_list(excluded_identities) do
+    Channel.validate!(channel)
     publish(channel, cid, action_name, params, excluded_identities)
+  end
+
+  # Encodes a channel value to the cluster-wide PubSub topic string. Bare atoms
+  # become `"hologram:channel:<atom>"`; tuples join all elements with `:` so
+  # identity tuples like `{:instance, X}` round-trip through the same encoding
+  # as `identity_topic/2`. Shared by `Hologram.Realtime.publish/5` and the SSE
+  # process (subscribe/unsubscribe on PubSub topics).
+  @doc false
+  @spec channel_topic(atom | tuple) :: String.t()
+  def channel_topic(channel) when is_atom(channel) do
+    "hologram:channel:#{channel}"
+  end
+
+  def channel_topic(channel) when is_tuple(channel) do
+    parts =
+      channel
+      |> Tuple.to_list()
+      |> Enum.join(":")
+
+    "hologram:channel:#{parts}"
   end
 
   @doc """
@@ -245,9 +268,9 @@ defmodule Hologram.Realtime do
 
   defp prepend_identity(identities, kind, id), do: [{kind, id} | identities]
 
-  defp publish({kind, id}, cid, action_name, params, excluded_identities)
-       when kind in [:instance, :session, :user] and is_binary(cid) do
-    topic = identity_topic(kind, id)
+  defp publish(channel, cid, action_name, params, excluded_identities)
+       when is_binary(cid) do
+    topic = channel_topic(channel)
     action = %Action{name: action_name, params: Map.new(params), target: cid}
 
     Phoenix.PubSub.broadcast(

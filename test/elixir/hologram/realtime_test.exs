@@ -88,6 +88,12 @@ defmodule Hologram.RealtimeTest do
                         target: "layout"
                       }, []}
     end
+
+    test "raises ArgumentError when channel fails validation" do
+      assert_raise ArgumentError, fn ->
+        broadcast_action("not-a-valid-channel", "page", :ping)
+      end
+    end
   end
 
   describe "broadcast_action_except/4,5" do
@@ -113,6 +119,26 @@ defmodule Hologram.RealtimeTest do
 
       assert_receive {:broadcast_action,
                       %Action{name: :ping, params: %{text: "hi"}, target: "page"}, ^excluded}
+    end
+  end
+
+  describe "channel_topic/1" do
+    test "encodes a bare-atom channel" do
+      assert channel_topic(:notifications) == "hologram:channel:notifications"
+    end
+
+    test "encodes a 2-tuple application channel" do
+      assert channel_topic({:room, 42}) == "hologram:channel:room:42"
+    end
+
+    test "encodes a 3+-tuple application channel" do
+      assert channel_topic({:doc, "abc", "v2"}) == "hologram:channel:doc:abc:v2"
+    end
+
+    test "encodes an identity-shaped tuple consistently with identity_topic/2" do
+      assert channel_topic({:instance, "abc"}) == identity_topic(:instance, "abc")
+      assert channel_topic({:session, "s1"}) == identity_topic(:session, "s1")
+      assert channel_topic({:user, 7}) == identity_topic(:user, 7)
     end
   end
 
