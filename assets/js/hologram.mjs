@@ -347,6 +347,13 @@ export default class Hologram {
 
         throw error;
       }
+
+      // SSE must open AFTER `#mountPage()` because the handshake payload
+      // includes the receipts merged from `pageMountData.subReceiptAdds` -
+      // connecting earlier would send an empty receipts list.
+      if (Sse.eventSource === null) {
+        Sse.connect();
+      }
     });
   }
 
@@ -798,7 +805,6 @@ export default class Hologram {
 
     App.maybeLoadInstanceId();
     Client.connect(false);
-    Sse.connect();
 
     Hologram.#defineManuallyPortedFunctions();
 
