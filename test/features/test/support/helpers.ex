@@ -295,6 +295,29 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Inverse of `wait_for_subscription/2`: blocks until no `SubscriptionRegistry`
+  entry holds a subscription on the given `channel`, then returns the
+  `session` so the helper can be piped. Raises if the subscription persists
+  past `@max_wait_time`.
+  """
+  def wait_for_no_subscription(session, channel, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      !has_subscription?(channel) ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for subscription to drop on channel #{inspect(channel)}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_no_subscription(session, channel, start_time)
+    end
+  end
+
+  @doc """
   Blocks until any `SubscriptionRegistry` entry holds a subscription on the
   given `channel`, then returns the `session` so the helper can be piped.
   Raises if no subscription appears within `@max_wait_time`.
