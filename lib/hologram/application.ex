@@ -36,7 +36,9 @@ defmodule Hologram.Application do
       Hologram.Assets.PathRegistry,
       Hologram.Assets.ManifestCache,
       Hologram.Assets.PageDigestRegistry,
-      Hologram.Realtime.SubscriptionRegistry
+      Hologram.Realtime.Handshake,
+      Hologram.Realtime.SubscriptionRegistry,
+      Hologram.Realtime.Tombstone
     ]
   end
 
