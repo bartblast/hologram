@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import Logger from "./logger.mjs";
@@ -113,6 +114,7 @@ export default class Sse {
 
       $.eventSource.onopen = () => {
         $.reconnectAttempts = 0;
+        GlobalRegistry.set("sseConnected?", true);
       };
 
       // JS-driven reconnect: native EventSource auto-reconnect would re-use
@@ -123,6 +125,7 @@ export default class Sse {
       // "give up and reload" case organically once stored receipts age out.
       $.eventSource.onerror = (event) => {
         Logger.debug(`SSE error: ${event.type}`);
+        GlobalRegistry.set("sseConnected?", false);
         $.eventSource.close();
 
         $.reconnectAttempts++;

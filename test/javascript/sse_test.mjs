@@ -9,6 +9,7 @@ import {
 
 import App from "../../assets/js/app.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Logger from "../../assets/js/logger.mjs";
@@ -308,6 +309,17 @@ describe("Sse", () => {
       sinon.assert.calledOnce(mockEventSource.close);
     });
 
+    it("flips the sseConnected? signal to false on the global registry", async () => {
+      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onerror({type: "error"});
+
+      sinon.assert.calledWith(globalRegistrySetSpy, "sseConnected?", false);
+    });
+
     it("increments reconnectAttempts and schedules a delayed reconnect", async () => {
       stubHandshakeResponse();
 
@@ -366,6 +378,17 @@ describe("Sse", () => {
       Sse.eventSource.onopen({});
 
       assert.strictEqual(Sse.reconnectAttempts, 0);
+    });
+
+    it("flips the sseConnected? signal to true on the global registry", async () => {
+      const globalRegistrySetSpy = sinon.spy(GlobalRegistry, "set");
+
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      Sse.eventSource.onopen({});
+
+      sinon.assert.calledWith(globalRegistrySetSpy, "sseConnected?", true);
     });
   });
 
