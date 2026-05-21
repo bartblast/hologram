@@ -1059,13 +1059,13 @@ export default class Hologram {
       pageModule,
       pageParams,
       scrollPosition,
-      subscriptionReceiptEntries,
+      subscriptionReceipts,
     } = pageSnapshot;
 
     ComponentRegistry.populate(componentRegistryEntries);
 
     App.instanceId = instanceId;
-    App.subscriptionReceiptRegistry.populate(subscriptionReceiptEntries);
+    App.subscriptionReceiptRegistry.populate(subscriptionReceipts);
 
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
@@ -1108,7 +1108,7 @@ export default class Hologram {
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
       scrollPosition: [window.scrollX, window.scrollY],
-      subscriptionReceiptEntries: Array.from(
+      subscriptionReceipts: Array.from(
         App.subscriptionReceiptRegistry.entries.entries(),
       ),
     };
