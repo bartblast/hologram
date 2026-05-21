@@ -5,6 +5,7 @@ defmodule Hologram.Router do
   alias Hologram.Realtime.SSE
   alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.Connection
+  alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
 
   plug :match
@@ -24,6 +25,8 @@ defmodule Hologram.Router do
   end
 
   get "/hologram/sse" do
+    conn = PlugConnUtils.init_conn(conn)
+
     case Session.get_session_id(conn) do
       nil ->
         conn
