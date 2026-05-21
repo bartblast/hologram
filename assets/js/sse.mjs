@@ -91,9 +91,15 @@ export default class Sse {
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       });
 
-      // Log and let the browser auto-reconnect; JS-driven reconnect lands later.
-      $.eventSource.onerror = (event) =>
+      // JS-driven reconnect: native EventSource auto-reconnect would re-use
+      // the original URL with the now-stale single-use handshake_id and
+      // produce a 4xx loop. Close the failed connection and re-run the
+      // handshake protocol from scratch instead.
+      $.eventSource.onerror = (event) => {
         Logger.debug(`SSE error: ${event.type}`);
+        $.eventSource.close();
+        $.connect();
+      };
     } catch (error) {
       Logger.debug(`SSE handshake error: ${error}`);
     }

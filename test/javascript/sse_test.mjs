@@ -240,13 +240,35 @@ describe("Sse", () => {
       sinon.assert.calledWithExactly(loggerDebugStub, "SSE error: error");
     });
 
-    it("does not close the EventSource", async () => {
+    it("closes the failed EventSource and re-runs the handshake protocol", async () => {
       stubHandshakeResponse();
 
       await Sse.connect();
+      sinon.assert.calledOnce(globalThis.EventSource);
+
       Sse.eventSource.onerror({type: "error"});
 
-      sinon.assert.notCalled(mockEventSource.close);
+      // Yield to the microtask queue so the awaited fetch in connect() settles.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      sinon.assert.calledOnce(mockEventSource.close);
+      sinon.assert.calledTwice(globalThis.EventSource);
+    });
+
+    it("preserves the stored subscription receipts across re-handshake", async () => {
+      const refreshedReceipts = Type.list([
+        receipt(Type.atom("room_a"), "page", "fresh-token-a"),
+      ]);
+
+      stubHandshakeResponse({refreshedReceipts});
+
+      await Sse.connect();
+      assert.strictEqual(SubscriptionReceiptRegistry.entries.size, 1);
+
+      Sse.eventSource.onerror({type: "error"});
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.strictEqual(SubscriptionReceiptRegistry.entries.size, 1);
     });
   });
 
