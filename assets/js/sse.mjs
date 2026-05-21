@@ -119,6 +119,8 @@ export default class Sse {
       // the original URL with the now-stale single-use handshake_id and
       // produce a 4xx loop. Close the failed connection and re-run the
       // handshake protocol from scratch after an exponential backoff delay.
+      // No retry cap: the receipt-expiry path inside `connect()` handles the
+      // "give up and reload" case organically once stored receipts age out.
       $.eventSource.onerror = (event) => {
         Logger.debug(`SSE error: ${event.type}`);
         $.eventSource.close();
