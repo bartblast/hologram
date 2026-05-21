@@ -20,6 +20,7 @@ import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
+import Sse from "./sse.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
@@ -796,6 +797,7 @@ export default class Hologram {
     await $.#restoreEts();
 
     Client.connect(false);
+    Sse.connect();
 
     Hologram.#defineManuallyPortedFunctions();
 
