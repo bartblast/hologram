@@ -160,11 +160,13 @@ defmodule Hologram.Realtime.SSE do
         end
 
       {:sub, channel} ->
-        Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
+        topic = Realtime.channel_topic(channel)
+        Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
         {:cont, conn}
 
       {:unsub, channel} ->
-        Phoenix.PubSub.unsubscribe(Hologram.PubSub, channel_topic(channel))
+        topic = Realtime.channel_topic(channel)
+        Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
         {:cont, conn}
 
       _msg ->
@@ -245,7 +247,8 @@ defmodule Hologram.Realtime.SSE do
       )
 
     Enum.each(validated_channels, fn channel ->
-      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic(channel))
+      topic = Realtime.channel_topic(channel)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
     end)
 
     conn
@@ -311,19 +314,6 @@ defmodule Hologram.Realtime.SSE do
     conn
   end
 
-  defp channel_topic(channel) when is_atom(channel) do
-    "hologram:channel:#{channel}"
-  end
-
-  defp channel_topic(channel) when is_tuple(channel) do
-    parts =
-      channel
-      |> Tuple.to_list()
-      |> Enum.join(":")
-
-    "hologram:channel:#{parts}"
-  end
-
   defp claimed_identity(conn) do
     {
       conn.query_params["instance_id"],
@@ -366,7 +356,7 @@ defmodule Hologram.Realtime.SSE do
       SubscriptionRegistry.drop_keys(instance_id, keys)
 
     Enum.each(zero_crossing_channels, fn channel ->
-      topic = channel_topic(channel)
+      topic = Realtime.channel_topic(channel)
       Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
     end)
 
@@ -393,7 +383,7 @@ defmodule Hologram.Realtime.SSE do
       SubscriptionRegistry.drop_for_identity_change(instance_id, new_user_id)
 
     Enum.each(zero_crossing_channels, fn channel ->
-      topic = channel_topic(channel)
+      topic = Realtime.channel_topic(channel)
       Phoenix.PubSub.unsubscribe(Hologram.PubSub, topic)
     end)
 

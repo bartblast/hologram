@@ -323,7 +323,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "unsubscribes from the channel's PubSub topic" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      channel_topic = "hologram:channel:notifications"
+      topic = Realtime.channel_topic(:notifications)
 
       SubscriptionRegistry.attach_connection(
         instance_id,
@@ -333,14 +333,14 @@ defmodule Hologram.Realtime.SSETest do
         [{{:notifications, "c1"}, nil}]
       )
 
-      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       send(self(), {:drop_channel, :notifications})
 
       process_message(conn, nil, nil)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       refute_receive :hello
     end
@@ -389,7 +389,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "unsubscribes from the zero-crossing channel's PubSub topic" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      channel_topic = "hologram:channel:notifications"
+      topic = Realtime.channel_topic(:notifications)
 
       SubscriptionRegistry.attach_connection(
         instance_id,
@@ -399,14 +399,14 @@ defmodule Hologram.Realtime.SSETest do
         [{{:notifications, "c1"}, nil}]
       )
 
-      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       send(self(), {:drop_sub_receipts, [{:notifications, "c1"}]})
 
       process_message(conn, nil, nil)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       refute_receive :hello
     end
@@ -558,7 +558,7 @@ defmodule Hologram.Realtime.SSETest do
 
     test "unsubscribes from the zero-crossing channel's PubSub topic on identity drop" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      channel_topic = "hologram:channel:notifications"
+      topic = Realtime.channel_topic(:notifications)
 
       SubscriptionRegistry.attach_connection(
         instance_id,
@@ -568,14 +568,14 @@ defmodule Hologram.Realtime.SSETest do
         [{{:notifications, "c1"}, 7}]
       )
 
-      Phoenix.PubSub.subscribe(Hologram.PubSub, channel_topic)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       send(self(), {:identity_changed, "session-1", 8})
 
       process_message(conn, "session-1", 7)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, channel_topic, :hello)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       refute_receive :hello
     end
@@ -630,7 +630,8 @@ defmodule Hologram.Realtime.SSETest do
 
       {:cont, _updated_conn} = process_message(conn, nil, nil)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+      topic = Realtime.channel_topic(:notifications)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       assert_receive :hello
     end
@@ -639,12 +640,14 @@ defmodule Hologram.Realtime.SSETest do
   describe "process_message/4 on {:unsub, ...}" do
     test "unsubscribes from the channel's PubSub topic" do
       conn = prepared_test_conn()
-      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram:channel:notifications")
+      topic = Realtime.channel_topic(:notifications)
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
       send(self(), {:unsub, :notifications})
 
       {:cont, _updated_conn} = process_message(conn, nil, nil)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       refute_receive :hello
     end
@@ -684,8 +687,11 @@ defmodule Hologram.Realtime.SSETest do
 
       attach_validated_subscriptions(conn, bindings)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello_atom)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:room:lobby", :hello_tuple)
+      topic_1 = Realtime.channel_topic(:notifications)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic_1, :hello_atom)
+
+      topic_2 = Realtime.channel_topic({:room, :lobby})
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic_2, :hello_tuple)
 
       assert_receive :hello_atom
       assert_receive :hello_tuple
@@ -703,7 +709,8 @@ defmodule Hologram.Realtime.SSETest do
 
       attach_validated_subscriptions(conn, bindings)
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+      topic = Realtime.channel_topic(:notifications)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       assert_receive :hello
       refute_receive :hello
@@ -717,7 +724,8 @@ defmodule Hologram.Realtime.SSETest do
 
       assert SubscriptionRegistry.bindings_of(instance_id) == %{}
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+      topic = Realtime.channel_topic(:notifications)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       refute_receive :hello
     end
@@ -734,7 +742,8 @@ defmodule Hologram.Realtime.SSETest do
 
       assert SubscriptionRegistry.identity_of(instance_id) == {nil, nil}
 
-      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram:channel:notifications", :hello)
+      topic = Realtime.channel_topic(:notifications)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, topic, :hello)
 
       assert_receive :hello
     end
