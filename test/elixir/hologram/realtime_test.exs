@@ -270,6 +270,32 @@ defmodule Hologram.RealtimeTest do
 
       assert_receive {:broadcast_action, %Action{name: :ping}, [^originator]}
     end
+
+    test "fires a queued broadcast on an application channel" do
+      topic = channel_topic({:room, 42})
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      server = %Server{
+        instance_id: "test-instance",
+        broadcasts: [
+          %Broadcast{
+            channel: {:room, 42},
+            cid: "chat_window",
+            action_name: :append_message,
+            params: %{text: "hi"}
+          }
+        ]
+      }
+
+      flush_broadcasts(server)
+
+      assert_receive {:broadcast_action,
+                      %Action{
+                        name: :append_message,
+                        params: %{text: "hi"},
+                        target: "chat_window"
+                      }, [{:instance, "test-instance"}]}
+    end
   end
 
   describe "get_self_echoes/1" do
