@@ -76,6 +76,11 @@ export default class Sse {
         Hologram.scheduleAction(action);
       });
 
+      $.eventSource.addEventListener("drop_sub_receipts", (event) => {
+        const keys = Interpreter.evaluateJavaScriptExpression(event.data);
+        App.subscriptionReceiptRegistry.purge(keys);
+      });
+
       // Log and let the browser auto-reconnect; JS-driven reconnect lands later.
       $.eventSource.onerror = (event) =>
         Logger.debug(`SSE error: ${event.type}`);

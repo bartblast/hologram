@@ -304,4 +304,58 @@ describe("Sse", () => {
       sinon.assert.notCalled(scheduleStub);
     });
   });
+
+  describe("drop_sub_receipts event", () => {
+    const tripleA = Type.tuple([
+      Type.atom("room_a"),
+      Type.bitstring("page"),
+      Type.bitstring("token-a"),
+    ]);
+
+    const tripleB = Type.tuple([
+      Type.atom("room_b"),
+      Type.bitstring("widget"),
+      Type.bitstring("token-b"),
+    ]);
+
+    const encodedKeyA = Type.encodeMapKey(
+      Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+    );
+
+    const encodedKeyB = Type.encodeMapKey(
+      Type.tuple([Type.atom("room_b"), Type.bitstring("widget")]),
+    );
+
+    it("purges the named entries from the receipt registry", async () => {
+      const dropKeys = Type.list([
+        Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+      ]);
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-drop-keys").returns(dropKeys);
+
+      await Sse.connect();
+
+      SubscriptionReceiptRegistry.entries.set(encodedKeyA, tripleA);
+      SubscriptionReceiptRegistry.entries.set(encodedKeyB, tripleB);
+
+      Sse.eventSource.listeners.drop_sub_receipts({data: "encoded-drop-keys"});
+
+      assert.isFalse(SubscriptionReceiptRegistry.entries.has(encodedKeyA));
+      assert.isTrue(SubscriptionReceiptRegistry.entries.has(encodedKeyB));
+    });
+
+    it("is a no-op when the keys list is empty", async () => {
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-drop-keys").returns(Type.list());
+
+      await Sse.connect();
+
+      SubscriptionReceiptRegistry.entries.set(encodedKeyA, tripleA);
+
+      Sse.eventSource.listeners.drop_sub_receipts({data: "encoded-drop-keys"});
+
+      assert.isTrue(SubscriptionReceiptRegistry.entries.has(encodedKeyA));
+    });
+  });
 });
