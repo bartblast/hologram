@@ -358,4 +358,76 @@ describe("Sse", () => {
       assert.isTrue(SubscriptionReceiptRegistry.entries.has(encodedKeyA));
     });
   });
+
+  describe("refresh_sub_receipts event", () => {
+    const staleTripleA = Type.tuple([
+      Type.atom("room_a"),
+      Type.bitstring("page"),
+      Type.bitstring("stale-token-a"),
+    ]);
+
+    const tripleB = Type.tuple([
+      Type.atom("room_b"),
+      Type.bitstring("widget"),
+      Type.bitstring("token-b"),
+    ]);
+
+    const freshTripleA = Type.tuple([
+      Type.atom("room_a"),
+      Type.bitstring("page"),
+      Type.bitstring("fresh-token-a"),
+    ]);
+
+    const encodedKeyA = Type.encodeMapKey(
+      Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+    );
+
+    const encodedKeyB = Type.encodeMapKey(
+      Type.tuple([Type.atom("room_b"), Type.bitstring("widget")]),
+    );
+
+    it("replaces matching entries with refreshed receipts and leaves non-matching entries intact", async () => {
+      const refreshed = Type.list([freshTripleA]);
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-refreshed").returns(refreshed);
+
+      await Sse.connect();
+
+      SubscriptionReceiptRegistry.entries.set(encodedKeyA, staleTripleA);
+      SubscriptionReceiptRegistry.entries.set(encodedKeyB, tripleB);
+
+      Sse.eventSource.listeners.refresh_sub_receipts({
+        data: "encoded-refreshed",
+      });
+
+      assert.strictEqual(
+        SubscriptionReceiptRegistry.entries.get(encodedKeyA),
+        freshTripleA,
+      );
+
+      assert.strictEqual(
+        SubscriptionReceiptRegistry.entries.get(encodedKeyB),
+        tripleB,
+      );
+    });
+
+    it("is a no-op when the receipts list is empty", async () => {
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-refreshed").returns(Type.list());
+
+      await Sse.connect();
+
+      SubscriptionReceiptRegistry.entries.set(encodedKeyA, staleTripleA);
+
+      Sse.eventSource.listeners.refresh_sub_receipts({
+        data: "encoded-refreshed",
+      });
+
+      assert.strictEqual(
+        SubscriptionReceiptRegistry.entries.get(encodedKeyA),
+        staleTripleA,
+      );
+    });
+  });
 });

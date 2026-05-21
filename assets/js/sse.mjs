@@ -81,6 +81,11 @@ export default class Sse {
         App.subscriptionReceiptRegistry.purge(keys);
       });
 
+      $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
+        const refreshed = Interpreter.evaluateJavaScriptExpression(event.data);
+        App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
+      });
+
       // Log and let the browser auto-reconnect; JS-driven reconnect lands later.
       $.eventSource.onerror = (event) =>
         Logger.debug(`SSE error: ${event.type}`);
