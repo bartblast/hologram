@@ -1,6 +1,7 @@
 "use strict";
 
 import App from "./app.mjs";
+import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import Logger from "./logger.mjs";
@@ -62,6 +63,16 @@ export default class Sse {
 
       $.eventSource.addEventListener("action", (event) => {
         const action = Interpreter.evaluateJavaScriptExpression(event.data);
+        const target = Erlang_Maps["get/2"](Type.atom("target"), action);
+
+        // Hologram realtime is fire-and-forget: silently drop actions
+        // targeting cids that are not mounted on this client. Keeps the
+        // dispatcher's strict contract intact for command responses (where
+        // a missing cid is a real bug worth surfacing).
+        if (!ComponentRegistry.isCidRegistered(target)) {
+          return;
+        }
+
         Hologram.scheduleAction(action);
       });
 

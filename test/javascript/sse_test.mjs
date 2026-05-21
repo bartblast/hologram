@@ -3,10 +3,12 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  initComponentRegistryEntry,
   sinon,
 } from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
+import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Logger from "../../assets/js/logger.mjs";
@@ -48,6 +50,7 @@ describe("Sse", () => {
   }
 
   beforeEach(() => {
+    ComponentRegistry.clear();
     Sse.eventSource = null;
     SubscriptionReceiptRegistry.entries.clear();
 
@@ -77,6 +80,7 @@ describe("Sse", () => {
 
     App.instanceId = originalInstanceId;
 
+    ComponentRegistry.clear();
     SubscriptionReceiptRegistry.entries.clear();
   });
 
@@ -261,10 +265,13 @@ describe("Sse", () => {
   });
 
   describe("action event", () => {
-    it("decodes the event data and schedules the resulting action", async () => {
+    it("schedules the action when the target cid is mounted", async () => {
+      const cid = Type.bitstring("c1");
+      initComponentRegistryEntry(cid);
+
       const decodedAction = Type.actionStruct({
         name: Type.atom("my_action"),
-        target: Type.bitstring("c1"),
+        target: cid,
       });
 
       const evalStub = stubHandshakeResponse();
@@ -278,6 +285,23 @@ describe("Sse", () => {
       sinon.assert.calledWith(evalStub, "encoded-action-expression");
 
       sinon.assert.calledOnceWithExactly(scheduleStub, decodedAction);
+    });
+
+    it("silently drops the action when the target cid is not mounted", async () => {
+      const decodedAction = Type.actionStruct({
+        name: Type.atom("my_action"),
+        target: Type.bitstring("c_unmounted"),
+      });
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-action-expression").returns(decodedAction);
+
+      const scheduleStub = sinon.stub(Hologram, "scheduleAction");
+
+      await Sse.connect();
+      Sse.eventSource.listeners.action({data: "encoded-action-expression"});
+
+      sinon.assert.notCalled(scheduleStub);
     });
   });
 });
