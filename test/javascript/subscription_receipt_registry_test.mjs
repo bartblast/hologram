@@ -6,9 +6,6 @@ import {
   encodedSubscriptionReceiptKey,
 } from "./support/helpers.mjs";
 
-import Bitstring from "../../assets/js/bitstring.mjs";
-import Deserializer from "../../assets/js/deserializer.mjs";
-import Serializer from "../../assets/js/serializer.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
