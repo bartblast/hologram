@@ -32,12 +32,12 @@ defmodule HologramFeatureTests.RealtimeTest do
     # after the first has been processed (or dropped at PubSub if the
     # unsubscribe worked). Waiting for the second broadcast's effect in the
     # DOM is a deterministic barrier that replaces an arbitrary sleep.
-    Realtime.broadcast_action(@channel_1, "page", :show_test, message: "delivered")
-    Realtime.broadcast_action(@channel_2, "page", :show_sync, message: "ack")
+    Realtime.broadcast_action(@channel_1, "page", :show_1, message: "delivered")
+    Realtime.broadcast_action(@channel_2, "page", :show_2, message: "delivered")
 
     session
-    |> assert_text(css("#received-sync"), "ack")
-    |> assert_text(css("#received-test"), "none")
+    |> assert_text(css("#received-2"), "delivered")
+    |> assert_text(css("#received-1"), "none")
   end
 
   feature "page subscription is dropped when navigating away to a different page",

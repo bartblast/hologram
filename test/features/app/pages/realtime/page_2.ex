@@ -5,40 +5,40 @@ defmodule HologramFeatureTests.Realtime.Page2 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  @sync_channel {:room, 2}
-  @test_channel {:room, 1}
+  @channel_1 {:room, 1}
+  @channel_2 {:room, 2}
 
   def init(_params, component, server) do
     new_component =
       component
-      |> put_state(:received_sync, "none")
-      |> put_state(:received_test, "none")
+      |> put_state(:received_1, "none")
+      |> put_state(:received_2, "none")
 
     new_server =
       server
-      |> put_subscription(@sync_channel)
-      |> put_subscription(@test_channel)
+      |> put_subscription(@channel_1)
+      |> put_subscription(@channel_2)
 
     {new_component, new_server}
   end
 
   def template do
     ~HOLO"""
-    <p>Test: <strong id="received-test">{@received_test}</strong></p>
-    <p>Sync: <strong id="received-sync">{@received_sync}</strong></p>
+    <p>Channel 1: <strong id="received-1">{@received_1}</strong></p>
+    <p>Channel 2: <strong id="received-2">{@received_2}</strong></p>
     <button $click={command: :unsubscribe}> Unsubscribe </button>
     """
   end
 
-  def action(:show_sync, params, component) do
-    put_state(component, :received_sync, params[:message])
+  def action(:show_1, params, component) do
+    put_state(component, :received_1, params[:message])
   end
 
-  def action(:show_test, params, component) do
-    put_state(component, :received_test, params[:message])
+  def action(:show_2, params, component) do
+    put_state(component, :received_2, params[:message])
   end
 
   def command(:unsubscribe, _params, server) do
-    delete_subscription(server, @test_channel)
+    delete_subscription(server, @channel_1)
   end
 end

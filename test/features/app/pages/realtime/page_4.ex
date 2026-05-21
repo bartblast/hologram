@@ -1,8 +1,6 @@
 defmodule HologramFeatureTests.Realtime.Page4 do
   use Hologram.Page
 
-  alias Hologram.UI.Link
-
   route "/realtime/4"
 
   layout HologramFeatureTests.Components.DefaultLayout
