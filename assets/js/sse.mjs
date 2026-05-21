@@ -60,10 +60,10 @@ export default class Sse {
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
-      $.eventSource.onmessage = (event) => {
+      $.eventSource.addEventListener("action", (event) => {
         const action = Interpreter.evaluateJavaScriptExpression(event.data);
         Hologram.scheduleAction(action);
-      };
+      });
 
       // Log and let the browser auto-reconnect; JS-driven reconnect lands later.
       $.eventSource.onerror = (event) =>

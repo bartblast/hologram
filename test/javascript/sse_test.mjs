@@ -53,7 +53,10 @@ describe("Sse", () => {
 
     mockEventSource = {
       close: sinon.spy(),
-      onmessage: null,
+      listeners: {},
+      addEventListener: function (type, listener) {
+        this.listeners[type] = listener;
+      },
       onerror: null,
     };
 
@@ -257,7 +260,7 @@ describe("Sse", () => {
     });
   });
 
-  describe("onmessage", () => {
+  describe("action event", () => {
     it("decodes the event data and schedules the resulting action", async () => {
       const decodedAction = Type.actionStruct({
         name: Type.atom("my_action"),
@@ -270,7 +273,7 @@ describe("Sse", () => {
       const scheduleStub = sinon.stub(Hologram, "scheduleAction");
 
       await Sse.connect();
-      Sse.eventSource.onmessage({data: "encoded-action-expression"});
+      Sse.eventSource.listeners.action({data: "encoded-action-expression"});
 
       sinon.assert.calledWith(evalStub, "encoded-action-expression");
 
