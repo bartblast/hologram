@@ -8,7 +8,7 @@ defmodule HologramFeatureTests.Realtime.Page1 do
   def init(_params, component, server) do
     {
       put_state(component, :received, "none"),
-      put_subscription(server, {:room, 42})
+      put_subscription(server, {:room, 1})
     }
   end
 

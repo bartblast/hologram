@@ -5,8 +5,8 @@ defmodule HologramFeatureTests.Realtime.Page2 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  @sync_channel {:room, 99}
-  @test_channel {:room, 42}
+  @sync_channel {:room, 2}
+  @test_channel {:room, 1}
 
   def init(_params, component, server) do
     new_component =
