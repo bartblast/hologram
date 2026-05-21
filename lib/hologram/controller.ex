@@ -140,51 +140,16 @@ defmodule Hologram.Controller do
         target: target
       } = payload
 
-      bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+      if caller_owns_instance_id?(conn, instance_id) do
+        handle_validated_command_request(conn, instance_id, module, name, params, target)
+      else
+        Logger.warning("instance_id cross-check failed")
 
-      server_struct = %{
-        Server.from(conn)
-        | cid: target,
-          instance_id: instance_id,
-          subscriptions: Map.keys(bindings)
-      }
-
-      command_result = module.command(name, params, server_struct)
-
-      {processed_server_struct, next_action} =
-        process_command_result(command_result, server_struct, target)
-
-      # Apply subscription deltas before flushing broadcasts so a registry
-      # failure (GenServer.call timeout) leaves no half-done state.
-      # flush_broadcasts is effectively infallible, so once apply succeeds both
-      # side effects land.
-      {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
-
-      Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
-
-      # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
-      self_echoes = Realtime.get_self_echoes(processed_server_struct)
-
-      flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
-
-      {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
-      command_status = if encode_status == :ok, do: 1, else: 0
-
-      {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
-      {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
-      {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
-
-      conn
-      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-      |> Controller.json(%{
-        action: encoded_next_action,
-        selfEchoes: encoded_self_echoes,
-        status: command_status,
-        subReceiptAdds: encoded_sub_receipt_adds,
-        subReceiptDrops: encoded_sub_receipt_drops
-      })
-      |> Plug.Conn.halt()
+        conn
+        |> Plug.Conn.put_status(403)
+        |> Controller.text("Forbidden")
+        |> Plug.Conn.halt()
+      end
     else
       Logger.warning("CSRF token validation failed")
 
@@ -193,6 +158,70 @@ defmodule Hologram.Controller do
       |> Controller.text("Forbidden")
       |> Plug.Conn.halt()
     end
+  end
+
+  # Returns true when the registry has no entry for the `instance_id` (the
+  # instance hasn't attached yet, or its SSE process died and was GC'd) or
+  # when the entry's recorded `{session_id, user_id}` matches the caller's
+  # current session. Returns false when an entry exists but its identity
+  # doesn't match - the caller is using an `instance_id` they didn't
+  # establish (forgery, or post-logout stale state).
+  defp caller_owns_instance_id?(conn, instance_id) do
+    case SubscriptionRegistry.identity_of(instance_id) do
+      nil ->
+        true
+
+      registry_identity ->
+        registry_identity == {Session.get_session_id(conn), Session.get_user_id(conn)}
+    end
+  end
+
+  defp handle_validated_command_request(conn, instance_id, module, name, params, target) do
+    bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+
+    server_struct = %{
+      Server.from(conn)
+      | cid: target,
+        instance_id: instance_id,
+        subscriptions: Map.keys(bindings)
+    }
+
+    command_result = module.command(name, params, server_struct)
+
+    {processed_server_struct, next_action} =
+      process_command_result(command_result, server_struct, target)
+
+    # Apply subscription deltas before flushing broadcasts so a registry
+    # failure (GenServer.call timeout) leaves no half-done state.
+    # flush_broadcasts is effectively infallible, so once apply succeeds both
+    # side effects land.
+    {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
+
+    Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
+
+    # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
+    self_echoes = Realtime.get_self_echoes(processed_server_struct)
+
+    flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
+
+    {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
+    command_status = if encode_status == :ok, do: 1, else: 0
+
+    {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
+    {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
+    {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
+
+    conn
+    |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
+    |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
+    |> Controller.json(%{
+      action: encoded_next_action,
+      selfEchoes: encoded_self_echoes,
+      status: command_status,
+      subReceiptAdds: encoded_sub_receipt_adds,
+      subReceiptDrops: encoded_sub_receipt_drops
+    })
+    |> Plug.Conn.halt()
   end
 
   @doc """

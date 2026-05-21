@@ -42,7 +42,12 @@ defmodule Hologram.ControllerTest do
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
 
   @csrf_token_session_key CSRFProtection.session_key()
-  @session %{@csrf_token_session_key => @unmasked_csrf_token}
+  @hologram_session_id "test-session-id"
+
+  @session %{
+    @csrf_token_session_key => @unmasked_csrf_token,
+    hologram_session_id: @hologram_session_id
+  }
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -554,8 +559,27 @@ defmodule Hologram.ControllerTest do
              }
     end
 
-    test "establishes a Hologram session ID" do
-      conn = execute_successful_command_request()
+    test "establishes a Hologram session ID when absent" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      session_without_hologram_id = %{@csrf_token_session_key => @unmasked_csrf_token}
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, session_without_hologram_id)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
       session_id = Session.get_session_id(conn)
 
       assert {:ok, _info} = UUID.info(session_id)
@@ -594,6 +618,7 @@ defmodule Hologram.ControllerTest do
 
     test "pre-populates server.subscriptions from SubscriptionRegistry bindings for the request's instance_id" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -635,6 +660,7 @@ defmodule Hologram.ControllerTest do
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls put_subscription" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       execute_command_request(%{
         instance_id: "my-instance-id",
@@ -651,6 +677,7 @@ defmodule Hologram.ControllerTest do
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls delete_subscription" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -672,6 +699,7 @@ defmodule Hologram.ControllerTest do
 
     test "applies adds and drops together when a command calls put_subscription and delete_subscription" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -695,6 +723,7 @@ defmodule Hologram.ControllerTest do
 
     test "writes an instance-level binding-shape tombstone for each dropped key" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -719,6 +748,7 @@ defmodule Hologram.ControllerTest do
 
     test "writes no tombstones when the command handler raises before subscription_ops flushes" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -742,6 +772,7 @@ defmodule Hologram.ControllerTest do
 
     test "leaves SubscriptionRegistry bindings unchanged when subscription_ops is empty" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -765,6 +796,7 @@ defmodule Hologram.ControllerTest do
 
     test "does not flush subscription_ops when the command raises" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       payload = %{
         instance_id: "my-instance-id",
@@ -781,6 +813,7 @@ defmodule Hologram.ControllerTest do
 
     test "embeds a receipt entry in the response for each newly-added subscription" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       conn =
         execute_command_request(%{
@@ -799,6 +832,7 @@ defmodule Hologram.ControllerTest do
 
     test "embeds a drop entry in the response for each newly-dropped subscription" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -824,6 +858,7 @@ defmodule Hologram.ControllerTest do
 
     test "embeds adds and drops together when a command both puts and deletes subscriptions" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
@@ -1244,6 +1279,70 @@ defmodule Hologram.ControllerTest do
       end
 
       refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "passes through when the SubscriptionRegistry has no entry for the instance_id" do
+      conn = execute_successful_command_request()
+
+      assert conn.status == 200
+    end
+
+    test "passes through when the SubscriptionRegistry's identity matches the caller" do
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
+
+      conn =
+        execute_command_request(%{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_a,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.status == 200
+    end
+
+    test "returns 403 when the SubscriptionRegistry's session_id does not match the caller" do
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", "other-session-id", nil)
+
+      conn =
+        execute_command_request(%{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_a,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.halted == true
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "returns 403 when the SubscriptionRegistry's user_id does not match the caller" do
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+
+      :ok =
+        SubscriptionRegistry.update_identity(
+          "my-instance-id",
+          @hologram_session_id,
+          "some-user-id"
+        )
+
+      conn =
+        execute_command_request(%{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_a,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.halted == true
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
     end
   end
 
