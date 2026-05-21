@@ -76,6 +76,11 @@ export default class Sse {
         Hologram.scheduleAction(action);
       });
 
+      $.eventSource.addEventListener("add_sub_receipts", (event) => {
+        const receipts = Interpreter.evaluateJavaScriptExpression(event.data);
+        App.subscriptionReceiptRegistry.merge(receipts, Type.list());
+      });
+
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {
         const keys = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.purge(keys);

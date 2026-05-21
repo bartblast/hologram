@@ -291,6 +291,67 @@ describe("Sse", () => {
     });
   });
 
+  describe("add_sub_receipts event", () => {
+    it("inserts new entries and leaves non-matching entries intact", async () => {
+      const adds = Type.list([receiptA]);
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-adds").returns(adds);
+
+      await Sse.connect();
+
+      SubscriptionReceiptRegistry.entries.set(encodedBindingB, receiptB);
+
+      Sse.eventSource.listeners.add_sub_receipts({data: "encoded-adds"});
+
+      assert.strictEqual(
+        SubscriptionReceiptRegistry.entries.get(encodedBindingA),
+        receiptA,
+      );
+
+      assert.strictEqual(
+        SubscriptionReceiptRegistry.entries.get(encodedBindingB),
+        receiptB,
+      );
+    });
+
+    it("replaces an existing entry when an add carries the same binding", async () => {
+      const oldReceiptA = receipt(Type.atom("room_a"), "page", "old-token-a");
+      const newReceiptA = receipt(Type.atom("room_a"), "page", "new-token-a");
+      const adds = Type.list([newReceiptA]);
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-adds").returns(adds);
+
+      await Sse.connect();
+
+      SubscriptionReceiptRegistry.entries.set(encodedBindingA, oldReceiptA);
+
+      Sse.eventSource.listeners.add_sub_receipts({data: "encoded-adds"});
+
+      assert.strictEqual(
+        SubscriptionReceiptRegistry.entries.get(encodedBindingA),
+        newReceiptA,
+      );
+    });
+
+    it("is a no-op when the receipts list is empty", async () => {
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-adds").returns(Type.list());
+
+      await Sse.connect();
+
+      SubscriptionReceiptRegistry.entries.set(encodedBindingA, receiptA);
+
+      Sse.eventSource.listeners.add_sub_receipts({data: "encoded-adds"});
+
+      assert.strictEqual(
+        SubscriptionReceiptRegistry.entries.get(encodedBindingA),
+        receiptA,
+      );
+    });
+  });
+
   describe("drop_sub_receipts event", () => {
     it("purges the named entries from the receipt registry", async () => {
       const dropBindings = Type.list([bindingA]);
