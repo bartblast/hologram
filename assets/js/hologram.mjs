@@ -1053,10 +1053,17 @@ export default class Hologram {
   }
 
   static #restorePageSnapshot(pageSnapshot) {
-    const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
-      pageSnapshot;
+    const {
+      componentRegistryEntries,
+      instanceId,
+      pageModule,
+      pageParams,
+      scrollPosition,
+    } = pageSnapshot;
 
     ComponentRegistry.populate(componentRegistryEntries);
+
+    App.instanceId = instanceId;
 
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
@@ -1095,6 +1102,7 @@ export default class Hologram {
   static async #savePageSnapshot(forceSync = false) {
     const pageSnapshot = {
       componentRegistryEntries: ComponentRegistry.entries,
+      instanceId: App.instanceId,
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
       scrollPosition: [window.scrollX, window.scrollY],
