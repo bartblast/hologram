@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
 
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Router
   alias Wallaby.Browser
   alias Wallaby.Element
@@ -291,6 +292,41 @@ defmodule HologramFeatureTests.Helpers do
     |> wait_for_server_connection()
   end
 
+  @doc """
+  Blocks until any `SubscriptionRegistry` entry holds a subscription on the
+  given `channel`, then returns the `session` so the helper can be piped.
+  Raises if no subscription appears within `@max_wait_time`.
+
+  The race this gate closes: `Phoenix.PubSub` is fire-and-forget, so a
+  broadcast that fires before the SSE process has subscribed to the channel's
+  topic reaches no one. The SSE process only subscribes after the handshake
+  POST + SSE GET attach sequence completes, and that sequence runs
+  asynchronously in the browser after the page is mounted.
+
+  The gate is needed for broadcasts originating outside a Hologram handler -
+  e.g., a feature test calling `Realtime.broadcast_action` directly, or any
+  other external producer pushing into the system. It is NOT needed for
+  broadcasts originating inside Hologram handlers triggered by user
+  interaction (button click -> command -> `put_broadcast`), because the click
+  itself can't fire before the SSE connection is established.
+  """
+  def wait_for_subscription(session, channel, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      has_subscription?(channel) ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for subscription on channel #{inspect(channel)}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_subscription(session, channel, start_time)
+    end
+  end
+
   defp apply_at(query, elements) do
     case {Query.at_number(query), length(elements)} do
       {:all, _count} -> {:ok, elements}
@@ -343,6 +379,14 @@ defmodule HologramFeatureTests.Helpers do
       true -> {:ok, Enum.filter(elements, &Element.visible?(&1))}
       false -> {:ok, Enum.reject(elements, &Element.visible?(&1))}
     end
+  end
+
+  defp has_subscription?(channel) do
+    SubscriptionRegistry.ets_table_name()
+    |> :ets.tab2list()
+    |> Enum.any?(fn {_instance_id, entry} ->
+      Enum.any?(entry.bindings, fn {{ch, _cid}, _user_id} -> ch == channel end)
+    end)
   end
 
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
