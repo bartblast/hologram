@@ -26,6 +26,16 @@ export default class SubscriptionReceiptRegistry {
     }
   }
 
+  // Replaces `entries` with a fresh Map built from the given iterable of
+  // [encodedKey, triple] pairs. Used by the page-snapshot restore path to
+  // reinstate the registry after history navigation when bfcache did not
+  // preserve the JS context. Mirrors `ComponentRegistry.populate/1`; the
+  // iterable accepts whatever `Serializer.serialize` → `Deserializer.deserialize`
+  // produces for the save-side `Array.from(entries.entries())` form.
+  static populate(entries) {
+    $.entries = new Map(entries);
+  }
+
   static purge(keys) {
     $.merge(Type.list(), keys);
   }

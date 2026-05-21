@@ -6,6 +6,9 @@ import {
   encodedSubscriptionReceiptKey,
 } from "./support/helpers.mjs";
 
+import Bitstring from "../../assets/js/bitstring.mjs";
+import Deserializer from "../../assets/js/deserializer.mjs";
+import Serializer from "../../assets/js/serializer.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -102,6 +105,22 @@ describe("SubscriptionReceiptRegistry", () => {
       );
 
       assert.equal(SubscriptionReceiptRegistry.entries.size, 0);
+    });
+  });
+
+  describe("populate()", () => {
+    it("replaces existing entries with the passed iterable", () => {
+      SubscriptionReceiptRegistry.entries.set("old-key", "old-value");
+      SubscriptionReceiptRegistry.populate([["new-key", "new-value"]]);
+
+      assert.equal(SubscriptionReceiptRegistry.entries.size, 1);
+
+      assert.equal(
+        SubscriptionReceiptRegistry.entries.get("new-key"),
+        "new-value",
+      );
+
+      assert.isFalse(SubscriptionReceiptRegistry.entries.has("old-key"));
     });
   });
 
