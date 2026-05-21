@@ -9,10 +9,30 @@ import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Sse {
+  static BASE_RECONNECT_DELAY = 250;
   static HANDSHAKE_PATH = "/hologram/sse/handshake";
+  static MAX_RECONNECT_DELAY = 5_000;
+  static RECONNECT_BACKOFF_FACTOR = 2;
+  static RECONNECT_JITTER = 0.25;
   static SSE_PATH = "/hologram/sse";
 
   static eventSource = null;
+  static reconnectAttempts = 0;
+
+  // Exponential backoff with ±RECONNECT_JITTER noise. Mirrors the established
+  // pattern in `Hologram.Connection` so consecutive SSE reconnect failures
+  // don't hammer the handshake endpoint.
+  static computeReconnectDelay(attempts) {
+    const baseDelay = Math.min(
+      $.BASE_RECONNECT_DELAY *
+        Math.pow($.RECONNECT_BACKOFF_FACTOR, attempts - 1),
+      $.MAX_RECONNECT_DELAY,
+    );
+
+    const jitterRange = baseDelay * $.RECONNECT_JITTER;
+
+    return baseDelay + (Math.random() * 2 - 1) * jitterRange;
+  }
 
   static buildHandshakePayload() {
     const receipts = Array.from(
@@ -91,14 +111,22 @@ export default class Sse {
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       });
 
+      $.eventSource.onopen = () => {
+        $.reconnectAttempts = 0;
+      };
+
       // JS-driven reconnect: native EventSource auto-reconnect would re-use
       // the original URL with the now-stale single-use handshake_id and
       // produce a 4xx loop. Close the failed connection and re-run the
-      // handshake protocol from scratch instead.
+      // handshake protocol from scratch after an exponential backoff delay.
       $.eventSource.onerror = (event) => {
         Logger.debug(`SSE error: ${event.type}`);
         $.eventSource.close();
-        $.connect();
+
+        $.reconnectAttempts++;
+        const delay = $.computeReconnectDelay($.reconnectAttempts);
+
+        setTimeout(() => $.connect(), delay);
       };
     } catch (error) {
       Logger.debug(`SSE handshake error: ${error}`);

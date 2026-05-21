@@ -65,7 +65,10 @@ describe("Sse", () => {
 
   beforeEach(() => {
     ComponentRegistry.clear();
+
     Sse.eventSource = null;
+    Sse.reconnectAttempts = 0;
+
     SubscriptionReceiptRegistry.entries.clear();
 
     mockEventSource = {
@@ -75,6 +78,7 @@ describe("Sse", () => {
         this.listeners[type] = listener;
       },
       onerror: null,
+      onopen: null,
     };
 
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
@@ -125,6 +129,51 @@ describe("Sse", () => {
       ]);
 
       assert.deepStrictEqual(payload, expected);
+    });
+  });
+
+  describe("computeReconnectDelay()", () => {
+    beforeEach(() => {
+      sinon.stub(Math, "random").returns(0.5);
+    });
+
+    it("returns BASE_RECONNECT_DELAY on the first attempt", () => {
+      assert.strictEqual(
+        Sse.computeReconnectDelay(1),
+        Sse.BASE_RECONNECT_DELAY,
+      );
+    });
+
+    it("doubles on each subsequent attempt", () => {
+      assert.strictEqual(Sse.computeReconnectDelay(2), 500);
+      assert.strictEqual(Sse.computeReconnectDelay(3), 1000);
+      assert.strictEqual(Sse.computeReconnectDelay(4), 2000);
+      assert.strictEqual(Sse.computeReconnectDelay(5), 4000);
+    });
+
+    it("caps at MAX_RECONNECT_DELAY", () => {
+      assert.strictEqual(
+        Sse.computeReconnectDelay(100),
+        Sse.MAX_RECONNECT_DELAY,
+      );
+    });
+
+    it("applies negative jitter when Math.random returns 0", () => {
+      Math.random.returns(0);
+
+      assert.strictEqual(
+        Sse.computeReconnectDelay(1),
+        Sse.BASE_RECONNECT_DELAY * (1 - Sse.RECONNECT_JITTER),
+      );
+    });
+
+    it("applies positive jitter when Math.random returns 1", () => {
+      Math.random.returns(1);
+
+      assert.strictEqual(
+        Sse.computeReconnectDelay(1),
+        Sse.BASE_RECONNECT_DELAY * (1 + Sse.RECONNECT_JITTER),
+      );
     });
   });
 
@@ -229,10 +278,20 @@ describe("Sse", () => {
   });
 
   describe("onerror", () => {
+    let loggerDebugStub;
+    let setTimeoutSpy;
+
+    beforeEach(() => {
+      sinon.stub(Math, "random").returns(0.5);
+
+      // Logger.debug schedules its write via setTimeout; stub it out so the
+      // setTimeoutSpy below only captures the reconnect timer.
+      loggerDebugStub = sinon.stub(Logger, "debug");
+      setTimeoutSpy = sinon.stub(globalThis, "setTimeout");
+    });
+
     it("logs the error", async () => {
       stubHandshakeResponse();
-
-      const loggerDebugStub = sinon.stub(Logger, "debug");
 
       await Sse.connect();
       Sse.eventSource.onerror({type: "error"});
@@ -240,22 +299,48 @@ describe("Sse", () => {
       sinon.assert.calledWithExactly(loggerDebugStub, "SSE error: error");
     });
 
-    it("closes the failed EventSource and re-runs the handshake protocol", async () => {
+    it("closes the failed EventSource", async () => {
       stubHandshakeResponse();
 
       await Sse.connect();
-      sinon.assert.calledOnce(globalThis.EventSource);
+      Sse.eventSource.onerror({type: "error"});
+
+      sinon.assert.calledOnce(mockEventSource.close);
+    });
+
+    it("increments reconnectAttempts and schedules a delayed reconnect", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      setTimeoutSpy.resetHistory();
 
       Sse.eventSource.onerror({type: "error"});
 
-      // Yield to the microtask queue so the awaited fetch in connect() settles.
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.strictEqual(Sse.reconnectAttempts, 1);
 
-      sinon.assert.calledOnce(mockEventSource.close);
-      sinon.assert.calledTwice(globalThis.EventSource);
+      sinon.assert.calledWith(
+        setTimeoutSpy,
+        sinon.match.func,
+        Sse.BASE_RECONNECT_DELAY,
+      );
     });
 
-    it("preserves the stored subscription receipts across re-handshake", async () => {
+    it("backs off exponentially on consecutive failures", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+      setTimeoutSpy.resetHistory();
+
+      Sse.eventSource.onerror({type: "error"});
+      Sse.eventSource.onerror({type: "error"});
+      Sse.eventSource.onerror({type: "error"});
+
+      assert.strictEqual(setTimeoutSpy.getCall(0).args[1], 250);
+      assert.strictEqual(setTimeoutSpy.getCall(1).args[1], 500);
+      assert.strictEqual(setTimeoutSpy.getCall(2).args[1], 1000);
+    });
+
+    it("preserves the stored subscription receipts on connection error", async () => {
       const refreshedReceipts = Type.list([
         receipt(Type.atom("room_a"), "page", "fresh-token-a"),
       ]);
@@ -266,9 +351,21 @@ describe("Sse", () => {
       assert.strictEqual(SubscriptionReceiptRegistry.entries.size, 1);
 
       Sse.eventSource.onerror({type: "error"});
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
       assert.strictEqual(SubscriptionReceiptRegistry.entries.size, 1);
+    });
+  });
+
+  describe("onopen", () => {
+    it("resets reconnectAttempts to 0", async () => {
+      stubHandshakeResponse();
+
+      await Sse.connect();
+
+      Sse.reconnectAttempts = 5;
+      Sse.eventSource.onopen({});
+
+      assert.strictEqual(Sse.reconnectAttempts, 0);
     });
   });
 
