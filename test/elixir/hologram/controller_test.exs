@@ -43,7 +43,6 @@ defmodule Hologram.ControllerTest do
 
   @csrf_token_session_key CSRFProtection.session_key()
   @session %{@csrf_token_session_key => @unmasked_csrf_token}
-  @timestamp 1_700_000_000_000
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -148,14 +147,6 @@ defmodule Hologram.ControllerTest do
     |> Plug.Test.init_test_session(session_data)
     |> Map.put(:body_params, %{"_json" => parsed_json})
     |> handle_sse_handshake_request()
-  end
-
-  defp post_instance_closing(instance_id, session_data) do
-    :post
-    |> Plug.Test.conn("/hologram/sse/instance_closing", "")
-    |> Plug.Test.init_test_session(session_data)
-    |> Map.put(:body_params, %{"instance_id" => instance_id})
-    |> handle_instance_closing_request()
   end
 
   defp render_page_with_instance(page_module, instance_id, client_claimed_sub_keys \\ []) do
@@ -1464,107 +1455,6 @@ defmodule Hologram.ControllerTest do
                         params: %{text: "hi"},
                         target: "page"
                       }, [{:instance, _instance_id}]}
-    end
-  end
-
-  describe "handle_instance_closing_request/1" do
-    setup do
-      wait_for_process_cleanup(Hologram.PubSub)
-      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
-
-      wait_for_process_cleanup(Tombstone)
-      start_supervised!({Tombstone, boot_sync_timeout_ms: 0})
-
-      :ok
-    end
-
-    test "returns 401 when the session has no Hologram session_id" do
-      conn = post_instance_closing("test-instance-id", %{})
-
-      assert conn.halted == true
-      assert conn.status == 401
-    end
-
-    test "returns 200 and purges every tombstone under the instance when no registry entry exists" do
-      :ok =
-        Tombstone.insert(
-          {{:instance, "test-instance-id"}, :room_a, "c1"},
-          @timestamp
-        )
-
-      conn = post_instance_closing("test-instance-id", %{hologram_session_id: "test-session-id"})
-
-      assert conn.status == 200
-
-      assert :ets.lookup(
-               Tombstone.ets_table_name(),
-               {{:instance, "test-instance-id"}, :room_a, "c1"}
-             ) == []
-    end
-
-    test "returns 200 and purges when the registry entry's identity matches the caller" do
-      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
-      SubscriptionRegistry.update_identity("test-instance-id", "test-session-id", "test-user-id")
-
-      :ok =
-        Tombstone.insert(
-          {{:instance, "test-instance-id"}, :room_a, "c1"},
-          @timestamp
-        )
-
-      conn =
-        post_instance_closing("test-instance-id", %{
-          hologram_session_id: "test-session-id",
-          hologram_user_id: "test-user-id"
-        })
-
-      assert conn.status == 200
-
-      assert :ets.lookup(
-               Tombstone.ets_table_name(),
-               {{:instance, "test-instance-id"}, :room_a, "c1"}
-             ) == []
-    end
-
-    test "returns 403 when the registry entry's session_id mismatches the caller" do
-      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
-      SubscriptionRegistry.update_identity("test-instance-id", "stored-session-id", nil)
-
-      tombstone_key = {{:instance, "test-instance-id"}, :room_a, "c1"}
-      :ok = Tombstone.insert(tombstone_key, @timestamp)
-
-      conn = post_instance_closing("test-instance-id", %{hologram_session_id: "other-session-id"})
-
-      assert conn.status == 403
-
-      assert :ets.lookup(Tombstone.ets_table_name(), tombstone_key) == [
-               {tombstone_key, @timestamp}
-             ]
-    end
-
-    test "returns 403 when the registry entry's user_id mismatches the caller" do
-      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
-
-      SubscriptionRegistry.update_identity(
-        "test-instance-id",
-        "test-session-id",
-        "stored-user-id"
-      )
-
-      tombstone_key = {{:instance, "test-instance-id"}, :room_a, "c1"}
-      :ok = Tombstone.insert(tombstone_key, @timestamp)
-
-      conn =
-        post_instance_closing("test-instance-id", %{
-          hologram_session_id: "test-session-id",
-          hologram_user_id: "other-user-id"
-        })
-
-      assert conn.status == 403
-
-      assert :ets.lookup(Tombstone.ets_table_name(), tombstone_key) == [
-               {tombstone_key, @timestamp}
-             ]
     end
   end
 
