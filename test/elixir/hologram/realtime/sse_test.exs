@@ -860,8 +860,8 @@ defmodule Hologram.Realtime.SSETest do
 
   describe "maybe_reconcile_session_announce_sub/2" do
     test "unsubscribes from the old announce topic and subscribes to the new one on session change" do
-      old_topic = Realtime.announce_session_topic("s-old")
-      new_topic = Realtime.announce_session_topic("s-new")
+      old_topic = Realtime.session_announce_topic("s-old")
+      new_topic = Realtime.session_announce_topic("s-new")
 
       Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
 
@@ -906,7 +906,7 @@ defmodule Hologram.Realtime.SSETest do
       |> conn_with_instance_id()
       |> subscribe_to_identity_channels()
 
-      announce_topic = Realtime.announce_session_topic(session_id)
+      announce_topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.broadcast(Hologram.PubSub, announce_topic, :hello_announce)
 
       assert_receive :hello_announce

@@ -23,8 +23,8 @@ defmodule Hologram.RealtimeTest do
     :ok
   end
 
-  test "announce_session_topic/1" do
-    assert announce_session_topic(42) == "hologram:announce:session:42"
+  test "session_announce_topic/1" do
+    assert session_announce_topic(42) == "hologram:announce:session:42"
   end
 
   describe "broadcast_action/3,4" do

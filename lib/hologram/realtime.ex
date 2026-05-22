@@ -19,8 +19,8 @@ defmodule Hologram.Realtime do
   # in the future). Every SSE process auto-subscribes to this topic at stream
   # open and reconciles it on session change. Not user-addressable - the
   # public realtime API surface never publishes here.
-  @spec announce_session_topic(term) :: String.t()
-  def announce_session_topic(session_id) do
+  @spec session_announce_topic(term) :: String.t()
+  def session_announce_topic(session_id) do
     "hologram:announce:session:#{session_id}"
   end
 
@@ -157,7 +157,7 @@ defmodule Hologram.Realtime do
     identity_changed? = pre.session_id != post.session_id or pre.user_id != post.user_id
 
     if identity_changed? and pre.session_id != nil do
-      topic = announce_session_topic(pre.session_id)
+      topic = session_announce_topic(pre.session_id)
 
       Phoenix.PubSub.broadcast(
         Hologram.PubSub,

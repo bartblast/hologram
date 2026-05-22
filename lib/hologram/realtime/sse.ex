@@ -302,18 +302,18 @@ defmodule Hologram.Realtime.SSE do
   def maybe_reconcile_session_announce_sub(old, new) when old == new, do: :ok
 
   def maybe_reconcile_session_announce_sub(nil, new) do
-    new_topic = Realtime.announce_session_topic(new)
+    new_topic = Realtime.session_announce_topic(new)
     Phoenix.PubSub.subscribe(Hologram.PubSub, new_topic)
   end
 
   def maybe_reconcile_session_announce_sub(old, nil) do
-    old_topic = Realtime.announce_session_topic(old)
+    old_topic = Realtime.session_announce_topic(old)
     Phoenix.PubSub.unsubscribe(Hologram.PubSub, old_topic)
   end
 
   def maybe_reconcile_session_announce_sub(old, new) do
-    old_topic = Realtime.announce_session_topic(old)
-    new_topic = Realtime.announce_session_topic(new)
+    old_topic = Realtime.session_announce_topic(old)
+    new_topic = Realtime.session_announce_topic(new)
 
     Phoenix.PubSub.unsubscribe(Hologram.PubSub, old_topic)
     Phoenix.PubSub.subscribe(Hologram.PubSub, new_topic)
@@ -334,7 +334,7 @@ defmodule Hologram.Realtime.SSE do
     session_topic = Realtime.identity_topic(:session, session_id)
     Phoenix.PubSub.subscribe(Hologram.PubSub, session_topic)
 
-    announce_topic = Realtime.announce_session_topic(session_id)
+    announce_topic = Realtime.session_announce_topic(session_id)
     Phoenix.PubSub.subscribe(Hologram.PubSub, announce_topic)
 
     if user_id = Session.get_user_id(conn) do
