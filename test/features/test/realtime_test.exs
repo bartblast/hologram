@@ -64,6 +64,28 @@ defmodule HologramFeatureTests.RealtimeTest do
     assert_text(session_2, css("#received"), "delivered")
   end
 
+  feature "subscriptions are restored after SSE reconnect with stored receipts", %{
+    session: session
+  } do
+    session = visit(session, Page1)
+
+    # Simulate a network blip: kill the SSE process. The client's EventSource
+    # fires onerror, JS-driven reconnect POSTs the handshake with the receipts
+    # still in `App.subscriptionReceiptRegistry`, server validates them and
+    # `SubscriptionRegistry.attach_connection` re-registers the bindings.
+    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    Process.exit(entry.sse_pid, :kill)
+
+    session =
+      session
+      |> wait_for_no_subscription(@channel_1)
+      |> wait_for_subscription(@channel_1)
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered after reconnect")
+
+    assert_text(session, css("#received"), "delivered after reconnect")
+  end
+
   feature "unsubscribe_all drops every cid binding on the channel", %{session: session} do
     session = visit(session, Page8)
 
