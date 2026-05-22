@@ -42,6 +42,7 @@ defmodule Hologram.Page do
             put_action: 3,
             put_broadcast: 3,
             put_broadcast: 4,
+            put_broadcast: 5,
             put_command: 2,
             put_command: 3,
             put_context: 3,

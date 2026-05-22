@@ -76,6 +76,7 @@ defmodule Hologram.Component do
             put_action: 3,
             put_broadcast: 3,
             put_broadcast: 4,
+            put_broadcast: 5,
             put_broadcast_except: 4,
             put_broadcast_except: 5,
             put_broadcast_except: 6,
