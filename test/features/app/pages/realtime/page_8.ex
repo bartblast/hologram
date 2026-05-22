@@ -33,8 +33,7 @@ defmodule HologramFeatureTests.Realtime.Page8 do
 
   def command(:broadcast, _params, server) do
     server
-    |> put_broadcast(@channel_1, "component_1", :show, message: "delivered")
-    |> put_broadcast(@channel_1, "component_2", :show, message: "delivered")
-    |> put_broadcast(@channel_2, "page", :show, message: "delivered")
+    |> put_broadcast(@channel_1, :show, message: "delivered")
+    |> put_broadcast(@channel_2, :show, message: "delivered")
   end
 end

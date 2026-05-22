@@ -17,7 +17,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   feature "broadcast from outside a Hologram handler", %{session: session} do
     session = visit(session, Page1)
 
-    Realtime.broadcast_action(@channel_1, "page", :show, message: "delivered")
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered")
 
     assert_text(session, css("#received"), "delivered")
   end
