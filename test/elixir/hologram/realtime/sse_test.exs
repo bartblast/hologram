@@ -875,36 +875,13 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "subscribe_to_identity_channels/1" do
-    test "subscribes to the instance channel" do
-      conn = subscribe_to_identity_channels(conn_with_instance_id())
-      instance_id = conn.query_params["instance_id"]
-      instance_topic = Realtime.identity_topic(:instance, instance_id)
-
-      Phoenix.PubSub.broadcast(Hologram.PubSub, instance_topic, :hello)
-
-      assert_receive :hello
-    end
-
-    test "subscribes to the session channel" do
+  describe "subscribe_to_session_announce_topic/1" do
+    test "subscribes to the session announce topic" do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
 
       %{hologram_session_id: session_id}
       |> conn_with_instance_id()
-      |> subscribe_to_identity_channels()
-
-      session_topic = Realtime.identity_topic(:session, session_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hello_session)
-
-      assert_receive :hello_session
-    end
-
-    test "subscribes to the announce session topic" do
-      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-
-      %{hologram_session_id: session_id}
-      |> conn_with_instance_id()
-      |> subscribe_to_identity_channels()
+      |> subscribe_to_session_announce_topic()
 
       announce_topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.broadcast(Hologram.PubSub, announce_topic, :hello_announce)
@@ -912,27 +889,27 @@ defmodule Hologram.Realtime.SSETest do
       assert_receive :hello_announce
     end
 
-    test "subscribes to the user channel when a user ID is present" do
+    test "does not subscribe to user-addressable identity topics" do
+      instance_id = "any-instance"
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       user_id = "test-user-#{:erlang.unique_integer([:positive])}"
 
-      %{hologram_user_id: user_id}
+      %{hologram_session_id: session_id, hologram_user_id: user_id}
       |> conn_with_instance_id()
-      |> subscribe_to_identity_channels()
+      |> subscribe_to_session_announce_topic()
+
+      instance_topic = Realtime.identity_topic(:instance, instance_id)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, :hi_instance)
+
+      session_topic = Realtime.identity_topic(:session, session_id)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hi_session)
 
       user_topic = Realtime.identity_topic(:user, user_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello_user)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hi_user)
 
-      assert_receive :hello_user
-    end
-
-    test "does not subscribe to a user channel when no user ID is present" do
-      subscribe_to_identity_channels(conn_with_instance_id())
-
-      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
-      user_topic = Realtime.identity_topic(:user, user_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hello_user)
-
-      refute_receive :hello_user
+      refute_receive :hi_instance
+      refute_receive :hi_session
+      refute_receive :hi_user
     end
   end
 

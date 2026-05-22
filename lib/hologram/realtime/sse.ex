@@ -217,7 +217,7 @@ defmodule Hologram.Realtime.SSE do
 
         conn
         |> attach_validated_subscriptions(validated_bindings)
-        |> subscribe_to_identity_channels()
+        |> subscribe_to_session_announce_topic()
         |> prepare()
         |> message_pump(session_id, user_id, message_pump_opts)
 
@@ -322,25 +322,11 @@ defmodule Hologram.Realtime.SSE do
   # Public so tests can exercise subscription wiring without entering the
   # blocking message-pump loop.
   @doc false
-  @spec subscribe_to_identity_channels(Plug.Conn.t()) :: Plug.Conn.t()
-  def subscribe_to_identity_channels(initial_conn) do
-    conn = Plug.Conn.fetch_query_params(initial_conn)
-
-    instance_id = conn.query_params["instance_id"]
-    instance_topic = Realtime.identity_topic(:instance, instance_id)
-    Phoenix.PubSub.subscribe(Hologram.PubSub, instance_topic)
-
+  @spec subscribe_to_session_announce_topic(Plug.Conn.t()) :: Plug.Conn.t()
+  def subscribe_to_session_announce_topic(conn) do
     session_id = Session.get_session_id(conn)
-    session_topic = Realtime.identity_topic(:session, session_id)
-    Phoenix.PubSub.subscribe(Hologram.PubSub, session_topic)
-
     announce_topic = Realtime.session_announce_topic(session_id)
     Phoenix.PubSub.subscribe(Hologram.PubSub, announce_topic)
-
-    if user_id = Session.get_user_id(conn) do
-      user_topic = Realtime.identity_topic(:user, user_id)
-      Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
-    end
 
     conn
   end

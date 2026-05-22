@@ -506,7 +506,7 @@ defmodule Hologram.RealtimeTest do
 
   describe "maybe_announce_identity_change/2" do
     test "broadcasts on the pre session's announce topic when session_id changes" do
-      pre_session_id = subscribe_to_announce_topic()
+      pre_session_id = setup_session_announce_subscription()
       post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
 
       pre = %Server{session_id: pre_session_id, user_id: 7}
@@ -518,7 +518,7 @@ defmodule Hologram.RealtimeTest do
     end
 
     test "broadcasts on the pre session's announce topic when user_id changes" do
-      session_id = subscribe_to_announce_topic()
+      session_id = setup_session_announce_subscription()
       pre = %Server{session_id: session_id, user_id: nil}
       post = %Server{session_id: session_id, user_id: 7}
 
@@ -528,7 +528,7 @@ defmodule Hologram.RealtimeTest do
     end
 
     test "broadcasts post identity when both session_id and user_id change" do
-      pre_session_id = subscribe_to_announce_topic()
+      pre_session_id = setup_session_announce_subscription()
       post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
 
       pre = %Server{session_id: pre_session_id, user_id: 7}
@@ -540,7 +540,7 @@ defmodule Hologram.RealtimeTest do
     end
 
     test "emits no broadcast when nothing changed" do
-      session_id = subscribe_to_announce_topic()
+      session_id = setup_session_announce_subscription()
       server = %Server{session_id: session_id, user_id: 7}
 
       maybe_announce_identity_change(server, server)
@@ -549,7 +549,7 @@ defmodule Hologram.RealtimeTest do
     end
 
     test "emits no broadcast when pre.session_id is nil even if user_id changes" do
-      subscribe_to_announce_topic()
+      setup_session_announce_subscription()
 
       pre = %Server{session_id: nil, user_id: nil}
       post = %Server{session_id: nil, user_id: 7}
