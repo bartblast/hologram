@@ -78,6 +78,19 @@ defmodule Hologram.Realtime do
     "hologram:channel:#{kind}:#{id}"
   end
 
+  # Returns the framework-private instance announcement PubSub topic.
+  #
+  # Carries framework-internal signals scoped to a single instance (the
+  # `{:instance, I}` variant of `unsubscribe` / `unsubscribe_all`). Every SSE
+  # process auto-subscribes to its own instance announce topic at stream open;
+  # `instance_id` is stable for the SSE process's lifetime so no reconciliation
+  # is needed. Not user-addressable.
+  @doc false
+  @spec instance_announce_topic(term) :: String.t()
+  def instance_announce_topic(instance_id) do
+    "hologram:announce:instance:#{instance_id}"
+  end
+
   # Invoked by the framework (controller / renderer) after a handler returns
   # successfully. Iterates the LIFO list in call order, publishes each entry
   # via broadcast_action_except/5 with the originator's instance auto-added to
@@ -254,6 +267,18 @@ defmodule Hologram.Realtime do
     Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
 
     :ok
+  end
+
+  # Returns the framework-private user announcement PubSub topic.
+  #
+  # Carries framework-internal signals scoped to a single user (the
+  # `{:user, U}` variant of `unsubscribe` / `unsubscribe_all`). Every
+  # authenticated SSE process auto-subscribes to its user announce topic at
+  # stream open and reconciles it on identity change. Not user-addressable.
+  @doc false
+  @spec user_announce_topic(term) :: String.t()
+  def user_announce_topic(user_id) do
+    "hologram:announce:user:#{user_id}"
   end
 
   defp identity_channels_for(%Server{} = server) do

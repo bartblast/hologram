@@ -413,6 +413,10 @@ defmodule Hologram.RealtimeTest do
     end
   end
 
+  test "instance_announce_topic/1" do
+    assert instance_announce_topic("abc-uuid") == "hologram:announce:instance:abc-uuid"
+  end
+
   describe "maybe_announce_identity_change/2" do
     test "broadcasts on the pre session's announce topic when session_id changes" do
       pre_session_id = setup_session_announce_subscription()
@@ -633,5 +637,9 @@ defmodule Hologram.RealtimeTest do
         unsubscribe_all({:user, 7}, "string-channel")
       end
     end
+  end
+
+  test "user_announce_topic/1" do
+    assert user_announce_topic(7) == "hologram:announce:user:7"
   end
 end
