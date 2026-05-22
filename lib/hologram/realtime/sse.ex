@@ -373,29 +373,16 @@ defmodule Hologram.Realtime.SSE do
     })
   end
 
-  defp dispatch_broadcast(conn, action) do
-    id = System.unique_integer([:positive, :monotonic])
-
-    case Plug.Conn.chunk(conn, encode_action_envelope(id, action)) do
-      {:ok, conn} -> {:cont, conn}
-      {:error, _reason} -> {:halt, conn}
-    end
-  end
-
-  # TODO: bundle per-broadcast emissions into a single `event: broadcast` SSE
-  # chunk carrying the cids list, instead of emitting one `event: action`
-  # chunk per cid.
   defp dispatch_broadcast_to_cids(conn, _action_name, _params, []), do: {:cont, conn}
 
   defp dispatch_broadcast_to_cids(conn, action_name, params, cids) do
-    Enum.reduce_while(cids, {:cont, conn}, fn cid, {:cont, conn} ->
-      action = %Action{name: action_name, params: params, target: cid}
+    id = System.unique_integer([:positive, :monotonic])
+    chunk = encode_broadcast_envelope(id, action_name, params, cids)
 
-      case dispatch_broadcast(conn, action) do
-        {:cont, conn} -> {:cont, {:cont, conn}}
-        {:halt, conn} -> {:halt, {:halt, conn}}
-      end
-    end)
+    case Plug.Conn.chunk(conn, chunk) do
+      {:ok, conn} -> {:cont, conn}
+      {:error, _reason} -> {:halt, conn}
+    end
   end
 
   defp dispatch_receipts_refresh(initial_conn) do

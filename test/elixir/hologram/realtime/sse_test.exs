@@ -225,7 +225,7 @@ defmodule Hologram.Realtime.SSETest do
   end
 
   describe "process_message/4 on {:broadcast_action, ...}" do
-    test "emits one event: action chunk per cid bound to the broadcast's channel" do
+    test "emits one bundled event: broadcast chunk carrying all matching cids" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
       channel = {:room, 1}
@@ -242,14 +242,13 @@ defmodule Hologram.Realtime.SSETest do
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      action_chat = %Action{name: :my_action, params: %{}, target: "chat"}
-      {:ok, encoded_chat} = Encoder.encode_term(action_chat)
+      assert updated_conn.resp_body =~ "event: broadcast\n"
 
-      action_sidebar = %Action{name: :my_action, params: %{}, target: "sidebar"}
-      {:ok, encoded_sidebar} = Encoder.encode_term(action_sidebar)
+      # Only one event chunk total (the bundled one), not one per cid.
+      assert length(String.split(updated_conn.resp_body, "event: broadcast\n", trim: true)) == 1
 
-      assert updated_conn.resp_body =~ "data: #{encoded_chat}\n"
-      assert updated_conn.resp_body =~ "data: #{encoded_sidebar}\n"
+      {:ok, encoded} = Encoder.encode_term({:my_action, %{}, ["chat", "sidebar"]})
+      assert updated_conn.resp_body =~ "data: #{encoded}\n"
     end
 
     test "emits nothing when no binding matches the broadcast's channel" do
@@ -360,7 +359,7 @@ defmodule Hologram.Realtime.SSETest do
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      assert updated_conn.resp_body =~ "event: action\n"
+      assert updated_conn.resp_body =~ "event: broadcast\n"
     end
   end
 
