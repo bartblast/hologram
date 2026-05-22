@@ -6,6 +6,8 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
+  alias HologramFeatureTests.Realtime.Page5
+  alias HologramFeatureTests.Realtime.Page6
 
   @channel_1 {:room, 1}
 
@@ -35,5 +37,14 @@ defmodule HologramFeatureTests.RealtimeTest do
     |> click(button("Broadcast"))
     |> assert_text(css("#received-2"), "delivered")
     |> assert_text(css("#received-1"), "none")
+  end
+
+  feature "shared layout subscription persists across page navigation", %{session: session} do
+    session
+    |> visit(Page5)
+    |> click(link("Go to Page 6"))
+    |> assert_page(Page6)
+    |> click(button("Broadcast"))
+    |> assert_text(css("#received-shared"), "delivered")
   end
 end
