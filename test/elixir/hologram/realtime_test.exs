@@ -23,73 +23,50 @@ defmodule Hologram.RealtimeTest do
     :ok
   end
 
-  # TODO: target: "page" placeholder below tracks the temporary placeholder
-  # in `Realtime.publish/4`; update when the PubSub envelope becomes
-  # channel-keyed (no target cid on the envelope).
   describe "broadcast_action/2,3" do
     test "broadcasts to the instance channel topic with keyword params" do
       instance_id = subscribe_to_identity_channel(:instance)
+      channel = {:instance, instance_id}
 
-      broadcast_action({:instance, instance_id}, :append_message, text: "hi")
+      broadcast_action(channel, :append_message, text: "hi")
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :append_message,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, []}
+      assert_receive {:broadcast_action, ^channel, :append_message, %{text: "hi"}, []}
     end
 
     test "accepts params as a map" do
       instance_id = subscribe_to_identity_channel(:instance)
+      channel = {:instance, instance_id}
 
-      broadcast_action({:instance, instance_id}, :append_message, %{text: "hi"})
+      broadcast_action(channel, :append_message, %{text: "hi"})
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :append_message,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, []}
+      assert_receive {:broadcast_action, ^channel, :append_message, %{text: "hi"}, []}
     end
 
     test "broadcasts to the session channel topic" do
       session_id = subscribe_to_identity_channel(:session)
+      channel = {:session, session_id}
 
-      broadcast_action({:session, session_id}, :append_message, text: "hi")
+      broadcast_action(channel, :append_message, text: "hi")
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :append_message,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, []}
+      assert_receive {:broadcast_action, ^channel, :append_message, %{text: "hi"}, []}
     end
 
     test "broadcasts to the user channel topic" do
       user_id = subscribe_to_identity_channel(:user)
+      channel = {:user, user_id}
 
-      broadcast_action({:user, user_id}, :show_toast, text: "hi")
+      broadcast_action(channel, :show_toast, text: "hi")
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :show_toast,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, []}
+      assert_receive {:broadcast_action, ^channel, :show_toast, %{text: "hi"}, []}
     end
 
     test "supports the no-params arity" do
       instance_id = subscribe_to_identity_channel(:instance)
+      channel = {:instance, instance_id}
 
-      broadcast_action({:instance, instance_id}, :reload_session)
+      broadcast_action(channel, :reload_session)
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :reload_session,
-                        params: %{},
-                        target: "page"
-                      }, []}
+      assert_receive {:broadcast_action, ^channel, :reload_session, %{}, []}
     end
 
     test "raises ArgumentError when channel fails validation" do
@@ -99,9 +76,6 @@ defmodule Hologram.RealtimeTest do
     end
   end
 
-  # TODO: target: "page" placeholder below tracks the temporary placeholder
-  # in `Realtime.publish/4`; update when the PubSub envelope becomes
-  # channel-keyed (no target cid on the envelope).
   describe "broadcast_action_except/3,4" do
     # Tests here cover only what's unique to broadcast_action_except: the
     # single-tuple-vs-list dispatch. Channel kinds and params handling are
@@ -114,7 +88,7 @@ defmodule Hologram.RealtimeTest do
 
       broadcast_action_except(excluded_identity, {:instance, instance_id}, :ping)
 
-      assert_receive {:broadcast_action, %Action{name: :ping}, [^excluded_identity]}
+      assert_receive {:broadcast_action, _channel, :ping, _params, [^excluded_identity]}
     end
 
     test "passes a list of excluded identities through unchanged" do
@@ -123,8 +97,7 @@ defmodule Hologram.RealtimeTest do
 
       broadcast_action_except(excluded, {:instance, instance_id}, :ping, text: "hi")
 
-      assert_receive {:broadcast_action,
-                      %Action{name: :ping, params: %{text: "hi"}, target: "page"}, ^excluded}
+      assert_receive {:broadcast_action, _channel, :ping, %{text: "hi"}, ^excluded}
     end
   end
 
@@ -148,9 +121,6 @@ defmodule Hologram.RealtimeTest do
     end
   end
 
-  # TODO: target: "page" placeholder assertions below track the temporary
-  # placeholder cid in `Realtime.flush_broadcasts/1`; update when the PubSub
-  # envelope stops carrying a target cid (broadcasts become channel-only).
   describe "flush_broadcasts/1" do
     test "is a no-op for an empty broadcasts list and returns the server unchanged" do
       server = %Server{broadcasts: []}
@@ -160,12 +130,13 @@ defmodule Hologram.RealtimeTest do
 
     test "fires queued broadcasts and clears the list" do
       instance_id = subscribe_to_identity_channel(:instance)
+      channel = {:instance, instance_id}
 
       server = %Server{
         instance_id: instance_id,
         broadcasts: [
           %Broadcast{
-            channel: {:instance, instance_id},
+            channel: channel,
             action_name: :append_message,
             params: %{text: "hi"}
           }
@@ -174,70 +145,58 @@ defmodule Hologram.RealtimeTest do
 
       result = flush_broadcasts(server)
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :append_message,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, [{:instance, ^instance_id}]}
+      assert_receive {:broadcast_action, ^channel, :append_message, %{text: "hi"},
+                      [{:instance, ^instance_id}]}
 
       assert result.broadcasts == []
     end
 
     test "delivers multiple broadcasts in call order (reverse of the LIFO list)" do
       instance_id = subscribe_to_identity_channel(:instance)
+      channel = {:instance, instance_id}
 
       # broadcasts is LIFO: head is the most recent put_broadcast call.
       # Two calls in order :first, :second produce entries in :second, :first order.
       server = %Server{
         instance_id: instance_id,
         broadcasts: [
-          %Broadcast{
-            channel: {:instance, instance_id},
-            action_name: :second,
-            params: %{}
-          },
-          %Broadcast{
-            channel: {:instance, instance_id},
-            action_name: :first,
-            params: %{}
-          }
+          %Broadcast{channel: channel, action_name: :second, params: %{}},
+          %Broadcast{channel: channel, action_name: :first, params: %{}}
         ]
       }
 
       flush_broadcasts(server)
 
-      assert_receive {:broadcast_action, %Action{name: :first}, [{:instance, ^instance_id}]}
-      assert_receive {:broadcast_action, %Action{name: :second}, [{:instance, ^instance_id}]}
+      assert_receive {:broadcast_action, ^channel, :first, _params, [{:instance, ^instance_id}]}
+
+      assert_receive {:broadcast_action, ^channel, :second, _params, [{:instance, ^instance_id}]}
     end
 
     test "auto-excludes the originator's instance via excluded_identities" do
       instance_id = subscribe_to_identity_channel(:instance)
+      channel = {:instance, instance_id}
 
       server = %Server{
         instance_id: instance_id,
         broadcasts: [
-          %Broadcast{
-            channel: {:instance, instance_id},
-            action_name: :ping,
-            params: %{}
-          }
+          %Broadcast{channel: channel, action_name: :ping, params: %{}}
         ]
       }
 
       flush_broadcasts(server)
 
-      assert_receive {:broadcast_action, %Action{name: :ping}, [{:instance, ^instance_id}]}
+      assert_receive {:broadcast_action, ^channel, :ping, _params, [{:instance, ^instance_id}]}
     end
 
     test "merges dev-supplied except identities with the auto-excluded originator instance" do
       instance_id = subscribe_to_identity_channel(:instance)
+      channel = {:instance, instance_id}
 
       server = %Server{
         instance_id: instance_id,
         broadcasts: [
           %Broadcast{
-            channel: {:instance, instance_id},
+            channel: channel,
             action_name: :ping,
             params: %{},
             except: [{:session, "some-session-id"}]
@@ -247,7 +206,7 @@ defmodule Hologram.RealtimeTest do
 
       flush_broadcasts(server)
 
-      assert_receive {:broadcast_action, %Action{name: :ping}, excluded}
+      assert_receive {:broadcast_action, ^channel, :ping, _params, excluded}
 
       assert Enum.sort(excluded) ==
                Enum.sort([{:instance, instance_id}, {:session, "some-session-id"}])
@@ -256,12 +215,13 @@ defmodule Hologram.RealtimeTest do
     test "dedupes auto-excluded originator instance when dev also excluded it explicitly" do
       instance_id = subscribe_to_identity_channel(:instance)
       originator = {:instance, instance_id}
+      channel = {:instance, instance_id}
 
       server = %Server{
         instance_id: instance_id,
         broadcasts: [
           %Broadcast{
-            channel: {:instance, instance_id},
+            channel: channel,
             action_name: :ping,
             params: %{},
             except: [originator]
@@ -271,7 +231,7 @@ defmodule Hologram.RealtimeTest do
 
       flush_broadcasts(server)
 
-      assert_receive {:broadcast_action, %Action{name: :ping}, [^originator]}
+      assert_receive {:broadcast_action, ^channel, :ping, _params, [^originator]}
     end
 
     test "fires a queued broadcast on an application channel" do
@@ -291,12 +251,8 @@ defmodule Hologram.RealtimeTest do
 
       flush_broadcasts(server)
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :append_message,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, [{:instance, "test-instance"}]}
+      assert_receive {:broadcast_action, {:room, 42}, :append_message, %{text: "hi"},
+                      [{:instance, "test-instance"}]}
     end
   end
 

@@ -278,16 +278,8 @@ defmodule Hologram.Realtime do
 
   defp publish(channel, action_name, params, excluded_identities) do
     topic = channel_topic(channel)
-    # TODO: replace the placeholder `target: "page"` with a channel-keyed
-    # envelope shape; cid materialization will move to the SSE process on
-    # receive (consults `SubscriptionRegistry.bindings_of/1`).
-    action = %Action{name: action_name, params: Map.new(params), target: "page"}
-
-    Phoenix.PubSub.broadcast(
-      Hologram.PubSub,
-      topic,
-      {:broadcast_action, action, excluded_identities}
-    )
+    message = {:broadcast_action, channel, action_name, Map.new(params), excluded_identities}
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, message)
   end
 
   defp subscribe_target(instance_id, sse_pid, channel, cid) do

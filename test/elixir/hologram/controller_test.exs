@@ -1121,9 +1121,6 @@ defmodule Hologram.ControllerTest do
       # assert "hologram_session" in cookie_keys
     end
 
-    # TODO: target: "page" assertion below tracks the temporary placeholder
-    # in `Realtime.flush_broadcasts/1`; update when the PubSub envelope stops
-    # carrying a target cid.
     test "fires broadcasts queued during command after successful return" do
       instance_id = subscribe_to_identity_channel(:instance)
 
@@ -1137,12 +1134,8 @@ defmodule Hologram.ControllerTest do
 
       execute_command_request(payload)
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :my_broadcast_action,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, [{:instance, ^instance_id}]}
+      assert_receive {:broadcast_action, _channel, :my_broadcast_action, %{text: "hi"},
+                      [{:instance, ^instance_id}]}
     end
 
     test "does not fire broadcasts when command raises" do
@@ -1170,7 +1163,7 @@ defmodule Hologram.ControllerTest do
         handle_command_request(conn)
       end
 
-      refute_receive {:broadcast_action, _action, _excluded_identities}
+      refute_receive {:broadcast_action, _channel, _action_name, _params, _excluded_identities}
     end
 
     # TODO: target: "page" in the expected encoding below tracks the temporary
@@ -1554,12 +1547,8 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{})
       |> handle_initial_page_request(Module12)
 
-      assert_receive {:broadcast_action,
-                      %Action{
-                        name: :page_init_broadcast,
-                        params: %{text: "hi"},
-                        target: "page"
-                      }, [{:instance, _instance_id}]}
+      assert_receive {:broadcast_action, _channel, :page_init_broadcast, %{text: "hi"},
+                      [{:instance, _instance_id}]}
     end
   end
 

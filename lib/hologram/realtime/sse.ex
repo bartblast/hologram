@@ -100,10 +100,14 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      {:broadcast_action, %Action{} = action, excluded_identities} ->
+      {:broadcast_action, _channel, action_name, params, excluded_identities} ->
         if has_excluded_identity?(conn, excluded_identities) do
           {:cont, conn}
         else
+          # TODO: replace placeholder target with per-cid materialization via
+          # `SubscriptionRegistry.bindings_of/1` (filter to cids bound to the
+          # broadcast's channel on this connection).
+          action = %Action{name: action_name, params: params, target: "page"}
           dispatch_broadcast(conn, action)
         end
 

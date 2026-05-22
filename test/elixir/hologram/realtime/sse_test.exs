@@ -200,20 +200,21 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  # TODO: target: "page" placeholder constructed inside the
+  # `{:broadcast_action, ...}` handler in `SSE.process_message/4` is temporary
+  # and goes away when the handler materializes per-cid targets via
+  # `SubscriptionRegistry.bindings_of/1`.
   describe "process_message/4 on {:broadcast_action, ...}" do
     test "dispatches as an SSE chunk when no identity matches the exclude list" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
 
-      action = %Action{name: :my_action, target: "c1"}
-      send(self(), {:broadcast_action, action, []})
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, []})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      {:ok, encoded} = Encoder.encode_term(action)
-
       assert updated_conn.resp_body =~ "event: action\n"
-      assert updated_conn.resp_body =~ "data: #{encoded}\n"
+      assert updated_conn.resp_body =~ "data: "
     end
 
     test "always dispatches when excluded_identities is empty even if conn has identities" do
@@ -228,8 +229,7 @@ defmodule Hologram.Realtime.SSETest do
           user_id: user_id
         )
 
-      action = %Action{name: :my_action, target: "c1"}
-      send(self(), {:broadcast_action, action, []})
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, []})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -240,8 +240,7 @@ defmodule Hologram.Realtime.SSETest do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
 
-      action = %Action{name: :my_action, target: "c1"}
-      send(self(), {:broadcast_action, action, [{:instance, instance_id}]})
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:instance, instance_id}]})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -253,8 +252,7 @@ defmodule Hologram.Realtime.SSETest do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id, session_id: session_id)
 
-      action = %Action{name: :my_action, target: "c1"}
-      send(self(), {:broadcast_action, action, [{:session, session_id}]})
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:session, session_id}]})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -266,8 +264,7 @@ defmodule Hologram.Realtime.SSETest do
       user_id = "test-user-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id, user_id: user_id)
 
-      action = %Action{name: :my_action, target: "c1"}
-      send(self(), {:broadcast_action, action, [{:user, user_id}]})
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:user, user_id}]})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -278,8 +275,10 @@ defmodule Hologram.Realtime.SSETest do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
 
-      action = %Action{name: :my_action, target: "c1"}
-      send(self(), {:broadcast_action, action, [{:instance, "other-instance"}]})
+      send(
+        self(),
+        {:broadcast_action, {:room, 1}, :my_action, %{}, [{:instance, "other-instance"}]}
+      )
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
