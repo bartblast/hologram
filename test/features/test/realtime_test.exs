@@ -2,7 +2,6 @@ defmodule HologramFeatureTests.RealtimeTest do
   use HologramFeatureTests.TestCase, async: false
 
   alias Hologram.Realtime
-  alias Hologram.Realtime.SubscriptionRegistry
   alias HologramFeatureTests.Realtime.Page1
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page3
@@ -70,12 +69,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   } do
     session = visit(session, Page1)
 
-    # Simulate a network blip: kill the SSE process. The client's EventSource
-    # fires onerror, JS-driven reconnect POSTs the handshake with the receipts
-    # still in `App.subscriptionReceiptRegistry`, server validates them and
-    # `SubscriptionRegistry.attach_connection` re-registers the bindings.
-    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
-    Process.exit(entry.sse_pid, :kill)
+    simulate_sse_disconnect(current_instance_id())
 
     session =
       session
@@ -96,12 +90,8 @@ defmodule HologramFeatureTests.RealtimeTest do
     # receipt validates normally.
     session = visit(session, Page2)
 
-    # Simulate a network blip: kill the SSE process. The client's EventSource
-    # fires onerror, JS-driven reconnect POSTs the handshake with the receipts
-    # still in `App.subscriptionReceiptRegistry`, server validates them and
-    # `SubscriptionRegistry.attach_connection` re-registers the bindings.    
-    [{instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
-    Process.exit(entry.sse_pid, :kill)
+    instance_id = current_instance_id()
+    simulate_sse_disconnect(instance_id)
 
     # Wait for the registry GC so the subsequent wait_for_subscription/2 below
     # doesn't match the stale pre-kill entry (which still carries both
@@ -126,9 +116,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   feature "unsubscribe_all drops every cid binding on the channel", %{session: session} do
     session = visit(session, Page8)
 
-    [{instance_id, _entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
-
-    Realtime.unsubscribe_all({:instance, instance_id}, @channel_1)
+    Realtime.unsubscribe_all({:instance, current_instance_id()}, @channel_1)
 
     session
     |> click(button("Broadcast"))

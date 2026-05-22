@@ -173,6 +173,19 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Returns the `instance_id` of the currently-attached SSE process.
+
+  Assumes exactly one SSE process is currently registered. Useful for tests
+  that need to target the connected client from outside the connection
+  (e.g., `Realtime.unsubscribe_all({:instance, current_instance_id()}, channel)`).
+  """
+  @spec current_instance_id() :: String.t()
+  def current_instance_id do
+    [{instance_id, _entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    instance_id
+  end
+
+  @doc """
   Executes a query for refute_has with optimized retry behavior.
 
   - Returns immediately if element is NOT found (fast path for refute_has)
@@ -273,6 +286,25 @@ defmodule HologramFeatureTests.Helpers do
 
   def scroll_to(session, x, y) do
     Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
+  end
+
+  @doc """
+  Simulates a network blip by killing the SSE process attached to the given
+  `instance_id`.
+
+  After this call the client's `EventSource` fires `onerror` and the
+  JS-driven reconnect cycle begins: backoff, then POST handshake (the
+  receipts in `App.subscriptionReceiptRegistry` are re-validated), then a
+  fresh `EventSource` GET that re-registers bindings via
+  `SubscriptionRegistry.attach_connection`. Callers typically follow with
+  `wait_for_no_subscription/2` to gate the registry GC and then
+  `wait_for_subscription/2` to gate the reconnect-attach.
+  """
+  @spec simulate_sse_disconnect(String.t()) :: :ok
+  def simulate_sse_disconnect(instance_id) do
+    [{^instance_id, entry}] = :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id)
+    Process.exit(entry.sse_pid, :kill)
+    :ok
   end
 
   def sleep(session, duration) do
