@@ -1201,9 +1201,9 @@ defmodule Hologram.ControllerTest do
       assert encoded_self_echoes == "Type.list([])"
     end
 
-    test "broadcasts {:identity_changed, ...} on the pre session topic when the handler changes identity" do
+    test "broadcasts {:identity_changed, ...} on the pre session's announce topic when the handler changes identity" do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      topic = Realtime.identity_topic(:session, session_id)
+      topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       session = Map.put(@session, :hologram_session_id, session_id)
@@ -1229,7 +1229,7 @@ defmodule Hologram.ControllerTest do
 
     test "does not broadcast {:identity_changed, ...} when the handler leaves identity unchanged" do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      topic = Realtime.identity_topic(:session, session_id)
+      topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       session = Map.put(@session, :hologram_session_id, session_id)
@@ -1255,7 +1255,7 @@ defmodule Hologram.ControllerTest do
 
     test "does not broadcast {:identity_changed, ...} when the handler changes identity but raises" do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      topic = Realtime.identity_topic(:session, session_id)
+      topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       session = Map.put(@session, :hologram_session_id, session_id)
@@ -1688,13 +1688,13 @@ defmodule Hologram.ControllerTest do
       assert SubscriptionRegistry.bindings_of("test-instance-id") == %{}
     end
 
-    test "broadcasts {:identity_changed, ...} on the pre session topic when init/3 changes identity" do
+    test "broadcasts {:identity_changed, ...} on the pre session's announce topic when init/3 changes identity" do
       wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      topic = Realtime.identity_topic(:session, session_id)
+      topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       :get
@@ -1716,7 +1716,7 @@ defmodule Hologram.ControllerTest do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      topic = Realtime.identity_topic(:session, session_id)
+      topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       :get
@@ -1738,7 +1738,7 @@ defmodule Hologram.ControllerTest do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      topic = Realtime.identity_topic(:session, session_id)
+      topic = Realtime.session_announce_topic(session_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
 
       assert_raise RuntimeError, "boom", fn ->
