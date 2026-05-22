@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page4
   alias HologramFeatureTests.Realtime.Page5
   alias HologramFeatureTests.Realtime.Page6
+  alias HologramFeatureTests.Realtime.Page7
 
   @channel_1 {:room, 1}
 
@@ -46,5 +47,18 @@ defmodule HologramFeatureTests.RealtimeTest do
     |> assert_page(Page6)
     |> click(button("Broadcast"))
     |> assert_text(css("#received-shared"), "delivered")
+  end
+
+  @sessions 2
+  feature "broadcast on application channel fans out to all subscribed sessions", %{
+    sessions: [session_1, session_2]
+  } do
+    session_1 = visit(session_1, Page7)
+    session_2 = visit(session_2, Page7)
+
+    click(session_1, button("Broadcast"))
+
+    assert_text(session_1, css("#received"), "delivered")
+    assert_text(session_2, css("#received"), "delivered")
   end
 end
