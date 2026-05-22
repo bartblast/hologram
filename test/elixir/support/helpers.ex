@@ -237,6 +237,20 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Subscribes the calling process to the framework-private announce topic
+  for a fresh session id and returns that id so the caller can build matching
+  `%Server{session_id: id}` fixtures.
+  """
+  @spec subscribe_to_announce_topic() :: String.t()
+  def subscribe_to_announce_topic do
+    id = "test-session-#{:erlang.unique_integer([:positive])}"
+    topic = Realtime.announce_session_topic(id)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+    id
+  end
+
+  @doc """
   Subscribes the calling process to a Hologram identity-channel PubSub topic
   with a unique generated id. Returns the generated id so the caller can build
   matching channel tuples (e.g. `{:instance, id}`).

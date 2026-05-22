@@ -509,8 +509,8 @@ defmodule Hologram.RealtimeTest do
   end
 
   describe "maybe_announce_identity_change/2" do
-    test "broadcasts on the pre session topic when session_id changes" do
-      pre_session_id = subscribe_to_identity_channel(:session)
+    test "broadcasts on the pre session's announce topic when session_id changes" do
+      pre_session_id = subscribe_to_announce_topic()
       post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
 
       pre = %Server{session_id: pre_session_id, user_id: 7}
@@ -521,8 +521,8 @@ defmodule Hologram.RealtimeTest do
       assert_receive {:identity_changed, ^post_session_id, 7}
     end
 
-    test "broadcasts on the pre session topic when user_id changes" do
-      session_id = subscribe_to_identity_channel(:session)
+    test "broadcasts on the pre session's announce topic when user_id changes" do
+      session_id = subscribe_to_announce_topic()
       pre = %Server{session_id: session_id, user_id: nil}
       post = %Server{session_id: session_id, user_id: 7}
 
@@ -532,7 +532,7 @@ defmodule Hologram.RealtimeTest do
     end
 
     test "broadcasts post identity when both session_id and user_id change" do
-      pre_session_id = subscribe_to_identity_channel(:session)
+      pre_session_id = subscribe_to_announce_topic()
       post_session_id = "test-session-#{:erlang.unique_integer([:positive])}"
 
       pre = %Server{session_id: pre_session_id, user_id: 7}
@@ -544,7 +544,7 @@ defmodule Hologram.RealtimeTest do
     end
 
     test "emits no broadcast when nothing changed" do
-      session_id = subscribe_to_identity_channel(:session)
+      session_id = subscribe_to_announce_topic()
       server = %Server{session_id: session_id, user_id: 7}
 
       maybe_announce_identity_change(server, server)
@@ -553,7 +553,7 @@ defmodule Hologram.RealtimeTest do
     end
 
     test "emits no broadcast when pre.session_id is nil even if user_id changes" do
-      subscribe_to_identity_channel(:session)
+      subscribe_to_announce_topic()
 
       pre = %Server{session_id: nil, user_id: nil}
       post = %Server{session_id: nil, user_id: 7}
