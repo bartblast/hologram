@@ -139,6 +139,7 @@ defmodule Hologram.Realtime.SSE do
 
       {:identity_changed, new_session_id, new_user_id} ->
         maybe_reconcile_identity_subs(:session, session_id, new_session_id)
+        maybe_reconcile_session_announce_sub(session_id, new_session_id)
         maybe_reconcile_identity_subs(:user, user_id, new_user_id)
 
         conn = Plug.Conn.fetch_query_params(conn)
@@ -289,6 +290,30 @@ defmodule Hologram.Realtime.SSE do
   def maybe_reconcile_identity_subs(kind, old, new) when kind in [:session, :user] do
     old_topic = Realtime.identity_topic(kind, old)
     new_topic = Realtime.identity_topic(kind, new)
+
+    Phoenix.PubSub.unsubscribe(Hologram.PubSub, old_topic)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, new_topic)
+  end
+
+  # Public so tests can exercise the announce-topic swap without entering the
+  # blocking message-pump loop.
+  @doc false
+  @spec maybe_reconcile_session_announce_sub(term | nil, term | nil) :: :ok
+  def maybe_reconcile_session_announce_sub(old, new) when old == new, do: :ok
+
+  def maybe_reconcile_session_announce_sub(nil, new) do
+    new_topic = Realtime.announce_session_topic(new)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, new_topic)
+  end
+
+  def maybe_reconcile_session_announce_sub(old, nil) do
+    old_topic = Realtime.announce_session_topic(old)
+    Phoenix.PubSub.unsubscribe(Hologram.PubSub, old_topic)
+  end
+
+  def maybe_reconcile_session_announce_sub(old, new) do
+    old_topic = Realtime.announce_session_topic(old)
+    new_topic = Realtime.announce_session_topic(new)
 
     Phoenix.PubSub.unsubscribe(Hologram.PubSub, old_topic)
     Phoenix.PubSub.subscribe(Hologram.PubSub, new_topic)
