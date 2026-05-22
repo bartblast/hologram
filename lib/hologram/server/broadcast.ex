@@ -9,12 +9,11 @@ defmodule Hologram.Server.Broadcast do
   @type identity ::
           {:instance, String.t()} | {:session, String.t()} | {:user, integer | String.t() | atom}
 
-  @enforce_keys [:channel, :cid, :action_name]
-  defstruct [:channel, :cid, :action_name, params: %{}, except: []]
+  @enforce_keys [:channel, :action_name]
+  defstruct [:channel, :action_name, params: %{}, except: []]
 
   @type t :: %__MODULE__{
           channel: atom | tuple,
-          cid: String.t(),
           action_name: atom,
           params: map,
           except: [identity]

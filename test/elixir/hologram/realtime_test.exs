@@ -142,6 +142,9 @@ defmodule Hologram.RealtimeTest do
     end
   end
 
+  # TODO: target: "page" placeholder assertions below track the temporary
+  # placeholder cid in `Realtime.flush_broadcasts/1`; update when the PubSub
+  # envelope stops carrying a target cid (broadcasts become channel-only).
   describe "flush_broadcasts/1" do
     test "is a no-op for an empty broadcasts list and returns the server unchanged" do
       server = %Server{broadcasts: []}
@@ -157,7 +160,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:instance, instance_id},
-            cid: "my_editor",
             action_name: :append_message,
             params: %{text: "hi"}
           }
@@ -170,7 +172,7 @@ defmodule Hologram.RealtimeTest do
                       %Action{
                         name: :append_message,
                         params: %{text: "hi"},
-                        target: "my_editor"
+                        target: "page"
                       }, [{:instance, ^instance_id}]}
 
       assert result.broadcasts == []
@@ -186,13 +188,11 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:instance, instance_id},
-            cid: "page",
             action_name: :second,
             params: %{}
           },
           %Broadcast{
             channel: {:instance, instance_id},
-            cid: "page",
             action_name: :first,
             params: %{}
           }
@@ -213,7 +213,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:instance, instance_id},
-            cid: "page",
             action_name: :ping,
             params: %{}
           }
@@ -233,7 +232,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:instance, instance_id},
-            cid: "page",
             action_name: :ping,
             params: %{},
             except: [{:session, "some-session-id"}]
@@ -258,7 +256,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:instance, instance_id},
-            cid: "page",
             action_name: :ping,
             params: %{},
             except: [originator]
@@ -280,7 +277,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "chat_window",
             action_name: :append_message,
             params: %{text: "hi"}
           }
@@ -293,11 +289,15 @@ defmodule Hologram.RealtimeTest do
                       %Action{
                         name: :append_message,
                         params: %{text: "hi"},
-                        target: "chat_window"
+                        target: "page"
                       }, [{:instance, "test-instance"}]}
     end
   end
 
+  # TODO: target: "page" placeholder assertions below track the temporary
+  # placeholder in `Realtime.get_self_echoes/1`; update when self-echo
+  # materialization becomes per-binding (one Action per matching
+  # `{channel, cid}` in `server.subscriptions`).
   describe "get_self_echoes/1" do
     test "returns [] when broadcasts list is empty" do
       server = %Server{instance_id: "originator", broadcasts: []}
@@ -312,7 +312,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :append,
             params: %{text: "hi"}
           }
@@ -320,7 +319,7 @@ defmodule Hologram.RealtimeTest do
       }
 
       assert get_self_echoes(server) == [
-               %Action{name: :append, params: %{text: "hi"}, target: "msgs"}
+               %Action{name: :append, params: %{text: "hi"}, target: "page"}
              ]
     end
 
@@ -331,7 +330,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :append,
             params: %{text: "hi"}
           }
@@ -347,7 +345,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:instance, "originator"},
-            cid: "page",
             action_name: :ping,
             params: %{}
           }
@@ -366,7 +363,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:session, "session-1"},
-            cid: "page",
             action_name: :ping,
             params: %{}
           }
@@ -386,7 +382,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:user, "user-1"},
-            cid: "page",
             action_name: :ping,
             params: %{}
           }
@@ -405,7 +400,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :append,
             params: %{text: "hi"},
             except: [{:instance, "originator"}]
@@ -424,7 +418,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :append,
             params: %{text: "hi"},
             except: [{:session, "session-1"}]
@@ -444,7 +437,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :append,
             params: %{text: "hi"},
             except: [{:user, "user-1"}]
@@ -462,7 +454,6 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :append,
             params: %{text: "hi"},
             except: [{:instance, "other-instance"}]
@@ -471,7 +462,7 @@ defmodule Hologram.RealtimeTest do
       }
 
       assert get_self_echoes(server) == [
-               %Action{name: :append, params: %{text: "hi"}, target: "msgs"}
+               %Action{name: :append, params: %{text: "hi"}, target: "page"}
              ]
     end
 
@@ -484,13 +475,11 @@ defmodule Hologram.RealtimeTest do
         broadcasts: [
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :second,
             params: %{}
           },
           %Broadcast{
             channel: {:room, 42},
-            cid: "msgs",
             action_name: :first,
             params: %{}
           }
@@ -498,8 +487,8 @@ defmodule Hologram.RealtimeTest do
       }
 
       assert get_self_echoes(server) == [
-               %Action{name: :first, params: %{}, target: "msgs"},
-               %Action{name: :second, params: %{}, target: "msgs"}
+               %Action{name: :first, params: %{}, target: "page"},
+               %Action{name: :second, params: %{}, target: "page"}
              ]
     end
   end

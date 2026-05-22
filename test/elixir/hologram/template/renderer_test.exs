@@ -1071,25 +1071,21 @@ defmodule Hologram.Template.RendererTest do
       assert returned_server.broadcasts == [
                %Broadcast{
                  channel: {:instance, "test-instance-id"},
-                 cid: "comp_2",
                  action_name: :component_broadcast,
                  params: %{text: "hi"}
                },
                %Broadcast{
                  channel: {:instance, "test-instance-id"},
-                 cid: "comp_1",
                  action_name: :component_broadcast,
                  params: %{text: "hi"}
                },
                %Broadcast{
                  channel: {:instance, "test-instance-id"},
-                 cid: "layout",
                  action_name: :layout_broadcast,
                  params: %{level: "layout"}
                },
                %Broadcast{
                  channel: {:instance, "test-instance-id"},
-                 cid: "page",
                  action_name: :page_broadcast,
                  params: %{level: "page"}
                }

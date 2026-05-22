@@ -101,7 +101,10 @@ defmodule Hologram.Realtime do
     |> Enum.reverse()
     |> Enum.each(fn %Broadcast{} = entry ->
       excluded = Enum.uniq([{:instance, instance_id} | entry.except])
-      broadcast_action_except(excluded, entry.channel, entry.cid, entry.action_name, entry.params)
+      # TODO: drop the placeholder cid argument once the PubSub envelope stops
+      # carrying a target cid (publisher names only the channel; cid materialization
+      # moves to the SSE process on receive).
+      broadcast_action_except(excluded, entry.channel, "page", entry.action_name, entry.params)
     end)
 
     %{server | broadcasts: []}
@@ -126,7 +129,10 @@ defmodule Hologram.Realtime do
         not Enum.any?(except, &(&1 in own_identities))
     end)
     |> Enum.map(fn %Broadcast{} = entry ->
-      %Action{name: entry.action_name, params: Map.new(entry.params), target: entry.cid}
+      # TODO: replace the placeholder target with per-binding materialization
+      # (one Action per `{channel, cid}` in `server.subscriptions` matching the
+      # broadcast's channel).
+      %Action{name: entry.action_name, params: Map.new(entry.params), target: "page"}
     end)
   end
 

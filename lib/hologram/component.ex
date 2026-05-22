@@ -501,12 +501,13 @@ defmodule Hologram.Component do
     end
   end
 
-  defp append_broadcast(server, channel, cid, action_name, params, except \\ []) do
+  # TODO: drop the `_cid` parameter once `put_broadcast` / `put_broadcast_except`
+  # stop accepting cid (publisher API becomes channel-only).
+  defp append_broadcast(server, channel, _cid, action_name, params, except \\ []) do
     Channel.validate!(channel)
 
     broadcast = %Broadcast{
       channel: channel,
-      cid: cid,
       action_name: action_name,
       params: Map.new(params),
       except: normalize_except(except)

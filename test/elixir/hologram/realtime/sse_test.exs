@@ -899,7 +899,7 @@ defmodule Hologram.Realtime.SSETest do
       |> subscribe_to_session_announce_topic()
 
       instance_topic = Realtime.identity_topic(:instance, instance_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, :hi_instance)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, instance_topic, :hi_instance)
 
       session_topic = Realtime.identity_topic(:session, session_id)
       Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hi_session)

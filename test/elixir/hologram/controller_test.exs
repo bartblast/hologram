@@ -1121,6 +1121,9 @@ defmodule Hologram.ControllerTest do
       # assert "hologram_session" in cookie_keys
     end
 
+    # TODO: target: "page" assertion below tracks the temporary placeholder
+    # in `Realtime.flush_broadcasts/1`; update when the PubSub envelope stops
+    # carrying a target cid.
     test "fires broadcasts queued during command after successful return" do
       instance_id = subscribe_to_identity_channel(:instance)
 
@@ -1138,7 +1141,7 @@ defmodule Hologram.ControllerTest do
                       %Action{
                         name: :my_broadcast_action,
                         params: %{text: "hi"},
-                        target: "my_target_1"
+                        target: "page"
                       }, [{:instance, ^instance_id}]}
     end
 
@@ -1170,6 +1173,9 @@ defmodule Hologram.ControllerTest do
       refute_receive {:broadcast_action, _action, _excluded_identities}
     end
 
+    # TODO: target: "page" in the expected encoding below tracks the temporary
+    # placeholder in `Realtime.get_self_echoes/1`; update when self-echo
+    # materialization becomes per-binding.
     test "sets the selfEchoes field to the encoded actions when any self-echoes were queued" do
       payload = %{
         module: Module6,
@@ -1183,7 +1189,7 @@ defmodule Hologram.ControllerTest do
       %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
 
       assert encoded_self_echoes ==
-               ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])])'
+               ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("page")]])])'
     end
 
     test "sets the selfEchoes field to an empty list when no self-echoes were queued" do

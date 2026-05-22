@@ -272,8 +272,8 @@ defmodule Hologram.ComponentTest do
         |> put_broadcast({:room, 2}, :second)
 
       assert result.broadcasts == [
-               %Broadcast{channel: {:room, 2}, cid: "page", action_name: :second, params: %{}},
-               %Broadcast{channel: {:room, 1}, cid: "page", action_name: :first, params: %{}}
+               %Broadcast{channel: {:room, 2}, action_name: :second, params: %{}},
+               %Broadcast{channel: {:room, 1}, action_name: :first, params: %{}}
              ]
     end
 
@@ -290,7 +290,7 @@ defmodule Hologram.ComponentTest do
       result = put_broadcast(server, {:room, 42}, :refresh)
 
       assert result.broadcasts == [
-               %Broadcast{channel: {:room, 42}, cid: "layout", action_name: :refresh, params: %{}}
+               %Broadcast{channel: {:room, 42}, action_name: :refresh, params: %{}}
              ]
     end
   end
@@ -302,7 +302,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "page",
                  action_name: :append_message,
                  params: %{text: "hi"}
                }
@@ -315,7 +314,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "page",
                  action_name: :append_message,
                  params: %{text: "hi"}
                }
@@ -328,7 +326,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :refresh,
                  params: %{}
                }
@@ -345,7 +342,6 @@ defmodule Hologram.ComponentTest do
       assert cid_form_result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :refresh,
                  params: %{}
                }
@@ -354,7 +350,6 @@ defmodule Hologram.ComponentTest do
       assert action_form_result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "page",
                  action_name: :refresh,
                  params: %{text: "hi"}
                }
@@ -370,7 +365,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :append_message,
                  params: %{text: "hi"}
                }
@@ -389,7 +383,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "page",
                  action_name: :refresh,
                  params: %{},
                  except: [{:user, "u1"}]
@@ -405,7 +398,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "page",
                  action_name: :refresh,
                  params: %{},
                  except: except
@@ -428,7 +420,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :refresh,
                  params: %{},
                  except: [{:user, "u1"}]
@@ -447,7 +438,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :append_message,
                  params: %{text: "hi"},
                  except: [{:user, "u1"}]
@@ -461,7 +451,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :refresh,
                  params: %{},
                  except: [{:user, "u1"}]
@@ -483,7 +472,6 @@ defmodule Hologram.ComponentTest do
       assert cid_form_result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :refresh,
                  params: %{},
                  except: [{:user, "u1"}]
@@ -493,7 +481,6 @@ defmodule Hologram.ComponentTest do
       assert action_form_result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "layout",
                  action_name: :refresh,
                  params: %{text: "hi"},
                  except: [{:user, "u1"}]
@@ -517,7 +504,6 @@ defmodule Hologram.ComponentTest do
       assert result.broadcasts == [
                %Broadcast{
                  channel: {:room, 42},
-                 cid: "my_editor",
                  action_name: :append_message,
                  params: %{text: "hi"},
                  except: [{:user, "u1"}]
