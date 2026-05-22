@@ -13,7 +13,7 @@ defmodule Hologram.Realtime do
 
   @doc false
   # Returns the framework-private session announcement PubSub topic.
-
+  #
   # Carries framework-internal cross-tab announcements scoped to a session
   # (`:identity_changed` today, other framework state-transition announcements
   # in the future). Every SSE process auto-subscribes to this topic at stream
@@ -167,6 +167,16 @@ defmodule Hologram.Realtime do
     end
 
     :ok
+  end
+
+  # Carries framework-internal cross-tab announcements scoped to a session
+  # (`:identity_changed` today, other framework state-transition announcements
+  # in the future). Every SSE process auto-subscribes to this topic at stream
+  # open and reconciles it on session change. Not user-addressable - the
+  # public realtime API surface never publishes here.
+  @spec session_announce_topic(term) :: String.t()
+  def session_announce_topic(session_id) do
+    "hologram:announce:session:#{session_id}"
   end
 
   @doc """

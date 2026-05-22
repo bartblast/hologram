@@ -23,10 +23,6 @@ defmodule Hologram.RealtimeTest do
     :ok
   end
 
-  test "session_announce_topic/1" do
-    assert session_announce_topic(42) == "hologram:announce:session:42"
-  end
-
   describe "broadcast_action/3,4" do
     test "broadcasts to the instance channel topic with a custom cid (keyword params)" do
       instance_id = subscribe_to_identity_channel(:instance)
@@ -562,6 +558,10 @@ defmodule Hologram.RealtimeTest do
 
       refute_receive {:identity_changed, _session_id, _user_id}
     end
+  end
+
+  test "session_announce_topic/1" do
+    assert session_announce_topic(42) == "hologram:announce:session:42"
   end
 
   describe "subscribe/3" do
