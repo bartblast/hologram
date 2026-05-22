@@ -882,6 +882,19 @@ defmodule Hologram.Realtime.SSETest do
       assert_receive :hello_session
     end
 
+    test "subscribes to the announce session topic" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      %{hologram_session_id: session_id}
+      |> conn_with_instance_id()
+      |> subscribe_to_identity_channels()
+
+      announce_topic = Realtime.announce_session_topic(session_id)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, announce_topic, :hello_announce)
+
+      assert_receive :hello_announce
+    end
+
     test "subscribes to the user channel when a user ID is present" do
       user_id = "test-user-#{:erlang.unique_integer([:positive])}"
 

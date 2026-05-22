@@ -309,6 +309,9 @@ defmodule Hologram.Realtime.SSE do
     session_topic = Realtime.identity_topic(:session, session_id)
     Phoenix.PubSub.subscribe(Hologram.PubSub, session_topic)
 
+    announce_topic = Realtime.announce_session_topic(session_id)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, announce_topic)
+
     if user_id = Session.get_user_id(conn) do
       user_topic = Realtime.identity_topic(:user, user_id)
       Phoenix.PubSub.subscribe(Hologram.PubSub, user_topic)
