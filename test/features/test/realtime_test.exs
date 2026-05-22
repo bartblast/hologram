@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.VariableRebinding
 defmodule HologramFeatureTests.RealtimeTest do
   use HologramFeatureTests.TestCase, async: false
 
