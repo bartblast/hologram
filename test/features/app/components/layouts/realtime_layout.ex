@@ -20,7 +20,7 @@ defmodule HologramFeatureTests.Components.RealtimeLayout do
         <Runtime />
       </head>
       <body>
-        <p>Channel 9: <strong id="received-layout">{@received}</strong></p>
+        <p>Channel 9: <strong id="received-shared">{@received}</strong></p>
         <slot />
       </body>
     </html>
