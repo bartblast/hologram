@@ -200,12 +200,54 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  # TODO: target: "page" placeholder constructed inside the
-  # `{:broadcast_action, ...}` handler in `SSE.process_message/4` is temporary
-  # and goes away when the handler materializes per-cid targets via
-  # `SubscriptionRegistry.bindings_of/1`.
   describe "process_message/4 on {:broadcast_action, ...}" do
-    test "dispatches as an SSE chunk when no identity matches the exclude list" do
+    test "emits one event: action chunk per cid bound to the broadcast's channel" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+      channel = {:room, 1}
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{channel, "chat"}, nil}, {{channel, "sidebar"}, nil}]
+      )
+
+      send(self(), {:broadcast_action, channel, :my_action, %{}, []})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      action_chat = %Action{name: :my_action, params: %{}, target: "chat"}
+      {:ok, encoded_chat} = Encoder.encode_term(action_chat)
+
+      action_sidebar = %Action{name: :my_action, params: %{}, target: "sidebar"}
+      {:ok, encoded_sidebar} = Encoder.encode_term(action_sidebar)
+
+      assert updated_conn.resp_body =~ "data: #{encoded_chat}\n"
+      assert updated_conn.resp_body =~ "data: #{encoded_sidebar}\n"
+    end
+
+    test "emits nothing when no binding matches the broadcast's channel" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id)
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{{:room, 2}, "chat"}, nil}]
+      )
+
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, []})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body == ""
+    end
+
+    test "emits nothing when no registry entry exists for the instance" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
 
@@ -213,32 +255,20 @@ defmodule Hologram.Realtime.SSETest do
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      assert updated_conn.resp_body =~ "event: action\n"
-      assert updated_conn.resp_body =~ "data: "
-    end
-
-    test "always dispatches when excluded_identities is empty even if conn has identities" do
-      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
-      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
-
-      conn =
-        prepared_test_conn_with_identities(
-          instance_id: instance_id,
-          session_id: session_id,
-          user_id: user_id
-        )
-
-      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, []})
-
-      {:cont, updated_conn} = process_message(conn, nil, nil)
-
-      assert updated_conn.resp_body =~ "event: action\n"
+      assert updated_conn.resp_body == ""
     end
 
     test "drops the broadcast when the conn's instance identity is in excluded_identities" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{{:room, 1}, "chat"}, nil}]
+      )
 
       send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:instance, instance_id}]})
 
@@ -252,6 +282,14 @@ defmodule Hologram.Realtime.SSETest do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id, session_id: session_id)
 
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        session_id,
+        nil,
+        self(),
+        [{{{:room, 1}, "chat"}, nil}]
+      )
+
       send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:session, session_id}]})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
@@ -264,6 +302,14 @@ defmodule Hologram.Realtime.SSETest do
       user_id = "test-user-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id, user_id: user_id)
 
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        user_id,
+        self(),
+        [{{{:room, 1}, "chat"}, nil}]
+      )
+
       send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:user, user_id}]})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
@@ -274,6 +320,14 @@ defmodule Hologram.Realtime.SSETest do
     test "dispatches when excluded_identities contains identities that don't match the conn" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id)
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        nil,
+        self(),
+        [{{{:room, 1}, "chat"}, nil}]
+      )
 
       send(
         self(),

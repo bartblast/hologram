@@ -100,15 +100,18 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
-      {:broadcast_action, _channel, action_name, params, excluded_identities} ->
+      {:broadcast_action, channel, action_name, params, excluded_identities} ->
         if has_excluded_identity?(conn, excluded_identities) do
           {:cont, conn}
         else
-          # TODO: replace placeholder target with per-cid materialization via
-          # `SubscriptionRegistry.bindings_of/1` (filter to cids bound to the
-          # broadcast's channel on this connection).
-          action = %Action{name: action_name, params: params, target: "page"}
-          dispatch_broadcast(conn, action)
+          conn = Plug.Conn.fetch_query_params(conn)
+          instance_id = conn.query_params["instance_id"]
+          bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
+
+          matching_cids =
+            for {{ch, cid}, _user_id} <- bindings, ch == channel, do: cid
+
+          dispatch_broadcast_to_cids(conn, action_name, params, matching_cids)
         end
 
       {:close, _reason} ->
@@ -363,6 +366,22 @@ defmodule Hologram.Realtime.SSE do
       {:ok, conn} -> {:cont, conn}
       {:error, _reason} -> {:halt, conn}
     end
+  end
+
+  # TODO: bundle per-broadcast emissions into a single `event: broadcast` SSE
+  # chunk carrying the cids list, instead of emitting one `event: action`
+  # chunk per cid.
+  defp dispatch_broadcast_to_cids(conn, _action_name, _params, []), do: {:cont, conn}
+
+  defp dispatch_broadcast_to_cids(conn, action_name, params, cids) do
+    Enum.reduce_while(cids, {:cont, conn}, fn cid, {:cont, conn} ->
+      action = %Action{name: action_name, params: params, target: cid}
+
+      case dispatch_broadcast(conn, action) do
+        {:cont, conn} -> {:cont, {:cont, conn}}
+        {:halt, conn} -> {:halt, {:halt, conn}}
+      end
+    end)
   end
 
   defp dispatch_receipts_refresh(initial_conn) do
