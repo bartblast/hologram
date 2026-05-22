@@ -112,14 +112,13 @@ defmodule Hologram.Realtime do
 
     broadcasts
     |> Enum.reverse()
+    |> Enum.reject(fn %Broadcast{except: except} ->
+      Enum.any?(except, &(&1 in own_identities))
+    end)
     |> Enum.flat_map(fn %Broadcast{} = entry ->
-      if Enum.any?(entry.except, &(&1 in own_identities)) do
-        []
-      else
-        for {ch, cid} <- subscriptions,
-            ch == entry.channel,
-            do: %Action{name: entry.action_name, params: Map.new(entry.params), target: cid}
-      end
+      for {ch, cid} <- subscriptions,
+          ch == entry.channel,
+          do: %Action{name: entry.action_name, params: Map.new(entry.params), target: cid}
     end)
   end
 
