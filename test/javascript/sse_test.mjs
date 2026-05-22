@@ -433,6 +433,89 @@ describe("Sse", () => {
     });
   });
 
+  describe("broadcast event", () => {
+    it("schedules an action for each mounted cid in the envelope", async () => {
+      const chat = Type.bitstring("chat");
+      const sidebar = Type.bitstring("sidebar");
+
+      initComponentRegistryEntry(chat);
+      initComponentRegistryEntry(sidebar);
+
+      const actionName = Type.atom("my_action");
+      const params = Type.map([[Type.atom("text"), Type.bitstring("hi")]]);
+      const envelope = Type.tuple([
+        actionName,
+        params,
+        Type.list([chat, sidebar]),
+      ]);
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-broadcast").returns(envelope);
+
+      const scheduleStub = sinon.stub(Hologram, "scheduleAction");
+
+      await Sse.connect();
+      Sse.eventSource.listeners.broadcast({data: "encoded-broadcast"});
+
+      sinon.assert.calledTwice(scheduleStub);
+
+      sinon.assert.calledWith(
+        scheduleStub,
+        Type.actionStruct({name: actionName, params: params, target: chat}),
+      );
+
+      sinon.assert.calledWith(
+        scheduleStub,
+        Type.actionStruct({name: actionName, params: params, target: sidebar}),
+      );
+    });
+
+    it("silently drops cids that are not mounted", async () => {
+      const chat = Type.bitstring("chat");
+      initComponentRegistryEntry(chat);
+
+      const actionName = Type.atom("my_action");
+      const params = Type.map();
+
+      const envelope = Type.tuple([
+        actionName,
+        params,
+        Type.list([chat, Type.bitstring("unmounted")]),
+      ]);
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-broadcast").returns(envelope);
+
+      const scheduleStub = sinon.stub(Hologram, "scheduleAction");
+
+      await Sse.connect();
+      Sse.eventSource.listeners.broadcast({data: "encoded-broadcast"});
+
+      sinon.assert.calledOnceWithExactly(
+        scheduleStub,
+        Type.actionStruct({name: actionName, params: params, target: chat}),
+      );
+    });
+
+    it("is a no-op when the cids list is empty", async () => {
+      const envelope = Type.tuple([
+        Type.atom("my_action"),
+        Type.map([]),
+        Type.list([]),
+      ]);
+
+      const evalStub = stubHandshakeResponse();
+      evalStub.withArgs("encoded-broadcast").returns(envelope);
+
+      const scheduleStub = sinon.stub(Hologram, "scheduleAction");
+
+      await Sse.connect();
+      Sse.eventSource.listeners.broadcast({data: "encoded-broadcast"});
+
+      sinon.assert.notCalled(scheduleStub);
+    });
+  });
+
   describe("add_sub_receipts event", () => {
     it("inserts new entries and leaves non-matching entries intact", async () => {
       const adds = Type.list([receiptA]);

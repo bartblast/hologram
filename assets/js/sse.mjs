@@ -102,6 +102,23 @@ export default class Sse {
         App.subscriptionReceiptRegistry.merge(receipts, Type.list());
       });
 
+      $.eventSource.addEventListener("broadcast", (event) => {
+        const decoded = Interpreter.evaluateJavaScriptExpression(event.data);
+        const [actionName, params, cidsList] = decoded.data;
+
+        for (const cid of cidsList.data) {
+          if (!ComponentRegistry.isCidRegistered(cid)) continue;
+
+          const action = Type.actionStruct({
+            name: actionName,
+            params: params,
+            target: cid,
+          });
+
+          Hologram.scheduleAction(action);
+        }
+      });
+
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {
         const keys = Interpreter.evaluateJavaScriptExpression(event.data);
         App.subscriptionReceiptRegistry.purge(keys);
