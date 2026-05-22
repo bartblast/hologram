@@ -107,21 +107,19 @@ defmodule Hologram.Realtime do
   # must invoke this BEFORE `flush_broadcasts/1` clears the broadcasts queue.
   @doc false
   @spec get_self_echoes(Server.t()) :: [Action.t()]
-  def get_self_echoes(%Server{broadcasts: broadcasts} = server) do
+  def get_self_echoes(%Server{broadcasts: broadcasts, subscriptions: subscriptions} = server) do
     own_identities = identity_channels_for(server)
-    effective_channels = effective_subscriptions(server, own_identities)
 
     broadcasts
     |> Enum.reverse()
-    |> Enum.filter(fn %Broadcast{channel: channel, except: except} ->
-      MapSet.member?(effective_channels, channel) and
-        not Enum.any?(except, &(&1 in own_identities))
-    end)
-    |> Enum.map(fn %Broadcast{} = entry ->
-      # TODO: replace the placeholder target with per-binding materialization
-      # (one Action per `{channel, cid}` in `server.subscriptions` matching the
-      # broadcast's channel).
-      %Action{name: entry.action_name, params: Map.new(entry.params), target: "page"}
+    |> Enum.flat_map(fn %Broadcast{} = entry ->
+      if Enum.any?(entry.except, &(&1 in own_identities)) do
+        []
+      else
+        for {ch, cid} <- subscriptions,
+            ch == entry.channel,
+            do: %Action{name: entry.action_name, params: Map.new(entry.params), target: cid}
+      end
     end)
   end
 
@@ -257,13 +255,6 @@ defmodule Hologram.Realtime do
     Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
 
     :ok
-  end
-
-  defp effective_subscriptions(%Server{subscriptions: subscriptions}, identity_channels) do
-    subscriptions
-    |> Enum.map(&elem(&1, 0))
-    |> Enum.concat(identity_channels)
-    |> MapSet.new()
   end
 
   defp identity_channels_for(%Server{} = server) do

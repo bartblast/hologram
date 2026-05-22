@@ -255,10 +255,6 @@ defmodule Hologram.RealtimeTest do
     end
   end
 
-  # TODO: target: "page" placeholder assertions below track the temporary
-  # placeholder in `Realtime.get_self_echoes/1`; update when self-echo
-  # materialization becomes per-binding (one Action per matching
-  # `{channel, cid}` in `server.subscriptions`).
   describe "get_self_echoes/1" do
     test "returns [] when broadcasts list is empty" do
       server = %Server{instance_id: "originator", broadcasts: []}
@@ -266,91 +262,62 @@ defmodule Hologram.RealtimeTest do
       assert get_self_echoes(server) == []
     end
 
-    test "includes a put_broadcast targeting a subscribed application channel" do
+    test "emits one Action per matching binding for a broadcast on a subscribed channel" do
       server = %Server{
         instance_id: "originator",
-        subscriptions: [{{:room, 42}, "msgs"}],
+        subscriptions: [{{:room, 42}, "msgs"}, {{:room, 42}, "sidebar"}],
         broadcasts: [
-          %Broadcast{
-            channel: {:room, 42},
-            action_name: :append,
-            params: %{text: "hi"}
-          }
+          %Broadcast{channel: {:room, 42}, action_name: :append, params: %{text: "hi"}}
         ]
       }
 
       assert get_self_echoes(server) == [
-               %Action{name: :append, params: %{text: "hi"}, target: "page"}
+               %Action{name: :append, params: %{text: "hi"}, target: "msgs"},
+               %Action{name: :append, params: %{text: "hi"}, target: "sidebar"}
              ]
     end
 
-    test "excludes a put_broadcast targeting an unsubscribed channel" do
+    test "emits no Action when the broadcast's channel has no matching binding" do
       server = %Server{
         instance_id: "originator",
         subscriptions: [],
         broadcasts: [
-          %Broadcast{
-            channel: {:room, 42},
-            action_name: :append,
-            params: %{text: "hi"}
-          }
+          %Broadcast{channel: {:room, 42}, action_name: :append, params: %{text: "hi"}}
         ]
       }
 
       assert get_self_echoes(server) == []
     end
 
-    test "includes a put_broadcast targeting the originator's auto-subscribed instance channel" do
-      server = %Server{
-        instance_id: "originator",
-        broadcasts: [
-          %Broadcast{
-            channel: {:instance, "originator"},
-            action_name: :ping,
-            params: %{}
-          }
-        ]
-      }
-
-      assert get_self_echoes(server) == [
-               %Action{name: :ping, params: %{}, target: "page"}
-             ]
-    end
-
-    test "includes a put_broadcast targeting the originator's auto-subscribed session channel" do
-      server = %Server{
-        instance_id: "originator",
-        session_id: "session-1",
-        broadcasts: [
-          %Broadcast{
-            channel: {:session, "session-1"},
-            action_name: :ping,
-            params: %{}
-          }
-        ]
-      }
-
-      assert get_self_echoes(server) == [
-               %Action{name: :ping, params: %{}, target: "page"}
-             ]
-    end
-
-    test "includes a put_broadcast targeting the originator's auto-subscribed user channel" do
+    test "emits no Action for an identity-channel broadcast without an explicit subscription" do
+      # Identity channels are no longer auto-subscribed; without an explicit
+      # put_subscription binding in server.subscriptions there is no self-echo.
       server = %Server{
         instance_id: "originator",
         session_id: "session-1",
         user_id: "user-1",
+        subscriptions: [],
         broadcasts: [
-          %Broadcast{
-            channel: {:user, "user-1"},
-            action_name: :ping,
-            params: %{}
-          }
+          %Broadcast{channel: {:user, "user-1"}, action_name: :ping, params: %{}}
+        ]
+      }
+
+      assert get_self_echoes(server) == []
+    end
+
+    test "emits a self-echo when an identity channel was explicitly subscribed" do
+      server = %Server{
+        instance_id: "originator",
+        session_id: "session-1",
+        user_id: "user-1",
+        subscriptions: [{{:user, "user-1"}, "layout"}],
+        broadcasts: [
+          %Broadcast{channel: {:user, "user-1"}, action_name: :ping, params: %{}}
         ]
       }
 
       assert get_self_echoes(server) == [
-               %Action{name: :ping, params: %{}, target: "page"}
+               %Action{name: :ping, params: %{}, target: "layout"}
              ]
     end
 
@@ -423,7 +390,7 @@ defmodule Hologram.RealtimeTest do
       }
 
       assert get_self_echoes(server) == [
-               %Action{name: :append, params: %{text: "hi"}, target: "page"}
+               %Action{name: :append, params: %{text: "hi"}, target: "msgs"}
              ]
     end
 
@@ -434,22 +401,14 @@ defmodule Hologram.RealtimeTest do
         instance_id: "originator",
         subscriptions: [{{:room, 42}, "msgs"}],
         broadcasts: [
-          %Broadcast{
-            channel: {:room, 42},
-            action_name: :second,
-            params: %{}
-          },
-          %Broadcast{
-            channel: {:room, 42},
-            action_name: :first,
-            params: %{}
-          }
+          %Broadcast{channel: {:room, 42}, action_name: :second, params: %{}},
+          %Broadcast{channel: {:room, 42}, action_name: :first, params: %{}}
         ]
       }
 
       assert get_self_echoes(server) == [
-               %Action{name: :first, params: %{}, target: "page"},
-               %Action{name: :second, params: %{}, target: "page"}
+               %Action{name: :first, params: %{}, target: "msgs"},
+               %Action{name: :second, params: %{}, target: "msgs"}
              ]
     end
   end

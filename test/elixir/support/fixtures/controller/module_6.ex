@@ -110,7 +110,9 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
   end
 
   def command(:my_command_self_echo_put_broadcast_subscribed, _params, server) do
-    put_broadcast(server, {:instance, server.instance_id}, :test_action, text: "hi")
+    server
+    |> put_subscription({:instance, server.instance_id})
+    |> put_broadcast({:instance, server.instance_id}, :test_action, text: "hi")
   end
 
   def command(:my_command_self_echo_put_broadcast_unsubscribed, _params, server) do

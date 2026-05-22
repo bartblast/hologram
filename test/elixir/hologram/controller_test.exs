@@ -9,7 +9,6 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
-  alias Hologram.Component.Action
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
   alias Hologram.Realtime.Receipt
@@ -1166,9 +1165,6 @@ defmodule Hologram.ControllerTest do
       refute_receive {:broadcast_action, _channel, _action_name, _params, _excluded_identities}
     end
 
-    # TODO: target: "page" in the expected encoding below tracks the temporary
-    # placeholder in `Realtime.get_self_echoes/1`; update when self-echo
-    # materialization becomes per-binding.
     test "sets the selfEchoes field to the encoded actions when any self-echoes were queued" do
       payload = %{
         module: Module6,
@@ -1182,7 +1178,7 @@ defmodule Hologram.ControllerTest do
       %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
 
       assert encoded_self_echoes ==
-               ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("page")]])])'
+               ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])])'
     end
 
     test "sets the selfEchoes field to an empty list when no self-echoes were queued" do
