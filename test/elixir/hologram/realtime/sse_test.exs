@@ -951,6 +951,44 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "maybe_reconcile_user_announce_sub/2" do
+    test "unsubscribes from the old user announce topic and subscribes to the new one on user change" do
+      old_topic = Realtime.user_announce_topic("u-old")
+      new_topic = Realtime.user_announce_topic("u-new")
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      maybe_reconcile_user_announce_sub("u-old", "u-new")
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello_old)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello_new)
+
+      refute_receive :hello_old
+      assert_receive :hello_new
+    end
+
+    test "subscribes to the new user announce topic on login (nil -> user)" do
+      new_topic = Realtime.user_announce_topic("u-new")
+
+      maybe_reconcile_user_announce_sub(nil, "u-new")
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, new_topic, :hello)
+
+      assert_receive :hello
+    end
+
+    test "unsubscribes from the old user announce topic on logout (user -> nil)" do
+      old_topic = Realtime.user_announce_topic("u-old")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, old_topic)
+
+      maybe_reconcile_user_announce_sub("u-old", nil)
+
+      Phoenix.PubSub.broadcast(Hologram.PubSub, old_topic, :hello)
+
+      refute_receive :hello
+    end
+  end
+
   describe "stream/2" do
     test "returns 4xx when no handshake matches within the wait budget" do
       conn =
