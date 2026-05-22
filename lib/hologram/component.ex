@@ -76,10 +76,8 @@ defmodule Hologram.Component do
             put_action: 3,
             put_broadcast: 3,
             put_broadcast: 4,
-            put_broadcast: 5,
             put_broadcast_except: 4,
             put_broadcast_except: 5,
-            put_broadcast_except: 6,
             put_command: 2,
             put_command: 3,
             put_context: 3,
@@ -269,48 +267,21 @@ defmodule Hologram.Component do
   successfully. If the handler raises, the queued broadcasts are discarded along
   with the rest of the Server state.
 
-  When not explicitly provided, `cid` defaults to `server.cid` - set by the
-  framework at handler entry: `"page"` in a page handler, `"layout"` in a layout
-  handler, or the component's cid in a component handler.
+  Delivered to every cid that registered the channel via `put_subscription` on
+  each receiving connection.
   """
   @spec put_broadcast(Server.t(), atom | tuple, atom) :: Server.t()
   def put_broadcast(server, channel, action_name) when is_atom(action_name) do
-    append_broadcast(server, channel, server.cid, action_name, %{})
+    append_broadcast(server, channel, action_name, %{})
   end
 
   @doc """
-  Queues an action broadcast on the server struct. The broadcast is appended to
-  `server.broadcasts` and flushed by the framework after the handler returns
-  successfully. If the handler raises, the queued broadcasts are discarded along
-  with the rest of the Server state.
-
-  When not explicitly provided, `cid` defaults to `server.cid` - set by the
-  framework at handler entry: `"page"` in a page handler, `"layout"` in a layout
-  handler, or the component's cid in a component handler.
+  Queues an action broadcast on the server struct with the given params.
+  See `put_broadcast/3` for delivery semantics.
   """
-  @spec put_broadcast(Server.t(), atom | tuple, String.t() | atom, atom | keyword | map) ::
-          Server.t()
-  def put_broadcast(server, channel, cid_or_action_name, action_name_or_params)
-
-  def put_broadcast(server, channel, cid, action_name)
-      when is_binary(cid) and is_atom(action_name) do
-    append_broadcast(server, channel, cid, action_name, %{})
-  end
-
+  @spec put_broadcast(Server.t(), atom | tuple, atom, keyword | map) :: Server.t()
   def put_broadcast(server, channel, action_name, params) when is_atom(action_name) do
-    append_broadcast(server, channel, server.cid, action_name, params)
-  end
-
-  @doc """
-  Queues an action broadcast on the server struct. The broadcast is appended to
-  `server.broadcasts` and flushed by the framework after the handler returns
-  successfully. If the handler raises, the queued broadcasts are discarded along
-  with the rest of the Server state.
-  """
-  @spec put_broadcast(Server.t(), atom | tuple, String.t(), atom, keyword | map) :: Server.t()
-  def put_broadcast(server, channel, cid, action_name, params)
-      when is_binary(cid) and is_atom(action_name) do
-    append_broadcast(server, channel, cid, action_name, params)
+    append_broadcast(server, channel, action_name, params)
   end
 
   @doc """
@@ -320,8 +291,6 @@ defmodule Hologram.Component do
   (`{:instance, id}`, `{:session, id}`, `{:user, id}`) that should not receive
   the broadcast. `except` accepts either a single identity tuple or a list of
   identity tuples.
-
-  `cid` defaults to `server.cid` - set by the framework at handler entry.
   """
   @spec put_broadcast_except(
           Server.t(),
@@ -330,47 +299,22 @@ defmodule Hologram.Component do
           atom
         ) :: Server.t()
   def put_broadcast_except(server, except, channel, action_name) when is_atom(action_name) do
-    append_broadcast(server, channel, server.cid, action_name, %{}, except)
+    append_broadcast(server, channel, action_name, %{}, except)
   end
 
   @doc """
-  Like `put_broadcast/4` with an `except` identity (or list). See
-  `put_broadcast_except/4` for the except semantics.
+  Like `put_broadcast_except/4` but with explicit params.
   """
   @spec put_broadcast_except(
           Server.t(),
           Broadcast.identity() | [Broadcast.identity()],
           atom | tuple,
-          String.t() | atom,
-          atom | keyword | map
-        ) :: Server.t()
-  def put_broadcast_except(server, except, channel, cid_or_action_name, action_name_or_params)
-
-  def put_broadcast_except(server, except, channel, cid, action_name)
-      when is_binary(cid) and is_atom(action_name) do
-    append_broadcast(server, channel, cid, action_name, %{}, except)
-  end
-
-  def put_broadcast_except(server, except, channel, action_name, params)
-      when is_atom(action_name) do
-    append_broadcast(server, channel, server.cid, action_name, params, except)
-  end
-
-  @doc """
-  Like `put_broadcast/5` with an `except` identity (or list). See
-  `put_broadcast_except/4` for the except semantics.
-  """
-  @spec put_broadcast_except(
-          Server.t(),
-          Broadcast.identity() | [Broadcast.identity()],
-          atom | tuple,
-          String.t(),
           atom,
           keyword | map
         ) :: Server.t()
-  def put_broadcast_except(server, except, channel, cid, action_name, params)
-      when is_binary(cid) and is_atom(action_name) do
-    append_broadcast(server, channel, cid, action_name, params, except)
+  def put_broadcast_except(server, except, channel, action_name, params)
+      when is_atom(action_name) do
+    append_broadcast(server, channel, action_name, params, except)
   end
 
   @doc """
@@ -501,9 +445,7 @@ defmodule Hologram.Component do
     end
   end
 
-  # TODO: drop the `_cid` parameter once `put_broadcast` / `put_broadcast_except`
-  # stop accepting cid (publisher API becomes channel-only).
-  defp append_broadcast(server, channel, _cid, action_name, params, except \\ []) do
+  defp append_broadcast(server, channel, action_name, params, except \\ []) do
     Channel.validate!(channel)
 
     broadcast = %Broadcast{

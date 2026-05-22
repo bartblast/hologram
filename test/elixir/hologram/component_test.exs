@@ -285,9 +285,8 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "put_broadcast/3" do
-    test "defaults params to an empty map and uses server.cid as the broadcast target" do
-      server = %Server{cid: "layout"}
-      result = put_broadcast(server, {:room, 42}, :refresh)
+    test "defaults params to an empty map" do
+      result = put_broadcast(@server, {:room, 42}, :refresh)
 
       assert result.broadcasts == [
                %Broadcast{channel: {:room, 42}, action_name: :refresh, params: %{}}
@@ -296,7 +295,7 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "put_broadcast/4" do
-    test "defaulted-cid form appends with keyword params and uses server.cid" do
+    test "accepts params as a keyword list" do
       result = put_broadcast(@server, {:room, 42}, :append_message, text: "hi")
 
       assert result.broadcasts == [
@@ -308,59 +307,8 @@ defmodule Hologram.ComponentTest do
              ]
     end
 
-    test "defaulted-cid form accepts params as a map" do
+    test "accepts params as a map" do
       result = put_broadcast(@server, {:room, 42}, :append_message, %{text: "hi"})
-
-      assert result.broadcasts == [
-               %Broadcast{
-                 channel: {:room, 42},
-                 action_name: :append_message,
-                 params: %{text: "hi"}
-               }
-             ]
-    end
-
-    test "explicit-cid form overrides server.cid" do
-      result = put_broadcast(@server, {:room, 42}, "my_editor", :refresh)
-
-      assert result.broadcasts == [
-               %Broadcast{
-                 channel: {:room, 42},
-                 action_name: :refresh,
-                 params: %{}
-               }
-             ]
-    end
-
-    test "guard dispatches by position-3 type (string -> cid, atom -> action_name)" do
-      # Position 3 is a binary -> explicit-cid clause; param 4 is the action_name atom.
-      cid_form_result = put_broadcast(@server, {:room, 42}, "my_editor", :refresh)
-
-      # Position 3 is an atom -> defaulted-cid clause; param 4 is params.
-      action_form_result = put_broadcast(@server, {:room, 42}, :refresh, text: "hi")
-
-      assert cid_form_result.broadcasts == [
-               %Broadcast{
-                 channel: {:room, 42},
-                 action_name: :refresh,
-                 params: %{}
-               }
-             ]
-
-      assert action_form_result.broadcasts == [
-               %Broadcast{
-                 channel: {:room, 42},
-                 action_name: :refresh,
-                 params: %{text: "hi"}
-               }
-             ]
-    end
-  end
-
-  describe "put_broadcast/5" do
-    test "explicit-cid form overrides server.cid and accepts params" do
-      result =
-        put_broadcast(@server, {:room, 42}, "my_editor", :append_message, text: "hi")
 
       assert result.broadcasts == [
                %Broadcast{
@@ -375,7 +323,7 @@ defmodule Hologram.ComponentTest do
   describe "put_broadcast_except/* (common behavior)" do
     # Tests here cover what's shared across all put_broadcast_except arities:
     # the single-tuple-vs-list normalization on except, and validator wiring.
-    # Per-arity tests below focus on the cid / params dispatch surface.
+    # Per-arity tests below focus on the params dispatch surface.
 
     test "wraps a single identity tuple into a list and stores on except" do
       result = put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :refresh)
@@ -413,9 +361,8 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "put_broadcast_except/4" do
-    test "defaults params to an empty map and uses server.cid as the broadcast target" do
-      server = %Server{cid: "my_editor"}
-      result = put_broadcast_except(server, {:user, "u1"}, {:room, 42}, :refresh)
+    test "defaults params to an empty map" do
+      result = put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :refresh)
 
       assert result.broadcasts == [
                %Broadcast{
@@ -429,11 +376,9 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "put_broadcast_except/5" do
-    test "defaulted-cid form appends with keyword params and uses server.cid" do
-      server = %Server{cid: "my_editor"}
-
+    test "accepts params as a keyword list" do
       result =
-        put_broadcast_except(server, {:user, "u1"}, {:room, 42}, :append_message, text: "hi")
+        put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :append_message, text: "hi")
 
       assert result.broadcasts == [
                %Broadcast{
@@ -445,61 +390,9 @@ defmodule Hologram.ComponentTest do
              ]
     end
 
-    test "explicit-cid form overrides server.cid" do
-      result = put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, "my_editor", :refresh)
-
-      assert result.broadcasts == [
-               %Broadcast{
-                 channel: {:room, 42},
-                 action_name: :refresh,
-                 params: %{},
-                 except: [{:user, "u1"}]
-               }
-             ]
-    end
-
-    test "guard dispatches by position-4 type (string -> cid, atom -> action_name)" do
-      server = %Server{cid: "layout"}
-
-      # Position 4 is a binary -> explicit-cid clause; param 5 is the action_name atom.
-      cid_form_result =
-        put_broadcast_except(server, {:user, "u1"}, {:room, 42}, "my_editor", :refresh)
-
-      # Position 4 is an atom -> defaulted-cid clause; param 5 is params.
-      action_form_result =
-        put_broadcast_except(server, {:user, "u1"}, {:room, 42}, :refresh, text: "hi")
-
-      assert cid_form_result.broadcasts == [
-               %Broadcast{
-                 channel: {:room, 42},
-                 action_name: :refresh,
-                 params: %{},
-                 except: [{:user, "u1"}]
-               }
-             ]
-
-      assert action_form_result.broadcasts == [
-               %Broadcast{
-                 channel: {:room, 42},
-                 action_name: :refresh,
-                 params: %{text: "hi"},
-                 except: [{:user, "u1"}]
-               }
-             ]
-    end
-  end
-
-  describe "put_broadcast_except/6" do
-    test "explicit-cid form overrides server.cid and accepts params" do
+    test "accepts params as a map" do
       result =
-        put_broadcast_except(
-          @server,
-          {:user, "u1"},
-          {:room, 42},
-          "my_editor",
-          :append_message,
-          text: "hi"
-        )
+        put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :append_message, %{text: "hi"})
 
       assert result.broadcasts == [
                %Broadcast{
