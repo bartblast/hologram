@@ -37,6 +37,20 @@ defmodule Hologram.Realtime.SSE do
   end
 
   @doc """
+  Builds the SSE event-stream chunk for a `broadcast` event: the standard
+  `event:`/`id:`/`data:` framing with the given id and the encoded
+  `{action_name, params, [cid1, cid2, ...]}` tuple as the data payload.
+
+  The cids list lets the client iterate per-cid dispatch from a single
+  bundled chunk rather than receiving one `event: action` per matching cid.
+  """
+  @spec encode_broadcast_envelope(integer, atom, map, [String.t()]) :: String.t()
+  def encode_broadcast_envelope(id, action_name, params, cids) do
+    {:ok, data} = Encoder.encode_term({action_name, params, cids})
+    "event: broadcast\nid: #{id}\ndata: #{data}\n\n"
+  end
+
+  @doc """
   Builds the SSE event-stream chunk for a `drop_sub_receipts` event: the
   standard `event:`/`id:`/`data:` framing with the given id and the encoded
   list of `{channel, cid}` keys as the data payload.

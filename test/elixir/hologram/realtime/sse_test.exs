@@ -146,6 +146,30 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "encode_broadcast_envelope/4" do
+    test "wraps a single-cid payload in a broadcast SSE event envelope" do
+      {:ok, encoded} = Encoder.encode_term({:append, %{text: "hi"}, ["chat"]})
+
+      assert encode_broadcast_envelope(42, :append, %{text: "hi"}, ["chat"]) ==
+               "event: broadcast\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    test "wraps a multi-cid payload in a broadcast SSE event envelope" do
+      cids = ["chat", "sidebar", "minimap"]
+      {:ok, encoded} = Encoder.encode_term({:append, %{text: "hi"}, cids})
+
+      assert encode_broadcast_envelope(42, :append, %{text: "hi"}, cids) ==
+               "event: broadcast\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    test "handles empty params" do
+      {:ok, encoded} = Encoder.encode_term({:ping, %{}, ["page"]})
+
+      assert encode_broadcast_envelope(1, :ping, %{}, ["page"]) ==
+               "event: broadcast\nid: 1\ndata: #{encoded}\n\n"
+    end
+  end
+
   describe "encode_drop_sub_receipts_envelope/2" do
     test "wraps the keys list in a drop_sub_receipts SSE event envelope" do
       keys = [{:notifications, "c1"}]
