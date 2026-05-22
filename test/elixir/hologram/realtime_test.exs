@@ -593,12 +593,26 @@ defmodule Hologram.RealtimeTest do
                :ets.lookup(Tombstone.ets_table_name(), tombstone_key)
     end
 
-    test "broadcasts {:drop_sub_receipts, ...} on the target identity's channel topic" do
-      identity = {:user, 7}
-      topic = identity_topic(:user, 7)
-      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+    test "broadcasts {:drop_sub_receipts, ...} on the instance announce topic for {:instance, _}" do
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, instance_announce_topic("i-1"))
 
-      unsubscribe(identity, :notifications, "c1")
+      unsubscribe({:instance, "i-1"}, :notifications, "c1")
+
+      assert_receive {:drop_sub_receipts, [{:notifications, "c1"}]}
+    end
+
+    test "broadcasts {:drop_sub_receipts, ...} on the session announce topic for {:session, _}" do
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, session_announce_topic("s-1"))
+
+      unsubscribe({:session, "s-1"}, :notifications, "c1")
+
+      assert_receive {:drop_sub_receipts, [{:notifications, "c1"}]}
+    end
+
+    test "broadcasts {:drop_sub_receipts, ...} on the user announce topic for {:user, _}" do
+      :ok = Phoenix.PubSub.subscribe(Hologram.PubSub, user_announce_topic(7))
+
+      unsubscribe({:user, 7}, :notifications, "c1")
 
       assert_receive {:drop_sub_receipts, [{:notifications, "c1"}]}
     end

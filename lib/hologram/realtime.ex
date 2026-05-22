@@ -237,7 +237,7 @@ defmodule Hologram.Realtime do
     tombstone_key = {identity, channel, cid}
     Tombstone.insert(tombstone_key, System.system_time(:millisecond))
 
-    topic = identity_topic(kind, id)
+    topic = announce_topic_for(kind, id)
     envelope = {:drop_sub_receipts, [{channel, cid}]}
 
     Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
@@ -280,6 +280,12 @@ defmodule Hologram.Realtime do
   def user_announce_topic(user_id) do
     "hologram:announce:user:#{user_id}"
   end
+
+  defp announce_topic_for(:instance, id), do: instance_announce_topic(id)
+
+  defp announce_topic_for(:session, id), do: session_announce_topic(id)
+
+  defp announce_topic_for(:user, id), do: user_announce_topic(id)
 
   defp identity_channels_for(%Server{} = server) do
     [{:instance, server.instance_id}]
