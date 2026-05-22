@@ -23,90 +23,96 @@ defmodule Hologram.RealtimeTest do
     :ok
   end
 
-  describe "broadcast_action/3,4" do
-    test "broadcasts to the instance channel topic with a custom cid (keyword params)" do
+  # TODO: target: "page" placeholder below tracks the temporary placeholder
+  # in `Realtime.publish/4`; update when the PubSub envelope becomes
+  # channel-keyed (no target cid on the envelope).
+  describe "broadcast_action/2,3" do
+    test "broadcasts to the instance channel topic with keyword params" do
       instance_id = subscribe_to_identity_channel(:instance)
 
-      broadcast_action({:instance, instance_id}, "my_editor", :append_message, text: "hi")
+      broadcast_action({:instance, instance_id}, :append_message, text: "hi")
 
       assert_receive {:broadcast_action,
                       %Action{
                         name: :append_message,
                         params: %{text: "hi"},
-                        target: "my_editor"
+                        target: "page"
                       }, []}
     end
 
     test "accepts params as a map" do
       instance_id = subscribe_to_identity_channel(:instance)
 
-      broadcast_action({:instance, instance_id}, "my_editor", :append_message, %{text: "hi"})
+      broadcast_action({:instance, instance_id}, :append_message, %{text: "hi"})
 
       assert_receive {:broadcast_action,
                       %Action{
                         name: :append_message,
                         params: %{text: "hi"},
-                        target: "my_editor"
+                        target: "page"
                       }, []}
     end
 
     test "broadcasts to the session channel topic" do
       session_id = subscribe_to_identity_channel(:session)
 
-      broadcast_action({:session, session_id}, "my_editor", :append_message, text: "hi")
+      broadcast_action({:session, session_id}, :append_message, text: "hi")
 
       assert_receive {:broadcast_action,
                       %Action{
                         name: :append_message,
                         params: %{text: "hi"},
-                        target: "my_editor"
+                        target: "page"
                       }, []}
     end
 
     test "broadcasts to the user channel topic" do
       user_id = subscribe_to_identity_channel(:user)
 
-      broadcast_action({:user, user_id}, "notifications", :show_toast, text: "hi")
+      broadcast_action({:user, user_id}, :show_toast, text: "hi")
 
       assert_receive {:broadcast_action,
                       %Action{
                         name: :show_toast,
                         params: %{text: "hi"},
-                        target: "notifications"
+                        target: "page"
                       }, []}
     end
 
     test "supports the no-params arity" do
       instance_id = subscribe_to_identity_channel(:instance)
 
-      broadcast_action({:instance, instance_id}, "layout", :reload_session)
+      broadcast_action({:instance, instance_id}, :reload_session)
 
       assert_receive {:broadcast_action,
                       %Action{
                         name: :reload_session,
                         params: %{},
-                        target: "layout"
+                        target: "page"
                       }, []}
     end
 
     test "raises ArgumentError when channel fails validation" do
       assert_raise ArgumentError, fn ->
-        broadcast_action("not-a-valid-channel", "page", :ping)
+        broadcast_action("not-a-valid-channel", :ping)
       end
     end
   end
 
-  describe "broadcast_action_except/4,5" do
+  # TODO: target: "page" placeholder below tracks the temporary placeholder
+  # in `Realtime.publish/4`; update when the PubSub envelope becomes
+  # channel-keyed (no target cid on the envelope).
+  describe "broadcast_action_except/3,4" do
     # Tests here cover only what's unique to broadcast_action_except: the
-    # single-tuple-vs-list dispatch. Channel kinds, cid, and params handling
-    # are exercised in the broadcast_action describe block - both functions
-    # share the same envelope construction via the private publish/5 helper.
+    # single-tuple-vs-list dispatch. Channel kinds and params handling are
+    # exercised in the broadcast_action describe block - both functions share
+    # the same envelope construction via the private publish/4 helper.
 
     test "wraps a single identity tuple into a list in the envelope" do
       instance_id = subscribe_to_identity_channel(:instance)
       excluded_identity = {:user, "user-1"}
 
-      broadcast_action_except(excluded_identity, {:instance, instance_id}, "page", :ping)
+      broadcast_action_except(excluded_identity, {:instance, instance_id}, :ping)
 
       assert_receive {:broadcast_action, %Action{name: :ping}, [^excluded_identity]}
     end
@@ -115,7 +121,7 @@ defmodule Hologram.RealtimeTest do
       instance_id = subscribe_to_identity_channel(:instance)
       excluded = [{:instance, "other"}, {:session, "session-1"}, {:user, "user-1"}]
 
-      broadcast_action_except(excluded, {:instance, instance_id}, "page", :ping, text: "hi")
+      broadcast_action_except(excluded, {:instance, instance_id}, :ping, text: "hi")
 
       assert_receive {:broadcast_action,
                       %Action{name: :ping, params: %{text: "hi"}, target: "page"}, ^excluded}

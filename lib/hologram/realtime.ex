@@ -17,43 +17,35 @@ defmodule Hologram.Realtime do
   Immediate counterpart to `put_broadcast`. Called from outside `Hologram.Page`
   and `Hologram.Component` handlers (`init/3`, `command/3`) - background jobs,
   GenServers, controllers, plugs, mix tasks. Fires through Phoenix.PubSub.
-  Silent no-op if no connections are subscribed.
-
-  `cid` is the destination component identifier on each receiving connection
-  and is always required - the inside-handler `put_broadcast` defaults it to
-  the currently-executing handler's cid, but no such context exists here.
+  Silent no-op if no connections are subscribed. Delivered to every cid that
+  registered the channel via `put_subscription` on each receiving connection.
   """
-  @spec broadcast_action(atom | tuple, String.t(), atom, keyword | map) :: :ok
-  def broadcast_action(channel, cid, action_name, params \\ %{}) do
+  @spec broadcast_action(atom | tuple, atom, keyword | map) :: :ok
+  def broadcast_action(channel, action_name, params \\ %{}) do
     Channel.validate!(channel)
-    publish(channel, cid, action_name, params, [])
+    publish(channel, action_name, params, [])
   end
 
   @doc """
   Broadcasts an action to subscribers of the given channel, excluding the
   listed identities.
 
-  Like `broadcast_action/4` but takes an `excluded_identities` argument first.
+  Like `broadcast_action/3` but takes an `excluded_identities` argument first.
   Pass either a single identity tuple - `{:instance, id}`, `{:session, id}`,
   or `{:user, id}` - or a list of such tuples. Receiving SSE connections drop
   the broadcast when any of their own identities match an entry in the list.
-
-  `cid` is the destination component identifier on each receiving connection
-  and is always required - the inside-handler `put_broadcast` defaults it to
-  the currently-executing handler's cid, but no such context exists here.
   """
-  @spec broadcast_action_except(tuple | [tuple], atom | tuple, String.t(), atom, keyword | map) ::
-          :ok
-  def broadcast_action_except(excluded, channel, cid, action_name, params \\ %{})
+  @spec broadcast_action_except(tuple | [tuple], atom | tuple, atom, keyword | map) :: :ok
+  def broadcast_action_except(excluded, channel, action_name, params \\ %{})
 
-  def broadcast_action_except({_kind, _id} = identity, channel, cid, action_name, params) do
-    broadcast_action_except([identity], channel, cid, action_name, params)
+  def broadcast_action_except({_kind, _id} = identity, channel, action_name, params) do
+    broadcast_action_except([identity], channel, action_name, params)
   end
 
-  def broadcast_action_except(excluded_identities, channel, cid, action_name, params)
+  def broadcast_action_except(excluded_identities, channel, action_name, params)
       when is_list(excluded_identities) do
     Channel.validate!(channel)
-    publish(channel, cid, action_name, params, excluded_identities)
+    publish(channel, action_name, params, excluded_identities)
   end
 
   # Encodes a channel value to the cluster-wide PubSub topic string. Bare atoms
@@ -101,10 +93,7 @@ defmodule Hologram.Realtime do
     |> Enum.reverse()
     |> Enum.each(fn %Broadcast{} = entry ->
       excluded = Enum.uniq([{:instance, instance_id} | entry.except])
-      # TODO: drop the placeholder cid argument once the PubSub envelope stops
-      # carrying a target cid (publisher names only the channel; cid materialization
-      # moves to the SSE process on receive).
-      broadcast_action_except(excluded, entry.channel, "page", entry.action_name, entry.params)
+      broadcast_action_except(excluded, entry.channel, entry.action_name, entry.params)
     end)
 
     %{server | broadcasts: []}
@@ -287,10 +276,12 @@ defmodule Hologram.Realtime do
 
   defp prepend_identity(identities, kind, id), do: [{kind, id} | identities]
 
-  defp publish(channel, cid, action_name, params, excluded_identities)
-       when is_binary(cid) do
+  defp publish(channel, action_name, params, excluded_identities) do
     topic = channel_topic(channel)
-    action = %Action{name: action_name, params: Map.new(params), target: cid}
+    # TODO: replace the placeholder `target: "page"` with a channel-keyed
+    # envelope shape; cid materialization will move to the SSE process on
+    # receive (consults `SubscriptionRegistry.bindings_of/1`).
+    action = %Action{name: action_name, params: Map.new(params), target: "page"}
 
     Phoenix.PubSub.broadcast(
       Hologram.PubSub,
