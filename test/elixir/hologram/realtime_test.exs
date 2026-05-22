@@ -168,7 +168,6 @@ defmodule Hologram.RealtimeTest do
       flush_broadcasts(server)
 
       assert_receive {:broadcast_action, ^channel, :first, _params, [{:instance, ^instance_id}]}
-
       assert_receive {:broadcast_action, ^channel, :second, _params, [{:instance, ^instance_id}]}
     end
 
