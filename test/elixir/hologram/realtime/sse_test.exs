@@ -951,44 +951,6 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  describe "subscribe_to_session_announce_topic/1" do
-    test "subscribes to the session announce topic" do
-      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-
-      %{hologram_session_id: session_id}
-      |> conn_with_instance_id()
-      |> subscribe_to_session_announce_topic()
-
-      announce_topic = Realtime.session_announce_topic(session_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, announce_topic, :hello_announce)
-
-      assert_receive :hello_announce
-    end
-
-    test "does not subscribe to user-addressable identity topics" do
-      instance_id = "any-instance"
-      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
-      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
-
-      %{hologram_session_id: session_id, hologram_user_id: user_id}
-      |> conn_with_instance_id()
-      |> subscribe_to_session_announce_topic()
-
-      instance_topic = Realtime.identity_topic(:instance, instance_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, instance_topic, :hi_instance)
-
-      session_topic = Realtime.identity_topic(:session, session_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, session_topic, :hi_session)
-
-      user_topic = Realtime.identity_topic(:user, user_id)
-      Phoenix.PubSub.broadcast(Hologram.PubSub, user_topic, :hi_user)
-
-      refute_receive :hi_instance
-      refute_receive :hi_session
-      refute_receive :hi_user
-    end
-  end
-
   describe "stream/2" do
     test "returns 4xx when no handshake matches within the wait budget" do
       conn =
@@ -1151,6 +1113,94 @@ defmodule Hologram.Realtime.SSETest do
       assert settings.error_logger == true
 
       Process.exit(pid, :kill)
+    end
+  end
+
+  describe "subscribe_to_announce_topics/1" do
+    test "subscribes to all three identity-level announce topics for an authenticated connection" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+
+      conn =
+        %{hologram_session_id: session_id, hologram_user_id: user_id}
+        |> conn_with_instance_id()
+        |> subscribe_to_announce_topics()
+
+      instance_id = conn.query_params["instance_id"]
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.instance_announce_topic(instance_id),
+        :hi_instance
+      )
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.session_announce_topic(session_id),
+        :hi_session
+      )
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.user_announce_topic(user_id),
+        :hi_user
+      )
+
+      assert_receive :hi_instance
+      assert_receive :hi_session
+      assert_receive :hi_user
+    end
+
+    test "skips the user announce topic for an anonymous connection" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+
+      %{hologram_session_id: session_id}
+      |> conn_with_instance_id()
+      |> subscribe_to_announce_topics()
+
+      user_id = "any-user"
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.user_announce_topic(user_id),
+        :hi_user
+      )
+
+      refute_receive :hi_user
+    end
+
+    test "does not subscribe to user-addressable identity topics" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      user_id = "test-user-#{:erlang.unique_integer([:positive])}"
+
+      conn =
+        %{hologram_session_id: session_id, hologram_user_id: user_id}
+        |> conn_with_instance_id()
+        |> subscribe_to_announce_topics()
+
+      instance_id = conn.query_params["instance_id"]
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.identity_topic(:instance, instance_id),
+        :hi_instance
+      )
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.identity_topic(:session, session_id),
+        :hi_session
+      )
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        Realtime.identity_topic(:user, user_id),
+        :hi_user
+      )
+
+      refute_receive :hi_instance
+      refute_receive :hi_session
+      refute_receive :hi_user
     end
   end
 end
