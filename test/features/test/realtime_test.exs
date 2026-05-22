@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page8
 
   @channel_1 {:room, 1}
+  @channel_2 {:room, 2}
 
   feature "broadcast from outside a Hologram handler", %{session: session} do
     session = visit(session, Page1)
@@ -84,6 +85,42 @@ defmodule HologramFeatureTests.RealtimeTest do
     Realtime.broadcast_action(@channel_1, :show, message: "delivered after reconnect")
 
     assert_text(session, css("#received"), "delivered after reconnect")
+  end
+
+  feature "unsubscribe_all on an offline client takes effect on reconnect", %{
+    session: session
+  } do
+    # Page2 subscribes to both @channel_1 and @channel_2 in init/3. We tombstone
+    # only @channel_1 while the SSE is dead and assert that on reconnect the
+    # @channel_1 receipt is rejected (no binding restored) while the @channel_2
+    # receipt validates normally.
+    session = visit(session, Page2)
+
+    # Simulate a network blip: kill the SSE process. The client's EventSource
+    # fires onerror, JS-driven reconnect POSTs the handshake with the receipts
+    # still in `App.subscriptionReceiptRegistry`, server validates them and
+    # `SubscriptionRegistry.attach_connection` re-registers the bindings.    
+    [{instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    Process.exit(entry.sse_pid, :kill)
+
+    # Wait for the registry GC so the subsequent wait_for_subscription/2 below
+    # doesn't match the stale pre-kill entry (which still carries both
+    # bindings) and return before the JS-driven reconnect has even started.
+    # The tombstone write itself doesn't need the GC - it just needs to land
+    # before the reconnect POSTs the handshake (~250ms backoff is ample).
+    session = wait_for_no_subscription(session, @channel_1)
+    Realtime.unsubscribe_all({:instance, instance_id}, @channel_1)
+
+    # On reconnect only the @channel_2 binding restores in the new entry; the
+    # tombstoned @channel_1 receipt is rejected at handshake verification.
+    session = wait_for_subscription(session, @channel_2)
+
+    Realtime.broadcast_action(@channel_1, :show_1, message: "blocked")
+    Realtime.broadcast_action(@channel_2, :show_2, message: "delivered")
+
+    session
+    |> assert_text(css("#received-1"), "none")
+    |> assert_text(css("#received-2"), "delivered")
   end
 
   feature "unsubscribe_all drops every cid binding on the channel", %{session: session} do
