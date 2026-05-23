@@ -186,6 +186,19 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Returns the `session_id` recorded for the currently-attached SSE process.
+
+  Assumes exactly one SSE process is currently registered. Useful for capturing
+  a connection's session id before a second connection opens, e.g. to target it
+  via `Realtime.broadcast_action_except({:session, current_session_id()}, ...)`.
+  """
+  @spec current_session_id() :: term
+  def current_session_id do
+    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    entry.session_id
+  end
+
+  @doc """
   Returns the `user_id` recorded for the currently-attached SSE process.
 
   Assumes exactly one SSE process is currently registered. Useful for gating on
