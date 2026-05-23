@@ -403,4 +403,25 @@ defmodule HologramFeatureTests.RealtimeTest do
 
     refute_text(session_a1, css("#received"), "delivered to everyone else", wait_time: 1_000)
   end
+
+  @sessions 3
+  feature "broadcast from inside a handler can exclude a session", %{
+    sessions: [session_a1, session_a2, session_b]
+  } do
+    # A2 is a second tab of A1's session (same session, different instance); B is
+    # a separate session. All three on Page7, subscribed to @channel_1.
+    session_a1 = visit(session_a1, Page7)
+    session_a2 = visit_as_sibling(session_a2, session_a1, Page7)
+    session_b = visit(session_b, Page7)
+
+    # A1 excludes its own session, so every tab of that session is skipped: both
+    # A1 and its same-session sibling A2 miss the broadcast, while the unrelated B
+    # still receives (session exclusion reaches all connections of the session).
+    session_a1 = click(session_a1, button("Exclude session"))
+
+    assert_text(session_b, css("#received"), "delivered to all other sessions")
+
+    refute_text(session_a1, css("#received"), "delivered to all other sessions", wait_time: 1_000)
+    refute_text(session_a2, css("#received"), "delivered to all other sessions", wait_time: 1_000)
+  end
 end
