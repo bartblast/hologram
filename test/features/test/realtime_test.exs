@@ -82,6 +82,32 @@ defmodule HologramFeatureTests.RealtimeTest do
     assert_text(session, css("#received"), "delivered after reconnect")
   end
 
+  feature "subscriptions survive history navigation back from an external page", %{
+    session: session
+  } do
+    session = visit(session, Page1)
+
+    instance_id = current_instance_id()
+
+    session =
+      session
+      |> visit("/external")
+      |> assert_text("External Page")
+      |> go_back()
+      |> assert_page(Page1)
+      |> wait_for_subscription(@channel_1)
+
+    # The restored page reuses the preserved client-side instance id rather than
+    # minting a fresh one, so the registry re-attaches under the same key. A
+    # different value here would mean the page was reloaded from scratch instead
+    # of restored (bfcache or page-snapshot path).
+    assert current_instance_id() == instance_id
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered after back navigation")
+
+    assert_text(session, css("#received"), "delivered after back navigation")
+  end
+
   feature "unsubscribe_all on an offline client takes effect on reconnect", %{
     session: session
   } do
