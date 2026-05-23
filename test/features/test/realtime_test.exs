@@ -140,6 +140,35 @@ defmodule HologramFeatureTests.RealtimeTest do
     |> assert_text(css("#received-2"), "delivered")
   end
 
+  feature "reload fail-safe re-establishes the session when no receipt validates", %{
+    session: session
+  } do
+    # Page1 subscribes to a single channel. Tombstoning that channel while the
+    # SSE is dead leaves the client holding a receipt that no longer validates,
+    # so the reconnect handshake returns no bindings at all. With receipts on
+    # hand but none honored, the client gives up the in-place reconnect and does
+    # a full page reload - re-mounting under a fresh instance id and
+    # re-subscribing from scratch (contrast the offline unsubscribe_all case
+    # above, where a surviving channel keeps the in-place reconnect alive).
+    session = visit(session, Page1)
+
+    instance_id = current_instance_id()
+    simulate_sse_disconnect(instance_id)
+
+    session = wait_for_no_subscription(session, @channel_1)
+    Realtime.unsubscribe_all({:instance, instance_id}, @channel_1)
+
+    session = wait_for_subscription(session, @channel_1)
+
+    # The fresh instance id proves the page reloaded rather than reconnecting in
+    # place, and the channel re-subscribes cleanly so broadcasts dispatch again.
+    assert current_instance_id() != instance_id
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered after reload")
+
+    assert_text(session, css("#received"), "delivered after reload")
+  end
+
   feature "unsubscribe_all drops every cid binding on the channel", %{session: session} do
     session = visit(session, Page8)
 
