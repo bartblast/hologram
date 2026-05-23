@@ -296,4 +296,26 @@ defmodule HologramFeatureTests.RealtimeTest do
     Realtime.broadcast_action(@channel_1, :show, message: "delivered after logout")
     assert_text(session, css("#received"), "delivered after logout")
   end
+
+  @sessions 2
+  feature "broadcast from outside a handler can exclude an identity", %{
+    sessions: [session_a, session_b]
+  } do
+    # Connect A first so its instance id can be captured while it is the only
+    # registered connection, then connect B.
+    session_a = visit(session_a, Page1)
+    instance_a = current_instance_id()
+    session_b = visit(session_b, Page1)
+
+    # Broadcasting with A excluded reaches B but not A.
+    Realtime.broadcast_action_except(
+      {:instance, instance_a},
+      @channel_1,
+      :show,
+      message: "delivered to the rest"
+    )
+
+    assert_text(session_b, css("#received"), "delivered to the rest")
+    refute_text(session_a, css("#received"), "delivered to the rest", wait_time: 1_000)
+  end
 end
