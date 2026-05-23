@@ -336,6 +336,7 @@ defmodule HologramFeatureTests.RealtimeTest do
     # different session id).
     session_a = visit(session_a, Page1)
     session_a_id = current_session_id()
+
     session_b = visit(session_b, Page1)
 
     # Broadcasting with A's session excluded reaches B (a different session) but
