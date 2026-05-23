@@ -23,10 +23,17 @@ defmodule HologramFeatureTests.Realtime.Page12 do
   def template do
     ~HOLO"""
     <p>Received: <strong id="received">{@received}</strong></p>
+    <button $click={command: :broadcast_except_user}>Exclude user</button>
     """
   end
 
   def action(:show, params, component) do
     put_state(component, :received, params[:message])
+  end
+
+  def command(:broadcast_except_user, _params, server) do
+    put_broadcast_except(server, {:user, server.user_id}, @channel_1, :show,
+      message: "delivered to all other users"
+    )
   end
 end
