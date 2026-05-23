@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page6
   alias HologramFeatureTests.Realtime.Page7
   alias HologramFeatureTests.Realtime.Page8
+  alias HologramFeatureTests.Realtime.Page9
 
   @channel_1 {:room, 1}
   @channel_2 {:room, 2}
@@ -195,5 +196,32 @@ defmodule HologramFeatureTests.RealtimeTest do
     |> assert_text(css("#received-page"), "delivered")
     |> assert_text(css("#received-component-1"), "none")
     |> assert_text(css("#received-component-2"), "delivered")
+  end
+
+  feature "logout drops user-authorized subscriptions in place", %{session: session} do
+    # Page9 subscribes to @channel_1 while logged in, so the binding is
+    # authorized under that user. Logging out (server.user_id -> nil in the
+    # command handler) makes the SSE process drop that binding in place via the
+    # identity-change announce - no full page reload.
+    session = visit(session, Page9)
+
+    instance_id = current_instance_id()
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered while authed")
+    session = assert_text(session, css("#received"), "delivered while authed")
+
+    session =
+      session
+      |> click(button("Log out"))
+      |> wait_for_no_subscription(@channel_1)
+
+    # Same instance id confirms no full page reload happened.
+    assert current_instance_id() == instance_id
+
+    # The dropped binding means this broadcast must never reach the client.
+    # Give it time to (not) arrive before refuting that it ever showed up.
+    Realtime.broadcast_action(@channel_1, :show, message: "blocked after logout")
+
+    refute_text(session, css("#received"), "blocked after logout", wait_time: 1_000)
   end
 end
