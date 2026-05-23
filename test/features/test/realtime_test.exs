@@ -298,7 +298,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   end
 
   @sessions 2
-  feature "broadcast from outside a handler can exclude an identity", %{
+  feature "broadcast from outside a handler can exclude an instance", %{
     sessions: [session_a, session_b]
   } do
     # Connect A first so its instance id can be captured while it is the only
@@ -307,7 +307,7 @@ defmodule HologramFeatureTests.RealtimeTest do
     instance_a = current_instance_id()
     session_b = visit(session_b, Page1)
 
-    # Broadcasting with A excluded reaches B but not A.
+    # Broadcasting with A's instance excluded reaches B but not A.
     Realtime.broadcast_action_except(
       {:instance, instance_a},
       @channel_1,
@@ -317,5 +317,29 @@ defmodule HologramFeatureTests.RealtimeTest do
 
     assert_text(session_b, css("#received"), "delivered to the rest")
     refute_text(session_a, css("#received"), "delivered to the rest", wait_time: 1_000)
+  end
+
+  @sessions 2
+  feature "broadcast from outside a handler can exclude a session", %{
+    sessions: [session_a, session_b]
+  } do
+    # Connect A first so its session id can be captured while it is the only
+    # registered connection, then connect B (a separate Wallaby session, so a
+    # different session id).
+    session_a = visit(session_a, Page1)
+    session_a_id = current_session_id()
+    session_b = visit(session_b, Page1)
+
+    # Broadcasting with A's session excluded reaches B (a different session) but
+    # not A.
+    Realtime.broadcast_action_except(
+      {:session, session_a_id},
+      @channel_1,
+      :show,
+      message: "delivered to other sessions"
+    )
+
+    assert_text(session_b, css("#received"), "delivered to other sessions")
+    refute_text(session_a, css("#received"), "delivered to other sessions", wait_time: 1_000)
   end
 end
