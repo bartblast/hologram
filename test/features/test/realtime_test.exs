@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias Hologram.Realtime
   alias HologramFeatureTests.Realtime.Page1
   alias HologramFeatureTests.Realtime.Page10
+  alias HologramFeatureTests.Realtime.Page11
   alias HologramFeatureTests.Realtime.Page12
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page3
@@ -474,5 +475,20 @@ defmodule HologramFeatureTests.RealtimeTest do
 
     refute_text(session_a1, css("#received"), "delivered to all other users", wait_time: 1_000)
     refute_text(session_a2, css("#received"), "delivered to all other users", wait_time: 1_000)
+  end
+
+  feature "server grants a subscription to a connected client", %{session: session} do
+    # Page11 declares no subscription in init, so the live client starts with no
+    # binding on @channel_1.
+    session = visit(session, Page11)
+
+    # The server grants a {@channel_1, "page"} binding to the live connection;
+    # gate on the registry reflecting it before broadcasting.
+    Realtime.subscribe({:instance, current_instance_id()}, @channel_1, "page")
+    session = wait_for_subscription(session, @channel_1)
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered on granted subscription")
+
+    assert_text(session, css("#received"), "delivered on granted subscription")
   end
 end
