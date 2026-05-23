@@ -87,4 +87,21 @@ defmodule Hologram.Runtime.SessionTest do
                Plug.Conn.get_session(conn_2, @session_id_key)
     end
   end
+
+  describe "put_user_id/2" do
+    test "stores the user ID under the user_id key" do
+      conn = put_user_id(conn_with_empty_session(), 42)
+
+      assert Plug.Conn.get_session(conn, @user_id_key) == 42
+    end
+
+    test "removes the user_id key when given nil" do
+      conn =
+        %{@user_id_key => 42}
+        |> conn_with_session()
+        |> put_user_id(nil)
+
+      assert Plug.Conn.get_session(conn, @user_id_key) == nil
+    end
+  end
 end

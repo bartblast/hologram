@@ -52,4 +52,17 @@ defmodule Hologram.Runtime.Session do
       _session_id -> conn
     end
   end
+
+  @doc """
+  Persists the authenticated Hologram user ID in the Phoenix session under the
+  `#{inspect(@user_id_key)}` key, or removes the key when `user_id` is `nil`.
+  """
+  @spec put_user_id(Plug.Conn.t(), any) :: Plug.Conn.t()
+  def put_user_id(conn, nil) do
+    Plug.Conn.delete_session(conn, @user_id_key)
+  end
+
+  def put_user_id(conn, user_id) do
+    Plug.Conn.put_session(conn, @user_id_key, user_id)
+  end
 end
