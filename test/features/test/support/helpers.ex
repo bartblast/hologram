@@ -255,17 +255,25 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Custom refute_has/2 that returns immediately when element is not found.
+  Custom refute_has that returns immediately when the element is not found.
 
   Unlike Wallaby.Browser.refute_has/2 which always waits for max_wait_time,
   this version:
   - Returns immediately if the element is NOT present (fast path)
   - Waits/retries if the element IS present, giving it time to disappear
+
+  Pass `wait_time: ms` to assert absence only after waiting `ms` first, so an
+  appearance arriving within that window is still caught.
   """
-  defmacro refute_has(parent, query) do
+  defmacro refute_has(parent, query, opts \\ []) do
     quote do
       parent = unquote(parent)
       query = unquote(query)
+
+      case unquote(opts)[:wait_time] do
+        nil -> :ok
+        wait_time -> :timer.sleep(wait_time)
+      end
 
       case execute_refute_query(parent, query) do
         {:error, :invalid_selector} ->
@@ -277,6 +285,19 @@ defmodule HologramFeatureTests.Helpers do
         {:ok, query} ->
           raise Wallaby.ExpectationNotMetError, ErrorMessage.message(query, :found)
       end
+    end
+  end
+
+  @doc """
+  Refutes that the element matching `query` displays `text`. The negative
+  counterpart to `assert_text/3`; accepts the same `opts` as `refute_has/3`.
+  """
+  defmacro refute_text(parent, query, text, opts \\ []) do
+    quote do
+      text_query =
+        Map.update!(unquote(query), :conditions, &Keyword.put(&1, :text, unquote(text)))
+
+      refute_has(unquote(parent), text_query, unquote(opts))
     end
   end
 
