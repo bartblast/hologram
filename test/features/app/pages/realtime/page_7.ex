@@ -18,6 +18,7 @@ defmodule HologramFeatureTests.Realtime.Page7 do
     ~HOLO"""
     <p>Received: <strong id="received">{@received}</strong></p>
     <button $click={command: :broadcast}>Broadcast</button>
+    <button $click={command: :broadcast_except_instance}>Exclude instance</button>
     """
   end
 
@@ -27,5 +28,11 @@ defmodule HologramFeatureTests.Realtime.Page7 do
 
   def command(:broadcast, _params, server) do
     put_broadcast(server, @channel_1, :show, message: "delivered")
+  end
+
+  def command(:broadcast_except_instance, _params, server) do
+    put_broadcast_except(server, {:instance, server.instance_id}, @channel_1, :show,
+      message: "delivered to everyone else"
+    )
   end
 end
