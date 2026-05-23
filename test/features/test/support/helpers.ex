@@ -373,6 +373,28 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Visits `page_module` in `session` as a second tab of `origin`'s Hologram
+  session, by copying `origin`'s signed `phoenix_session` cookie into it.
+
+  Wallaby sessions have isolated cookie jars, so a second tab is otherwise a
+  separate session. A cookie can only be set once the browser is on the domain,
+  hence the throwaway `/external` visit (a plain page, no session/SSE) before
+  setting it; the final `visit/3` then loads the page carrying `origin`'s
+  cookie. Use it to give a connection a same-session sibling.
+  """
+  def visit_as_sibling(session, origin, page_module, params \\ []) do
+    %{"value" => session_cookie} =
+      origin
+      |> cookies()
+      |> Enum.find(&(&1["name"] == "phoenix_session"))
+
+    session
+    |> visit("/external")
+    |> Browser.set_cookie("phoenix_session", session_cookie)
+    |> visit(page_module, params)
+  end
+
+  @doc """
   Inverse of `wait_for_subscription/2`: blocks until no `SubscriptionRegistry`
   entry holds a subscription on the given `channel`, then returns the
   `session` so the helper can be piped. Raises if the subscription persists
