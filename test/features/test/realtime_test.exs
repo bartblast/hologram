@@ -358,15 +358,20 @@ defmodule HologramFeatureTests.RealtimeTest do
     refute_text(session_a2, css("#received"), "delivered to other sessions", wait_time: 1_000)
   end
 
-  @sessions 2
+  @sessions 3
   feature "broadcast from outside a handler can exclude a user (anonymous clients still receive)",
-          %{sessions: [session_a, session_b]} do
-    # A is logged in as user 1; B is anonymous. Both subscribe to @channel_1.
-    session_a = visit(session_a, Page12, user_id: 1)
+          %{sessions: [session_a1, session_a2, session_b]} do
+    # A1 and A2 are two independent logins as the same user 1 (separate sessions,
+    # not cookie-shared - a shared cookie would share the session and couldn't
+    # distinguish user-scope from session-scope). B is anonymous. All subscribe
+    # to @channel_1.
+    session_a1 = visit(session_a1, Page12, user_id: 1)
+    session_a2 = visit(session_a2, Page12, user_id: 1)
     session_b = visit(session_b, Page1)
 
-    # Excluding user 1 reaches the anonymous B (no user identity to match) but
-    # not A.
+    # Excluding user 1 skips every session of that user: both A1 and the
+    # same-user-different-session A2 miss the broadcast, while the anonymous B
+    # (no user identity to match) receives.
     Realtime.broadcast_action_except(
       {:user, 1},
       @channel_1,
@@ -375,7 +380,9 @@ defmodule HologramFeatureTests.RealtimeTest do
     )
 
     assert_text(session_b, css("#received"), "delivered to anonymous clients")
-    refute_text(session_a, css("#received"), "delivered to anonymous clients", wait_time: 1_000)
+
+    refute_text(session_a1, css("#received"), "delivered to anonymous clients", wait_time: 1_000)
+    refute_text(session_a2, css("#received"), "delivered to anonymous clients", wait_time: 1_000)
   end
 
   @sessions 2
