@@ -298,26 +298,33 @@ defmodule HologramFeatureTests.RealtimeTest do
     assert_text(session, css("#received"), "delivered after logout")
   end
 
-  @sessions 2
+  @sessions 3
   feature "broadcast from outside a handler can exclude an instance", %{
-    sessions: [session_a, session_b]
+    sessions: [session_a1, session_a2, session_b]
   } do
-    # Connect A first so its instance id can be captured while it is the only
-    # registered connection, then connect B.
-    session_a = visit(session_a, Page1)
-    instance_a = current_instance_id()
+    # Connect A1 first so its instance id can be captured while it is the only
+    # registered connection. A2 is a second tab of A1's session (same session,
+    # different instance); B is a separate session.
+    session_a1 = visit(session_a1, Page1)
+    instance_a1 = current_instance_id()
+
+    session_a2 = visit_as_sibling(session_a2, session_a1, Page1)
     session_b = visit(session_b, Page1)
 
-    # Broadcasting with A's instance excluded reaches B but not A.
+    # Excluding A1's instance skips only that one connection: its same-session
+    # sibling A2 and the unrelated B both still receive (instance exclusion is
+    # per-connection, not per-session).
     Realtime.broadcast_action_except(
-      {:instance, instance_a},
+      {:instance, instance_a1},
       @channel_1,
       :show,
       message: "delivered to the rest"
     )
 
+    assert_text(session_a2, css("#received"), "delivered to the rest")
     assert_text(session_b, css("#received"), "delivered to the rest")
-    refute_text(session_a, css("#received"), "delivered to the rest", wait_time: 1_000)
+
+    refute_text(session_a1, css("#received"), "delivered to the rest", wait_time: 1_000)
   end
 
   @sessions 2
