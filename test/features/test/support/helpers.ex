@@ -186,6 +186,18 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Returns the `user_id` recorded for the currently-attached SSE process.
+
+  Assumes exactly one SSE process is currently registered. Useful for gating on
+  a handler-driven identity change having propagated to the connection.
+  """
+  @spec current_user_id() :: term
+  def current_user_id do
+    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    entry.user_id
+  end
+
+  @doc """
   Executes a query for refute_has with optimized retry behavior.
 
   - Returns immediately if element is NOT found (fast path for refute_has)
@@ -402,6 +414,30 @@ defmodule HologramFeatureTests.Helpers do
       true ->
         :timer.sleep(100)
         wait_for_subscription(session, channel, start_time)
+    end
+  end
+
+  @doc """
+  Blocks until the currently-attached SSE process records `user_id`, then
+  returns the `session`. Gates on a handler-driven identity change (login or
+  logout) having propagated to the connection before its effects are asserted -
+  e.g. before broadcasting to check whether a binding was kept or dropped.
+  Raises if the value does not appear within `@max_wait_time`.
+  """
+  def wait_for_user_id(session, user_id, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      current_user_id() == user_id ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for connection user_id #{inspect(user_id)}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_user_id(session, user_id, start_time)
     end
   end
 
