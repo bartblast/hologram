@@ -214,6 +214,7 @@ defmodule Hologram.Controller do
     conn
     |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
+    |> maybe_persist_user_id(server_struct, flushed_server_struct)
     |> Controller.json(%{
       action: encoded_next_action,
       selfEchoes: encoded_self_echoes,
@@ -308,6 +309,7 @@ defmodule Hologram.Controller do
     conn
     |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
+    |> maybe_persist_user_id(server_struct, flushed_server_struct)
     |> Controller.html(final_html)
     |> Plug.Conn.halt()
   end
@@ -485,6 +487,19 @@ defmodule Hologram.Controller do
       token when is_binary(token) -> {:ok, token}
       _fallback -> :error
     end
+  end
+
+  # Persists a handler-driven `server.user_id` change into the Phoenix session
+  # (the opaque `:hologram_user_id` key) so later requests resolve the new
+  # identity. No-op when unchanged, leaving the session - and any Set-Cookie -
+  # untouched on the common path. Applied after the handler's own ops so
+  # `server.user_id` stays the source of truth for the key.
+  defp maybe_persist_user_id(conn, %Server{user_id: user_id}, %Server{user_id: user_id}) do
+    conn
+  end
+
+  defp maybe_persist_user_id(conn, _pre_server, %Server{user_id: user_id}) do
+    Session.put_user_id(conn, user_id)
   end
 
   defp process_command_result(command_result, server_struct, default_target) do

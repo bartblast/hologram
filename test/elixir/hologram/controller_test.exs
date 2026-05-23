@@ -1276,6 +1276,50 @@ defmodule Hologram.ControllerTest do
       refute_receive {:identity_changed, _session_id, _user_id}
     end
 
+    test "persists the changed user_id into the session when the handler changes identity" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
+    end
+
+    test "leaves the session user_id untouched when the handler does not change identity" do
+      session = Map.put(@session, :hologram_user_id, 7)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_a,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
+    end
+
     test "passes through when the SubscriptionRegistry has no entry for the instance_id" do
       conn = execute_successful_command_request()
 
@@ -1745,6 +1789,47 @@ defmodule Hologram.ControllerTest do
       end
 
       refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "persists the changed user_id into the session when init/3 changes identity" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{hologram_session_id: "test-session-id"})
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module21, %{}, [],
+          initial_page?: true,
+          instance_id: "test-instance-id",
+          csrf_token: @masked_csrf_token
+        )
+
+      assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
+    end
+
+    test "leaves the session user_id untouched when init/3 does not change identity" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+      :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
+
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{
+          hologram_session_id: "test-session-id",
+          hologram_user_id: 7
+        })
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module14, %{}, [],
+          initial_page?: true,
+          instance_id: "test-instance-id",
+          csrf_token: @masked_csrf_token
+        )
+
+      assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
     end
   end
 
