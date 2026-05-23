@@ -491,4 +491,21 @@ defmodule HologramFeatureTests.RealtimeTest do
 
     assert_text(session, css("#received"), "delivered on granted subscription")
   end
+
+  feature "a handler grants its own connection a new subscription", %{session: session} do
+    # Page11 declares no subscription in init, so the client starts with no
+    # binding on @channel_1.
+    session = visit(session, Page11)
+
+    # A command handler subscribes the connection to @channel_1 via
+    # put_subscription; gate on the registry reflecting it before broadcasting.
+    session =
+      session
+      |> click(button("Subscribe"))
+      |> wait_for_subscription(@channel_1)
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered after subscribing")
+
+    assert_text(session, css("#received"), "delivered after subscribing")
+  end
 end
