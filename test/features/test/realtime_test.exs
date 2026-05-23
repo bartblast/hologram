@@ -125,4 +125,20 @@ defmodule HologramFeatureTests.RealtimeTest do
     |> assert_text(css("#received-component-1"), "none")
     |> assert_text(css("#received-component-2"), "none")
   end
+
+  feature "unsubscribe drops a single cid binding on the channel", %{session: session} do
+    # Page8 binds two components to @channel_1 (cids "component_1" and
+    # "component_2"). A per-binding unsubscribe targets only "component_1", so a
+    # subsequent broadcast still reaches the sibling "component_2" binding on the
+    # same channel and the page's @channel_2 binding.
+    session = visit(session, Page8)
+
+    Realtime.unsubscribe({:instance, current_instance_id()}, @channel_1, "component_1")
+
+    session
+    |> click(button("Broadcast"))
+    |> assert_text(css("#received-page"), "delivered")
+    |> assert_text(css("#received-component-1"), "none")
+    |> assert_text(css("#received-component-2"), "delivered")
+  end
 end
