@@ -224,4 +224,47 @@ defmodule HologramFeatureTests.RealtimeTest do
 
     refute_text(session, css("#received"), "blocked after logout", wait_time: 1_000)
   end
+
+  @sessions 2
+  feature "logout drops user-authorized subscriptions across tabs in the session", %{
+    sessions: [tab_a, tab_b]
+  } do
+    # Tab A establishes the session (logged in as user 1, subscribed to
+    # @channel_1 under that user).
+    tab_a = visit(tab_a, Page9)
+
+    # Tab B joins the SAME session by reusing tab A's signed session cookie, so
+    # both SSE connections sit under one session_id and share its announce
+    # topic. Wallaby sessions otherwise have isolated cookie jars; a cookie can
+    # only be set once the browser is on the domain, hence the priming visit.
+    %{"value" => session_cookie} =
+      tab_a
+      |> cookies()
+      |> Enum.find(&(&1["name"] == "phoenix_session"))
+
+    tab_b =
+      tab_b
+      |> visit("/external")
+      |> set_cookie("phoenix_session", session_cookie)
+      |> visit(Page9)
+
+    # Both tabs are subscribed, so the broadcast reaches both.
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered while authed")
+    tab_a = assert_text(tab_a, css("#received"), "delivered while authed")
+    tab_b = assert_text(tab_b, css("#received"), "delivered while authed")
+
+    # Tab A logs out. The identity-change announce on the shared session topic
+    # reaches both SSE processes, dropping the user-1 binding on each.
+    tab_a = click(tab_a, button("Log out"))
+    wait_for_no_subscription(tab_a, @channel_1)
+
+    Realtime.broadcast_action(@channel_1, :show, message: "blocked after logout")
+
+    # Both tabs converge: the post-logout broadcast dispatches on neither, and
+    # neither reloaded (each still shows its pre-logout value, not "none").
+    refute_text(tab_a, css("#received"), "blocked after logout", wait_time: 1_000)
+    assert_text(tab_a, css("#received"), "delivered while authed")
+    refute_text(tab_b, css("#received"), "blocked after logout")
+    assert_text(tab_b, css("#received"), "delivered while authed")
+  end
 end
