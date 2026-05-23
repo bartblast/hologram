@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
   alias Hologram.Realtime
   alias HologramFeatureTests.Realtime.Page1
+  alias HologramFeatureTests.Realtime.Page10
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
@@ -266,5 +267,33 @@ defmodule HologramFeatureTests.RealtimeTest do
     assert_text(tab_a, css("#received"), "delivered while authed")
     refute_text(tab_b, css("#received"), "blocked after logout")
     assert_text(tab_b, css("#received"), "delivered while authed")
+  end
+
+  feature "anonymous subscription survives login and logout", %{session: session} do
+    # Page10 subscribes while anonymous, so the binding is authorized under no
+    # user. By the elevation rule such a binding is never dropped on an identity
+    # change, so it stays live across a login and a later logout. Each broadcast
+    # is gated behind wait_for_user_id so it fires only after the identity change
+    # has propagated - otherwise it would race ahead and not exercise survival.
+    session = visit(session, Page10)
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered while anonymous")
+    session = assert_text(session, css("#received"), "delivered while anonymous")
+
+    session =
+      session
+      |> click(button("Log in"))
+      |> wait_for_user_id(1)
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered after login")
+    session = assert_text(session, css("#received"), "delivered after login")
+
+    session =
+      session
+      |> click(button("Log out"))
+      |> wait_for_user_id(nil)
+
+    Realtime.broadcast_action(@channel_1, :show, message: "delivered after logout")
+    assert_text(session, css("#received"), "delivered after logout")
   end
 end
