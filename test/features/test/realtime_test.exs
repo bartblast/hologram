@@ -363,4 +363,23 @@ defmodule HologramFeatureTests.RealtimeTest do
     assert_text(session_b, css("#received"), "delivered to anonymous clients")
     refute_text(session_a, css("#received"), "delivered to anonymous clients", wait_time: 1_000)
   end
+
+  @sessions 2
+  feature "broadcast from outside a handler can exclude a user (other users still receive)",
+          %{sessions: [session_a, session_b]} do
+    # A is user 1, B is user 2. Both subscribe to @channel_1.
+    session_a = visit(session_a, Page12, user_id: 1)
+    session_b = visit(session_b, Page12, user_id: 2)
+
+    # Excluding user 1 reaches B (a different user) but not A.
+    Realtime.broadcast_action_except(
+      {:user, 1},
+      @channel_1,
+      :show,
+      message: "delivered to other users"
+    )
+
+    assert_text(session_b, css("#received"), "delivered to other users")
+    refute_text(session_a, css("#received"), "delivered to other users", wait_time: 1_000)
+  end
 end
