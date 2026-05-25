@@ -420,33 +420,34 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until at least `count` `SubscriptionRegistry` entries hold a
-  subscription on `channel` (`count` defaults to 1), then returns the `session`
-  so the helper can be piped. Raises if the count is not reached within
-  `@max_wait_time`.
+  Blocks until at least `count` (default 1) `SubscriptionRegistry` connections
+  hold a binding on `channel` - or, when `cid` is given, a `{channel, cid}`
+  binding specifically - then returns the `session` so the helper can be piped.
+  Raises if the count is not reached within `@max_wait_time`.
 
   Gate any broadcast whose recipients a test asserts on: subscriptions register
   asynchronously after the page mounts (handshake POST + SSE attach), and
   `Phoenix.PubSub` is fire-and-forget, so a broadcast that fires first reaches
-  no one. In multi-session tests pass `count` to require that *every*
-  participating connection has subscribed - a count of 1 can be satisfied by a
-  single session, letting the broadcast race the others (a missed delivery, or a
-  refute that passes vacuously because the "excluded" session was never there).
+  no one - a missed delivery, or a refute that passes vacuously because the
+  asserted-on session was never there. Pass `count` > 1 to require *every*
+  participating connection in a multi-session test. Pass a `cid` when several
+  bindings share one connection (e.g. multiple components on one page), where a
+  connection count can't tell whether a specific cid is bound.
   """
-  def wait_for_subscription(session, channel, count \\ 1, start_time \\ nil) do
+  def wait_for_subscription(session, channel, count \\ 1, cid \\ nil, start_time \\ nil) do
     start_time = start_time || current_time()
 
     cond do
-      subscription_count(channel) >= count ->
+      subscription_count(channel, cid) >= count ->
         session
 
       timed_out?(start_time) ->
         raise Wallaby.ExpectationNotMetError,
-              "Timed out waiting for #{count} subscription(s) on channel #{inspect(channel)}"
+              "Timed out waiting for #{count} subscription(s) on #{inspect(channel)} (cid: #{inspect(cid)})"
 
       true ->
         :timer.sleep(100)
-        wait_for_subscription(session, channel, count, start_time)
+        wait_for_subscription(session, channel, count, cid, start_time)
     end
   end
 
@@ -549,11 +550,13 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  defp subscription_count(channel) do
+  defp subscription_count(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
     |> Enum.count(fn {_instance_id, entry} ->
-      Enum.any?(entry.bindings, fn {{ch, _cid}, _user_id} -> ch == channel end)
+      Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
+        ch == channel and (is_nil(cid) or c == cid)
+      end)
     end)
   end
 
