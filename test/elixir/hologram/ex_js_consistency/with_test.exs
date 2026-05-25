@@ -1,9 +1,3 @@
-# These tests intentionally exercise minimal and non-standard `with` forms (single
-# clause + else, all-bare clauses, etc.), so Credo's `with`-refactoring suggestions
-# do not apply here.
-# credo:disable-for-this-file Credo.Check.Readability.WithSingleClause
-# credo:disable-for-this-file Credo.Check.Refactor.WithClauses
-
 defmodule Hologram.ExJsConsistency.WithTest do
   @moduledoc """
   IMPORTANT!
@@ -14,6 +8,14 @@ defmodule Hologram.ExJsConsistency.WithTest do
 
   @moduletag :consistency
 
+  # Some clauses below wrap their value in wrap_term/1 to keep it opaque to the compiler.
+  # Without it, some Elixir versions emit "this check/guard will always yield the same
+  # result" for a literal `<-` / `=` clause that can never match, or for an always-false
+  # guard.
+
+  # credo:disable-for-this-file Credo.Check.Readability.WithSingleClause
+  # credo:disable-for-this-file Credo.Check.Refactor.WithClauses
+
   test "evaluates the body when there are no clauses" do
     result = with do: nil
 
@@ -21,7 +23,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
   end
 
   test "returns the unmatched value when there are no else clauses" do
-    a = :ok
+    a = wrap_term(:ok)
 
     result =
       with :error <- a do
@@ -92,8 +94,6 @@ defmodule Hologram.ExJsConsistency.WithTest do
     end
 
     test "raises a MatchError when a bare clause fails to match" do
-      # wrap_term/1 keeps the compiler from flagging `:error = a` as a pattern that
-      # will never match (the bare `=` is type-checked at compile time).
       a = wrap_term(:ok)
 
       assert_error MatchError, "no match of right hand side value: :ok", fn ->
@@ -106,7 +106,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
 
   describe "else clauses" do
     test "routes a failed match to a single else clause" do
-      a = :ok
+      a = wrap_term(:ok)
 
       result =
         with :error <- a do
@@ -119,7 +119,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
     end
 
     test "selects the matching clause among multiple else clauses" do
-      a = :ok
+      a = wrap_term(:ok)
 
       result =
         with :error <- a do
@@ -134,7 +134,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
     end
 
     test "selects a guarded else clause when its guard passes" do
-      a = :ok
+      a = wrap_term(:ok)
 
       result =
         with :error <- a do
@@ -147,8 +147,6 @@ defmodule Hologram.ExJsConsistency.WithTest do
     end
 
     test "routes a failed guard to the else clauses" do
-      # wrap_term/1 keeps `b` opaque; otherwise Elixir < 1.18 warns that the guard
-      # `b == :no` "will always yield the same result" (b is statically known to be :ok).
       a = wrap_term(:ok)
 
       result =
@@ -162,7 +160,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
     end
 
     test "raises WithClauseError when no else clause matches" do
-      a = :ok
+      a = wrap_term(:ok)
 
       assert_error WithClauseError, "no with clause matching: :ok", fn ->
         with :error <- a do
@@ -192,7 +190,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
 
       result =
         with x <- a,
-             :fail <- :mismatch do
+             :fail <- wrap_term(:mismatch) do
           x
         else
           _fallback -> x
