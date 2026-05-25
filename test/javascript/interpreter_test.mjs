@@ -7287,6 +7287,32 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(result, expected);
       });
 
+      it("returns the body result for a clause with a passing guard", () => {
+        // with b when b == :ok <- a do
+        //   {a, b}
+        // end
+
+        const guard = (context) =>
+          Erlang["==/2"](context.vars.b, Type.atom("ok"));
+
+        const result = Interpreter.with(
+          body,
+          [
+            {
+              match: Type.variablePattern("b"),
+              guards: [guard],
+              expression: (context) => context.vars.a,
+            },
+          ],
+          [],
+          context,
+        );
+
+        const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
       it("lets a later clause shadow an earlier binding", () => {
         // with a <- (
         //  b = 1
