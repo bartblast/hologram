@@ -1047,17 +1047,22 @@ export default class Interpreter {
 
   static with(body, clauses, elseClauses, context) {
     const originalContext = context;
+
+    // Clauses form a sequential pipeline that aborts on the first failure, so
+    // (unlike case) there is no need to clone per clause: a single working copy
+    // protects the caller's context, and on failure the accumulated bindings are
+    // discarded in favor of the original context (else runs in the pre-with scope).
+    context = Interpreter.cloneContext(context);
+
     for (const clause of clauses) {
-      const contextClone = Interpreter.cloneContext(context);
-      const condition = clause.expression(contextClone);
+      const condition = clause.expression(context);
       const plainClause = !clause.match;
       const matched =
-        plainClause ||
-        Interpreter.isMatched(clause.match, condition, contextClone);
-      Interpreter.updateVarsToMatchedValues(contextClone);
+        plainClause || Interpreter.isMatched(clause.match, condition, context);
+      Interpreter.updateVarsToMatchedValues(context);
       const guardMatched =
         plainClause ||
-        (matched && Interpreter.#evaluateGuards(clause.guards, contextClone));
+        (matched && Interpreter.#evaluateGuards(clause.guards, context));
 
       if (!matched || !guardMatched) {
         return Interpreter.#withElse(
@@ -1066,10 +1071,9 @@ export default class Interpreter {
           Interpreter.cloneContext(originalContext),
         );
       }
-      context = contextClone;
     }
 
-    return body(Interpreter.cloneContext(context));
+    return body(context);
   }
 
   static #areBitstringsEqual(bitstring1, bitstring2) {
