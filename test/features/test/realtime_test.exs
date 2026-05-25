@@ -180,28 +180,6 @@ defmodule HologramFeatureTests.RealtimeTest do
     end
 
     @sessions 3
-    feature "a user, from inside a handler (other users still receive)", %{
-      sessions: [session_a1, session_a2, session_b]
-    } do
-      # A1 and A2 are two independent logins as the same user 1 (separate sessions,
-      # not cookie-shared - a shared cookie would share the session and couldn't
-      # distinguish user-scope from session-scope). B is logged in as user 2.
-      session_a1 = visit(session_a1, Page12, user_id: 1)
-      session_a2 = visit(session_a2, Page12, user_id: 1)
-      session_b = visit(session_b, Page12, user_id: 2)
-
-      # A1 excludes its own user, so every session of that user is skipped: both A1
-      # and the same-user-different-session A2 miss the broadcast, while user 2's B
-      # still receives (user exclusion reaches all of a user's connections).
-      session_a1 = click(session_a1, button("Exclude user"))
-
-      assert_text(session_b, css("#received"), "delivered to all other users")
-
-      refute_text(session_a1, css("#received"), "delivered to all other users", wait_time: 1_000)
-      refute_text(session_a2, css("#received"), "delivered to all other users", wait_time: 1_000)
-    end
-
-    @sessions 3
     feature "a user, from outside a handler (anonymous clients still receive)", %{
       sessions: [session_a1, session_a2, session_b]
     } do
@@ -238,6 +216,28 @@ defmodule HologramFeatureTests.RealtimeTest do
         "delivered to anonymous clients",
         wait_time: 1_000
       )
+    end
+
+    @sessions 3
+    feature "a user, from inside a handler (other users still receive)", %{
+      sessions: [session_a1, session_a2, session_b]
+    } do
+      # A1 and A2 are two independent logins as the same user 1 (separate sessions,
+      # not cookie-shared - a shared cookie would share the session and couldn't
+      # distinguish user-scope from session-scope). B is logged in as user 2.
+      session_a1 = visit(session_a1, Page12, user_id: 1)
+      session_a2 = visit(session_a2, Page12, user_id: 1)
+      session_b = visit(session_b, Page12, user_id: 2)
+
+      # A1 excludes its own user, so every session of that user is skipped: both A1
+      # and the same-user-different-session A2 miss the broadcast, while user 2's B
+      # still receives (user exclusion reaches all of a user's connections).
+      session_a1 = click(session_a1, button("Exclude user"))
+
+      assert_text(session_b, css("#received"), "delivered to all other users")
+
+      refute_text(session_a1, css("#received"), "delivered to all other users", wait_time: 1_000)
+      refute_text(session_a2, css("#received"), "delivered to all other users", wait_time: 1_000)
     end
 
     @sessions 3
