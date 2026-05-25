@@ -19,12 +19,16 @@ defmodule HologramFeatureTests.RealtimeTest do
 
   @channel_1 {:room, 1}
   @channel_2 {:room, 2}
+  @channel_9 {:room, 9}
 
   describe "broadcasting" do
     @sessions 2
     feature "from inside a handler", %{sessions: [session_1, session_2]} do
       session_1 = visit(session_1, Page7)
       session_2 = visit(session_2, Page7)
+
+      # Both connections must be subscribed before the broadcast.
+      wait_for_subscription(session_2, @channel_1, 2)
 
       click(session_1, button("Broadcast"))
 
@@ -36,6 +40,9 @@ defmodule HologramFeatureTests.RealtimeTest do
     feature "from outside a handler", %{sessions: [session_1, session_2]} do
       session_1 = visit(session_1, Page1)
       session_2 = visit(session_2, Page1)
+
+      # Both connections must be subscribed before the broadcast.
+      wait_for_subscription(session_2, @channel_1, 2)
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered")
 
@@ -54,6 +61,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       session_a1 = visit(session_a1, Page7)
       session_a2 = visit_as_sibling(session_a2, session_a1, Page7)
       session_b = visit(session_b, Page7)
+
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
 
       # A1 excludes its own instance, so only A1's tab is skipped: its same-session
       # sibling A2 and the unrelated B both still receive (instance exclusion is
@@ -78,6 +89,10 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       session_a2 = visit_as_sibling(session_a2, session_a1, Page1)
       session_b = visit(session_b, Page1)
+
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
 
       # Excluding A1's instance skips only that one connection: its same-session
       # sibling A2 and the unrelated B both still receive (instance exclusion is
@@ -104,6 +119,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       session_a1 = visit(session_a1, Page7)
       session_a2 = visit_as_sibling(session_a2, session_a1, Page7)
       session_b = visit(session_b, Page7)
+
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
 
       # A1 excludes its own session, so every tab of that session is skipped: both
       # A1 and its same-session sibling A2 miss the broadcast, while the unrelated B
@@ -141,6 +160,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       session_a2 = visit_as_sibling(session_a2, session_a1, Page1)
       session_b = visit(session_b, Page1)
 
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
+
       # Excluding A1's session skips every connection of that session: both A1 and
       # its same-session sibling A2 miss the broadcast, while B (a different
       # session) receives (session exclusion reaches all connections of the
@@ -169,6 +192,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       session_a2 = visit(session_a2, Page12, user_id: 1)
       session_b = visit(session_b, Page1)
 
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
+
       # A1 excludes its own user, so every session of that user is skipped: both A1
       # and the same-user-different-session A2 miss the broadcast, while the
       # anonymous B (no user identity to match) receives.
@@ -191,6 +218,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       session_a1 = visit(session_a1, Page12, user_id: 1)
       session_a2 = visit(session_a2, Page12, user_id: 1)
       session_b = visit(session_b, Page1)
+
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
 
       # Excluding user 1 skips every session of that user: both A1 and the
       # same-user-different-session A2 miss the broadcast, while the anonymous B
@@ -230,6 +261,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       session_a2 = visit(session_a2, Page12, user_id: 1)
       session_b = visit(session_b, Page12, user_id: 2)
 
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
+
       # A1 excludes its own user, so every session of that user is skipped: both A1
       # and the same-user-different-session A2 miss the broadcast, while user 2's B
       # still receives (user exclusion reaches all of a user's connections).
@@ -252,6 +287,10 @@ defmodule HologramFeatureTests.RealtimeTest do
       session_a1 = visit(session_a1, Page12, user_id: 1)
       session_a2 = visit(session_a2, Page12, user_id: 1)
       session_b = visit(session_b, Page12, user_id: 2)
+
+      # All three must be subscribed first, else the refute below could pass
+      # without the exclusion ever being exercised.
+      wait_for_subscription(session_b, @channel_1, 3)
 
       # Excluding user 1 skips every session of that user: both A1 and the
       # same-user-different-session A2 miss the broadcast, while B (a different
@@ -309,8 +348,13 @@ defmodule HologramFeatureTests.RealtimeTest do
       # Page2's page cid subscribes to @channel_1 and @channel_2. The command
       # deletes its @channel_1 binding, then broadcasts on both: @channel_2 (the
       # same cid on another channel) still delivers while @channel_1 does not.
+      session = visit(session, Page2)
+
+      # Both bindings must exist before the drop, or "received-1 = none" is vacuous.
+      wait_for_subscription(session, @channel_1)
+      wait_for_subscription(session, @channel_2)
+
       session
-      |> visit(Page2)
       |> click(button("Unsubscribe and broadcast"))
       |> assert_text(css("#received-2"), "delivered")
       |> assert_text(css("#received-1"), "none")
@@ -321,10 +365,14 @@ defmodule HologramFeatureTests.RealtimeTest do
     } do
       # Same shape as the inside case, driven via Realtime.unsubscribe: dropping
       # the page cid's @channel_1 binding leaves its @channel_2 binding intact.
-      # unsubscribe is async (announce-topic broadcast), so gate on the drop
-      # landing before broadcasting.
       session = visit(session, Page2)
 
+      # Both bindings must exist before the drop, or "received-1 = none" is vacuous.
+      wait_for_subscription(session, @channel_1)
+      wait_for_subscription(session, @channel_2)
+
+      # unsubscribe is async (announce-topic broadcast), so gate on the drop
+      # landing before broadcasting.
       Realtime.unsubscribe({:instance, current_instance_id()}, @channel_1, "page")
       session = wait_for_no_subscription(session, @channel_1)
 
@@ -343,8 +391,14 @@ defmodule HologramFeatureTests.RealtimeTest do
       # "component_3"). Component 3's command deletes its own {@channel_1, cid}
       # binding, then broadcasts on @channel_1: the sibling component 1 still
       # receives while component 3 does not.
+      session = visit(session, Page13)
+
+      # Both cid bindings must exist before the drop; they share one connection, so
+      # gate each cid (a connection count can't tell them apart).
+      wait_for_subscription(session, @channel_1, 1, "component_1")
+      wait_for_subscription(session, @channel_1, 1, "component_3")
+
       session
-      |> visit(Page13)
       |> click(button("Unsubscribe and broadcast"))
       |> assert_text(css("#received-component-1"), "delivered to sibling cid")
       |> assert_text(css("#received-component-3"), "none")
@@ -359,7 +413,16 @@ defmodule HologramFeatureTests.RealtimeTest do
       # same channel and the page's @channel_2 binding.
       session = visit(session, Page8)
 
+      # All three bindings must exist before the drop; gate each cid since they
+      # share one connection.
+      wait_for_subscription(session, @channel_1, 1, "component_1")
+      wait_for_subscription(session, @channel_1, 1, "component_2")
+      wait_for_subscription(session, @channel_2)
+
+      # unsubscribe is async, so gate on component_1's binding being gone before
+      # broadcasting.
       Realtime.unsubscribe({:instance, current_instance_id()}, @channel_1, "component_1")
+      session = wait_for_no_subscription(session, @channel_1, "component_1")
 
       session
       |> click(button("Broadcast"))
@@ -373,7 +436,15 @@ defmodule HologramFeatureTests.RealtimeTest do
     } do
       session = visit(session, Page8)
 
+      # All bindings must exist before the drop; gate each cid (shared connection).
+      wait_for_subscription(session, @channel_1, 1, "component_1")
+      wait_for_subscription(session, @channel_1, 1, "component_2")
+      wait_for_subscription(session, @channel_2)
+
+      # unsubscribe_all is async, so gate on @channel_1 being cleared before
+      # broadcasting.
       Realtime.unsubscribe_all({:instance, current_instance_id()}, @channel_1)
+      session = wait_for_no_subscription(session, @channel_1)
 
       session
       |> click(button("Broadcast"))
@@ -385,20 +456,35 @@ defmodule HologramFeatureTests.RealtimeTest do
 
   describe "subscriptions across navigation" do
     feature "dropped when navigating to a different page", %{session: session} do
+      session =
+        session
+        |> visit(Page3)
+        |> click(link("Go to Page 4"))
+        |> assert_page(Page4)
+
+      # Page 4 is subscribed to @channel_2, and Page 3's @channel_1 binding must be
+      # dropped, before broadcasting - else "received-1 = none" is vacuous.
+      wait_for_subscription(session, @channel_2)
+      session = wait_for_no_subscription(session, @channel_1)
+
       session
-      |> visit(Page3)
-      |> click(link("Go to Page 4"))
-      |> assert_page(Page4)
       |> click(button("Broadcast"))
       |> assert_text(css("#received-2"), "delivered")
       |> assert_text(css("#received-1"), "none")
     end
 
     feature "shared layout subscription persists", %{session: session} do
+      session =
+        session
+        |> visit(Page5)
+        |> click(link("Go to Page 6"))
+        |> assert_page(Page6)
+
+      # The shared layout's @channel_9 binding must persist across the navigation
+      # before broadcasting.
+      wait_for_subscription(session, @channel_9)
+
       session
-      |> visit(Page5)
-      |> click(link("Go to Page 6"))
-      |> assert_page(Page6)
       |> click(button("Broadcast"))
       |> assert_text(css("#received-shared"), "delivered")
     end
@@ -514,6 +600,9 @@ defmodule HologramFeatureTests.RealtimeTest do
       # identity-change announce - no full page reload.
       session = visit(session, Page9)
 
+      # Gate on the subscription before the first broadcast.
+      session = wait_for_subscription(session, @channel_1)
+
       instance_id = current_instance_id()
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered while authed")
@@ -557,6 +646,9 @@ defmodule HologramFeatureTests.RealtimeTest do
         |> set_cookie("phoenix_session", session_cookie)
         |> visit(Page9)
 
+      # Both tabs must be subscribed before the first broadcast.
+      wait_for_subscription(tab_b, @channel_1, 2)
+
       # Both tabs are subscribed, so the broadcast reaches both.
       Realtime.broadcast_action(@channel_1, :show, message: "delivered while authed")
       tab_a = assert_text(tab_a, css("#received"), "delivered while authed")
@@ -584,6 +676,9 @@ defmodule HologramFeatureTests.RealtimeTest do
       # is gated behind wait_for_user_id so it fires only after the identity change
       # has propagated - otherwise it would race ahead and not exercise survival.
       session = visit(session, Page10)
+
+      # Gate on the subscription before the first broadcast.
+      session = wait_for_subscription(session, @channel_1)
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered while anonymous")
       session = assert_text(session, css("#received"), "delivered while anonymous")
