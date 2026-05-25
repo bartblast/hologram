@@ -211,23 +211,12 @@ export default class Interpreter {
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
   static case(condition, clauses, context) {
-    if (typeof condition === "function") {
-      condition = condition(context);
-    }
-
-    for (const clause of clauses) {
-      const contextClone = Interpreter.cloneContext(context);
-
-      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
-        Interpreter.updateVarsToMatchedValues(contextClone);
-
-        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return clause.body(contextClone);
-        }
-      }
-    }
-
-    Interpreter.raiseCaseClauseError(condition);
+    return Interpreter.#checkAllClauses(
+      condition,
+      clauses,
+      context,
+      Interpreter.raiseCaseClauseError,
+    );
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update case().
@@ -890,6 +879,12 @@ export default class Interpreter {
     Interpreter.raiseError("CaseClauseError", message);
   }
 
+  static raiseWithClauseError(arg) {
+    const message = "no with clause matching: " + Interpreter.inspect(arg);
+
+    Interpreter.raiseError("WithClauseError", message);
+  }
+
   static raiseCompileError(message) {
     Interpreter.raiseError("CompileError", message);
   }
@@ -1050,11 +1045,31 @@ export default class Interpreter {
     return context;
   }
 
-  // TODO: finish implementing
-  static with() {
-    throw new HologramInterpreterError(
-      '"with" expression is not yet implemented in Hologram',
-    );
+  static with(body, clauses, elseClauses, context) {
+    const originalContext = context;
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+      const condition = clause.expression(contextClone);
+      const plainClause = !clause.match;
+      const matched =
+        plainClause ||
+        Interpreter.isMatched(clause.match, condition, contextClone);
+      Interpreter.updateVarsToMatchedValues(contextClone);
+      const guardMatched =
+        plainClause ||
+        (matched && Interpreter.#evaluateGuards(clause.guards, contextClone));
+
+      if (!matched || !guardMatched) {
+        return Interpreter.#withElse(
+          condition,
+          elseClauses,
+          Interpreter.cloneContext(originalContext),
+        );
+      }
+      context = contextClone;
+    }
+
+    return body(Interpreter.cloneContext(context));
   }
 
   static #areBitstringsEqual(bitstring1, bitstring2) {
@@ -1201,6 +1216,26 @@ export default class Interpreter {
         Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
       );
     };
+  }
+
+  static #checkAllClauses(condition, clauses, context, errorFun) {
+    if (typeof condition === "function") {
+      condition = condition(context);
+    }
+
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          return clause.body(contextClone);
+        }
+      }
+    }
+
+    errorFun(condition);
   }
 
   static #comparePids(pid1, pid2) {
@@ -1704,6 +1739,18 @@ export default class Interpreter {
     Interpreter.raiseError(
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
+    );
+  }
+
+  static #withElse(condition, elseClauses, context) {
+    if (elseClauses.length === 0) {
+      return condition;
+    }
+    return Interpreter.#checkAllClauses(
+      condition,
+      elseClauses,
+      context,
+      Interpreter.raiseWithClauseError,
     );
   }
 }
