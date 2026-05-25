@@ -7214,12 +7214,13 @@ describe("Interpreter", () => {
           a: Type.atom("ok"),
         },
       });
+
       body = (context) => {
         return Type.tuple([context.vars.a, context.vars.b]);
       };
     });
 
-    it("handles an empty with", () => {
+    it("evaluates the body when there are no clauses", () => {
       // with do: nil
       const result = Interpreter.with(
         (_context) => {
@@ -7231,9 +7232,11 @@ describe("Interpreter", () => {
       );
 
       const expected = Type.atom("nil");
+
       assert.deepStrictEqual(result, expected);
     });
-    it("successful match returns body result (single match clause)", () => {
+
+    it("returns the body result for a single matching clause", () => {
       // with b <- a do
       //   {a, b}
       // end
@@ -7251,9 +7254,11 @@ describe("Interpreter", () => {
       );
 
       const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+
       assert.deepStrictEqual(result, expected);
     });
-    it("successful match return body result (multiple match clause)", () => {
+
+    it("returns the body result for multiple matching clauses", () => {
       // with b <- a,
       //   :ok <- b do
       //   {a, b}
@@ -7277,42 +7282,19 @@ describe("Interpreter", () => {
       );
 
       const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
-      assert.deepStrictEqual(result, expected);
-    });
-    it("can fail to match on match condition", () => {
-      // with :error <- a do
-      // else
-      //   :ok -> {:error, :nomatch}
-      // end
-      const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
-      const result = Interpreter.with(
-        body,
-        [
-          {
-            match: Type.atom("error"),
-            guards: [],
-            expression: (context) => context.vars.a,
-          },
-        ],
-        [
-          {
-            match: Type.atom("ok"),
-            guards: [],
-            body: (_context) => expected,
-          },
-        ],
-        context,
-      );
 
       assert.deepStrictEqual(result, expected);
     });
-    it("can fail to match on guard", () => {
+
+    it("routes a failed guard to the else clauses", () => {
       // with b when b == :no <- a do
       // else
       //   :ok -> {:error, :nomatch}
       // end
+
       const guard = (context) =>
         Erlang["==/2"](context.vars.b, Type.atom("no"));
+
       const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
 
       const result = Interpreter.with(
@@ -7336,11 +7318,11 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-    it("handles plain expressions", () => {
+
+    it("evaluates a bare expression clause", () => {
       // with b = a do
       //   {a, b}
       // end
-      const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
       const result = Interpreter.with(
         body,
         [
@@ -7357,18 +7339,16 @@ describe("Interpreter", () => {
         context,
       );
 
+      const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+
       assert.deepStrictEqual(result, expected);
     });
-    it("handles multiple plain expressions", () => {
+
+    it("evaluates multiple bare expression clauses", () => {
       // with b = a,
       //   c = b do
-      //   {a, b}
+      //   {a, b, c}
       // end
-      const expected = Type.tuple([
-        Type.atom("ok"),
-        Type.atom("ok"),
-        Type.atom("ok"),
-      ]);
       const result = Interpreter.with(
         (context) =>
           Type.tuple([context.vars.a, context.vars.b, context.vars.c]),
@@ -7394,13 +7374,19 @@ describe("Interpreter", () => {
         context,
       );
 
+      const expected = Type.tuple([
+        Type.atom("ok"),
+        Type.atom("ok"),
+        Type.atom("ok"),
+      ]);
+
       assert.deepStrictEqual(result, expected);
     });
-    it("returns the unmatched value directly if there are no else clauses", () => {
+
+    it("returns the unmatched value when there are no else clauses", () => {
       // with :error <- a do
-      //   x
+      //   {a, b}
       // end
-      const expected = Type.atom("ok");
       const result = Interpreter.with(
         body,
         [
@@ -7414,10 +7400,16 @@ describe("Interpreter", () => {
         context,
       );
 
+      const expected = Type.atom("ok");
+
       assert.deepStrictEqual(result, expected);
     });
-    it("handles single else clause", () => {
-      const expected = Type.atom("match");
+
+    it("routes a failed match to a single else clause", () => {
+      // with :error <- a do
+      // else
+      //   :ok -> :match
+      // end
       const result = Interpreter.with(
         body,
         [
@@ -7437,10 +7429,18 @@ describe("Interpreter", () => {
         context,
       );
 
+      const expected = Type.atom("match");
+
       assert.deepStrictEqual(result, expected);
     });
-    it("handles multiple else clauses", () => {
-      const expected = Type.atom("second");
+
+    it("selects the matching clause among multiple else clauses", () => {
+      // with :error <- a do
+      // else
+      //   :a -> :first
+      //   :ok -> :second
+      //   :c -> :third
+      // end
       const result = Interpreter.with(
         body,
         [
@@ -7470,12 +7470,12 @@ describe("Interpreter", () => {
         context,
       );
 
+      const expected = Type.atom("second");
+
       assert.deepStrictEqual(result, expected);
     });
-    it("handles shadowing correctly", () => {
-      // Based on a test case from the Elixir standard lib
-      //   that ensures that later clauses can shadow variables
-      //   set in earlier clauses.
+
+    it("lets a later clause shadow an earlier binding", () => {
       // with a <- (
       //  b = 1
       //  _ = b
@@ -7484,7 +7484,6 @@ describe("Interpreter", () => {
       //   b <- 2 do
       //   a + b
       // end
-      const expected = Type.integer(3);
       const result = Interpreter.with(
         (context) => Erlang["+/2"](context.vars.a, context.vars.b),
         [
@@ -7517,12 +7516,15 @@ describe("Interpreter", () => {
         context,
       );
 
+      const expected = Type.integer(3);
+
       assert.deepStrictEqual(result, expected);
     });
-    it("throws error if there are else clauses but none match", () => {
-      // with  :error <- a do
+
+    it("raises WithClauseError when no else clause matches", () => {
+      // with :error <- a do
       // else
-      //   :other -> {:error, :nomatch}
+      //   :other -> nil
       // end
       assertBoxedError(
         () =>
@@ -7548,8 +7550,10 @@ describe("Interpreter", () => {
         "no with clause matching: :ok",
       );
     });
-    it("gives the original context to the else clauses", () => {
+
+    it("evaluates else clauses in the original context", () => {
       // x = :original
+      //
       // with x <- a,
       //   :fail <- :mismatch do
       //   :body
@@ -7557,13 +7561,14 @@ describe("Interpreter", () => {
       //   _ ->
       //     x
       // end
+
       const contextWithX = contextFixture({
         vars: {
           a: Type.atom("ok"),
           x: Type.atom("original"),
         },
       });
-      const expected = Type.atom("original");
+
       const result = Interpreter.with(
         body,
         [
@@ -7588,10 +7593,14 @@ describe("Interpreter", () => {
         contextWithX,
       );
 
+      const expected = Type.atom("original");
+
       assert.deepStrictEqual(result, expected);
     });
-    it("gives the original context to the else clauses (guard mismatch)", () => {
+
+    it("evaluates else clauses in the original context (guard mismatch)", () => {
       // x = :original
+      //
       // with x <- a,
       //   i when false <- :mismatch do
       //   :body
@@ -7599,13 +7608,14 @@ describe("Interpreter", () => {
       //   _ ->
       //     x
       // end
+
       const contextWithX = contextFixture({
         vars: {
           a: Type.atom("ok"),
           x: Type.atom("original"),
         },
       });
-      const expected = Type.atom("original");
+
       const result = Interpreter.with(
         body,
         [
@@ -7630,14 +7640,20 @@ describe("Interpreter", () => {
         contextWithX,
       );
 
+      const expected = Type.atom("original");
+
       assert.deepStrictEqual(result, expected);
     });
+
     it("does not leak assignments into the original context", () => {
       // a = :ok
+      //
       // with b <- a do
       //   a = 2
       // end
+      //
       // a == :ok
+
       Interpreter.with(
         (context) => {
           Interpreter.matchOperator(
@@ -7657,6 +7673,7 @@ describe("Interpreter", () => {
         [],
         context,
       );
+
       assert.deepStrictEqual(context.vars.a, Type.atom("ok"));
       assert.deepStrictEqual(context.vars.b, undefined);
     });
