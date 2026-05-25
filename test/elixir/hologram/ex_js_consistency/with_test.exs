@@ -1,3 +1,9 @@
+# These tests intentionally exercise minimal and non-standard `with` forms (single
+# clause + else, all-bare clauses, etc.), so Credo's `with`-refactoring suggestions
+# do not apply here.
+# credo:disable-for-this-file Credo.Check.Readability.WithSingleClause
+# credo:disable-for-this-file Credo.Check.Refactor.WithClauses
+
 defmodule Hologram.ExJsConsistency.WithTest do
   @moduledoc """
   IMPORTANT!
