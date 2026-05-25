@@ -1763,12 +1763,14 @@ export default class Interpreter {
     );
   }
 
-  static #withElse(condition, elseClauses, context) {
+  static #withElse(value, elseClauses, context) {
+    // A `with` without else clauses returns the unmatched value as-is.
     if (elseClauses.length === 0) {
-      return condition;
+      return value;
     }
+
     return Interpreter.#checkAllClauses(
-      condition,
+      value,
       elseClauses,
       context,
       Interpreter.raiseWithClauseError,
