@@ -7324,7 +7324,7 @@ describe("Interpreter", () => {
       it("lets a later clause shadow an earlier binding", () => {
         // with a <- (
         //  b = 1
-        //  _ = b
+        //  _var = b
         //  1
         // ),
         //   b <- 2 do
@@ -7342,13 +7342,20 @@ describe("Interpreter", () => {
                   Type.variablePattern("b"),
                   context,
                 );
+
                 Interpreter.updateVarsToMatchedValues(context);
+
+                // `_var = b` is a no-op here. It is kept so this test stays
+                // identical to its Elixir consistency counterpart, where it marks
+                // `b` as used to avoid the unused-variable compiler warning.
                 Interpreter.matchOperator(
                   context.vars.b,
                   Type.matchPlaceholder(),
                   context,
                 );
+
                 Interpreter.updateVarsToMatchedValues(context);
+
                 return Type.integer(1);
               },
             },
