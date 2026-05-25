@@ -7249,10 +7249,10 @@ describe("Interpreter", () => {
 
     it("returns the unmatched value when there are no else clauses", () => {
       // with :error <- a do
-      //   {a, b}
+      //   :body
       // end
       const result = Interpreter.with(
-        body,
+        (_context) => Type.atom("body"),
         [
           {
             match: Type.atom("error"),
@@ -7294,7 +7294,7 @@ describe("Interpreter", () => {
 
       it("returns the body result for multiple matching clauses", () => {
         // with b <- a,
-        //   :ok <- b do
+        //      :ok <- b do
         //   {a, b}
         // end
         const result = Interpreter.with(
@@ -7375,7 +7375,7 @@ describe("Interpreter", () => {
 
       it("evaluates multiple bare expression clauses", () => {
         // with b = a,
-        //   c = b do
+        //      c = b do
         //   {a, b, c}
         // end
         const result = Interpreter.with(
@@ -7414,14 +7414,12 @@ describe("Interpreter", () => {
 
       it("raises a MatchError when a bare clause fails to match", () => {
         // with :error = a do
-        //   {a, b}
-        // else
-        //   _fallback -> :unused
+        //   :body
         // end
         assertBoxedError(
           () =>
             Interpreter.with(
-              body,
+              (_context) => Type.atom("body"),
               [
                 {
                   expression: (context) =>
@@ -7432,13 +7430,7 @@ describe("Interpreter", () => {
                     ),
                 },
               ],
-              [
-                {
-                  match: Type.matchPlaceholder(),
-                  guards: [],
-                  body: (_context) => Type.atom("unused"),
-                },
-              ],
+              [],
               context,
             ),
           "MatchError",
@@ -7450,11 +7442,12 @@ describe("Interpreter", () => {
     describe("else clauses", () => {
       it("routes a failed match to a single else clause", () => {
         // with :error <- a do
+        //   :body
         // else
         //   :ok -> :match
         // end
         const result = Interpreter.with(
-          body,
+          (_context) => Type.atom("body"),
           [
             {
               match: Type.atom("error"),
@@ -7479,13 +7472,14 @@ describe("Interpreter", () => {
 
       it("selects the matching clause among multiple else clauses", () => {
         // with :error <- a do
+        //   :body
         // else
         //   :a -> :first
         //   :ok -> :second
         //   :c -> :third
         // end
         const result = Interpreter.with(
-          body,
+          (_context) => Type.atom("body"),
           [
             {
               match: Type.atom("error"),
@@ -7520,7 +7514,7 @@ describe("Interpreter", () => {
 
       it("selects a guarded else clause when its guard passes", () => {
         // with :error <- a do
-        //   {a, b}
+        //   :body
         // else
         //   e when e == :ok -> {:guarded, e}
         // end
@@ -7529,7 +7523,7 @@ describe("Interpreter", () => {
           Erlang["==/2"](context.vars.e, Type.atom("ok"));
 
         const result = Interpreter.with(
-          body,
+          (_context) => Type.atom("body"),
           [
             {
               match: Type.atom("error"),
@@ -7555,6 +7549,7 @@ describe("Interpreter", () => {
 
       it("routes a failed guard to the else clauses", () => {
         // with b when b == :no <- a do
+        //   :body
         // else
         //   :ok -> {:error, :nomatch}
         // end
@@ -7565,7 +7560,7 @@ describe("Interpreter", () => {
         const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
 
         const result = Interpreter.with(
-          body,
+          (_context) => Type.atom("body"),
           [
             {
               match: Type.variablePattern("b"),
@@ -7588,13 +7583,14 @@ describe("Interpreter", () => {
 
       it("raises WithClauseError when no else clause matches", () => {
         // with :error <- a do
+        //   :body
         // else
         //   :other -> nil
         // end
         assertBoxedError(
           () =>
             Interpreter.with(
-              body,
+              (_context) => Type.atom("body"),
               [
                 {
                   match: Type.atom("error"),
@@ -7606,7 +7602,7 @@ describe("Interpreter", () => {
                 {
                   match: Type.atom("other"),
                   guards: [],
-                  body: (_context) => null,
+                  body: (_context) => Type.nil(),
                 },
               ],
               context,
@@ -7623,6 +7619,7 @@ describe("Interpreter", () => {
         //
         // with b <- a do
         //   a = 2
+        //   {a, b}
         // end
         //
         // a == :ok
@@ -7634,7 +7631,10 @@ describe("Interpreter", () => {
               Type.variablePattern("a"),
               context,
             );
-            return Interpreter.updateVarsToMatchedValues(context);
+
+            Interpreter.updateVarsToMatchedValues(context);
+
+            return Type.tuple([context.vars.a, context.vars.b]);
           },
           [
             {
@@ -7655,11 +7655,10 @@ describe("Interpreter", () => {
         // x = :original
         //
         // with x <- a,
-        //   :fail <- :mismatch do
-        //   :body
+        //      :fail <- :mismatch do
+        //   x
         // else
-        //   _fallback ->
-        //     x
+        //   _fallback -> x
         // end
 
         const contextWithX = contextFixture({
@@ -7670,7 +7669,7 @@ describe("Interpreter", () => {
         });
 
         const result = Interpreter.with(
-          body,
+          (context) => context.vars.x,
           [
             {
               match: Type.variablePattern("x"),
@@ -7699,12 +7698,13 @@ describe("Interpreter", () => {
       });
 
       it("lets a later clause shadow an earlier binding", () => {
-        // with a <- (
-        //  b = 1
-        //  _var = b
-        //  1
-        // ),
-        //   b <- 2 do
+        // with a <-
+        //        (
+        //          b = 1
+        //          _var = b
+        //          1
+        //        ),
+        //      b <- 2 do
         //   a + b
         // end
         const result = Interpreter.with(
