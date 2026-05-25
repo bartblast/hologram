@@ -7057,6 +7057,14 @@ describe("Interpreter", () => {
     );
   });
 
+  it("raiseWithClauseError()", () => {
+    assertBoxedError(
+      () => Interpreter.raiseWithClauseError(Type.atom("abc")),
+      "WithClauseError",
+      "no with clause matching: :abc",
+    );
+  });
+
   describe("registerJsBindings()", () => {
     const $1 = {name: "import_1"};
     const $2 = {name: "import_2"};
