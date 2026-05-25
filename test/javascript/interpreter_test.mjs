@@ -7244,6 +7244,28 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("returns the unmatched value when there are no else clauses", () => {
+      // with :error <- a do
+      //   {a, b}
+      // end
+      const result = Interpreter.with(
+        body,
+        [
+          {
+            match: Type.atom("error"),
+            guards: [],
+            expression: (context) => context.vars.a,
+          },
+        ],
+        [],
+        context,
+      );
+
+      const expected = Type.atom("ok");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     describe("match clauses", () => {
       it("returns the body result for a single matching clause", () => {
         // with b <- a do
@@ -7557,28 +7579,6 @@ describe("Interpreter", () => {
           ],
           context,
         );
-
-        assert.deepStrictEqual(result, expected);
-      });
-
-      it("returns the unmatched value when there are no else clauses", () => {
-        // with :error <- a do
-        //   {a, b}
-        // end
-        const result = Interpreter.with(
-          body,
-          [
-            {
-              match: Type.atom("error"),
-              guards: [],
-              expression: (context) => context.vars.a,
-            },
-          ],
-          [],
-          context,
-        );
-
-        const expected = Type.atom("ok");
 
         assert.deepStrictEqual(result, expected);
       });
