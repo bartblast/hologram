@@ -7213,6 +7213,9 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  // IMPORTANT!
+  // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/with_test.exs
+  // Always update both together.
   describe("with()", () => {
     let context, body;
 
@@ -7559,6 +7562,8 @@ describe("Interpreter", () => {
         const guard = (context) =>
           Erlang["==/2"](context.vars.b, Type.atom("no"));
 
+        const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
+
         const result = Interpreter.with(
           body,
           [
@@ -7577,8 +7582,6 @@ describe("Interpreter", () => {
           ],
           context,
         );
-
-        const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
 
         assert.deepStrictEqual(result, expected);
       });
