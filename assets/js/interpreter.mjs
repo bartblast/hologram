@@ -1055,18 +1055,35 @@ export default class Interpreter {
     context = Interpreter.cloneContext(context);
 
     for (const clause of clauses) {
-      const condition = clause.expression(context);
-      const plainClause = !clause.match;
-      const matched =
-        plainClause || Interpreter.isMatched(clause.match, condition, context);
-      Interpreter.updateVarsToMatchedValues(context);
-      const guardMatched =
-        plainClause ||
-        (matched && Interpreter.#evaluateGuards(clause.guards, context));
+      const value = clause.expression(context);
 
-      if (!matched || !guardMatched) {
+      // A bare clause (e.g. `x = 1`) has no pattern to match against: it commits its
+      // own bindings and the pipeline continues to the next clause.
+      if (!clause.match) {
+        Interpreter.updateVarsToMatchedValues(context);
+        continue;
+      }
+
+      // A match clause (`pattern <- expression`, optionally guarded) must match the
+      // pattern and then satisfy its guards.
+      const isPatternMatched = Interpreter.isMatched(
+        clause.match,
+        value,
+        context,
+      );
+
+      if (isPatternMatched) {
+        Interpreter.updateVarsToMatchedValues(context);
+      }
+
+      const isClausePassed =
+        isPatternMatched && Interpreter.#evaluateGuards(clause.guards, context);
+
+      // A failed clause ends the pipeline: the unmatched value is routed to the else
+      // clauses, which are evaluated in the original, pre-`with` context.
+      if (!isClausePassed) {
         return Interpreter.#withElse(
-          condition,
+          value,
           elseClauses,
           Interpreter.cloneContext(originalContext),
         );
