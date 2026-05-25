@@ -70,11 +70,23 @@ defmodule Hologram.ExJsConsistency.WithTest do
   end
 
   describe "bare clauses" do
-    test "evaluates a bare expression clause" do
+    test "evaluates a bare expression clause that binds a variable" do
       a = :ok
 
       result =
         with b = a do
+          {a, b}
+        end
+
+      assert result == {:ok, :ok}
+    end
+
+    test "evaluates a bare expression clause that does not bind a variable" do
+      a = :ok
+
+      result =
+        with b <- a,
+             :noop do
           {a, b}
         end
 

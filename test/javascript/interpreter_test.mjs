@@ -7348,7 +7348,7 @@ describe("Interpreter", () => {
     });
 
     describe("bare clauses", () => {
-      it("evaluates a bare expression clause", () => {
+      it("evaluates a bare expression clause that binds a variable", () => {
         // with b = a do
         //   {a, b}
         // end
@@ -7362,6 +7362,32 @@ describe("Interpreter", () => {
                   Type.variablePattern("b"),
                   context,
                 ),
+            },
+          ],
+          [],
+          context,
+        );
+
+        const expected = Type.tuple([Type.atom("ok"), Type.atom("ok")]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("evaluates a bare expression clause that does not bind a variable", () => {
+        // with b <- a,
+        //      :noop do
+        //   {a, b}
+        // end
+        const result = Interpreter.with(
+          body,
+          [
+            {
+              match: Type.variablePattern("b"),
+              guards: [],
+              expression: (context) => context.vars.a,
+            },
+            {
+              expression: (_context) => Type.atom("noop"),
             },
           ],
           [],
