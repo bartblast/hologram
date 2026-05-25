@@ -7228,23 +7228,23 @@ describe("Interpreter", () => {
       };
     });
 
+    it("evaluates the body when there are no clauses", () => {
+      // with do: nil
+      const result = Interpreter.with(
+        (_context) => {
+          return Type.atom("nil");
+        },
+        [],
+        [],
+        context,
+      );
+
+      const expected = Type.atom("nil");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     describe("match clauses", () => {
-      it("evaluates the body when there are no clauses", () => {
-        // with do: nil
-        const result = Interpreter.with(
-          (_context) => {
-            return Type.atom("nil");
-          },
-          [],
-          [],
-          context,
-        );
-
-        const expected = Type.atom("nil");
-
-        assert.deepStrictEqual(result, expected);
-      });
-
       it("returns the body result for a single matching clause", () => {
         // with b <- a do
         //   {a, b}
