@@ -147,7 +147,9 @@ defmodule Hologram.ExJsConsistency.WithTest do
     end
 
     test "routes a failed guard to the else clauses" do
-      a = :ok
+      # wrap_term/1 keeps `b` opaque; otherwise Elixir < 1.18 warns that the guard
+      # `b == :no` "will always yield the same result" (b is statically known to be :ok).
+      a = wrap_term(:ok)
 
       result =
         with b when b == :no <- a do
