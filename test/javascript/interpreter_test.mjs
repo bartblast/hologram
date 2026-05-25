@@ -7320,59 +7320,6 @@ describe("Interpreter", () => {
 
         assert.deepStrictEqual(result, expected);
       });
-
-      it("lets a later clause shadow an earlier binding", () => {
-        // with a <- (
-        //  b = 1
-        //  _var = b
-        //  1
-        // ),
-        //   b <- 2 do
-        //   a + b
-        // end
-        const result = Interpreter.with(
-          (context) => Erlang["+/2"](context.vars.a, context.vars.b),
-          [
-            {
-              match: Type.variablePattern("a"),
-              guards: [],
-              expression: (context) => {
-                Interpreter.matchOperator(
-                  Type.integer(1),
-                  Type.variablePattern("b"),
-                  context,
-                );
-
-                Interpreter.updateVarsToMatchedValues(context);
-
-                // `_var = b` is a no-op here. It is kept so this test stays
-                // identical to its Elixir consistency counterpart, where it marks
-                // `b` as used to avoid the unused-variable compiler warning.
-                Interpreter.matchOperator(
-                  context.vars.b,
-                  Type.matchPlaceholder(),
-                  context,
-                );
-
-                Interpreter.updateVarsToMatchedValues(context);
-
-                return Type.integer(1);
-              },
-            },
-            {
-              match: Type.variablePattern("b"),
-              guards: [],
-              expression: (_context) => Type.integer(2),
-            },
-          ],
-          [],
-          context,
-        );
-
-        const expected = Type.integer(3);
-
-        assert.deepStrictEqual(result, expected);
-      });
     });
 
     describe("bare clauses", () => {
@@ -7744,6 +7691,59 @@ describe("Interpreter", () => {
         );
 
         const expected = Type.atom("original");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("lets a later clause shadow an earlier binding", () => {
+        // with a <- (
+        //  b = 1
+        //  _var = b
+        //  1
+        // ),
+        //   b <- 2 do
+        //   a + b
+        // end
+        const result = Interpreter.with(
+          (context) => Erlang["+/2"](context.vars.a, context.vars.b),
+          [
+            {
+              match: Type.variablePattern("a"),
+              guards: [],
+              expression: (context) => {
+                Interpreter.matchOperator(
+                  Type.integer(1),
+                  Type.variablePattern("b"),
+                  context,
+                );
+
+                Interpreter.updateVarsToMatchedValues(context);
+
+                // `_var = b` is a no-op here. It is kept so this test stays
+                // identical to its Elixir consistency counterpart, where it marks
+                // `b` as used to avoid the unused-variable compiler warning.
+                Interpreter.matchOperator(
+                  context.vars.b,
+                  Type.matchPlaceholder(),
+                  context,
+                );
+
+                Interpreter.updateVarsToMatchedValues(context);
+
+                return Type.integer(1);
+              },
+            },
+            {
+              match: Type.variablePattern("b"),
+              guards: [],
+              expression: (_context) => Type.integer(2),
+            },
+          ],
+          [],
+          context,
+        );
+
+        const expected = Type.integer(3);
 
         assert.deepStrictEqual(result, expected);
       });
