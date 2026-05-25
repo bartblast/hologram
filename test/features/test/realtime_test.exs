@@ -31,12 +31,15 @@ defmodule HologramFeatureTests.RealtimeTest do
       assert_text(session_2, css("#received"), "delivered")
     end
 
-    feature "from outside a handler", %{session: session} do
-      session = visit(session, Page1)
+    @sessions 2
+    feature "from outside a handler", %{sessions: [session_1, session_2]} do
+      session_1 = visit(session_1, Page1)
+      session_2 = visit(session_2, Page1)
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered")
 
-      assert_text(session, css("#received"), "delivered")
+      assert_text(session_1, css("#received"), "delivered")
+      assert_text(session_2, css("#received"), "delivered")
     end
   end
 
