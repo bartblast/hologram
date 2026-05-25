@@ -7424,6 +7424,40 @@ describe("Interpreter", () => {
 
         assert.deepStrictEqual(result, expected);
       });
+
+      it("raises a MatchError when a bare clause fails to match", () => {
+        // with :error = a do
+        //   {a, b}
+        // else
+        //   _ -> :unused
+        // end
+        assertBoxedError(
+          () =>
+            Interpreter.with(
+              body,
+              [
+                {
+                  expression: (context) =>
+                    Interpreter.matchOperator(
+                      context.vars.a,
+                      Type.atom("error"),
+                      context,
+                    ),
+                },
+              ],
+              [
+                {
+                  match: Type.matchPlaceholder(),
+                  guards: [],
+                  body: (_context) => Type.atom("unused"),
+                },
+              ],
+              context,
+            ),
+          "MatchError",
+          "no match of right hand side value: :ok",
+        );
+      });
     });
 
     describe("else clauses", () => {
