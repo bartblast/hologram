@@ -420,52 +420,20 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Blocks until any `SubscriptionRegistry` entry holds a subscription on the
-  given `channel`, then returns the `session` so the helper can be piped.
-  Raises if no subscription appears within `@max_wait_time`.
-
-  The race this gate closes: `Phoenix.PubSub` is fire-and-forget, so a
-  broadcast that fires before the SSE process has subscribed to the channel's
-  topic reaches no one. The SSE process only subscribes after the handshake
-  POST + SSE GET attach sequence completes, and that sequence runs
-  asynchronously in the browser after the page is mounted.
-
-  The gate is needed for broadcasts originating outside a Hologram handler -
-  e.g., a feature test calling `Realtime.broadcast_action` directly, or any
-  other external producer pushing into the system. It is NOT needed for
-  broadcasts originating inside Hologram handlers triggered by user
-  interaction (button click -> command -> `put_broadcast`), because the click
-  itself can't fire before the SSE connection is established.
-  """
-  def wait_for_subscription(session, channel, start_time \\ nil) do
-    start_time = start_time || current_time()
-
-    cond do
-      has_subscription?(channel) ->
-        session
-
-      timed_out?(start_time) ->
-        raise Wallaby.ExpectationNotMetError,
-              "Timed out waiting for subscription on channel #{inspect(channel)}"
-
-      true ->
-        :timer.sleep(100)
-        wait_for_subscription(session, channel, start_time)
-    end
-  end
-
-  @doc """
   Blocks until at least `count` `SubscriptionRegistry` entries hold a
-  subscription on the given `channel`, then returns the `session` so the helper
-  can be piped. Raises if the count is not reached within `@max_wait_time`.
+  subscription on `channel` (`count` defaults to 1), then returns the `session`
+  so the helper can be piped. Raises if the count is not reached within
+  `@max_wait_time`.
 
-  Use in multi-session tests to gate on *every* participating connection having
-  subscribed before a broadcast. The channel-level `wait_for_subscription/2`
-  only confirms that *some* connection is subscribed, which would let a
-  broadcast race a not-yet-subscribed session - a missed delivery, or a
-  refute that passes vacuously because the "excluded" session was never there.
+  Gate any broadcast whose recipients a test asserts on: subscriptions register
+  asynchronously after the page mounts (handshake POST + SSE attach), and
+  `Phoenix.PubSub` is fire-and-forget, so a broadcast that fires first reaches
+  no one. In multi-session tests pass `count` to require that *every*
+  participating connection has subscribed - a count of 1 can be satisfied by a
+  single session, letting the broadcast race the others (a missed delivery, or a
+  refute that passes vacuously because the "excluded" session was never there).
   """
-  def wait_for_subscriptions(session, channel, count, start_time \\ nil) do
+  def wait_for_subscription(session, channel, count \\ 1, start_time \\ nil) do
     start_time = start_time || current_time()
 
     cond do
@@ -474,11 +442,11 @@ defmodule HologramFeatureTests.Helpers do
 
       timed_out?(start_time) ->
         raise Wallaby.ExpectationNotMetError,
-              "Timed out waiting for #{count} subscriptions on channel #{inspect(channel)}"
+              "Timed out waiting for #{count} subscription(s) on channel #{inspect(channel)}"
 
       true ->
         :timer.sleep(100)
-        wait_for_subscriptions(session, channel, count, start_time)
+        wait_for_subscription(session, channel, count, start_time)
     end
   end
 
@@ -560,7 +528,7 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  defp has_subscription?(channel, cid \\ nil) do
+  defp has_subscription?(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
     |> Enum.any?(fn {_instance_id, entry} ->
