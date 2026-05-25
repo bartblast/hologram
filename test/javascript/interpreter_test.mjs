@@ -7531,6 +7531,41 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(result, expected);
       });
 
+      it("selects a guarded else clause when its guard passes", () => {
+        // with :error <- a do
+        //   {a, b}
+        // else
+        //   e when e == :ok -> {:guarded, e}
+        // end
+
+        const guard = (context) =>
+          Erlang["==/2"](context.vars.e, Type.atom("ok"));
+
+        const result = Interpreter.with(
+          body,
+          [
+            {
+              match: Type.atom("error"),
+              guards: [],
+              expression: (context) => context.vars.a,
+            },
+          ],
+          [
+            {
+              match: Type.variablePattern("e"),
+              guards: [guard],
+              body: (context) =>
+                Type.tuple([Type.atom("guarded"), context.vars.e]),
+            },
+          ],
+          context,
+        );
+
+        const expected = Type.tuple([Type.atom("guarded"), Type.atom("ok")]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
       it("routes a failed guard to the else clauses", () => {
         // with b when b == :no <- a do
         // else
