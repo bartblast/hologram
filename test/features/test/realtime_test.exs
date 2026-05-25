@@ -303,13 +303,36 @@ defmodule HologramFeatureTests.RealtimeTest do
   end
 
   describe "dropping subscriptions" do
-    feature "from inside a handler (delete_subscription stops further broadcasts)", %{
+    feature "from inside a handler (the same cid still receives on another channel)", %{
       session: session
     } do
+      # Page2's page cid subscribes to @channel_1 and @channel_2. The command
+      # deletes its @channel_1 binding, then broadcasts on both: @channel_2 (the
+      # same cid on another channel) still delivers while @channel_1 does not.
       session
       |> visit(Page2)
       |> click(button("Unsubscribe and broadcast"))
       |> assert_text(css("#received-2"), "delivered")
+      |> assert_text(css("#received-1"), "none")
+    end
+
+    feature "from outside a handler (the same cid still receives on another channel)", %{
+      session: session
+    } do
+      # Same shape as the inside case, driven via Realtime.unsubscribe: dropping
+      # the page cid's @channel_1 binding leaves its @channel_2 binding intact.
+      # unsubscribe is async (announce-topic broadcast), so gate on the drop
+      # landing before broadcasting.
+      session = visit(session, Page2)
+
+      Realtime.unsubscribe({:instance, current_instance_id()}, @channel_1, "page")
+      session = wait_for_no_subscription(session, @channel_1)
+
+      Realtime.broadcast_action(@channel_1, :show_1, message: "blocked")
+      Realtime.broadcast_action(@channel_2, :show_2, message: "delivered to other channel")
+
+      session
+      |> assert_text(css("#received-2"), "delivered to other channel")
       |> assert_text(css("#received-1"), "none")
     end
 
