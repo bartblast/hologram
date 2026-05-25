@@ -211,7 +211,7 @@ export default class Interpreter {
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
   static case(condition, clauses, context) {
-    return Interpreter.#checkAllClauses(
+    return Interpreter.#evaluateMatchingClause(
       condition,
       clauses,
       context,
@@ -1239,26 +1239,6 @@ export default class Interpreter {
     };
   }
 
-  static #checkAllClauses(condition, clauses, context, errorFun) {
-    if (typeof condition === "function") {
-      condition = condition(context);
-    }
-
-    for (const clause of clauses) {
-      const contextClone = Interpreter.cloneContext(context);
-
-      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
-        Interpreter.updateVarsToMatchedValues(contextClone);
-
-        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return clause.body(contextClone);
-        }
-      }
-    }
-
-    errorFun(condition);
-  }
-
   static #comparePids(pid1, pid2) {
     for (let i = 2; i >= 0; --i) {
       if (pid1.segments[i] === pid2.segments[i]) {
@@ -1315,6 +1295,29 @@ export default class Interpreter {
     }
 
     return false;
+  }
+
+  // Evaluates the body of the first clause whose pattern and guards match `value`,
+  // raising via `errorFun` if none do. Shared case-clause dispatch: used by case/2
+  // and by with's else block (which is itself a case over the unmatched value).
+  static #evaluateMatchingClause(value, clauses, context, errorFun) {
+    if (typeof value === "function") {
+      value = value(context);
+    }
+
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.isMatched(clause.match, value, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          return clause.body(contextClone);
+        }
+      }
+    }
+
+    errorFun(value);
   }
 
   // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
@@ -1769,7 +1772,7 @@ export default class Interpreter {
       return value;
     }
 
-    return Interpreter.#checkAllClauses(
+    return Interpreter.#evaluateMatchingClause(
       value,
       elseClauses,
       context,
