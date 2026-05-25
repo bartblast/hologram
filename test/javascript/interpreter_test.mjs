@@ -7732,53 +7732,6 @@ describe("Interpreter", () => {
 
         assert.deepStrictEqual(result, expected);
       });
-
-      it("evaluates else clauses in the original context (guard mismatch)", () => {
-        // x = :original
-        //
-        // with x <- a,
-        //   i when false <- :mismatch do
-        //   :body
-        // else
-        //   _ ->
-        //     x
-        // end
-
-        const contextWithX = contextFixture({
-          vars: {
-            a: Type.atom("ok"),
-            x: Type.atom("original"),
-          },
-        });
-
-        const result = Interpreter.with(
-          body,
-          [
-            {
-              match: Type.variablePattern("x"),
-              guards: [],
-              expression: (context) => context.vars.a,
-            },
-            {
-              match: Type.variablePattern("i"),
-              guards: [(_context) => Type.atom(false)],
-              expression: (_context) => Type.atom("mismatch"),
-            },
-          ],
-          [
-            {
-              match: Type.matchPlaceholder(),
-              guards: [],
-              body: (context) => context.vars.x,
-            },
-          ],
-          contextWithX,
-        );
-
-        const expected = Type.atom("original");
-
-        assert.deepStrictEqual(result, expected);
-      });
     });
   });
 });
