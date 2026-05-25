@@ -7413,7 +7413,7 @@ describe("Interpreter", () => {
         // with :error = a do
         //   {a, b}
         // else
-        //   _ -> :unused
+        //   _fallback -> :unused
         // end
         assertBoxedError(
           () =>
@@ -7559,8 +7559,6 @@ describe("Interpreter", () => {
         const guard = (context) =>
           Erlang["==/2"](context.vars.b, Type.atom("no"));
 
-        const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
-
         const result = Interpreter.with(
           body,
           [
@@ -7579,6 +7577,8 @@ describe("Interpreter", () => {
           ],
           context,
         );
+
+        const expected = Type.tuple([Type.atom("error"), Type.atom("nomatch")]);
 
         assert.deepStrictEqual(result, expected);
       });
@@ -7655,7 +7655,7 @@ describe("Interpreter", () => {
         //   :fail <- :mismatch do
         //   :body
         // else
-        //   _ ->
+        //   _fallback ->
         //     x
         // end
 
