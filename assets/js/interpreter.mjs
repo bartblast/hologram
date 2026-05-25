@@ -879,12 +879,6 @@ export default class Interpreter {
     Interpreter.raiseError("CaseClauseError", message);
   }
 
-  static raiseWithClauseError(arg) {
-    const message = "no with clause matching: " + Interpreter.inspect(arg);
-
-    Interpreter.raiseError("WithClauseError", message);
-  }
-
   static raiseCompileError(message) {
     Interpreter.raiseError("CompileError", message);
   }
@@ -924,6 +918,12 @@ export default class Interpreter {
 
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
+  }
+
+  static raiseWithClauseError(arg) {
+    const message = "no with clause matching: " + Interpreter.inspect(arg);
+
+    Interpreter.raiseError("WithClauseError", message);
   }
 
   static registerJsBindings(bindingsMap) {
