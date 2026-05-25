@@ -395,25 +395,27 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Inverse of `wait_for_subscription/2`: blocks until no `SubscriptionRegistry`
-  entry holds a subscription on the given `channel`, then returns the
-  `session` so the helper can be piped. Raises if the subscription persists
-  past `@max_wait_time`.
+  Blocks until no `SubscriptionRegistry` entry holds a subscription on `channel`,
+  then returns the `session` so the helper can be piped. Pass a `cid` to narrow
+  the wait to a single `{channel, cid}` binding - needed to gate a single-cid
+  `unsubscribe` whose channel keeps other cids bound, where the channel-wide
+  wait would never return. Raises if the subscription persists past
+  `@max_wait_time`.
   """
-  def wait_for_no_subscription(session, channel, start_time \\ nil) do
+  def wait_for_no_subscription(session, channel, cid \\ nil, start_time \\ nil) do
     start_time = start_time || current_time()
 
     cond do
-      !has_subscription?(channel) ->
+      !has_subscription?(channel, cid) ->
         session
 
       timed_out?(start_time) ->
         raise Wallaby.ExpectationNotMetError,
-              "Timed out waiting for subscription to drop on channel #{inspect(channel)}"
+              "Timed out waiting for subscription to drop on #{inspect(channel)} (cid: #{inspect(cid)})"
 
       true ->
         :timer.sleep(100)
-        wait_for_no_subscription(session, channel, start_time)
+        wait_for_no_subscription(session, channel, cid, start_time)
     end
   end
 
@@ -558,11 +560,13 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  defp has_subscription?(channel) do
+  defp has_subscription?(channel, cid \\ nil) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
     |> Enum.any?(fn {_instance_id, entry} ->
-      Enum.any?(entry.bindings, fn {{ch, _cid}, _user_id} -> ch == channel end)
+      Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
+        ch == channel and (is_nil(cid) or c == cid)
+      end)
     end)
   end
 
