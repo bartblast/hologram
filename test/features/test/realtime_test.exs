@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page10
   alias HologramFeatureTests.Realtime.Page11
   alias HologramFeatureTests.Realtime.Page12
+  alias HologramFeatureTests.Realtime.Page13
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
@@ -312,7 +313,21 @@ defmodule HologramFeatureTests.RealtimeTest do
       |> assert_text(css("#received-1"), "none")
     end
 
-    feature "from outside a handler (unsubscribe drops a single cid binding)", %{
+    feature "from inside a handler (a sibling cid on the same channel still receives)", %{
+      session: session
+    } do
+      # Page13 hosts two components on @channel_1 (cids "component_1" and
+      # "component_3"). Component 3's command deletes its own {@channel_1, cid}
+      # binding, then broadcasts on @channel_1: the sibling component 1 still
+      # receives while component 3 does not.
+      session
+      |> visit(Page13)
+      |> click(button("Unsubscribe and broadcast"))
+      |> assert_text(css("#received-component-1"), "delivered to sibling cid")
+      |> assert_text(css("#received-component-3"), "none")
+    end
+
+    feature "from outside a handler (a sibling cid on the same channel still receives)", %{
       session: session
     } do
       # Page8 binds two components to @channel_1 (cids "component_1" and
