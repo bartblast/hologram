@@ -453,6 +453,34 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Blocks until at least `count` `SubscriptionRegistry` entries hold a
+  subscription on the given `channel`, then returns the `session` so the helper
+  can be piped. Raises if the count is not reached within `@max_wait_time`.
+
+  Use in multi-session tests to gate on *every* participating connection having
+  subscribed before a broadcast. The channel-level `wait_for_subscription/2`
+  only confirms that *some* connection is subscribed, which would let a
+  broadcast race a not-yet-subscribed session - a missed delivery, or a
+  refute that passes vacuously because the "excluded" session was never there.
+  """
+  def wait_for_subscriptions(session, channel, count, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      subscription_count(channel) >= count ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for #{count} subscriptions on channel #{inspect(channel)}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_subscriptions(session, channel, count, start_time)
+    end
+  end
+
+  @doc """
   Blocks until the currently-attached SSE process records `user_id`, then
   returns the `session`. Gates on a handler-driven identity change (login or
   logout) having propagated to the connection before its effects are asserted -
@@ -547,6 +575,14 @@ defmodule HologramFeatureTests.Helpers do
 
       print_client_logs(session)
     end
+  end
+
+  defp subscription_count(channel) do
+    SubscriptionRegistry.ets_table_name()
+    |> :ets.tab2list()
+    |> Enum.count(fn {_instance_id, entry} ->
+      Enum.any?(entry.bindings, fn {{ch, _cid}, _user_id} -> ch == channel end)
+    end)
   end
 
   defp text_matches?(%Element{driver: driver} = element, text) do
