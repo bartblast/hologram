@@ -1,5 +1,6 @@
 defmodule HologramFeatureTests.ControlFlow.CaseTest do
   use HologramFeatureTests.TestCase, async: true
+
   alias HologramFeatureTests.ControlFlow.CasePage
 
   # single-expression condition / single clause / single-expression clause body
