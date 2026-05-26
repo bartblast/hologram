@@ -6,14 +6,7 @@ defmodule Hologram.Realtime.HandshakeTest do
   alias Hologram.Realtime.Handshake
 
   defp wait_for_waiter(handshake_id) do
-    case :sys.get_state(Handshake).waiters do
-      %{^handshake_id => _waiters} ->
-        :ok
-
-      _no_match ->
-        Process.sleep(1)
-        wait_for_waiter(handshake_id)
-    end
+    wait_until(fn -> match?(%{^handshake_id => _waiters}, :sys.get_state(Handshake).waiters) end)
   end
 
   setup do
