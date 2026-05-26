@@ -568,6 +568,15 @@ defmodule Hologram.Controller do
   # `client_claimed_sub_keys` is `[]` for the initial render and the keys the
   # client claims to currently hold for subsequent navigations.
   # `authorizing_user_id` is `nil` until the auth gate is wired.
+  #
+  # Drops here are intentionally NOT tombstoned (unlike `apply_subscription_deltas/1`,
+  # the explicit-removal path). This is the high-frequency cleanup path (every
+  # navigation), and a drop means only "the new page didn't re-declare this
+  # binding", not an authoritative revocation - tombstoning every navigation
+  # would both explode tombstone volume and, via the `created_at` threshold,
+  # reject the snapshot-restored receipt a prior page still relies on when the
+  # user navigates back. Authoritative removal stays on the explicit-delete
+  # path.
   defp transition_subscriptions(server, client_claimed_sub_keys)
 
   defp transition_subscriptions(%Server{instance_id: nil}, _client_claimed_sub_keys), do: {[], []}
