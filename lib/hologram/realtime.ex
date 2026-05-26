@@ -192,9 +192,15 @@ defmodule Hologram.Realtime do
     * sends `{:add_sub_receipts, [{channel, cid, token}]}` to the SSE process
       for client-side merge.
 
-  When `identity` resolves to no live connection, returns `:ok` without any
-  side effect - no receipt is signed, no binding is registered, no future
-  state is established. Raises `ArgumentError` on an invalid channel.
+  Then gossips a cluster-wide tombstone auto-purge for both the binding-level
+  key `{identity, channel, cid}` and the channel-wide key `{identity, channel}`:
+  an explicit subscribe is a re-grant that supersedes any prior revocation. This
+  purge fires regardless of whether any connection matched.
+
+  When `identity` resolves to no live connection, no receipt is signed, no
+  binding is registered, and no future state is established - the tombstone
+  auto-purge above is the only effect. Returns `:ok`. Raises `ArgumentError` on
+  an invalid channel.
   """
   @spec subscribe(
           {:instance, String.t()} | {:session, term} | {:user, term},
