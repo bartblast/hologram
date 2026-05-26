@@ -23,7 +23,6 @@ defmodule HologramFeatureTests.Components.Actions.Component19 do
     put_state(component, :result, {:component_19_action_b, component.state.execution_count})
   end
 
-  @impl true
   def template do
     ~HOLO"""
     <p>

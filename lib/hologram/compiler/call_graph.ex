@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
@@ -515,10 +516,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/clone_1/README.md
   """
-  @spec clone(t) :: t
-  def clone(call_graph) do
+  @spec clone(t, T.opts()) :: t
+  def clone(call_graph, opts \\ []) do
     graph = get_graph(call_graph)
-    start(graph)
+
+    opts
+    |> Keyword.put(:graph, graph)
+    |> start()
   end
 
   @doc """
@@ -906,11 +910,33 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Starts a new call graph agent with (optional) initial graph.
+  Starts a new call graph agent.
+
+  ## Options
+
+    * `:graph` - the initial `Digraph` to seed the agent with; defaults to an empty graph.
+    * `:supervisor` - a `DynamicSupervisor` to start the agent under as a `:temporary` child;
+      when omitted the agent is linked to the calling process.
   """
-  @spec start(Digraph.t()) :: t
-  def start(graph \\ Digraph.new()) do
-    {:ok, pid} = Agent.start_link(fn -> graph end)
+  @spec start(T.opts()) :: t
+  def start(opts \\ []) do
+    graph = opts[:graph] || Digraph.new()
+
+    {:ok, pid} =
+      case opts[:supervisor] do
+        nil ->
+          Agent.start_link(fn -> graph end)
+
+        sup ->
+          child_spec = %{
+            id: :call_graph,
+            restart: :temporary,
+            start: {Agent, :start_link, [fn -> graph end]}
+          }
+
+          DynamicSupervisor.start_child(sup, child_spec)
+      end
+
     %CallGraph{pid: pid}
   end
 

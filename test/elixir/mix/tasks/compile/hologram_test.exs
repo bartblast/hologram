@@ -33,6 +33,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @num_pages Enum.count(Reflection.list_pages())
 
+  defp count_plt_processes do
+    Enum.count(Process.list(), fn pid ->
+      case Process.info(pid, :dictionary) do
+        {:dictionary, dict} -> Keyword.get(dict, :"$initial_call") == {PLT, :init, 1}
+        nil -> false
+      end
+    end)
+  end
+
   defp generate_old_bundle(name, opts) do
     opts[:static_dir]
     |> Path.join("#{name}.js")
@@ -283,6 +292,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
     run(opts)
     test_build_artifacts(opts)
     test_old_build_static_artifacts_cleanup(opts)
+  end
+
+  test "stops the processes it spawns once compilation finishes", %{opts: initial_opts} do
+    opts = setup_empty_assets_and_build_dirs(initial_opts)
+
+    before_count = count_plt_processes()
+    run(opts)
+    after_count = count_plt_processes()
+
+    assert after_count == before_count
   end
 
   describe "compiler locking" do
