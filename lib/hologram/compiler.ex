@@ -440,8 +440,9 @@ defmodule Hologram.Compiler do
       "--files-max-size=#{1024 * 1024 * 1024}"
     ]
 
-    # Run from the project root so that asdf/mise resolves the Node.js version from the
-    # consuming project's config, not from any .tool-versions inside a git-checked-out dependency.
+    # Run from the project root, not from inside assets_dir, so version managers like
+    # asdf/mise resolve the Node.js version from the consuming project's config rather
+    # than any .tool-versions inside a git-checked-out dependency.
     cmd_opts = [parallelism: true, stderr_to_stdout: true]
 
     args_length =
@@ -531,9 +532,10 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
   def install_js_deps(assets_dir, build_dir) do
-    # Run npm from the project root (not from inside assets_dir) so that version managers
-    # like asdf/mise resolve the Node.js version from the consuming project's config,
-    # not from any .tool-versions that may be present inside a git-checked-out dependency.
+    # Run from the project root, not from inside assets_dir, so version managers like
+    # asdf/mise resolve the Node.js version from the consuming project's config rather
+    # than any .tool-versions inside a git-checked-out dependency. npm still installs
+    # into assets_dir via --prefix.
     opts = [into: IO.stream(:stdio, :line)]
 
     {_result, exit_status} =
