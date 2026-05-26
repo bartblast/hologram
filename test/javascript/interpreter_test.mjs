@@ -306,6 +306,83 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("asyncWith()", () => {
+    it("returns a Promise", () => {
+      const body = async (_context) => Type.atom("ok");
+      const context = contextFixture();
+      const result = Interpreter.asyncWith(body, [], [], context);
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("evaluates match clause expression with await", async () => {
+      const body = (context) => context.vars.x;
+
+      const clauses = [
+        {
+          match: Type.variablePattern("x"),
+          guards: [],
+          expression: async (_context) => Type.atom("matched"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncWith(body, clauses, [], context);
+
+      assert.deepStrictEqual(result, Type.atom("matched"));
+    });
+
+    it("awaits body result", async () => {
+      const body = async (_context) => {
+        return new Promise((resolve) =>
+          setTimeout(() => resolve(Type.atom("delayed")), 1),
+        );
+      };
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncWith(body, [], [], context);
+
+      assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+
+    it("awaits else clause body when a clause fails to match", async () => {
+      const body = (_context) => Type.atom("body");
+
+      const clauses = [
+        {
+          match: Type.atom("error"),
+          guards: [],
+          expression: async (_context) => Type.atom("ok"),
+        },
+      ];
+
+      const elseClauses = [
+        {
+          match: Type.variablePattern("x"),
+          guards: [],
+          body: async (_context) => {
+            return new Promise((resolve) =>
+              setTimeout(() => resolve(Type.atom("recovered")), 1),
+            );
+          },
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncWith(
+        body,
+        clauses,
+        elseClauses,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("recovered"));
+    });
+  });
+
   it("buildArgumentErrorMsg()", () => {
     const result = Interpreter.buildArgumentErrorMsg(2, "my message");
 
