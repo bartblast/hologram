@@ -10,7 +10,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
-  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -577,7 +576,7 @@ defmodule Hologram.Compiler do
   """
   @spec maybe_load_call_graph(T.file_path(), T.opts()) :: {CallGraph.t(), String.t()}
   def maybe_load_call_graph(build_dir, opts \\ []) do
-    call_graph = CallGraph.start(Digraph.new(), opts)
+    call_graph = CallGraph.start(opts)
     call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
     CallGraph.maybe_load(call_graph, call_graph_dump_path)
 

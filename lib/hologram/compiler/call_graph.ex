@@ -519,7 +519,10 @@ defmodule Hologram.Compiler.CallGraph do
   @spec clone(t, T.opts()) :: t
   def clone(call_graph, opts \\ []) do
     graph = get_graph(call_graph)
-    start(graph, opts)
+
+    opts
+    |> Keyword.put(:graph, graph)
+    |> start()
   end
 
   @doc """
@@ -907,10 +910,18 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Starts a new call graph agent with (optional) initial graph.
+  Starts a new call graph agent.
+
+  ## Options
+
+    * `:graph` - the initial `Digraph` to seed the agent with; defaults to an empty graph.
+    * `:supervisor` - a `DynamicSupervisor` to start the agent under as a `:temporary` child;
+      when omitted the agent is linked to the calling process.
   """
-  @spec start(Digraph.t(), T.opts()) :: t
-  def start(graph \\ Digraph.new(), opts \\ []) do
+  @spec start(T.opts()) :: t
+  def start(opts \\ []) do
+    graph = opts[:graph] || Digraph.new()
+
     {:ok, pid} =
       case opts[:supervisor] do
         nil ->
