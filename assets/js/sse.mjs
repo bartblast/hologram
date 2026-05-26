@@ -59,6 +59,7 @@ export default class Sse {
 
       if (!response.ok) {
         Logger.debug(`SSE handshake error: ${response.status}`);
+        $.scheduleReconnect();
         return;
       }
 
@@ -145,14 +146,23 @@ export default class Sse {
         GlobalRegistry.set("sseConnected?", false);
         $.eventSource.close();
 
-        $.reconnectAttempts++;
-        const delay = $.computeReconnectDelay($.reconnectAttempts);
-
-        setTimeout(() => $.connect(), delay);
+        $.scheduleReconnect();
       };
     } catch (error) {
       Logger.debug(`SSE handshake error: ${error}`);
+      $.scheduleReconnect();
     }
+  }
+
+  // Bump the failure counter and re-run the handshake protocol from scratch
+  // after an exponential backoff delay. Shared by the handshake-failure paths
+  // and the post-open EventSource onerror handler so a failure anywhere in the
+  // connect lifecycle backs off identically instead of leaving realtime down.
+  static scheduleReconnect() {
+    $.reconnectAttempts++;
+    const delay = $.computeReconnectDelay($.reconnectAttempts);
+
+    setTimeout(() => $.connect(), delay);
   }
 }
 

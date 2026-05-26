@@ -179,6 +179,17 @@ describe("Sse", () => {
   });
 
   describe("connect()", () => {
+    let setTimeoutSpy;
+
+    beforeEach(() => {
+      sinon.stub(Math, "random").returns(0.5);
+
+      // Logger.debug schedules its write via setTimeout; stub it out so the
+      // setTimeoutSpy below only captures the reconnect timer.
+      sinon.stub(Logger, "debug");
+      setTimeoutSpy = sinon.stub(globalThis, "setTimeout");
+    });
+
     it("POSTs the handshake payload to the handshake endpoint before opening the EventSource", async () => {
       stubHandshakeResponse();
 
@@ -220,12 +231,40 @@ describe("Sse", () => {
       sinon.assert.notCalled(globalThis.EventSource);
     });
 
+    it("increments reconnectAttempts and schedules a reconnect when the handshake POST returns a non-2xx", async () => {
+      stubHandshakeResponse({ok: false, status: 503});
+
+      await Sse.connect();
+
+      assert.strictEqual(Sse.reconnectAttempts, 1);
+
+      sinon.assert.calledWith(
+        setTimeoutSpy,
+        sinon.match.func,
+        Sse.BASE_RECONNECT_DELAY,
+      );
+    });
+
     it("does not open an EventSource when fetch throws", async () => {
       fetchStub.rejects(new Error("network down"));
 
       await Sse.connect();
 
       sinon.assert.notCalled(globalThis.EventSource);
+    });
+
+    it("increments reconnectAttempts and schedules a reconnect when fetch throws", async () => {
+      fetchStub.rejects(new Error("network down"));
+
+      await Sse.connect();
+
+      assert.strictEqual(Sse.reconnectAttempts, 1);
+
+      sinon.assert.calledWith(
+        setTimeoutSpy,
+        sinon.match.func,
+        Sse.BASE_RECONNECT_DELAY,
+      );
     });
 
     it("exposes the opened EventSource as Sse.eventSource", async () => {
