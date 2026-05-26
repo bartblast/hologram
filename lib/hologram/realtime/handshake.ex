@@ -101,18 +101,9 @@ defmodule Hologram.Realtime.Handshake do
     boot_sync_timeout_ms =
       Keyword.get(opts, :boot_sync_timeout_ms, @boot_sync_timeout_ms)
 
-    Phoenix.PubSub.broadcast_from(
-      Hologram.PubSub,
-      self(),
-      @gossip_topic,
-      {:sync_request, self()}
-    )
-
-    collect_sync_replies(System.monotonic_time(:millisecond) + boot_sync_timeout_ms)
-
     schedule_sweep()
 
-    {:ok, %{waiters: %{}}}
+    {:ok, %{waiters: %{}}, {:continue, {:boot_sync, boot_sync_timeout_ms}}}
   end
 
   @impl GenServer
@@ -172,6 +163,25 @@ defmodule Hologram.Realtime.Handshake do
     delete_expired()
 
     {:reply, :ok, state}
+  end
+
+  # Boot-sync runs here rather than in init/1 so the blocking wait for peer
+  # replies doesn't stall the supervision tree (and thus app/endpoint
+  # readiness) for the full timeout on every boot. The ETS table and gossip
+  # subscription are established in init/1, so direct readers and live gossip
+  # are unaffected during this catch-up window.
+  @impl GenServer
+  def handle_continue({:boot_sync, boot_sync_timeout_ms}, state) do
+    Phoenix.PubSub.broadcast_from(
+      Hologram.PubSub,
+      self(),
+      @gossip_topic,
+      {:sync_request, self()}
+    )
+
+    collect_sync_replies(System.monotonic_time(:millisecond) + boot_sync_timeout_ms)
+
+    {:noreply, state}
   end
 
   @impl GenServer

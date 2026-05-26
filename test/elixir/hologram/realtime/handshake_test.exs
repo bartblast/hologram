@@ -16,6 +16,18 @@ defmodule Hologram.Realtime.HandshakeTest do
     end
   end
 
+  # Boot-sync runs in handle_continue/2, so start_supervised! returns before it
+  # completes. Poll the table until the expected state lands instead of reading
+  # it synchronously right after startup.
+  defp wait_until(fun) do
+    if fun.() do
+      :ok
+    else
+      :timer.sleep(1)
+      wait_until(fun)
+    end
+  end
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -171,6 +183,8 @@ defmodule Hologram.Realtime.HandshakeTest do
 
       start_supervised!({Handshake, boot_sync_timeout_ms: 200})
 
+      wait_until(fn -> :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_entry] end)
+
       assert :ets.lookup(ets_table_name(), "peer-entry-id") == [peer_entry]
     end
 
@@ -178,6 +192,10 @@ defmodule Hologram.Realtime.HandshakeTest do
       :ok = stop_supervised(Handshake)
 
       start_supervised!({Handshake, boot_sync_timeout_ms: 50})
+
+      # No peers reply, so nothing merges; the synchronous call blocks until the
+      # boot-sync handle_continue has run, then the table is asserted empty.
+      :sys.get_state(Handshake)
 
       assert :ets.tab2list(ets_table_name()) == []
     end
@@ -207,9 +225,15 @@ defmodule Hologram.Realtime.HandshakeTest do
 
       start_supervised!({Handshake, boot_sync_timeout_ms: 50})
 
-      # Drain the GenServer mailbox so the {:insert, ...} delivered during
-      # boot-sync has been merged before we read ETS.
-      :ok = sweep_expired()
+      wait_until(fn ->
+        match?(
+          [
+            {"post-sync-handshake-id", [], "peer-instance-id", "peer-session-id", "peer-user-id",
+             ^future}
+          ],
+          :ets.lookup(ets_table_name(), "post-sync-handshake-id")
+        )
+      end)
 
       assert [
                {"post-sync-handshake-id", [], "peer-instance-id", "peer-session-id",
