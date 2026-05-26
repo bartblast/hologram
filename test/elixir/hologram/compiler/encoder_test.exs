@@ -3297,6 +3297,53 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == expected
     end
+
+    test "async" do
+      # with x when :erlang.is_atom(x) <- :ok do
+      #   x
+      # else
+      #   :error -> :failed
+      # end
+      ir = %IR.With{
+        body: %IR.Block{
+          expressions: [%IR.Variable{name: :x}]
+        },
+        clauses: [
+          %IR.WithMatchClause{
+            match: %IR.Variable{name: :x},
+            guards: [
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :is_atom,
+                args: [%IR.Variable{name: :x}]
+              }
+            ],
+            expression: %IR.AtomType{value: :ok}
+          }
+        ],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.AtomType{value: :error},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :failed}]
+            }
+          }
+        ]
+      }
+
+      # Body, match-clause expression, and else-clause body are async; guards stay sync.
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncWith(async (context) => {
+        return context.vars.x;
+        }, [{match: Type.variablePattern("x"), guards: [(context) => Erlang["is_atom/1"](context.vars.x)], expression: async (context) => Type.atom("ok")}], [{match: Type.atom("error"), guards: [], body: async (context) => {
+        return Type.atom("failed");
+        }}], context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
   end
 
   describe "encode_as_class_name/1" do

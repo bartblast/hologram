@@ -211,7 +211,7 @@ export default class Interpreter {
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
   static case(condition, clauses, context) {
-    return Interpreter.#checkAllClauses(
+    return Interpreter.#evaluateMatchingClause(
       condition,
       clauses,
       context,
@@ -221,23 +221,12 @@ export default class Interpreter {
 
   // SYNC/ASYNC PAIR: When modifying this function, also update case().
   static async asyncCase(condition, clauses, context) {
-    if (typeof condition === "function") {
-      condition = await condition(context);
-    }
-
-    for (const clause of clauses) {
-      const contextClone = Interpreter.cloneContext(context);
-
-      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
-        Interpreter.updateVarsToMatchedValues(contextClone);
-
-        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return await clause.body(contextClone);
-        }
-      }
-    }
-
-    Interpreter.raiseCaseClauseError(condition);
+    return await Interpreter.#asyncEvaluateMatchingClause(
+      condition,
+      clauses,
+      context,
+      Interpreter.raiseCaseClauseError,
+    );
   }
 
   static cloneContext(context) {
@@ -879,12 +868,6 @@ export default class Interpreter {
     Interpreter.raiseError("CaseClauseError", message);
   }
 
-  static raiseWithClauseError(arg) {
-    const message = "no with clause matching: " + Interpreter.inspect(arg);
-
-    Interpreter.raiseError("WithClauseError", message);
-  }
-
   static raiseCompileError(message) {
     Interpreter.raiseError("CompileError", message);
   }
@@ -924,6 +907,12 @@ export default class Interpreter {
 
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
+  }
+
+  static raiseWithClauseError(arg) {
+    const message = "no with clause matching: " + Interpreter.inspect(arg);
+
+    Interpreter.raiseError("WithClauseError", message);
   }
 
   static registerJsBindings(bindingsMap) {
@@ -1045,31 +1034,92 @@ export default class Interpreter {
     return context;
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncWith().
   static with(body, clauses, elseClauses, context) {
     const originalContext = context;
-    for (const clause of clauses) {
-      const contextClone = Interpreter.cloneContext(context);
-      const condition = clause.expression(contextClone);
-      const plainClause = !clause.match;
-      const matched =
-        plainClause ||
-        Interpreter.isMatched(clause.match, condition, contextClone);
-      Interpreter.updateVarsToMatchedValues(contextClone);
-      const guardMatched =
-        plainClause ||
-        (matched && Interpreter.#evaluateGuards(clause.guards, contextClone));
 
-      if (!matched || !guardMatched) {
+    // Clauses form a sequential pipeline that aborts on the first failure, so
+    // (unlike case) there is no need to clone per clause: a single working copy
+    // protects the caller's context, and on failure the accumulated bindings are
+    // discarded in favor of the original context (else runs in the pre-with scope).
+    context = Interpreter.cloneContext(context);
+
+    for (const clause of clauses) {
+      const value = clause.expression(context);
+
+      // A bare clause (e.g. `x = 1`) has no pattern to match against: it commits its
+      // own bindings and the pipeline continues to the next clause.
+      if (!clause.match) {
+        Interpreter.updateVarsToMatchedValues(context);
+        continue;
+      }
+
+      // A match clause (`pattern <- expression`, optionally guarded) must match the
+      // pattern and then satisfy its guards.
+      const isPatternMatched = Interpreter.isMatched(
+        clause.match,
+        value,
+        context,
+      );
+
+      if (isPatternMatched) {
+        Interpreter.updateVarsToMatchedValues(context);
+      }
+
+      const isClausePassed =
+        isPatternMatched && Interpreter.#evaluateGuards(clause.guards, context);
+
+      // A failed clause ends the pipeline: the unmatched value is routed to the else
+      // clauses, which are evaluated in the original, pre-`with` context.
+      if (!isClausePassed) {
         return Interpreter.#withElse(
-          condition,
+          value,
           elseClauses,
           Interpreter.cloneContext(originalContext),
         );
       }
-      context = contextClone;
     }
 
-    return body(Interpreter.cloneContext(context));
+    return body(context);
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update with().
+  static async asyncWith(body, clauses, elseClauses, context) {
+    const originalContext = context;
+
+    context = Interpreter.cloneContext(context);
+
+    for (const clause of clauses) {
+      const value = await clause.expression(context);
+
+      if (!clause.match) {
+        Interpreter.updateVarsToMatchedValues(context);
+        continue;
+      }
+
+      const isPatternMatched = Interpreter.isMatched(
+        clause.match,
+        value,
+        context,
+      );
+
+      if (isPatternMatched) {
+        Interpreter.updateVarsToMatchedValues(context);
+      }
+
+      const isClausePassed =
+        isPatternMatched && Interpreter.#evaluateGuards(clause.guards, context);
+
+      if (!isClausePassed) {
+        return await Interpreter.#asyncWithElse(
+          value,
+          elseClauses,
+          Interpreter.cloneContext(originalContext),
+        );
+      }
+    }
+
+    return await body(context);
   }
 
   static #areBitstringsEqual(bitstring1, bitstring2) {
@@ -1218,26 +1268,6 @@ export default class Interpreter {
     };
   }
 
-  static #checkAllClauses(condition, clauses, context, errorFun) {
-    if (typeof condition === "function") {
-      condition = condition(context);
-    }
-
-    for (const clause of clauses) {
-      const contextClone = Interpreter.cloneContext(context);
-
-      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
-        Interpreter.updateVarsToMatchedValues(contextClone);
-
-        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return clause.body(contextClone);
-        }
-      }
-    }
-
-    errorFun(condition);
-  }
-
   static #comparePids(pid1, pid2) {
     for (let i = 2; i >= 0; --i) {
       if (pid1.segments[i] === pid2.segments[i]) {
@@ -1294,6 +1324,51 @@ export default class Interpreter {
     }
 
     return false;
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #asyncEvaluateMatchingClause().
+  // Evaluates the body of the first clause whose pattern and guards match `value`,
+  // raising via `errorFun` if none do. Shared case-clause dispatch: used by case/2
+  // and by with's else block (which is itself a case over the unmatched value).
+  static #evaluateMatchingClause(value, clauses, context, errorFun) {
+    if (typeof value === "function") {
+      value = value(context);
+    }
+
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.isMatched(clause.match, value, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          return clause.body(contextClone);
+        }
+      }
+    }
+
+    errorFun(value);
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #evaluateMatchingClause().
+  static async #asyncEvaluateMatchingClause(value, clauses, context, errorFun) {
+    if (typeof value === "function") {
+      value = await value(context);
+    }
+
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.isMatched(clause.match, value, contextClone)) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
+          return await clause.body(contextClone);
+        }
+      }
+    }
+
+    errorFun(value);
   }
 
   // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
@@ -1742,12 +1817,30 @@ export default class Interpreter {
     );
   }
 
-  static #withElse(condition, elseClauses, context) {
+  // SYNC/ASYNC PAIR: When modifying this function, also update #asyncWithElse().
+  static #withElse(value, elseClauses, context) {
+    // A `with` without else clauses returns the unmatched value as-is.
     if (elseClauses.length === 0) {
-      return condition;
+      return value;
     }
-    return Interpreter.#checkAllClauses(
-      condition,
+
+    return Interpreter.#evaluateMatchingClause(
+      value,
+      elseClauses,
+      context,
+      Interpreter.raiseWithClauseError,
+    );
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #withElse().
+  static async #asyncWithElse(value, elseClauses, context) {
+    // A `with` without else clauses returns the unmatched value as-is.
+    if (elseClauses.length === 0) {
+      return value;
+    }
+
+    return await Interpreter.#asyncEvaluateMatchingClause(
+      value,
       elseClauses,
       context,
       Interpreter.raiseWithClauseError,
