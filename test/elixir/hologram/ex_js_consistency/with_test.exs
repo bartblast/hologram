@@ -2,7 +2,8 @@ defmodule Hologram.ExJsConsistency.WithTest do
   @moduledoc """
   IMPORTANT!
   Each Elixir consistency test has a related JavaScript test in test/javascript/interpreter_test.mjs (with() section)
-  Always update both together.
+  and a related feature test in test/features/test/control_flow/with_test.exs.
+  Always update all three together.
   """
   use Hologram.Test.BasicCase, async: true
 

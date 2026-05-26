@@ -7215,7 +7215,8 @@ describe("Interpreter", () => {
 
   // IMPORTANT!
   // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/with_test.exs
-  // Always update both together.
+  // and a related feature test in test/features/test/control_flow/with_test.exs.
+  // Always update all three together.
   describe("with()", () => {
     let context, body;
 
