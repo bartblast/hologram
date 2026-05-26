@@ -4,9 +4,9 @@ defmodule HologramFeatureTests.ControlFlow.WithTest do
   alias HologramFeatureTests.ControlFlow.WithPage
 
   # IMPORTANT!
-  # Keep consistent with the related JavaScript unit tests in
-  # test/javascript/interpreter_test.mjs (with() section) and the Elixir consistency
-  # tests in test/elixir/hologram/ex_js_consistency/with_test.exs.
+  # Each feature test has a related JavaScript test in test/javascript/interpreter_test.mjs (with() section)
+  # and a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/with_test.exs.
+  # Always update all three together.
 
   feature "evaluates the body when there are no clauses", %{session: session} do
     session
