@@ -16,18 +16,6 @@ defmodule Hologram.Realtime.HandshakeTest do
     end
   end
 
-  # Boot-sync runs in handle_continue/2, so start_supervised! returns before it
-  # completes. Poll the table until the expected state lands instead of reading
-  # it synchronously right after startup.
-  defp wait_until(fun) do
-    if fun.() do
-      :ok
-    else
-      :timer.sleep(1)
-      wait_until(fun)
-    end
-  end
-
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})

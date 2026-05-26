@@ -300,4 +300,24 @@ defmodule Hologram.Test.Helpers do
       :ok
     end
   end
+
+  @doc """
+  Polls `fun` until it returns a truthy value, sleeping between attempts.
+  Relies on the ExUnit per-test timeout as the backstop if the condition never
+  holds.
+
+  ## Examples
+
+      iex> wait_until(fn -> :ets.lookup(table, key) == [expected] end)
+      :ok
+  """
+  @spec wait_until((-> as_boolean(term))) :: :ok
+  def wait_until(fun) do
+    if fun.() do
+      :ok
+    else
+      :timer.sleep(1)
+      wait_until(fun)
+    end
+  end
 end
