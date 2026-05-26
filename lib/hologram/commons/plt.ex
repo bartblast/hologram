@@ -18,14 +18,14 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Returns a clone of the PLT.
   """
-  @spec clone(PLT.t()) :: PLT.t()
-  def clone(plt) do
+  @spec clone(PLT.t(), T.opts()) :: PLT.t()
+  def clone(plt, opts \\ []) do
     items =
       plt
       |> get_all()
       |> Map.to_list()
 
-    put(start(), items)
+    put(start(opts), items)
   end
 
   @doc """
@@ -180,9 +180,26 @@ defmodule Hologram.Commons.PLT do
   """
   @spec start(T.opts()) :: PLT.t()
   def start(opts \\ []) do
-    genserver_opts = Keyword.delete(opts, :table_name)
+    genserver_opts =
+      opts
+      |> Keyword.delete(:table_name)
+      |> Keyword.delete(:supervisor)
 
-    {:ok, pid} = GenServer.start_link(PLT, opts[:table_name], genserver_opts)
+    {:ok, pid} =
+      case opts[:supervisor] do
+        nil ->
+          GenServer.start_link(PLT, opts[:table_name], genserver_opts)
+
+        sup ->
+          child_spec = %{
+            id: :plt,
+            restart: :temporary,
+            start: {GenServer, :start_link, [PLT, opts[:table_name], genserver_opts]}
+          }
+
+          DynamicSupervisor.start_child(sup, child_spec)
+      end
+
     table_ref = GenServer.call(pid, :get_table_ref)
 
     plt = %PLT{pid: pid, table_ref: table_ref, table_name: opts[:table_name]}
