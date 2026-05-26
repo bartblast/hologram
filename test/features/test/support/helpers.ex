@@ -615,9 +615,16 @@ defmodule HologramFeatureTests.Helpers do
     start_time = start_time || current_time()
 
     callback = fn connected? ->
-      if !connected? && !timed_out?(start_time) do
-        :timer.sleep(100)
-        wait_for_sse_connection(session, start_time)
+      cond do
+        connected? ->
+          :ok
+
+        timed_out?(start_time) ->
+          raise Wallaby.ExpectationNotMetError, "Timed out waiting for SSE connection"
+
+        true ->
+          :timer.sleep(100)
+          wait_for_sse_connection(session, start_time)
       end
     end
 
@@ -630,9 +637,16 @@ defmodule HologramFeatureTests.Helpers do
     start_time = start_time || current_time()
 
     callback = fn connected? ->
-      if !connected? && !timed_out?(start_time) do
-        :timer.sleep(100)
-        wait_for_ws_connection(session, start_time)
+      cond do
+        connected? ->
+          :ok
+
+        timed_out?(start_time) ->
+          raise Wallaby.ExpectationNotMetError, "Timed out waiting for WS connection"
+
+        true ->
+          :timer.sleep(100)
+          wait_for_ws_connection(session, start_time)
       end
     end
 
