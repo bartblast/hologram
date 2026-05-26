@@ -357,7 +357,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       session
       |> click(button("Unsubscribe and broadcast"))
       |> assert_text(css("#received-2"), "delivered")
-      |> assert_text(css("#received-1"), "none")
+      |> refute_text(css("#received-1"), "delivered", wait_time: 1_000)
     end
 
     feature "from outside a handler (the same cid still receives on another channel)", %{
@@ -381,7 +381,7 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       session
       |> assert_text(css("#received-2"), "delivered to other channel")
-      |> assert_text(css("#received-1"), "none")
+      |> refute_text(css("#received-1"), "blocked", wait_time: 1_000)
     end
 
     feature "from inside a handler (a sibling cid on the same channel still receives)", %{
@@ -401,7 +401,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       session
       |> click(button("Unsubscribe and broadcast"))
       |> assert_text(css("#received-component-1"), "delivered to sibling cid")
-      |> assert_text(css("#received-component-3"), "none")
+      |> refute_text(css("#received-component-3"), "delivered to sibling cid", wait_time: 1_000)
     end
 
     feature "from outside a handler (a sibling cid on the same channel still receives)", %{
@@ -427,7 +427,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       session
       |> click(button("Broadcast"))
       |> assert_text(css("#received-page"), "delivered")
-      |> assert_text(css("#received-component-1"), "none")
+      |> refute_text(css("#received-component-1"), "delivered", wait_time: 1_000)
       |> assert_text(css("#received-component-2"), "delivered")
     end
 
@@ -449,8 +449,8 @@ defmodule HologramFeatureTests.RealtimeTest do
       session
       |> click(button("Broadcast"))
       |> assert_text(css("#received-page"), "delivered")
-      |> assert_text(css("#received-component-1"), "none")
-      |> assert_text(css("#received-component-2"), "none")
+      |> refute_text(css("#received-component-1"), "delivered", wait_time: 1_000)
+      |> refute_text(css("#received-component-2"), "delivered", wait_time: 1_000)
     end
   end
 
@@ -470,7 +470,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       session
       |> click(button("Broadcast"))
       |> assert_text(css("#received-2"), "delivered")
-      |> assert_text(css("#received-1"), "none")
+      |> refute_text(css("#received-1"), "delivered", wait_time: 1_000)
     end
 
     feature "shared layout subscription persists", %{session: session} do
@@ -558,7 +558,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       Realtime.broadcast_action(@channel_2, :show_2, message: "delivered")
 
       session
-      |> assert_text(css("#received-1"), "none")
+      |> refute_text(css("#received-1"), "blocked", wait_time: 1_000)
       |> assert_text(css("#received-2"), "delivered")
     end
 
