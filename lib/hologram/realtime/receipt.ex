@@ -42,7 +42,7 @@ defmodule Hologram.Realtime.Receipt do
   def verify(token, opts \\ []) do
     max_age = Keyword.get(opts, :max_age, @max_age_seconds)
 
-    case Phoenix.Token.verify(secret_key_base(), @salt, token, max_age: max_age) do
+    case Phoenix.Token.verify(Hologram.secret_key_base(), @salt, token, max_age: max_age) do
       {:ok, {instance_id, user_id, channel, cid, created_at}} ->
         {:ok,
          %__MODULE__{
@@ -58,14 +58,10 @@ defmodule Hologram.Realtime.Receipt do
     end
   end
 
-  defp secret_key_base do
-    System.fetch_env!("SECRET_KEY_BASE")
-  end
-
   defp sign(%__MODULE__{} = receipt) do
     payload =
       {receipt.instance_id, receipt.user_id, receipt.channel, receipt.cid, receipt.created_at}
 
-    Phoenix.Token.sign(secret_key_base(), @salt, payload)
+    Phoenix.Token.sign(Hologram.secret_key_base(), @salt, payload)
   end
 end

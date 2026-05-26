@@ -58,9 +58,7 @@ defmodule Hologram.Runtime.Session.Standalone do
   end
 
   defp derive_encryption_key do
-    "SECRET_KEY_BASE"
-    |> System.fetch_env!()
-    |> KeyGenerator.generate("hologram session")
+    KeyGenerator.generate(Hologram.secret_key_base(), "hologram session")
   end
 
   defp encrypt_session_data(data) do

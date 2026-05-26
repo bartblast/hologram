@@ -1,4 +1,6 @@
 defmodule Hologram do
+  alias Hologram.Reflection
+
   @doc """
   Returns the current environment.
   """
@@ -13,11 +15,42 @@ defmodule Hologram do
     end
   end
 
+  @doc """
+  Returns the secret key base.
+
+  Uses the `SECRET_KEY_BASE` env var when set. In :dev/:test, falls back to the
+  Phoenix endpoint's configured `:secret_key_base`. In all other environments the
+  env var is required.
+  """
+  @spec secret_key_base() :: String.t()
+  def secret_key_base do
+    System.get_env("SECRET_KEY_BASE") || dev_test_secret_key_base()
+  end
+
   defp detect_env do
     if Process.whereis(ExUnit.Server) do
       :test
     else
       :dev
+    end
+  end
+
+  defp dev_test_secret_key_base do
+    # NOTE: Hologram.env/0 defaults to :dev when neither HOLOGRAM_ENV nor MIX_ENV
+    # is set (possible in a release). Harmless here: a real prod release either has
+    # SECRET_KEY_BASE set (handled above) or Phoenix's runtime.exs already raised.
+    if env() in [:dev, :test] do
+      endpoint = Reflection.phoenix_endpoint()
+      otp_app = Reflection.otp_app()
+
+      (endpoint && Application.get_env(otp_app, endpoint)[:secret_key_base]) ||
+        raise """
+        Hologram could not resolve a secret key base. Set the SECRET_KEY_BASE \
+        environment variable, or configure :secret_key_base on your Phoenix \
+        endpoint (config :my_app, MyAppWeb.Endpoint, secret_key_base: ...).
+        """
+    else
+      raise "Hologram requires the SECRET_KEY_BASE environment variable to be set in this environment."
     end
   end
 end
