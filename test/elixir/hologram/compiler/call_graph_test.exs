@@ -1515,16 +1515,16 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "start/1" do
-    test "default graph param" do
+    test "default graph opt" do
       assert %CallGraph{pid: pid} = start()
       assert is_pid(pid)
       assert Agent.get(pid, & &1) == Digraph.new()
     end
 
-    test "graph param specified" do
+    test "graph opt specified" do
       graph = Digraph.add_vertex(Digraph.new(), :my_vertex)
 
-      assert %CallGraph{pid: pid} = start(graph)
+      assert %CallGraph{pid: pid} = start(graph: graph)
       assert is_pid(pid)
       assert Agent.get(pid, & &1) == graph
     end

@@ -18,14 +18,14 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Returns a clone of the PLT.
   """
-  @spec clone(PLT.t(), T.opts()) :: PLT.t()
-  def clone(plt, opts \\ []) do
+  @spec clone(PLT.t()) :: PLT.t()
+  def clone(plt) do
     items =
       plt
       |> get_all()
       |> Map.to_list()
 
-    put(start(opts), items)
+    put(start(), items)
   end
 
   @doc """
@@ -182,8 +182,8 @@ defmodule Hologram.Commons.PLT do
   def start(opts \\ []) do
     genserver_opts =
       opts
-      |> Keyword.delete(:table_name)
       |> Keyword.delete(:supervisor)
+      |> Keyword.delete(:table_name)
 
     {:ok, pid} =
       case opts[:supervisor] do
