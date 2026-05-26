@@ -85,6 +85,21 @@ defmodule Hologram.Realtime.HandshakeTest do
                 {"test-instance-id", "test-session-id", "test-user-id"}}
     end
 
+    test "returns :error and deletes the entry when it is already expired" do
+      past = System.system_time(:millisecond) - 1
+
+      insert(
+        "expired-handshake-id",
+        [{{:room_a, "page"}, "test-user-id"}],
+        {"test-instance-id", "test-session-id", "test-user-id"},
+        past
+      )
+
+      assert redeem("expired-handshake-id", 50) == :error
+
+      assert :ets.lookup(ets_table_name(), "expired-handshake-id") == []
+    end
+
     test "returns :error after the per-call timeout when the entry never arrives" do
       assert redeem("missing-handshake-id", 50) == :error
     end

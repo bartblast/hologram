@@ -141,9 +141,20 @@ defmodule Hologram.Realtime.Handshake do
 
   @impl GenServer
   def handle_call({:redeem, handshake_id, timeout}, from, state) do
+    now = System.system_time(:millisecond)
+
     case :ets.lookup(@table_name, handshake_id) do
-      [{^handshake_id, validated_bindings, instance_id, session_id, user_id, _expires_at}] ->
+      [{^handshake_id, validated_bindings, instance_id, session_id, user_id, expires_at}]
+      when expires_at > now ->
         {:reply, {:ok, validated_bindings, {instance_id, session_id, user_id}}, state}
+
+      # Expiry is enforced here, not just by the periodic sweep, so a stale
+      # entry can never be redeemed in the window before the next sweep pass.
+      # handshake_ids are unique UUIDv4s, so a fresh insert for an expired id
+      # is impossible - reject immediately rather than waiting on gossip.
+      [{^handshake_id, _validated_bindings, _instance_id, _session_id, _user_id, _expires_at}] ->
+        :ets.delete(@table_name, handshake_id)
+        {:reply, :error, state}
 
       [] ->
         ref = make_ref()
