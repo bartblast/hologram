@@ -474,7 +474,11 @@ defmodule Hologram.Compiler.Encoder do
     clauses_js = encode_as_array(clauses, context)
     else_clauses_js = encode_as_array(else_clauses, context)
 
-    "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
+    if context.async? do
+      "(await Interpreter.asyncWith(#{body_js}, #{clauses_js}, #{else_clauses_js}, context))"
+    else
+      "Interpreter.with(#{body_js}, #{clauses_js}, #{else_clauses_js}, context)"
+    end
   end
 
   def encode_ir(%IR.WithBareClause{expression: expression}, context) do
@@ -488,7 +492,10 @@ defmodule Hologram.Compiler.Encoder do
         context
       ) do
     match_js = encode_ir(match, %{context | pattern?: true})
-    guards_js = encode_as_array(guards, context, &encode_closure/2)
+
+    # Guards are never async — Elixir guards are restricted to a safe subset of functions.
+    guards_js = encode_as_array(guards, %{context | async?: false}, &encode_closure/2)
+
     expression_js = encode_closure(expression, context)
 
     "{match: #{match_js}, guards: #{guards_js}, expression: #{expression_js}}"
