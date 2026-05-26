@@ -18,6 +18,18 @@ defmodule Hologram.Realtime.TombstoneTest do
     end)
   end
 
+  # Boot-sync runs in handle_continue/2, so start_supervised! returns before it
+  # completes. Poll the table until the expected state lands instead of reading
+  # it synchronously right after startup.
+  defp wait_until(fun) do
+    if fun.() do
+      :ok
+    else
+      :timer.sleep(1)
+      wait_until(fun)
+    end
+  end
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -183,6 +195,8 @@ defmodule Hologram.Realtime.TombstoneTest do
 
       start_supervised!({Tombstone, boot_sync_timeout_ms: 200})
 
+      wait_until(fn -> :ets.lookup(ets_table_name(), key) == [peer_entry] end)
+
       assert :ets.lookup(ets_table_name(), key) == [peer_entry]
     end
 
@@ -190,6 +204,10 @@ defmodule Hologram.Realtime.TombstoneTest do
       :ok = stop_supervised(Tombstone)
 
       start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
+
+      # No peers reply, so nothing merges; the synchronous call blocks until the
+      # boot-sync handle_continue has run, then the table is asserted empty.
+      :sys.get_state(Tombstone)
 
       assert :ets.tab2list(ets_table_name()) == []
     end
@@ -208,7 +226,7 @@ defmodule Hologram.Realtime.TombstoneTest do
 
       start_supervised!({Tombstone, boot_sync_timeout_ms: 50})
 
-      :sys.get_state(Tombstone)
+      wait_until(fn -> :ets.lookup(ets_table_name(), key) == [{key, @timestamp}] end)
 
       assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp}]
     end
@@ -231,6 +249,8 @@ defmodule Hologram.Realtime.TombstoneTest do
       assert_receive :peer_ready
 
       start_supervised!({Tombstone, boot_sync_timeout_ms: 200})
+
+      wait_until(fn -> :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}] end)
 
       assert :ets.lookup(ets_table_name(), key) == [{key, @timestamp + 10}]
     end
@@ -256,7 +276,10 @@ defmodule Hologram.Realtime.TombstoneTest do
         {:insert, gossip_key, @timestamp + 1}
       )
 
-      :sys.get_state(Tombstone)
+      wait_until(fn ->
+        :ets.lookup(ets_table_name(), synced_key) == [{synced_key, @timestamp}] and
+          :ets.lookup(ets_table_name(), gossip_key) == [{gossip_key, @timestamp + 1}]
+      end)
 
       assert :ets.lookup(ets_table_name(), synced_key) == [{synced_key, @timestamp}]
       assert :ets.lookup(ets_table_name(), gossip_key) == [{gossip_key, @timestamp + 1}]
