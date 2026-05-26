@@ -71,7 +71,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp compile(opts) do
-    {:ok, sup} = DynamicSupervisor.start_link([])
+    {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
 
     try do
       Logger.info("Hologram: compiler started")
