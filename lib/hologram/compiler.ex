@@ -102,11 +102,11 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
-  @spec build_ir_plt :: PLT.t()
+  @spec build_ir_plt(T.opts()) :: PLT.t()
   # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
-  def build_ir_plt do
-    ir_plt = PLT.start()
+  def build_ir_plt(opts \\ []) do
+    ir_plt = PLT.start(opts)
 
     modules = Reflection.list_elixir_modules()
 
@@ -136,9 +136,9 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!_1/README.md
   """
-  @spec build_module_digest_plt! :: PLT.t()
-  def build_module_digest_plt! do
-    module_digest_plt = PLT.start()
+  @spec build_module_digest_plt!(T.opts()) :: PLT.t()
+  def build_module_digest_plt!(opts \\ []) do
+    module_digest_plt = PLT.start(opts)
 
     Reflection.list_elixir_modules()
     |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt))
@@ -160,7 +160,7 @@ defmodule Hologram.Compiler do
         [{page_module, digest} | acc]
       end)
 
-    page_digest_plt = PLT.start(items: page_digest_plt_items)
+    page_digest_plt = PLT.start(items: page_digest_plt_items, supervisor: opts[:supervisor])
 
     page_digest_plt_dump_path =
       Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
@@ -436,7 +436,10 @@ defmodule Hologram.Compiler do
       "--files-max-size=#{1024 * 1024 * 1024}"
     ]
 
-    cmd_opts = [cd: opts[:assets_dir], parallelism: true, stderr_to_stdout: true]
+    # Run from the project root, not from inside assets_dir, so version managers like
+    # asdf/mise resolve the Node.js version from the consuming project's config rather
+    # than any .tool-versions inside a git-checked-out dependency.
+    cmd_opts = [parallelism: true, stderr_to_stdout: true]
 
     args_length =
       base_args
@@ -525,8 +528,14 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
   def install_js_deps(assets_dir, build_dir) do
-    opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
-    {_result, exit_status} = SystemUtils.cmd_cross_platform("npm", ["install"], opts)
+    # Run from the project root, not from inside assets_dir, so version managers like
+    # asdf/mise resolve the Node.js version from the consuming project's config rather
+    # than any .tool-versions inside a git-checked-out dependency. npm still installs
+    # into assets_dir via --prefix.
+    opts = [into: IO.stream(:stdio, :line)]
+
+    {_result, exit_status} =
+      SystemUtils.cmd_cross_platform("npm", ["install", "--prefix", assets_dir], opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
@@ -565,9 +574,9 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph_1/README.md
   """
-  @spec maybe_load_call_graph(T.file_path()) :: {CallGraph.t(), String.t()}
-  def maybe_load_call_graph(build_dir) do
-    call_graph = CallGraph.start()
+  @spec maybe_load_call_graph(T.file_path(), T.opts()) :: {CallGraph.t(), String.t()}
+  def maybe_load_call_graph(build_dir, opts \\ []) do
+    call_graph = CallGraph.start(opts)
     call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
     CallGraph.maybe_load(call_graph, call_graph_dump_path)
 
@@ -593,9 +602,9 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
   """
-  @spec maybe_load_module_digest_plt(T.file_path()) :: {PLT.t(), String.t()}
-  def maybe_load_module_digest_plt(build_dir) do
-    module_digest_plt = PLT.start()
+  @spec maybe_load_module_digest_plt(T.file_path(), T.opts()) :: {PLT.t(), String.t()}
+  def maybe_load_module_digest_plt(build_dir, opts \\ []) do
+    module_digest_plt = PLT.start(opts)
 
     module_digest_plt_dump_path =
       Path.join(build_dir, Reflection.module_digest_plt_dump_file_name())
