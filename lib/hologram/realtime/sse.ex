@@ -115,11 +115,12 @@ defmodule Hologram.Realtime.SSE do
         end
 
       {:broadcast_action, channel, action_name, params, excluded_identities} ->
-        if has_excluded_identity?(conn, excluded_identities) do
+        conn = Plug.Conn.fetch_query_params(conn)
+        instance_id = conn.query_params["instance_id"]
+
+        if has_excluded_identity?(instance_id, session_id, user_id, excluded_identities) do
           {:cont, conn}
         else
-          conn = Plug.Conn.fetch_query_params(conn)
-          instance_id = conn.query_params["instance_id"]
           bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
 
           matching_cids =
@@ -459,9 +460,9 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
-  defp has_excluded_identity?(conn, excluded_identities) do
-    conn
-    |> own_identities()
+  defp has_excluded_identity?(instance_id, session_id, user_id, excluded_identities) do
+    instance_id
+    |> own_identities(session_id, user_id)
     |> Enum.any?(&(&1 in excluded_identities))
   end
 
@@ -505,14 +506,10 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
-  defp own_identities(conn) do
-    conn = Plug.Conn.fetch_query_params(conn)
-    instance_id = conn.query_params["instance_id"]
-    session_id = Session.get_session_id(conn)
-
+  defp own_identities(instance_id, session_id, user_id) do
     base = [{:instance, instance_id}, {:session, session_id}]
 
-    case Session.get_user_id(conn) do
+    case user_id do
       nil -> base
       user_id -> [{:user, user_id} | base]
     end

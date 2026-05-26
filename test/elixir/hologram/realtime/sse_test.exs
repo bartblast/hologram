@@ -300,7 +300,7 @@ defmodule Hologram.Realtime.SSETest do
       assert updated_conn.resp_body == ""
     end
 
-    test "drops the broadcast when the conn's session identity is in excluded_identities" do
+    test "drops the broadcast when the connection's session identity is in excluded_identities" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id, session_id: session_id)
@@ -315,12 +315,12 @@ defmodule Hologram.Realtime.SSETest do
 
       send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:session, session_id}]})
 
-      {:cont, updated_conn} = process_message(conn, nil, nil)
+      {:cont, updated_conn} = process_message(conn, session_id, nil)
 
       assert updated_conn.resp_body == ""
     end
 
-    test "drops the broadcast when the conn's user identity is in excluded_identities" do
+    test "drops the broadcast when the connection's user identity is in excluded_identities" do
       instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
       user_id = "test-user-#{:erlang.unique_integer([:positive])}"
       conn = prepared_test_conn_with_identities(instance_id: instance_id, user_id: user_id)
@@ -335,9 +335,52 @@ defmodule Hologram.Realtime.SSETest do
 
       send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:user, user_id}]})
 
-      {:cont, updated_conn} = process_message(conn, nil, nil)
+      {:cont, updated_conn} = process_message(conn, nil, user_id)
 
       assert updated_conn.resp_body == ""
+    end
+
+    test "excludes against the reconciled loop-state identity, not the conn's attach-time identity" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id, user_id: "stale-user")
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        "fresh-user",
+        self(),
+        [{{{:room, 1}, "chat"}, nil}]
+      )
+
+      # The connection logged in mid-stream: the conn still carries the
+      # attach-time user ("stale-user"), but the loop state holds "fresh-user".
+      # Excluding the reconciled user drops the broadcast.
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:user, "fresh-user"}]})
+
+      {:cont, updated_conn} = process_message(conn, nil, "fresh-user")
+
+      assert updated_conn.resp_body == ""
+    end
+
+    test "does not exclude against the conn's stale attach-time identity" do
+      instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
+      conn = prepared_test_conn_with_identities(instance_id: instance_id, user_id: "stale-user")
+
+      SubscriptionRegistry.attach_connection(
+        instance_id,
+        nil,
+        "fresh-user",
+        self(),
+        [{{{:room, 1}, "chat"}, nil}]
+      )
+
+      # Excluding the conn's stale attach-time user must NOT drop the broadcast:
+      # the reconciled loop-state identity is "fresh-user".
+      send(self(), {:broadcast_action, {:room, 1}, :my_action, %{}, [{:user, "stale-user"}]})
+
+      {:cont, updated_conn} = process_message(conn, nil, "fresh-user")
+
+      assert updated_conn.resp_body =~ "event: broadcast\n"
     end
 
     test "dispatches when excluded_identities contains identities that don't match the conn" do
