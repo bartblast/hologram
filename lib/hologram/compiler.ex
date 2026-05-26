@@ -10,6 +10,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -102,11 +103,11 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
-  @spec build_ir_plt :: PLT.t()
+  @spec build_ir_plt(T.opts()) :: PLT.t()
   # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
-  def build_ir_plt do
-    ir_plt = PLT.start()
+  def build_ir_plt(opts \\ []) do
+    ir_plt = PLT.start(opts)
 
     modules = Reflection.list_elixir_modules()
 
@@ -136,9 +137,9 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!_1/README.md
   """
-  @spec build_module_digest_plt! :: PLT.t()
-  def build_module_digest_plt! do
-    module_digest_plt = PLT.start()
+  @spec build_module_digest_plt!(T.opts()) :: PLT.t()
+  def build_module_digest_plt!(opts \\ []) do
+    module_digest_plt = PLT.start(opts)
 
     Reflection.list_elixir_modules()
     |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt))
@@ -160,7 +161,10 @@ defmodule Hologram.Compiler do
         [{page_module, digest} | acc]
       end)
 
-    page_digest_plt = PLT.start(items: page_digest_plt_items)
+    page_digest_plt =
+      opts
+      |> Keyword.put(:items, page_digest_plt_items)
+      |> PLT.start()
 
     page_digest_plt_dump_path =
       Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
@@ -565,9 +569,9 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph_1/README.md
   """
-  @spec maybe_load_call_graph(T.file_path()) :: {CallGraph.t(), String.t()}
-  def maybe_load_call_graph(build_dir) do
-    call_graph = CallGraph.start()
+  @spec maybe_load_call_graph(T.file_path(), T.opts()) :: {CallGraph.t(), String.t()}
+  def maybe_load_call_graph(build_dir, opts \\ []) do
+    call_graph = CallGraph.start(Digraph.new(), opts)
     call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
     CallGraph.maybe_load(call_graph, call_graph_dump_path)
 
@@ -593,9 +597,9 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
   """
-  @spec maybe_load_module_digest_plt(T.file_path()) :: {PLT.t(), String.t()}
-  def maybe_load_module_digest_plt(build_dir) do
-    module_digest_plt = PLT.start()
+  @spec maybe_load_module_digest_plt(T.file_path(), T.opts()) :: {PLT.t(), String.t()}
+  def maybe_load_module_digest_plt(build_dir, opts \\ []) do
+    module_digest_plt = PLT.start(opts)
 
     module_digest_plt_dump_path =
       Path.join(build_dir, Reflection.module_digest_plt_dump_file_name())
