@@ -52,6 +52,9 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
       <button $click="async_new"> Async new </button>
     </p>
     <p>
+      <button $click="async_with"> Async with </button>
+    </p>
+    <p>
       <button $click="call_async_method"> Call async method </button>
     </p>
     <p>
@@ -181,6 +184,23 @@ defmodule HologramFeatureTests.JavaScriptInterop.AsyncPage do
     result = JS.get(obj, :value)
 
     put_state(component, :result, {result, is_integer(result)})
+  end
+
+  def action(:async_with, _params, component) do
+    sum =
+      :helpers
+      |> JS.call(:asyncSum, [18, 22])
+      |> Task.await()
+
+    result =
+      with n when is_integer(n) <- sum,
+           40 <- n do
+        {:ok, n}
+      else
+        _other -> :error
+      end
+
+    put_state(component, :result, result)
   end
 
   def action(:call_async_method, _params, component) do
