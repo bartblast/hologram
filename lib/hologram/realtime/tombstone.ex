@@ -3,6 +3,8 @@ defmodule Hologram.Realtime.Tombstone do
 
   use GenServer
 
+  alias Hologram.Realtime.Gossip
+
   @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:tombstones"
   @table_name :hologram_tombstones
@@ -86,14 +88,7 @@ defmodule Hologram.Realtime.Tombstone do
   # are unaffected during this catch-up window.
   @impl GenServer
   def handle_continue({:boot_sync, boot_sync_timeout_ms}, state) do
-    Phoenix.PubSub.broadcast_from(
-      Hologram.PubSub,
-      self(),
-      @gossip_topic,
-      {:sync_request, self()}
-    )
-
-    collect_sync_replies(System.monotonic_time(:millisecond) + boot_sync_timeout_ms)
+    Gossip.boot_sync(@gossip_topic, boot_sync_timeout_ms, &merge_synced_entries/1)
 
     {:noreply, state}
   end
@@ -122,22 +117,9 @@ defmodule Hologram.Realtime.Tombstone do
 
   @impl GenServer
   def handle_info({:sync_request, requester_pid}, state) do
-    entries = :ets.tab2list(@table_name)
-    send(requester_pid, {:sync_reply, entries})
+    Gossip.reply_to_sync_request(@table_name, requester_pid)
 
     {:noreply, state}
-  end
-
-  defp collect_sync_replies(deadline) do
-    remaining_ms = max(deadline - System.monotonic_time(:millisecond), 0)
-
-    receive do
-      {:sync_reply, entries} ->
-        Enum.each(entries, fn {key, created_at} -> merge_insert(key, created_at) end)
-        collect_sync_replies(deadline)
-    after
-      remaining_ms -> :ok
-    end
   end
 
   defp delete_expired do
@@ -158,6 +140,10 @@ defmodule Hologram.Realtime.Tombstone do
       _other ->
         :ets.insert(@table_name, {key, created_at})
     end
+  end
+
+  defp merge_synced_entries(entries) do
+    Enum.each(entries, fn {key, created_at} -> merge_insert(key, created_at) end)
   end
 
   defp schedule_sweep do
