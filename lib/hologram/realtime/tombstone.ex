@@ -7,6 +7,14 @@ defmodule Hologram.Realtime.Tombstone do
 
   @boot_sync_timeout_ms 5_000
   @gossip_topic "hologram:gossip:tombstones"
+
+  # Decoupled from the TTL on purpose: sweeping only once per TTL would let an
+  # entry inserted just after a sweep survive for almost another full TTL past
+  # expiry (~2x TTL retention). A shorter interval bounds retention to roughly
+  # TTL + this interval, so the working set stays close to the documented
+  # `rate × TTL` even under heavy tombstone-write traffic.
+  @sweep_interval_ms 30 * 60 * 1000
+
   @table_name :hologram_tombstones
   @tombstone_ttl_ms 72 * 60 * 60 * 1000
 
@@ -147,6 +155,6 @@ defmodule Hologram.Realtime.Tombstone do
   end
 
   defp schedule_sweep do
-    Process.send_after(self(), :sweep_expired, @tombstone_ttl_ms)
+    Process.send_after(self(), :sweep_expired, @sweep_interval_ms)
   end
 end
