@@ -182,8 +182,8 @@ defmodule Hologram.Commons.PLT do
   def start(opts \\ []) do
     genserver_opts =
       opts
-      |> Keyword.delete(:table_name)
       |> Keyword.delete(:supervisor)
+      |> Keyword.delete(:table_name)
 
     {:ok, pid} =
       case opts[:supervisor] do
