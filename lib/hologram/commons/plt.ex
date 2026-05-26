@@ -18,14 +18,14 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Returns a clone of the PLT.
   """
-  @spec clone(PLT.t(), T.opts()) :: PLT.t()
-  def clone(plt, opts \\ []) do
+  @spec clone(PLT.t()) :: PLT.t()
+  def clone(plt) do
     items =
       plt
       |> get_all()
       |> Map.to_list()
 
-    put(start(opts), items)
+    put(start(), items)
   end
 
   @doc """
