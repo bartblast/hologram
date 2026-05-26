@@ -161,10 +161,7 @@ defmodule Hologram.Compiler do
         [{page_module, digest} | acc]
       end)
 
-    page_digest_plt =
-      opts
-      |> Keyword.put(:items, page_digest_plt_items)
-      |> PLT.start()
+    page_digest_plt = PLT.start(items: page_digest_plt_items, supervisor: opts[:supervisor])
 
     page_digest_plt_dump_path =
       Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
