@@ -1,123 +1,107 @@
 defmodule Hologram.Runtime.SessionTest do
   use Hologram.Test.BasicCase, async: true
+
   import Hologram.Runtime.Session
 
-  defp assert_session_cookie_properties(conn, secure_flag) do
-    resp_cookies = conn.resp_cookies
-    assert Map.has_key?(resp_cookies, "hologram_session")
+  @session_id_key :hologram_session_id
+  @user_id_key :hologram_user_id
 
-    cookie = resp_cookies["hologram_session"]
-    assert cookie.http_only == true
-    assert cookie.same_site == "Lax"
-    assert cookie.secure == secure_flag
+  defp conn_with_empty_session do
+    :get
+    |> Plug.Test.conn("/")
+    |> Plug.Test.init_test_session(%{})
   end
 
-  defp assert_valid_session_id(session_id) do
-    assert is_binary(session_id)
-    assert String.length(session_id) == 36
-
-    assert session_id =~
-             ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
+  defp conn_with_session(session) do
+    :get
+    |> Plug.Test.conn("/")
+    |> Plug.Test.init_test_session(session)
   end
 
-  defp build_conn_with_session_cookie(cookie_value) do
-    %Plug.Conn{
-      req_cookies: %{"hologram_session" => cookie_value},
-      resp_cookies: %{},
-      scheme: :https
-    }
+  describe "get_session/1" do
+    test "strips the session_id key while preserving app entries" do
+      conn = conn_with_session(%{@session_id_key => "abc", "role" => "admin"})
+
+      assert get_session(conn) == %{"role" => "admin"}
+    end
+
+    test "strips the user_id key while preserving app entries" do
+      conn = conn_with_session(%{@user_id_key => 42, "role" => "admin"})
+
+      assert get_session(conn) == %{"role" => "admin"}
+    end
   end
 
-  defp build_conn_with_unfetched_cookies do
-    %Plug.Conn{
-      req_cookies: %Plug.Conn.Unfetched{aspect: :cookies},
-      resp_cookies: %{},
-      scheme: :https
-    }
+  describe "get_session_id/1" do
+    test "returns the session ID when present" do
+      existing_id = "existing-session-id"
+      conn = conn_with_session(%{@session_id_key => existing_id})
+
+      assert get_session_id(conn) == existing_id
+    end
+
+    test "returns nil when no session ID is present" do
+      assert get_session_id(conn_with_empty_session()) == nil
+    end
   end
 
-  defp build_conn_without_session_cookie do
-    %Plug.Conn{
-      req_cookies: %{},
-      resp_cookies: %{},
-      scheme: :https
-    }
+  describe "get_user_id/1" do
+    test "returns the user ID when present" do
+      existing_id = "existing-user-id"
+      conn = conn_with_session(%{@user_id_key => existing_id})
+
+      assert get_user_id(conn) == existing_id
+    end
+
+    test "returns nil when no user ID is present" do
+      assert get_user_id(conn_with_empty_session()) == nil
+    end
   end
 
   describe "init/1" do
-    test "creates new session when no cookie exists" do
-      conn = build_conn_without_session_cookie()
+    test "mints a UUIDv4 session ID when absent" do
+      conn = init(conn_with_empty_session())
 
-      {updated_conn, session_id} = init(conn)
-
-      assert_valid_session_id(session_id)
-
-      assert_session_cookie_properties(updated_conn, true)
+      assert {:ok, _info} =
+               conn
+               |> Plug.Conn.get_session(@session_id_key)
+               |> UUID.info()
     end
 
-    test "retrieves existing session when valid cookie exists" do
-      # First, create a session to get a valid encrypted cookie
-      initial_conn = build_conn_without_session_cookie()
-      {conn_after_init, original_session_id} = init(initial_conn)
+    test "is idempotent when a session ID is already present" do
+      existing_id = "existing-session-id"
 
-      # Extract the encrypted cookie value and create a new connection that has it
-      encrypted_session = conn_after_init.resp_cookies["hologram_session"].value
-      conn_with_session_cookie = build_conn_with_session_cookie(encrypted_session)
+      conn =
+        %{@session_id_key => existing_id}
+        |> conn_with_session()
+        |> init()
 
-      # Now test init with the existing cookie
-      {updated_conn, session_id} = init(conn_with_session_cookie)
-
-      assert session_id == original_session_id
-
-      # Should not set a new cookie (resp_cookies should be empty)
-      assert updated_conn.resp_cookies == %{}
+      assert Plug.Conn.get_session(conn, @session_id_key) == existing_id
     end
 
-    test "creates new session when invalid cookie exists" do
-      # Create a connection with an invalid/corrupted session cookie
-      conn = build_conn_with_session_cookie("invalid_encrypted_data")
+    test "generates unique session IDs on independent calls" do
+      conn_1 = init(conn_with_empty_session())
+      conn_2 = init(conn_with_empty_session())
 
-      {updated_conn, session_id} = init(conn)
+      assert Plug.Conn.get_session(conn_1, @session_id_key) !=
+               Plug.Conn.get_session(conn_2, @session_id_key)
+    end
+  end
 
-      assert_valid_session_id(session_id)
+  describe "put_user_id/2" do
+    test "stores the user ID under the user_id key" do
+      conn = put_user_id(conn_with_empty_session(), 42)
 
-      assert_session_cookie_properties(updated_conn, true)
+      assert Plug.Conn.get_session(conn, @user_id_key) == 42
     end
 
-    test "sets secure flag to true for HTTPS connections" do
-      conn = %{build_conn_without_session_cookie() | scheme: :https}
+    test "removes the user_id key when given nil" do
+      conn =
+        %{@user_id_key => 42}
+        |> conn_with_session()
+        |> put_user_id(nil)
 
-      {updated_conn, _session_id} = init(conn)
-
-      assert updated_conn.resp_cookies["hologram_session"].secure == true
-    end
-
-    test "sets secure flag to false for HTTP connections" do
-      conn = %{build_conn_without_session_cookie() | scheme: :http}
-
-      {updated_conn, _session_id} = init(conn)
-
-      assert updated_conn.resp_cookies["hologram_session"].secure == false
-    end
-
-    test "generates unique session IDs for different calls" do
-      conn_1 = build_conn_without_session_cookie()
-      conn_2 = build_conn_without_session_cookie()
-
-      {_updated_conn_1, session_id_1} = init(conn_1)
-      {_updated_conn_2, session_id_2} = init(conn_2)
-
-      assert session_id_1 != session_id_2
-    end
-
-    test "handles unfetched cookies by fetching them and creating new session" do
-      conn = build_conn_with_unfetched_cookies()
-
-      {updated_conn, session_id} = init(conn)
-
-      assert_valid_session_id(session_id)
-
-      assert_session_cookie_properties(updated_conn, true)
+      assert Plug.Conn.get_session(conn, @user_id_key) == nil
     end
   end
 end

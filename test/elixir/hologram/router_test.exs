@@ -7,6 +7,7 @@ defmodule Hologram.RouterTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.Realtime.Handshake
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Router.Module1
   alias Hologram.Test.Fixtures.Router.Module2
@@ -27,6 +28,17 @@ defmodule Hologram.RouterTest do
     setup_page_digest_registry(PageDigestRegistryStub)
 
     setup_page_module_resolver(PageModuleResolverStub)
+
+    wait_for_process_cleanup(Hologram.PubSub)
+    start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+    wait_for_process_cleanup(Hologram.Realtime.SubscriptionRegistry)
+    start_supervised!(Hologram.Realtime.SubscriptionRegistry)
+
+    wait_for_process_cleanup(Handshake)
+    start_supervised!({Handshake, boot_sync_timeout_ms: 0})
+
+    :ok
   end
 
   describe "/hologram/command" do
@@ -39,6 +51,7 @@ defmodule Hologram.RouterTest do
         %{
           "t" => "m",
           "d" => [
+            ["ainstance_id", "b074657374696e7374616e6365"],
             ["amodule", "a#{Module2}"],
             ["aname", "amy_command"],
             ["aparams", %{"t" => "m", "d" => []}],
@@ -55,18 +68,41 @@ defmodule Hologram.RouterTest do
         |> Plug.Conn.put_req_header("x-csrf-token", masked_csrf_token)
         |> call([])
 
-      assert conn.resp_body == ~s'[1,"Type.atom(\\\"nil\\\")"]'
+      assert Jason.decode!(conn.resp_body) == %{
+               "action" => ~s'Type.atom("nil")',
+               "selfEchoes" => "Type.list([])",
+               "status" => 1,
+               "subReceiptAdds" => "Type.list([])",
+               "subReceiptDrops" => "Type.list([])"
+             }
     end
   end
 
   describe "/hologram/page" do
-    test "routes GET subsequent page request" do
+    test "routes POST subsequent page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
+      # Simulate that JSON has already been parsed upstream by Plug.Parsers
+      parsed_json = [
+        2,
+        %{
+          "t" => "m",
+          "d" => [
+            ["aclient_claimed_sub_keys", %{"t" => "l", "d" => []}],
+            ["ainstance_id", "b074657374696e7374616e6365"]
+          ]
+        }
+      ]
+
       conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz")
+        :post
+        |> Plug.Test.conn(
+          "/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz",
+          ""
+        )
+        |> Plug.Conn.put_req_header("content-type", "application/json")
         |> Plug.Test.init_test_session(%{})
+        |> Map.put(:body_params, %{"_json" => parsed_json})
         |> call([])
 
       assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
@@ -84,6 +120,55 @@ defmodule Hologram.RouterTest do
         |> call([])
 
       assert conn.resp_body == "pong"
+    end
+  end
+
+  describe "/hologram/sse" do
+    test "returns 401 when no Hologram session ID is present" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/sse")
+        |> Plug.Test.init_test_session(%{})
+        |> call([])
+
+      assert conn.halted == true
+      assert conn.status == 401
+      assert conn.resp_body == "Unauthorized"
+    end
+
+    test "opens an SSE stream when a Hologram session ID is present" do
+      instance_id = "test-instance-id"
+      session_id = "some-session-id"
+      handshake_id = "test-handshake-#{:erlang.unique_integer([:positive])}"
+
+      Handshake.insert(
+        handshake_id,
+        [],
+        {instance_id, session_id, nil},
+        System.system_time(:millisecond) + Handshake.stash_ttl_ms()
+      )
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/sse?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
+        |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+
+      # SSE.stream/1 blocks in a receive loop forever; run it in a Task so the
+      # test process can drive it, then send {:close, _reason} to terminate the
+      # loop cleanly and await the final conn for assertions.
+      task = Task.async(fn -> call(conn, []) end)
+      Process.sleep(50)
+      send(task.pid, {:close, :test_done})
+      result_conn = Task.await(task)
+
+      assert result_conn.status == 200
+      assert result_conn.state == :chunked
+
+      assert result_conn.resp_headers == [
+               {"cache-control", "no-cache"},
+               {"connection", "keep-alive"},
+               {"content-type", "text/event-stream"}
+             ]
     end
   end
 

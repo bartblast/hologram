@@ -28,6 +28,36 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
+  the encoded list of actions supplied by the caller.
+  """
+  @spec interpolate_self_echoes_js(String.t(), [Component.Action.t()]) :: String.t()
+  def interpolate_self_echoes_js(html, self_echoes) do
+    self_echoes_js = Encoder.encode_term!(self_echoes)
+    String.replace(html, "$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
+  end
+
+  @doc """
+  Substitutes the `$SUB_RECEIPT_ADDS_JS_PLACEHOLDER` token in the given HTML with
+  the encoded list of subscription receipts supplied by the caller.
+  """
+  @spec interpolate_sub_receipt_adds_js(String.t(), list) :: String.t()
+  def interpolate_sub_receipt_adds_js(html, sub_receipt_adds) do
+    sub_receipt_adds_js = Encoder.encode_term!(sub_receipt_adds)
+    String.replace(html, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER", sub_receipt_adds_js)
+  end
+
+  @doc """
+  Substitutes the `$SUB_RECEIPT_DROPS_JS_PLACEHOLDER` token in the given HTML with
+  the encoded list of subscription drops supplied by the caller.
+  """
+  @spec interpolate_sub_receipt_drops_js(String.t(), list) :: String.t()
+  def interpolate_sub_receipt_drops_js(html, sub_receipt_drops) do
+    sub_receipt_drops_js = Encoder.encode_term!(sub_receipt_drops)
+    String.replace(html, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER", sub_receipt_drops_js)
+  end
+
+  @doc """
   Renders the given DOM.
 
   ## Examples
@@ -153,6 +183,7 @@ defmodule Hologram.Template.Renderer do
       |> put_page_digest_context(page_digest)
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csrf_token_context(opts, initial_page?)
+      |> maybe_put_instance_id_context(opts, initial_page?)
 
     {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
@@ -174,6 +205,11 @@ defmodule Hologram.Template.Renderer do
         %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
+    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left in `html_with_interpolated_js`
+    # for the caller to substitute via `interpolate_self_echoes_js/2`. The value
+    # depends on the post-render `server.broadcasts`, which is a `Hologram.Realtime`
+    # concern - keeping the renderer Realtime-agnostic means the controller does
+    # the final substitution after `Realtime.get_self_echoes/1`.
     html_with_interpolated_js =
       initial_html
       |> interpolate_asset_manifest_js()
@@ -278,16 +314,19 @@ defmodule Hologram.Template.Renderer do
         {%Component{}, server_struct}
       end
 
-    case init_result do
-      {component_struct, mutaded_server_struct} ->
-        {component_struct, mutaded_server_struct}
+    {component_struct, returned_server_struct} =
+      case init_result do
+        {component_struct, mutaded_server_struct} ->
+          {component_struct, mutaded_server_struct}
 
-      %Component{} = component_struct ->
-        {component_struct, server_struct}
+        %Component{} = component_struct ->
+          {component_struct, server_struct}
 
-      %Server{} = mutated_server_struct ->
-        {%Component{}, mutated_server_struct}
-    end
+        %Server{} = mutated_server_struct ->
+          {%Component{}, mutated_server_struct}
+      end
+
+    {component_struct, %{returned_server_struct | cid: nil}}
   end
 
   defp inject_default_prop_values(props, module) do
@@ -344,6 +383,22 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp maybe_put_csrf_token_context(page_component_struct, _opts, false) do
+    page_component_struct
+  end
+
+  defp maybe_put_instance_id_context(page_component_struct, opts, true) do
+    instance_id =
+      opts[:instance_id] ||
+        raise ArgumentError, "instance_id is required for initial page requests"
+
+    Component.put_context(
+      page_component_struct,
+      {Hologram.Runtime, :instance_id},
+      instance_id
+    )
+  end
+
+  defp maybe_put_instance_id_context(page_component_struct, _opts, false) do
     page_component_struct
   end
 
@@ -427,7 +482,9 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp render_stateful_component(module, props, children_dom, context, server_struct) do
+    server_struct = %{server_struct | cid: props.cid}
     {component_struct, mutated_server_struct} = init_component(module, props, server_struct)
+
     vars = Map.merge(props, component_struct.state)
     merged_context = Map.merge(context, component_struct.emitted_context)
 

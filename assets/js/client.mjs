@@ -1,5 +1,6 @@
 "use strict";
 
+import App from "./app.mjs";
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
@@ -24,6 +25,7 @@ export default class Client {
     const module = ComponentRegistry.getComponentModule(target);
 
     return Type.map([
+      [Type.atom("instance_id"), Type.bitstring(App.instanceId)],
       [Type.atom("module"), module],
       [Type.atom("name"), Erlang_Maps["get/2"](Type.atom("name"), command)],
       [Type.atom("params"), Erlang_Maps["get/2"](Type.atom("params"), command)],
@@ -76,6 +78,17 @@ export default class Client {
     return queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
   }
 
+  static buildPageRequestPayload() {
+    const clientClaimedSubKeys = Array.from(
+      App.subscriptionReceiptRegistry.entries.values(),
+    ).map((triple) => Type.tuple([triple.data[0], triple.data[1]]));
+
+    return Type.map([
+      [Type.atom("client_claimed_sub_keys"), Type.list(clientClaimedSubKeys)],
+      [Type.atom("instance_id"), Type.bitstring(App.instanceId)],
+    ]);
+  }
+
   static connect(sendImmediatePing) {
     Connection.connect();
     HttpTransport.restartPing(sendImmediatePing);
@@ -95,7 +108,12 @@ export default class Client {
     try {
       const pageModuleName = Interpreter.moduleExName(pageModule);
       const url = `/hologram/page/${pageModuleName}${queryString}`;
-      const response = await fetch(url);
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: Serializer.serialize($.buildPageRequestPayload(), "server"),
+      });
 
       if (!response.ok) {
         $.#handleFetchPageError(response.status);
@@ -146,16 +164,39 @@ export default class Client {
         $.#failCommand(response.status);
       }
 
-      const [status, result] = await response.json();
+      const {
+        action,
+        selfEchoes: encodedSelfEchoes,
+        status,
+        subReceiptAdds: encodedSubReceiptAdds,
+        subReceiptDrops: encodedSubReceiptDrops,
+      } = await response.json();
 
       if (status === 0) {
-        $.#failCommand(result);
+        $.#failCommand(action);
       }
 
-      const nextAction = Interpreter.evaluateJavaScriptExpression(result);
+      const subReceiptAdds = Interpreter.evaluateJavaScriptExpression(
+        encodedSubReceiptAdds,
+      );
+
+      const subReceiptDrops = Interpreter.evaluateJavaScriptExpression(
+        encodedSubReceiptDrops,
+      );
+
+      App.subscriptionReceiptRegistry.merge(subReceiptAdds, subReceiptDrops);
+
+      const nextAction = Interpreter.evaluateJavaScriptExpression(action);
 
       if (!Type.isNil(nextAction)) {
         Hologram.scheduleAction(nextAction);
+      }
+
+      const selfEchoes =
+        Interpreter.evaluateJavaScriptExpression(encodedSelfEchoes);
+
+      for (const action of selfEchoes.data) {
+        Hologram.scheduleAction(action);
       }
     } catch (error) {
       if (error instanceof HologramRuntimeError) {

@@ -115,7 +115,7 @@ export default class Connection {
     console.warn("Hologram: disconnected from server", event);
 
     $.status = "disconnected";
-    GlobalRegistry.set("connected?", false);
+    GlobalRegistry.set("wsConnected?", false);
 
     $.clearConnectionTimer();
     $.clearPingTimer();
@@ -137,7 +137,7 @@ export default class Connection {
     console.error("Hologram: server connection error", event);
 
     $.status = "error";
-    GlobalRegistry.set("connected?", false);
+    GlobalRegistry.set("wsConnected?", false);
 
     $.clearConnectionTimer();
 
@@ -185,7 +185,7 @@ export default class Connection {
     console.log("Hologram: connected to server");
 
     $.status = "connected";
-    GlobalRegistry.set("connected?", true);
+    GlobalRegistry.set("wsConnected?", true);
 
     $.reconnectAttempts = 0;
     $.clearConnectionTimer();

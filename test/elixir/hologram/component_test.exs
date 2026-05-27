@@ -8,11 +8,14 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Component.Command
   alias Hologram.Reflection
   alias Hologram.Server
+  alias Hologram.Server.Broadcast
   alias Hologram.Test.Fixtures.Component.Module1
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
+
+  @server %Server{cid: "page"}
 
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
@@ -25,6 +28,42 @@ defmodule Hologram.ComponentTest do
   test "colocated_template_path/1" do
     assert colocated_template_path("/my_dir_1/my_dir_2/my_dir_3/my_file.ex") ==
              "/my_dir_1/my_dir_2/my_dir_3/my_file.holo"
+  end
+
+  describe "delete_subscription/2" do
+    test "removes {channel, server.cid} from server.subscriptions" do
+      result =
+        @server
+        |> put_subscription(:room_a)
+        |> delete_subscription(:room_a)
+
+      assert result.subscriptions == []
+    end
+
+    test "leaves bindings for other cids intact (encapsulation)" do
+      server_with_layout_binding = %{@server | subscriptions: [{:room_a, "layout"}]}
+
+      result = delete_subscription(server_with_layout_binding, :room_a)
+
+      assert result.subscriptions == [{:room_a, "layout"}]
+    end
+
+    test "records :delete in subscription_ops keyed by {channel, server.cid}" do
+      result = delete_subscription(@server, :room_a)
+
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :delete}
+    end
+
+    test "records :delete even when {channel, cid} is not present in server.subscriptions" do
+      result = delete_subscription(@server, :room_a)
+
+      assert result.subscriptions == []
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :delete}
+    end
+
+    test "raises ArgumentError for an invalid channel" do
+      assert_raise ArgumentError, fn -> delete_subscription(@server, "not_a_valid_channel") end
+    end
   end
 
   describe "init/2" do
@@ -189,20 +228,181 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  test "put_action/3, component struct" do
-    result = put_action(%Component{}, :my_action, a: 1, b: 2)
+  describe "put_action/3, component struct" do
+    test "accepts params as keyword list" do
+      result = put_action(%Component{}, :my_action, a: 1, b: 2)
 
-    assert result == %Component{
-             next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
-           }
+      assert result == %Component{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+
+    test "accepts params as a map" do
+      result = put_action(%Component{}, :my_action, %{a: 1, b: 2})
+
+      assert result == %Component{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
   end
 
-  test "put_action/3, server struct" do
-    result = put_action(%Server{}, :my_action, a: 1, b: 2)
+  describe "put_action/3, server struct" do
+    test "accepts params as keyword list" do
+      result = put_action(%Server{}, :my_action, a: 1, b: 2)
 
-    assert result == %Server{
-             next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
-           }
+      assert result == %Server{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+
+    test "accepts params as a map" do
+      result = put_action(%Server{}, :my_action, %{a: 1, b: 2})
+
+      assert result == %Server{
+               next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+  end
+
+  describe "put_broadcast/* (common behavior)" do
+    test "prepends so multiple calls accumulate in reverse-of-call order" do
+      result =
+        @server
+        |> put_broadcast({:room, 1}, :first)
+        |> put_broadcast({:room, 2}, :second)
+
+      assert result.broadcasts == [
+               %Broadcast{channel: {:room, 2}, action_name: :second, params: %{}},
+               %Broadcast{channel: {:room, 1}, action_name: :first, params: %{}}
+             ]
+    end
+
+    test "raises at the call site when the channel is invalid" do
+      assert_error ArgumentError,
+                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   fn -> put_broadcast(@server, "bad-channel", :foo) end
+    end
+  end
+
+  describe "put_broadcast/3" do
+    test "defaults params to an empty map" do
+      result = put_broadcast(@server, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{channel: {:room, 42}, action_name: :refresh, params: %{}}
+             ]
+    end
+  end
+
+  describe "put_broadcast/4" do
+    test "accepts params as a keyword list" do
+      result = put_broadcast(@server, {:room, 42}, :append_message, text: "hi")
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 action_name: :append_message,
+                 params: %{text: "hi"}
+               }
+             ]
+    end
+
+    test "accepts params as a map" do
+      result = put_broadcast(@server, {:room, 42}, :append_message, %{text: "hi"})
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 action_name: :append_message,
+                 params: %{text: "hi"}
+               }
+             ]
+    end
+  end
+
+  describe "put_broadcast_except/* (common behavior)" do
+    # Tests here cover what's shared across all put_broadcast_except arities:
+    # the single-tuple-vs-list normalization on except, and validator wiring.
+    # Per-arity tests below focus on the params dispatch surface.
+
+    test "wraps a single identity tuple into a list and stores on except" do
+      result = put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 action_name: :refresh,
+                 params: %{},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+
+    test "stores a list of identities unchanged on except" do
+      except = [{:user, "u1"}, {:session, "s1"}, {:instance, "i1"}]
+
+      result = put_broadcast_except(@server, except, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 action_name: :refresh,
+                 params: %{},
+                 except: except
+               }
+             ]
+    end
+
+    test "raises at the call site when the channel is invalid" do
+      assert_error ArgumentError,
+                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   fn -> put_broadcast_except(@server, {:user, "u1"}, "bad-channel", :foo) end
+    end
+  end
+
+  describe "put_broadcast_except/4" do
+    test "defaults params to an empty map" do
+      result = put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :refresh)
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 action_name: :refresh,
+                 params: %{},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+  end
+
+  describe "put_broadcast_except/5" do
+    test "accepts params as a keyword list" do
+      result =
+        put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :append_message, text: "hi")
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 action_name: :append_message,
+                 params: %{text: "hi"},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
+
+    test "accepts params as a map" do
+      result =
+        put_broadcast_except(@server, {:user, "u1"}, {:room, 42}, :append_message, %{text: "hi"})
+
+      assert result.broadcasts == [
+               %Broadcast{
+                 channel: {:room, 42},
+                 action_name: :append_message,
+                 params: %{text: "hi"},
+                 except: [{:user, "u1"}]
+               }
+             ]
+    end
   end
 
   describe "put_command/2" do
@@ -239,12 +439,22 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  test "put_command/3" do
-    result = put_command(%Component{}, :my_command, a: 1, b: 2)
+  describe "put_command/3" do
+    test "accepts params as keyword list" do
+      result = put_command(%Component{}, :my_command, a: 1, b: 2)
 
-    assert result == %Component{
-             next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
-           }
+      assert result == %Component{
+               next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+
+    test "accepts params as a map" do
+      result = put_command(%Component{}, :my_command, %{a: 1, b: 2})
+
+      assert result == %Component{
+               next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
   end
 
   test "put_context/3" do
@@ -305,6 +515,49 @@ defmodule Hologram.ComponentTest do
       result = put_state(component, [:b, :y], 4)
 
       assert result == %Component{state: %{a: 1, b: %Module5{x: 2, y: 4}}}
+    end
+  end
+
+  describe "put_subscription/2" do
+    test "appends {channel, server.cid} to server.subscriptions" do
+      result = put_subscription(@server, :room_a)
+
+      assert result.subscriptions == [{:room_a, "page"}]
+    end
+
+    test "records :put in subscription_ops keyed by {channel, server.cid}" do
+      result = put_subscription(@server, :room_a)
+
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :put}
+    end
+
+    test "server.subscriptions and __meta__.subscription_ops stay in sync across multiple calls" do
+      result =
+        @server
+        |> put_subscription(:room_a)
+        |> put_subscription(:room_b)
+
+      assert MapSet.new(result.subscriptions) ==
+               MapSet.new([{:room_a, "page"}, {:room_b, "page"}])
+
+      assert result.__meta__.subscription_ops == %{
+               {:room_a, "page"} => :put,
+               {:room_b, "page"} => :put
+             }
+    end
+
+    test "deduplicates when the same {channel, cid} key is put again" do
+      result =
+        @server
+        |> put_subscription(:room_a)
+        |> put_subscription(:room_a)
+
+      assert result.subscriptions == [{:room_a, "page"}]
+      assert result.__meta__.subscription_ops == %{{:room_a, "page"} => :put}
+    end
+
+    test "raises ArgumentError for an invalid channel" do
+      assert_raise ArgumentError, fn -> put_subscription(@server, "not_a_valid_channel") end
     end
   end
 

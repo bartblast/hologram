@@ -13,6 +13,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
+  alias Hologram.Realtime
   alias Hologram.Server
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
@@ -236,6 +237,36 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Generates a fresh session id, subscribes the calling process to its
+  framework-private announce topic, and returns the id so the caller can build
+  matching `%Server{session_id: id}` fixtures.
+  """
+  @spec setup_session_announce_subscription() :: String.t()
+  def setup_session_announce_subscription do
+    id = "test-session-#{:erlang.unique_integer([:positive])}"
+    announce_topic = Realtime.session_announce_topic(id)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, announce_topic)
+
+    id
+  end
+
+  @doc """
+  Subscribes the calling process to a Hologram identity-channel PubSub topic
+  with a unique generated id. Returns the generated id so the caller can build
+  matching channel tuples (e.g. `{:instance, id}`).
+
+  `kind` must be one of `:instance`, `:session`, or `:user`.
+  """
+  @spec subscribe_to_identity_channel(:instance | :session | :user) :: String.t()
+  def subscribe_to_identity_channel(kind) when kind in [:instance, :session, :user] do
+    id = "test-#{kind}-#{:erlang.unique_integer([:positive])}"
+    topic = Realtime.identity_topic(kind, id)
+    Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+    id
+  end
+
+  @doc """
   Returns the template for the given markup.
   """
   defmacro template(markup) do
@@ -267,6 +298,33 @@ defmodule Hologram.Test.Helpers do
       wait_for_process_cleanup(name)
     else
       :ok
+    end
+  end
+
+  @doc """
+  Polls `fun` (sleeping ~1 ms between attempts) until it returns a truthy
+  value, then returns `:ok`. Fails the test via `flunk/1` once roughly
+  `timeout_ms` has elapsed without the condition holding, so a never-met
+  condition fails fast with a clear message instead of stalling until the
+  global ExUnit timeout.
+
+  ## Examples
+
+      iex> wait_until(fn -> :ets.lookup(table, key) == [expected] end)
+      :ok
+  """
+  @spec wait_until((-> as_boolean(term)), non_neg_integer) :: :ok
+  def wait_until(fun, timeout_ms \\ 2_000) do
+    cond do
+      fun.() ->
+        :ok
+
+      timeout_ms <= 0 ->
+        flunk("wait_until/2: condition was not met within the timeout")
+
+      true ->
+        :timer.sleep(1)
+        wait_until(fun, timeout_ms - 1)
     end
   end
 end

@@ -44,12 +44,83 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     %{server | next_action: nil}
   end
 
+  def command(:my_command_accessing_cid, _params, server) do
+    put_action(server, :my_action_echoing_cid, cid: server.cid)
+  end
+
   def command(:my_command_accessing_cookie, _params, server) do
     put_action(server, get_cookie(server, "my_cookie_name"))
   end
 
+  def command(:my_command_accessing_instance_id, _params, server) do
+    put_action(server, :my_action_echoing_instance_id, instance_id: server.instance_id)
+  end
+
   def command(:my_command_accessing_session, _params, server) do
     put_action(server, get_session(server, "my_session_key"))
+  end
+
+  def command(:my_command_accessing_subscriptions, _params, server) do
+    put_action(server, :my_action_echoing_subscriptions, subscriptions: server.subscriptions)
+  end
+
+  def command(:my_command_changing_user_id, _params, server) do
+    %{server | user_id: 7}
+  end
+
+  def command(:my_command_changing_user_id_then_raising, _params, server) do
+    server = %{server | user_id: 7}
+    raise "boom"
+    server
+  end
+
+  def command(:my_command_deleting_subscription, _params, server) do
+    delete_subscription(server, :room_a)
+  end
+
+  def command(:my_command_deleting_subscription_then_raising, _params, server) do
+    server = delete_subscription(server, :room_a)
+    raise "boom"
+    server
+  end
+
+  def command(:my_command_putting_and_deleting_subscriptions, _params, server) do
+    server
+    |> put_subscription(:room_b)
+    |> delete_subscription(:room_a)
+  end
+
+  def command(:my_command_putting_subscription, _params, server) do
+    put_subscription(server, :room_a)
+  end
+
+  def command(:my_command_putting_subscription_then_raising, _params, server) do
+    server = put_subscription(server, :room_a)
+    raise "boom"
+    server
+  end
+
+  def command(:my_command_queueing_broadcast, _params, server) do
+    put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
+  end
+
+  def command(:my_command_queueing_broadcast_then_raising, _params, server) do
+    put_broadcast(server, {:instance, server.instance_id}, :my_broadcast_action, text: "hi")
+    raise "boom"
+  end
+
+  def command(:my_command_self_echo_broadcast_only, _params, server) do
+    put_broadcast(server, :room_a, :test_action, text: "hi")
+  end
+
+  def command(:my_command_self_echo_put_broadcast_subscribed, _params, server) do
+    server
+    |> put_subscription({:instance, server.instance_id})
+    |> put_broadcast({:instance, server.instance_id}, :test_action, text: "hi")
+  end
+
+  def command(:my_command_self_echo_put_broadcast_unsubscribed, _params, server) do
+    put_broadcast(server, {:instance, "other-instance"}, :test_action, text: "hi")
   end
 
   @impl Component

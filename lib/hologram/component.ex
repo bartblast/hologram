@@ -3,7 +3,9 @@ defmodule Hologram.Component do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
+  alias Hologram.Realtime.Channel
   alias Hologram.Server
+  alias Hologram.Server.Broadcast
 
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
 
@@ -67,17 +69,23 @@ defmodule Hologram.Component do
       quote do
         import Hologram.Component,
           only: [
+            delete_subscription: 2,
             prop: 2,
             prop: 3,
             put_action: 2,
             put_action: 3,
+            put_broadcast: 3,
+            put_broadcast: 4,
+            put_broadcast_except: 4,
+            put_broadcast_except: 5,
             put_command: 2,
             put_command: 3,
             put_context: 3,
             put_page: 2,
             put_page: 3,
             put_state: 2,
-            put_state: 3
+            put_state: 3,
+            put_subscription: 2
           ]
 
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
@@ -152,6 +160,36 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Removes the subscription on `channel` for the current handler's component.
+
+  The subscription is scoped to the component whose handler is running - the
+  page in a page handler, the layout in a layout handler, or the component in a
+  component handler. Takes effect after the handler returns successfully; if the
+  handler raises, it is discarded along with the rest of the changes.
+
+  Idempotent: removing a channel that is not subscribed is a no-op.
+  """
+  # Removes the {channel, server.cid} key from server.subscriptions and records
+  # it as :delete in __meta__.subscription_ops; the framework drains
+  # subscription_ops after a successful handler return to drive the
+  # SubscriptionRegistry. The :delete op is recorded even when the key is absent
+  # so the deletion still flushes to the registry. cid comes from server.cid,
+  # set by the framework at handler entry ("page" / "layout" / component cid).
+  @spec delete_subscription(Server.t(), atom | tuple) :: Server.t()
+  def delete_subscription(server, channel) do
+    Channel.validate!(channel)
+
+    key = {channel, server.cid}
+
+    new_subscriptions = List.delete(server.subscriptions, key)
+
+    new_subscription_ops = Map.put(server.__meta__.subscription_ops, key, :delete)
+    new_meta = %{server.__meta__ | subscription_ops: new_subscription_ops}
+
+    %{server | subscriptions: new_subscriptions, __meta__: new_meta}
+  end
+
+  @doc """
   Builds the template clause for colocated template if markup is registered in module attribute.
   Returns nil if no colocated template is found.
   """
@@ -218,9 +256,65 @@ defmodule Hologram.Component do
   Puts the given action spec to the component or server struct's next_action field.
   Next action will be executed by the client-side runtime after the specified delay (in milliseconds, defaults to 0).
   """
-  @spec put_action(Component.t() | Server.t(), atom, keyword) :: Component.t() | Server.t()
+  @spec put_action(Component.t() | Server.t(), atom, keyword | map) :: Component.t() | Server.t()
   def put_action(struct, name, params) do
     %{struct | next_action: %Action{name: name, params: Map.new(params)}}
+  end
+
+  @doc """
+  Queues an action broadcast to subscribers of `channel`.
+
+  Sent after the handler returns successfully; if the handler raises, it is
+  discarded along with the rest of the changes. Delivered to every cid that
+  subscribed to the channel via `put_subscription` on each receiving connection.
+  """
+  # Appended to server.broadcasts; the framework flushes the queue after a
+  # successful handler return.
+  @spec put_broadcast(Server.t(), atom | tuple, atom) :: Server.t()
+  def put_broadcast(server, channel, action_name) when is_atom(action_name) do
+    append_broadcast(server, channel, action_name, %{})
+  end
+
+  @doc """
+  Queues an action broadcast to subscribers of `channel` with the given params.
+  See `put_broadcast/3` for delivery semantics.
+  """
+  @spec put_broadcast(Server.t(), atom | tuple, atom, keyword | map) :: Server.t()
+  def put_broadcast(server, channel, action_name, params) when is_atom(action_name) do
+    append_broadcast(server, channel, action_name, params)
+  end
+
+  @doc """
+  Queues an action broadcast that excludes one or more identities from delivery.
+
+  Like `put_broadcast/3` but takes an `except` argument naming identities
+  (`{:instance, id}`, `{:session, id}`, `{:user, id}`) that should not receive
+  the broadcast. `except` accepts either a single identity tuple or a list of
+  identity tuples.
+  """
+  @spec put_broadcast_except(
+          Server.t(),
+          Broadcast.identity() | [Broadcast.identity()],
+          atom | tuple,
+          atom
+        ) :: Server.t()
+  def put_broadcast_except(server, except, channel, action_name) when is_atom(action_name) do
+    append_broadcast(server, channel, action_name, %{}, except)
+  end
+
+  @doc """
+  Like `put_broadcast_except/4` but with explicit params.
+  """
+  @spec put_broadcast_except(
+          Server.t(),
+          Broadcast.identity() | [Broadcast.identity()],
+          atom | tuple,
+          atom,
+          keyword | map
+        ) :: Server.t()
+  def put_broadcast_except(server, except, channel, action_name, params)
+      when is_atom(action_name) do
+    append_broadcast(server, channel, action_name, params, except)
   end
 
   @doc """
@@ -246,7 +340,7 @@ defmodule Hologram.Component do
   Puts the given command spec to the component's next_command field.
   Next command will be sent asynchronously to the server.
   """
-  @spec put_command(Component.t(), atom, keyword) :: Component.t()
+  @spec put_command(Component.t(), atom, keyword | map) :: Component.t()
   def put_command(%Component{} = component, name, params) do
     %{component | next_command: %Command{name: name, params: Map.new(params)}}
   end
@@ -308,6 +402,41 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Subscribes the current handler's component to `channel`.
+
+  The subscription is scoped to the component whose handler is running - the
+  page in a page handler, the layout in a layout handler, or the component in a
+  component handler. Once subscribed, the component receives actions broadcast
+  on the channel. Takes effect after the handler returns successfully; if the
+  handler raises, it is discarded along with the rest of the changes.
+
+  Idempotent: subscribing to the same channel twice does not duplicate it.
+  """
+  # Appends the {channel, server.cid} key to server.subscriptions and records it
+  # as :put in __meta__.subscription_ops; the framework drains subscription_ops
+  # after a successful handler return to drive the SubscriptionRegistry. cid
+  # comes from server.cid, set by the framework at handler entry ("page" /
+  # "layout" / component cid).
+  @spec put_subscription(Server.t(), atom | tuple) :: Server.t()
+  def put_subscription(server, channel) do
+    Channel.validate!(channel)
+
+    key = {channel, server.cid}
+
+    new_subscriptions =
+      if key in server.subscriptions do
+        server.subscriptions
+      else
+        [key | server.subscriptions]
+      end
+
+    new_subscription_ops = Map.put(server.__meta__.subscription_ops, key, :put)
+    new_meta = %{server.__meta__ | subscription_ops: new_subscription_ops}
+
+    %{server | subscriptions: new_subscriptions, __meta__: new_meta}
+  end
+
+  @doc """
   Returns the AST of code that registers __props__ module attribute.
   """
   @spec register_props_accumulator() :: AST.t()
@@ -316,4 +445,21 @@ defmodule Hologram.Component do
       Module.register_attribute(__MODULE__, :__props__, accumulate: true)
     end
   end
+
+  defp append_broadcast(server, channel, action_name, params, except \\ []) do
+    Channel.validate!(channel)
+
+    broadcast = %Broadcast{
+      channel: channel,
+      action_name: action_name,
+      params: Map.new(params),
+      except: normalize_except(except)
+    }
+
+    %{server | broadcasts: [broadcast | server.broadcasts]}
+  end
+
+  defp normalize_except({_kind, _id} = identity), do: [identity]
+
+  defp normalize_except(list) when is_list(list), do: list
 end

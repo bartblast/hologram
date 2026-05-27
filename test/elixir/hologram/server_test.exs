@@ -231,6 +231,61 @@ defmodule Hologram.ServerTest do
 
       refute Map.has_key?(result.cookies, "hologram_session")
     end
+
+    test "populates session_id from the Hologram session entry", %{conn: initial_conn} do
+      conn =
+        initial_conn
+        |> Plug.Test.init_test_session(%{hologram_session_id: "some-session-id"})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      assert from(conn).session_id == "some-session-id"
+    end
+
+    test "leaves session_id nil when no Hologram session entry is present", %{conn: initial_conn} do
+      conn =
+        initial_conn
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      assert from(conn).session_id == nil
+    end
+
+    test "populates user_id from the Hologram session entry", %{conn: initial_conn} do
+      conn =
+        initial_conn
+        |> Plug.Test.init_test_session(%{hologram_user_id: 42})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      assert from(conn).user_id == 42
+    end
+
+    test "leaves user_id nil when no Hologram user entry is present", %{conn: initial_conn} do
+      conn =
+        initial_conn
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      assert from(conn).user_id == nil
+    end
+
+    test "strips Hologram-managed keys from the session map" do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{
+          :hologram_session_id => "some-session-id",
+          :hologram_user_id => 42,
+          "role" => "admin"
+        })
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      assert from(conn).session == %{"role" => "admin"}
+    end
   end
 
   describe "get_cookie/2" do

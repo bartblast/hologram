@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
 
+  alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Router
   alias Wallaby.Browser
   alias Wallaby.Element
@@ -90,7 +91,8 @@ defmodule HologramFeatureTests.Helpers do
     session
     |> wait_for_path(path)
     |> wait_for_page_mounting(page_module, opts)
-    |> wait_for_server_connection()
+    |> wait_for_ws_connection()
+    |> wait_for_sse_connection()
   end
 
   def assert_public_comment(session, comment) do
@@ -171,6 +173,44 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Returns the `instance_id` of the currently-attached SSE process.
+
+  Assumes exactly one SSE process is currently registered. Useful for tests
+  that need to target the connected client from outside the connection
+  (e.g., `Realtime.unsubscribe_all({:instance, current_instance_id()}, channel)`).
+  """
+  @spec current_instance_id() :: String.t()
+  def current_instance_id do
+    [{instance_id, _entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    instance_id
+  end
+
+  @doc """
+  Returns the `session_id` recorded for the currently-attached SSE process.
+
+  Assumes exactly one SSE process is currently registered. Useful for capturing
+  a connection's session id before a second connection opens, e.g. to target it
+  via `Realtime.broadcast_action_except({:session, current_session_id()}, ...)`.
+  """
+  @spec current_session_id() :: term
+  def current_session_id do
+    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    entry.session_id
+  end
+
+  @doc """
+  Returns the `user_id` recorded for the currently-attached SSE process.
+
+  Assumes exactly one SSE process is currently registered. Useful for gating on
+  a handler-driven identity change having propagated to the connection.
+  """
+  @spec current_user_id() :: term
+  def current_user_id do
+    [{_instance_id, entry}] = :ets.tab2list(SubscriptionRegistry.ets_table_name())
+    entry.user_id
+  end
+
+  @doc """
   Executes a query for refute_has with optimized retry behavior.
 
   - Returns immediately if element is NOT found (fast path for refute_has)
@@ -240,17 +280,25 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
-  Custom refute_has/2 that returns immediately when element is not found.
+  Custom refute_has that returns immediately when the element is not found.
 
   Unlike Wallaby.Browser.refute_has/2 which always waits for max_wait_time,
   this version:
   - Returns immediately if the element is NOT present (fast path)
   - Waits/retries if the element IS present, giving it time to disappear
+
+  Pass `wait_time: ms` to assert absence only after waiting `ms` first, so an
+  appearance arriving within that window is still caught.
   """
-  defmacro refute_has(parent, query) do
+  defmacro refute_has(parent, query, opts \\ []) do
     quote do
       parent = unquote(parent)
       query = unquote(query)
+
+      case unquote(opts)[:wait_time] do
+        nil -> :ok
+        wait_time -> :timer.sleep(wait_time)
+      end
 
       case execute_refute_query(parent, query) do
         {:error, :invalid_selector} ->
@@ -265,12 +313,61 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  @doc """
+  Refutes that the element matching `query` displays `text`. The negative
+  counterpart to `assert_text/3`; accepts the same `opts` as `refute_has/3`.
+  """
+  defmacro refute_text(parent, query, text, opts \\ []) do
+    quote do
+      text_query =
+        Map.update!(unquote(query), :conditions, &Keyword.put(&1, :text, unquote(text)))
+
+      refute_has(unquote(parent), text_query, unquote(opts))
+    end
+  end
+
   def reload(session) do
     Browser.execute_script(session, "document.location.reload();")
   end
 
   def scroll_to(session, x, y) do
     Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
+  end
+
+  @doc """
+  Simulates a network blip by killing the SSE process attached to the given
+  `instance_id`.
+
+  After this call the client's `EventSource` fires `onerror` and the
+  JS-driven reconnect cycle begins: backoff, then POST handshake (the
+  receipts in `App.subscriptionReceiptRegistry` are re-validated), then a
+  fresh `EventSource` GET that re-registers bindings via
+  `SubscriptionRegistry.attach_connection`. Callers typically follow with
+  `wait_for_no_subscription/2` to gate the registry GC and then
+  `wait_for_subscription/2` to gate the reconnect-attach.
+  """
+  @spec simulate_sse_disconnect(String.t()) :: :ok
+  def simulate_sse_disconnect(instance_id) do
+    [{^instance_id, entry}] = :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id)
+    sse_pid = entry.sse_pid
+
+    # Killing the SSE process makes Ranch log an expected `:killed` request-process
+    # exit at :error level. That line is emitted asynchronously by the connection
+    # process as the exit propagates, so the capture window is held open until the
+    # killed process is confirmed down rather than closing the instant
+    # Process.exit/2 returns.
+    ExUnit.CaptureLog.capture_log(fn ->
+      ref = Process.monitor(sse_pid)
+      Process.exit(sse_pid, :kill)
+
+      receive do
+        {:DOWN, ^ref, :process, ^sse_pid, _reason} -> :ok
+      after
+        1_000 -> :ok
+      end
+    end)
+
+    :ok
   end
 
   def sleep(session, duration) do
@@ -288,7 +385,111 @@ defmodule HologramFeatureTests.Helpers do
     session
     |> Browser.visit(path)
     |> wait_for_page_mounting(page_module)
-    |> wait_for_server_connection()
+    |> wait_for_ws_connection()
+    |> wait_for_sse_connection()
+  end
+
+  @doc """
+  Visits `page_module` in `session` as a second tab of `origin`'s Hologram
+  session, by copying `origin`'s signed `phoenix_session` cookie into it.
+
+  Wallaby sessions have isolated cookie jars, so a second tab is otherwise a
+  separate session. A cookie can only be set once the browser is on the domain,
+  hence the throwaway `/external` visit (a plain page, no session/SSE) before
+  setting it; the final `visit/3` then loads the page carrying `origin`'s
+  cookie. Use it to give a connection a same-session sibling.
+  """
+  def visit_as_sibling(session, origin, page_module, params \\ []) do
+    %{"value" => session_cookie} =
+      origin
+      |> cookies()
+      |> Enum.find(&(&1["name"] == "phoenix_session"))
+
+    session
+    |> visit("/external")
+    |> Browser.set_cookie("phoenix_session", session_cookie)
+    |> visit(page_module, params)
+  end
+
+  @doc """
+  Blocks until no `SubscriptionRegistry` entry holds a subscription on `channel`,
+  then returns the `session` so the helper can be piped. Pass a `cid` to narrow
+  the wait to a single `{channel, cid}` binding - needed to gate a single-cid
+  `unsubscribe` whose channel keeps other cids bound, where the channel-wide
+  wait would never return. Raises if the subscription persists past
+  `@max_wait_time`.
+  """
+  def wait_for_no_subscription(session, channel, cid \\ nil, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      !has_subscription?(channel, cid) ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for subscription to drop on #{inspect(channel)} (cid: #{inspect(cid)})"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_no_subscription(session, channel, cid, start_time)
+    end
+  end
+
+  @doc """
+  Blocks until at least `count` (default 1) `SubscriptionRegistry` connections
+  hold a binding on `channel` - or, when `cid` is given, a `{channel, cid}`
+  binding specifically - then returns the `session` so the helper can be piped.
+  Raises if the count is not reached within `@max_wait_time`.
+
+  Gate any broadcast whose recipients a test asserts on: subscriptions register
+  asynchronously after the page mounts (handshake POST + SSE attach), and
+  `Phoenix.PubSub` is fire-and-forget, so a broadcast that fires first reaches
+  no one - a missed delivery, or a refute that passes vacuously because the
+  asserted-on session was never there. Pass `count` > 1 to require *every*
+  participating connection in a multi-session test. Pass a `cid` when several
+  bindings share one connection (e.g. multiple components on one page), where a
+  connection count can't tell whether a specific cid is bound.
+  """
+  def wait_for_subscription(session, channel, count \\ 1, cid \\ nil, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      subscription_count(channel, cid) >= count ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for #{count} subscription(s) on #{inspect(channel)} (cid: #{inspect(cid)})"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_subscription(session, channel, count, cid, start_time)
+    end
+  end
+
+  @doc """
+  Blocks until the currently-attached SSE process records `user_id`, then
+  returns the `session`. Gates on a handler-driven identity change (login or
+  logout) having propagated to the connection before its effects are asserted -
+  e.g. before broadcasting to check whether a binding was kept or dropped.
+  Raises if the value does not appear within `@max_wait_time`.
+  """
+  def wait_for_user_id(session, user_id, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      current_user_id() == user_id ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for connection user_id #{inspect(user_id)}"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_user_id(session, user_id, start_time)
+    end
   end
 
   defp apply_at(query, elements) do
@@ -345,6 +546,16 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  defp has_subscription?(channel, cid) do
+    SubscriptionRegistry.ets_table_name()
+    |> :ets.tab2list()
+    |> Enum.any?(fn {_instance_id, entry} ->
+      Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
+        ch == channel and (is_nil(cid) or c == cid)
+      end)
+    end)
+  end
+
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
   defp maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page) do
     if opts[:debug] do
@@ -354,6 +565,16 @@ defmodule HologramFeatureTests.Helpers do
 
       print_client_logs(session)
     end
+  end
+
+  defp subscription_count(channel, cid) do
+    SubscriptionRegistry.ets_table_name()
+    |> :ets.tab2list()
+    |> Enum.count(fn {_instance_id, entry} ->
+      Enum.any?(entry.bindings, fn {{ch, c}, _user_id} ->
+        ch == channel and (is_nil(cid) or c == cid)
+      end)
+    end)
   end
 
   defp text_matches?(%Element{driver: driver} = element, text) do
@@ -407,17 +628,46 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
-  defp wait_for_server_connection(session, start_time \\ nil) do
+  defp wait_for_sse_connection(session, start_time \\ nil) do
     start_time = start_time || current_time()
 
     callback = fn connected? ->
-      if !connected? && !timed_out?(start_time) do
-        :timer.sleep(100)
-        wait_for_server_connection(session, start_time)
+      cond do
+        connected? ->
+          :ok
+
+        timed_out?(start_time) ->
+          raise Wallaby.ExpectationNotMetError, "Timed out waiting for SSE connection"
+
+        true ->
+          :timer.sleep(100)
+          wait_for_sse_connection(session, start_time)
       end
     end
 
-    script = "return globalThis.Hologram?.['connected?'];"
+    script = "return globalThis.Hologram?.['sseConnected?'];"
+
+    Browser.execute_script(session, script, [], callback)
+  end
+
+  defp wait_for_ws_connection(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    callback = fn connected? ->
+      cond do
+        connected? ->
+          :ok
+
+        timed_out?(start_time) ->
+          raise Wallaby.ExpectationNotMetError, "Timed out waiting for WS connection"
+
+        true ->
+          :timer.sleep(100)
+          wait_for_ws_connection(session, start_time)
+      end
+    end
+
+    script = "return globalThis.Hologram?.['wsConnected?'];"
 
     Browser.execute_script(session, script, [], callback)
   end

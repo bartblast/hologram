@@ -4,11 +4,13 @@ import {
   assert,
   componentRegistryEntryFixture,
   defineGlobalErlangAndElixirModules,
+  encodedSubscriptionReceiptKey,
   registerWebApis,
   sinon,
   waitForEventLoop,
 } from "./support/helpers.mjs";
 
+import App from "../../assets/js/app.mjs";
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Connection from "../../assets/js/connection.mjs";
@@ -36,8 +38,17 @@ describe("Client", () => {
 
     const command = Type.commandStruct({name, params, target});
 
+    let originalInstanceId;
+
     beforeEach(() => {
       ComponentRegistry.clear();
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
+    });
+
+    afterEach(() => {
+      App.instanceId = originalInstanceId;
     });
 
     it("builds command payload when target component is registered", () => {
@@ -47,6 +58,7 @@ describe("Client", () => {
       const result = Client.buildCommandPayload(command);
 
       const expected = Type.map([
+        [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
         [Type.atom("module"), module],
         [Type.atom("name"), name],
         [Type.atom("params"), params],
@@ -286,7 +298,7 @@ describe("Client", () => {
   });
 
   describe("fetchPage()", () => {
-    let fetchStub, onSuccessStub;
+    let fetchStub, onSuccessStub, originalInstanceId;
 
     const pageModule = Type.alias("MyPage");
 
@@ -297,10 +309,17 @@ describe("Client", () => {
 
     beforeEach(() => {
       onSuccessStub = sinon.stub();
+
+      App.subscriptionReceiptRegistry.entries.clear();
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
     });
 
     afterEach(() => {
       sinon.restore();
+      App.subscriptionReceiptRegistry.entries.clear();
+      App.instanceId = originalInstanceId;
     });
 
     describe("fetch parameters", () => {
@@ -334,6 +353,65 @@ describe("Client", () => {
         sinon.assert.calledOnce(fetchStub);
         const [url] = fetchStub.firstCall.args;
         assert.equal(url, "/hologram/page/MyPage?user_id=123&status=active");
+      });
+
+      it("issues a POST request with a JSON content-type header", async () => {
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().resolves("<html>Response</html>"),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        await Client.fetchPage(pageModule, onSuccessStub);
+
+        sinon.assert.calledOnce(fetchStub);
+
+        const [, options] = fetchStub.firstCall.args;
+
+        assert.equal(options.method, "POST");
+
+        assert.deepStrictEqual(options.headers, {
+          "Content-Type": "application/json",
+        });
+      });
+
+      it("includes instance_id and client_claimed_sub_keys from the subscription receipt registry in the request body", async () => {
+        App.subscriptionReceiptRegistry.entries.set(
+          encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
+          Type.tuple([
+            Type.atom("room_a"),
+            Type.bitstring("page"),
+            Type.bitstring("token-a"),
+          ]),
+        );
+
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().resolves("<html>Response</html>"),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        await Client.fetchPage(pageModule, onSuccessStub);
+
+        const [, options] = fetchStub.firstCall.args;
+
+        assert.deepStrictEqual(
+          options.body,
+          Serializer.serialize(
+            Type.map([
+              [
+                Type.atom("client_claimed_sub_keys"),
+                Type.list([
+                  Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+                ]),
+              ],
+              [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
+            ]),
+            "server",
+          ),
+        );
       });
     });
 
@@ -463,7 +541,7 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
-    let fetchStub, hologramScheduleActionStub;
+    let fetchStub, hologramScheduleActionStub, originalInstanceId;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
@@ -489,17 +567,27 @@ describe("Client", () => {
       hologramScheduleActionStub = sinon.stub(Hologram, "scheduleAction");
 
       globalThis.Hologram = {csrfToken: "test-csrf-token-123"};
+
+      originalInstanceId = App.instanceId;
+      App.instanceId = "test-instance-id";
     });
 
     afterEach(() => {
       sinon.restore();
       delete globalThis.Hologram;
+      App.instanceId = originalInstanceId;
     });
 
     it("calls fetch with correct URL, options, and payload including CSRF token", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, "Type.nil()"]),
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes: "Type.list([])",
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -521,6 +609,7 @@ describe("Client", () => {
         options.body,
         Serializer.serialize(
           Type.map([
+            [Type.atom("instance_id"), Type.bitstring("test-instance-id")],
             [Type.atom("module"), module],
             [Type.atom("name"), name],
             [Type.atom("params"), params],
@@ -534,12 +623,13 @@ describe("Client", () => {
     it("command succeeds, next action is not nil", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon
-          .stub()
-          .resolves([
-            1,
-            'Type.actionStruct({name: Type.atom("dummy_action")})',
-          ]),
+        json: sinon.stub().resolves({
+          action: 'Type.actionStruct({name: Type.atom("dummy_action")})',
+          selfEchoes: "Type.list([])",
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -557,7 +647,13 @@ describe("Client", () => {
     it("command succeeds, next action is nil", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, "Type.nil()"]),
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes: "Type.list([])",
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -593,9 +689,10 @@ describe("Client", () => {
     it("command fails due to result status code", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon
-          .stub()
-          .resolves([0, "error message from server command handler"]),
+        json: sinon.stub().resolves({
+          action: "error message from server command handler",
+          status: 0,
+        }),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -616,6 +713,87 @@ describe("Client", () => {
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
       sinon.assert.notCalled(hologramScheduleActionStub);
+    });
+
+    it("dispatches each self-echoed action from the selfEchoes field", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes:
+            'Type.list([Type.actionStruct({name: Type.atom("self_echo_a")}), Type.actionStruct({name: Type.atom("self_echo_b")})])',
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+      await waitForEventLoop();
+
+      sinon.assert.calledTwice(hologramScheduleActionStub);
+
+      sinon.assert.calledWith(
+        hologramScheduleActionStub,
+        Type.actionStruct({name: Type.atom("self_echo_a")}),
+      );
+
+      sinon.assert.calledWith(
+        hologramScheduleActionStub,
+        Type.actionStruct({name: Type.atom("self_echo_b")}),
+      );
+    });
+
+    it("does not dispatch any self-echo when the selfEchoes field is an empty list", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes: "Type.list([])",
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+
+      sinon.assert.notCalled(hologramScheduleActionStub);
+    });
+
+    it("dispatches next_action before self-echoed actions", async () => {
+      const mockResponse = {
+        ok: true,
+        json: sinon.stub().resolves({
+          action: 'Type.actionStruct({name: Type.atom("next_action")})',
+          selfEchoes:
+            'Type.list([Type.actionStruct({name: Type.atom("self_echo")})])',
+          status: 1,
+          subReceiptAdds: "Type.list([])",
+          subReceiptDrops: "Type.list([])",
+        }),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+      await waitForEventLoop();
+
+      sinon.assert.calledTwice(hologramScheduleActionStub);
+
+      assert.deepStrictEqual(
+        hologramScheduleActionStub.firstCall.args[0],
+        Type.actionStruct({name: Type.atom("next_action")}),
+      );
+
+      assert.deepStrictEqual(
+        hologramScheduleActionStub.secondCall.args[0],
+        Type.actionStruct({name: Type.atom("self_echo")}),
+      );
     });
 
     it("command fails due to network error", async () => {
@@ -639,6 +817,50 @@ describe("Client", () => {
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
       sinon.assert.notCalled(hologramScheduleActionStub);
+    });
+
+    it("merges adds and drops from the subReceiptAdds and subReceiptDrops fields into the registry", async () => {
+      App.subscriptionReceiptRegistry.entries.clear();
+
+      App.subscriptionReceiptRegistry.merge(
+        Type.list([
+          Type.tuple([
+            Type.atom("room_a"),
+            Type.bitstring("page"),
+            Type.bitstring("token-a"),
+          ]),
+        ]),
+        Type.list(),
+      );
+
+      const mockResponse = {
+        ok: true,
+        json: sinon.stub().resolves({
+          action: "Type.nil()",
+          selfEchoes: "Type.list([])",
+          status: 1,
+          subReceiptAdds:
+            'Type.list([Type.tuple([Type.atom("room_b"), Type.bitstring("page"), Type.bitstring("token-b")])])',
+          subReceiptDrops:
+            'Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])',
+        }),
+      };
+
+      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+      await Client.sendCommand(command);
+
+      assert.isFalse(
+        App.subscriptionReceiptRegistry.entries.has(
+          encodedSubscriptionReceiptKey(Type.atom("room_a"), "page"),
+        ),
+      );
+
+      const stored = App.subscriptionReceiptRegistry.entries.get(
+        encodedSubscriptionReceiptKey(Type.atom("room_b"), "page"),
+      );
+
+      assert.equal(stored.data[2].text, "token-b");
     });
   });
 });

@@ -308,6 +308,10 @@ function defineGlobalModule(moduleJsName, moduleObj) {
   moduleObj.__exports__ = new Set(Object.keys(moduleObj));
 }
 
+export function encodedSubscriptionReceiptKey(channel, cid) {
+  return Type.encodeMapKey(Type.tuple([channel, Type.bitstring(cid)]));
+}
+
 // Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
 export function freeze(obj) {
   const props = Object.getOwnPropertyNames(obj);

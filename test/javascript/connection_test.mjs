@@ -273,7 +273,7 @@ describe("Connection", () => {
       );
 
       assert.equal(Connection.status, "disconnected");
-      sinon.assert.calledWith(GlobalRegistry.set, "connected?", false);
+      sinon.assert.calledWith(GlobalRegistry.set, "wsConnected?", false);
     });
 
     it("clears timers and pending requests", () => {
@@ -358,7 +358,7 @@ describe("Connection", () => {
       );
 
       assert.equal(Connection.status, "error");
-      sinon.assert.calledWith(GlobalRegistry.set, "connected?", false);
+      sinon.assert.calledWith(GlobalRegistry.set, "wsConnected?", false);
     });
 
     it("clears connection timer and triggers reconnection", () => {
@@ -474,7 +474,7 @@ describe("Connection", () => {
 
       sinon.assert.calledWith(consoleLogStub, "Hologram: connected to server");
       assert.equal(Connection.status, "connected");
-      sinon.assert.calledWith(GlobalRegistry.set, "connected?", true);
+      sinon.assert.calledWith(GlobalRegistry.set, "wsConnected?", true);
     });
 
     it("resets reconnect attempts and clears connection timer", () => {

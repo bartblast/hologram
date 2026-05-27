@@ -3,14 +3,32 @@ defmodule Hologram.Server do
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
+  alias Hologram.Server.Broadcast
   alias Hologram.Server.Metadata
 
-  defstruct cookies: %{}, next_action: nil, session: %{}, __meta__: %Metadata{}
+  defstruct broadcasts: [],
+            cid: nil,
+            cookies: %{},
+            instance_id: nil,
+            next_action: nil,
+            session: %{},
+            session_id: nil,
+            subscriptions: [],
+            user_id: nil,
+            __meta__: %Metadata{}
+
+  @type identity_id :: String.t() | integer | atom
 
   @type t :: %__MODULE__{
+          broadcasts: [Broadcast.t()],
+          cid: String.t() | nil,
           cookies: %{String.t() => any()},
+          instance_id: String.t() | nil,
           next_action: Action.t() | nil,
           session: %{atom => any},
+          session_id: identity_id | nil,
+          subscriptions: [tuple],
+          user_id: identity_id | nil,
           __meta__: Metadata.t()
         }
 
@@ -90,13 +108,18 @@ defmodule Hologram.Server do
   @doc """
   Creates a new Hologram.Server struct from a Plug.Conn struct.
 
-  Excludes "hologram_session" cookie.
+  Excludes "hologram_session" cookie. Populates `session_id` and `user_id`
+  from the Phoenix session (each `nil` when the underlying entry is absent),
+  and strips those Hologram-managed keys from the `session` map so it
+  contains only application-level entries.
   """
   @spec from(Plug.Conn.t()) :: t
   def from(%Plug.Conn{} = conn) do
     %__MODULE__{
       cookies: PlugConnUtils.extract_cookies(conn),
-      session: Plug.Conn.get_session(conn)
+      session: Session.get_session(conn),
+      session_id: Session.get_session_id(conn),
+      user_id: Session.get_user_id(conn)
     }
   end
 

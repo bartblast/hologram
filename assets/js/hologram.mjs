@@ -1,5 +1,6 @@
 "use strict";
 
+import App from "./app.mjs";
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
@@ -19,6 +20,7 @@ import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
+import Sse from "./sse.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
@@ -306,6 +308,13 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
+  static queueSelfEchoes(selfEchoes) {
+    for (const action of selfEchoes.data) {
+      InitActionQueue.enqueue(action);
+    }
+  }
+
+  // Made public to make tests easier
   static render() {
     const startTime = performance.now();
 
@@ -337,6 +346,13 @@ export default class Hologram {
         }
 
         throw error;
+      }
+
+      // SSE must open AFTER `#mountPage()` because the handshake payload
+      // includes the receipts merged from `pageMountData.subReceiptAdds` -
+      // connecting earlier would send an empty receipts list.
+      if (Sse.eventSource === null) {
+        Sse.connect();
       }
     });
   }
@@ -787,6 +803,7 @@ export default class Hologram {
 
     await $.#restoreEts();
 
+    App.maybeLoadInstanceId();
     Client.connect(false);
 
     Hologram.#defineManuallyPortedFunctions();
@@ -842,6 +859,8 @@ export default class Hologram {
     Hologram.#pageParams = mountData.pageParams;
 
     ComponentRegistry.populate(mountData.componentRegistry);
+
+    return mountData;
   }
 
   static #maybeInitAssetPathRegistry() {
@@ -851,8 +870,10 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    let mountData = null;
+
     if ($.#shouldLoadMountData) {
-      Hologram.#loadMountData();
+      mountData = Hologram.#loadMountData();
     } else {
       $.#shouldLoadMountData = true;
     }
@@ -867,6 +888,15 @@ export default class Hologram {
     Hologram.prefetchedPages.clear();
 
     Hologram.queueActionsFromServerInits();
+
+    if (mountData) {
+      Hologram.queueSelfEchoes(mountData.selfEchoes);
+
+      App.subscriptionReceiptRegistry.merge(
+        mountData.subReceiptAdds,
+        mountData.subReceiptDrops,
+      );
+    }
 
     window.requestAnimationFrame(() => {
       $.render();
@@ -1030,10 +1060,19 @@ export default class Hologram {
   }
 
   static #restorePageSnapshot(pageSnapshot) {
-    const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
-      pageSnapshot;
+    const {
+      componentRegistryEntries,
+      instanceId,
+      pageModule,
+      pageParams,
+      scrollPosition,
+      subscriptionReceipts,
+    } = pageSnapshot;
 
     ComponentRegistry.populate(componentRegistryEntries);
+
+    App.instanceId = instanceId;
+    App.subscriptionReceiptRegistry.populate(subscriptionReceipts);
 
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
@@ -1072,9 +1111,13 @@ export default class Hologram {
   static async #savePageSnapshot(forceSync = false) {
     const pageSnapshot = {
       componentRegistryEntries: ComponentRegistry.entries,
+      instanceId: App.instanceId,
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
       scrollPosition: [window.scrollX, window.scrollY],
+      subscriptionReceipts: Array.from(
+        App.subscriptionReceiptRegistry.entries.entries(),
+      ),
     };
 
     const snapshotKey = $.#pageSnapshotKey($.#historyId);

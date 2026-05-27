@@ -1,0 +1,323 @@
+defmodule Hologram.Realtime do
+  @moduledoc """
+  Public API for Hologram's realtime layer.
+  """
+
+  alias Hologram.Component.Action
+  alias Hologram.Realtime.Channel
+  alias Hologram.Realtime.Receipt
+  alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Realtime.Tombstone
+  alias Hologram.Server
+  alias Hologram.Server.Broadcast
+
+  @doc """
+  Broadcasts an action to subscribers of the given channel.
+
+  Immediate counterpart to `put_broadcast`. Called from outside `Hologram.Page`
+  and `Hologram.Component` handlers (`init/3`, `command/3`) - e.g. background jobs,
+  GenServers, controllers, plugs, mix tasks. Silent no-op if no connections are
+  subscribed. Delivered to every cid that registered the channel via
+  `put_subscription` on each receiving connection.
+  """
+  # Fires through Phoenix.PubSub.
+  @spec broadcast_action(atom | tuple, atom, keyword | map) :: :ok
+  def broadcast_action(channel, action_name, params \\ %{}) do
+    Channel.validate!(channel)
+    publish(channel, action_name, params, [])
+  end
+
+  @doc """
+  Broadcasts an action to subscribers of the given channel, excluding the
+  listed identities.
+
+  Like `broadcast_action/3` but takes an `excluded_identities` argument first.
+  Pass either a single identity tuple - `{:instance, id}`, `{:session, id}`,
+  or `{:user, id}` - or a list of such tuples. A connection matching any listed
+  identity does not receive the broadcast.
+  """
+  # Exclusion is enforced receiver-side: each SSE connection drops the broadcast
+  # when any of its own identities matches an entry in excluded_identities.
+  @spec broadcast_action_except(tuple | [tuple], atom | tuple, atom, keyword | map) :: :ok
+  def broadcast_action_except(excluded, channel, action_name, params \\ %{})
+
+  def broadcast_action_except({_kind, _id} = identity, channel, action_name, params) do
+    broadcast_action_except([identity], channel, action_name, params)
+  end
+
+  def broadcast_action_except(excluded_identities, channel, action_name, params)
+      when is_list(excluded_identities) do
+    Channel.validate!(channel)
+    publish(channel, action_name, params, excluded_identities)
+  end
+
+  # Encodes a channel value to the cluster-wide PubSub topic string. Bare atoms
+  # become `"hologram:channel:<atom>"`; tuples join all elements with `:` so
+  # identity tuples like `{:instance, X}` round-trip through the same encoding
+  # as `identity_topic/2`. Shared by `Hologram.Realtime.publish/5` and the SSE
+  # process (subscribe/unsubscribe on PubSub topics).
+  @doc false
+  @spec channel_topic(atom | tuple) :: String.t()
+  def channel_topic(channel) when is_atom(channel) do
+    "hologram:channel:#{channel}"
+  end
+
+  def channel_topic(channel) when is_tuple(channel) do
+    parts =
+      channel
+      |> Tuple.to_list()
+      |> Enum.join(":")
+
+    "hologram:channel:#{parts}"
+  end
+
+  # Returns the PubSub topic string for an identity channel. `kind` must be one
+  # of `:instance`, `:session`, or `:user`.
+  @doc false
+  @spec identity_topic(:instance | :session | :user, term) :: String.t()
+  def identity_topic(kind, id) when kind in [:instance, :session, :user] do
+    "hologram:channel:#{kind}:#{id}"
+  end
+
+  # Returns the framework-private instance announcement PubSub topic.
+  #
+  # Carries framework-internal signals scoped to a single instance (the
+  # `{:instance, I}` variant of `unsubscribe` / `unsubscribe_all`). Every SSE
+  # process auto-subscribes to its own instance announce topic at stream open;
+  # `instance_id` is stable for the SSE process's lifetime so no reconciliation
+  # is needed. Not user-addressable.
+  @doc false
+  @spec instance_announce_topic(term) :: String.t()
+  def instance_announce_topic(instance_id) do
+    "hologram:announce:instance:#{instance_id}"
+  end
+
+  # Invoked by the framework (controller / renderer) after a handler returns
+  # successfully. Iterates the LIFO list in call order, publishes each entry
+  # via broadcast_action_except/5 with the originator's instance auto-added to
+  # `excluded_identities` (the dev never sees this; it just prevents duplicate
+  # PubSub-side delivery to the originator, who instead receives via the
+  # response payload's self_echoes when subscribed). Returns the server with
+  # broadcasts cleared. If the handler raises, the server state is discarded
+  # before reaching here.
+  @doc false
+  @spec flush_broadcasts(Server.t()) :: Server.t()
+  def flush_broadcasts(%Server{broadcasts: broadcasts, instance_id: instance_id} = server) do
+    broadcasts
+    |> Enum.reverse()
+    |> Enum.each(fn %Broadcast{} = entry ->
+      excluded = Enum.uniq([{:instance, instance_id} | entry.except])
+      broadcast_action_except(excluded, entry.channel, entry.action_name, entry.params)
+    end)
+
+    %{server | broadcasts: []}
+  end
+
+  # Returns the list of `%Action{}`s the framework should self-echo to the
+  # originator via the HTTP response payload (command POST or pageMountData).
+  # An entry self-echoes iff its channel is in the originator's effective
+  # subscription set (`server.subscriptions` ∪ identity channels) AND its
+  # `except` list does not cover any of the originator's identities. Caller
+  # must invoke this BEFORE `flush_broadcasts/1` clears the broadcasts queue.
+  @doc false
+  @spec get_self_echoes(Server.t(), [tuple]) :: [Action.t()]
+  def get_self_echoes(%Server{broadcasts: broadcasts} = server, subscriptions) do
+    own_identities = identity_channels_for(server)
+
+    broadcasts
+    |> Enum.reverse()
+    |> Enum.reject(fn %Broadcast{except: except} ->
+      Enum.any?(except, &(&1 in own_identities))
+    end)
+    |> Enum.flat_map(fn %Broadcast{} = entry ->
+      for {ch, cid} <- subscriptions,
+          ch == entry.channel,
+          do: %Action{name: entry.action_name, params: Map.new(entry.params), target: cid}
+    end)
+  end
+
+  # Announces an identity change on the session announce topic when the
+  # post-handler identity differs from the pre-handler identity. Compares
+  # `session_id` and `user_id` between `pre` and `post`; if either differs and
+  # `pre.session_id` is not nil, broadcasts `{:identity_changed,
+  # post.session_id, post.user_id}` on
+  # `"hologram:announce:session:<pre.session_id>"`. Returns `:ok` either way.
+  @doc false
+  @spec maybe_announce_identity_change(Server.t(), Server.t()) :: :ok
+  def maybe_announce_identity_change(%Server{} = pre, %Server{} = post) do
+    identity_changed? = pre.session_id != post.session_id or pre.user_id != post.user_id
+
+    if identity_changed? and pre.session_id != nil do
+      topic = session_announce_topic(pre.session_id)
+
+      Phoenix.PubSub.broadcast(
+        Hologram.PubSub,
+        topic,
+        {:identity_changed, post.session_id, post.user_id}
+      )
+    end
+
+    :ok
+  end
+
+  # Returns the framework-private session announcement PubSub topic.
+  #
+  # Carries framework-internal cross-tab announcements scoped to a session
+  # (`:identity_changed` today, other framework state-transition announcements
+  # in the future). Every SSE process auto-subscribes to this topic at stream
+  # open and reconciles it on session change. Not user-addressable - the
+  # public realtime API surface never publishes here.
+  @doc false
+  @spec session_announce_topic(term) :: String.t()
+  def session_announce_topic(session_id) do
+    "hologram:announce:session:#{session_id}"
+  end
+
+  @doc """
+  Subscribes the connections identified by `identity` to a `{channel, cid}`
+  binding.
+
+  `identity` is `{:instance, id}`, `{:session, id}`, or `{:user, id}`. Every
+  live connection matching the identity begins receiving broadcasts on `channel`
+  for the given `cid`. An explicit subscribe is a re-grant that supersedes any
+  prior `unsubscribe`/`unsubscribe_all` for the same identity and channel.
+
+  When `identity` resolves to no live connection, the call has no effect on
+  delivery. Returns `:ok`. Raises `ArgumentError` on an invalid channel.
+  """
+  # For each live connection the identity resolves to (via
+  # SubscriptionRegistry.resolve_identity/1): registers the binding through
+  # SubscriptionRegistry.apply_deltas/4 (which emits a {:sub, channel}
+  # self-message to the SSE process on a zero-crossing channel), signs a fresh
+  # receipt under the connection's current user_id (so the authorization stamp
+  # tracks identity at issue time, per the elevation rule), and sends
+  # {:add_sub_receipts, [{channel, cid, token}]} to the SSE process for
+  # client-side merge. Then gossips a cluster-wide tombstone auto-purge for both
+  # the binding-level key {identity, channel, cid} and the channel-wide key
+  # {identity, channel} - the re-grant supersedes any prior revocation. The
+  # purge fires regardless of whether any connection matched.
+  @spec subscribe(
+          {:instance, String.t()} | {:session, term} | {:user, term},
+          atom | tuple,
+          String.t()
+        ) :: :ok
+  def subscribe(identity, channel, cid) when is_binary(cid) do
+    Channel.validate!(channel)
+
+    identity
+    |> SubscriptionRegistry.resolve_identity()
+    |> Enum.each(fn {instance_id, sse_pid} ->
+      subscribe_target(instance_id, sse_pid, channel, cid)
+    end)
+
+    gossip_topic = Tombstone.gossip_topic()
+    binding_key = {identity, channel, cid}
+    channel_key = {identity, channel}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, binding_key})
+    Phoenix.PubSub.broadcast(Hologram.PubSub, gossip_topic, {:purge, channel_key})
+
+    :ok
+  end
+
+  @doc """
+  Unsubscribes a `{channel, cid}` binding under `identity`.
+
+  Raises `ArgumentError` on an invalid channel.
+  """
+  @spec unsubscribe(
+          {:instance, String.t()} | {:session, term} | {:user, term},
+          atom | tuple,
+          String.t()
+        ) :: :ok
+  def unsubscribe({kind, id} = identity, channel, cid)
+      when kind in [:instance, :session, :user] and is_binary(cid) do
+    Channel.validate!(channel)
+
+    tombstone_key = {identity, channel, cid}
+    Tombstone.insert(tombstone_key, System.system_time(:millisecond))
+
+    topic = announce_topic_for(kind, id)
+    envelope = {:drop_sub_receipts, [{channel, cid}]}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
+
+    :ok
+  end
+
+  @doc """
+  Unsubscribes every cid binding under `identity` on `channel`.
+
+  Raises `ArgumentError` on an invalid channel.
+  """
+  @spec unsubscribe_all(
+          {:instance, String.t()} | {:session, term} | {:user, term},
+          atom | tuple
+        ) :: :ok
+  def unsubscribe_all({kind, id} = identity, channel)
+      when kind in [:instance, :session, :user] do
+    Channel.validate!(channel)
+
+    tombstone_key = {identity, channel}
+    Tombstone.insert(tombstone_key, System.system_time(:millisecond))
+
+    topic = announce_topic_for(kind, id)
+    envelope = {:drop_channel, channel}
+
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, envelope)
+
+    :ok
+  end
+
+  # Returns the framework-private user announcement PubSub topic.
+  #
+  # Carries framework-internal signals scoped to a single user (the
+  # `{:user, U}` variant of `unsubscribe` / `unsubscribe_all`). Every
+  # authenticated SSE process auto-subscribes to its user announce topic at
+  # stream open and reconciles it on identity change. Not user-addressable.
+  @doc false
+  @spec user_announce_topic(term) :: String.t()
+  def user_announce_topic(user_id) do
+    "hologram:announce:user:#{user_id}"
+  end
+
+  defp announce_topic_for(:instance, id), do: instance_announce_topic(id)
+
+  defp announce_topic_for(:session, id), do: session_announce_topic(id)
+
+  defp announce_topic_for(:user, id), do: user_announce_topic(id)
+
+  defp identity_channels_for(%Server{} = server) do
+    [{:instance, server.instance_id}]
+    |> prepend_identity(:session, server.session_id)
+    |> prepend_identity(:user, server.user_id)
+  end
+
+  defp prepend_identity(identities, _kind, nil), do: identities
+
+  defp prepend_identity(identities, kind, id), do: [{kind, id} | identities]
+
+  defp publish(channel, action_name, params, excluded_identities) do
+    topic = channel_topic(channel)
+    message = {:broadcast_action, channel, action_name, Map.new(params), excluded_identities}
+    Phoenix.PubSub.broadcast(Hologram.PubSub, topic, message)
+  end
+
+  defp subscribe_target(instance_id, sse_pid, channel, cid) do
+    case SubscriptionRegistry.identity_of(instance_id) do
+      {_session_id, authorizing_user_id} ->
+        SubscriptionRegistry.apply_deltas(
+          instance_id,
+          [{channel, cid}],
+          [],
+          authorizing_user_id
+        )
+
+        token = Receipt.issue(channel, cid, instance_id, authorizing_user_id)
+        send(sse_pid, {:add_sub_receipts, [{channel, cid, token}]})
+
+      nil ->
+        :ok
+    end
+  end
+end
