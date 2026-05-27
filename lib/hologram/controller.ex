@@ -202,9 +202,15 @@ defmodule Hologram.Controller do
 
     Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
 
-    # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
+    # Snapshot self-echoes before flush_broadcasts/1 clears the queue. Self-echoes
+    # reach every component on the originating instance subscribed to the
+    # broadcast channel, so they are materialized against the instance-wide
+    # subscription set rather than the cid-scoped server.subscriptions.
     self_echoes =
-      Realtime.get_self_echoes(processed_server_struct, processed_server_struct.subscriptions)
+      Realtime.get_self_echoes(
+        processed_server_struct,
+        instance_subscriptions(bindings, processed_server_struct.__meta__.subscription_ops)
+      )
 
     flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
@@ -492,6 +498,20 @@ defmodule Hologram.Controller do
       token when is_binary(token) -> {:ok, token}
       _fallback -> :error
     end
+  end
+
+  # Returns the originating instance's full post-handler subscription set: the
+  # command-start `bindings` adjusted by this handler's subscription ops. Used to
+  # materialize self-echoes, which reach every component on the instance
+  # subscribed to the broadcast channel - not only the command's target cid (the
+  # scope of `server.subscriptions`).
+  defp instance_subscriptions(bindings, subscription_ops) do
+    subscription_ops
+    |> Enum.reduce(MapSet.new(Map.keys(bindings)), fn
+      {key, :put}, acc -> MapSet.put(acc, key)
+      {key, :delete}, acc -> MapSet.delete(acc, key)
+    end)
+    |> MapSet.to_list()
   end
 
   # Persists a handler-driven `server.user_id` change into the Phoenix session

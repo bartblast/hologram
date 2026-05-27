@@ -1196,6 +1196,34 @@ defmodule Hologram.ControllerTest do
       assert encoded_self_echoes == "Type.list([])"
     end
 
+    test "self-echoes reach every cid on the originating instance subscribed to the channel, not just the target" do
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+      :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
+
+      SubscriptionRegistry.apply_deltas(
+        "my-instance-id",
+        [{:room_a, "my_target_1"}, {:room_a, "sibling"}],
+        [],
+        "test-user-id"
+      )
+
+      payload = %{
+        instance_id: "my-instance-id",
+        module: Module6,
+        name: :my_command_self_echo_broadcast_only,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      conn = execute_command_request(payload)
+      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
+
+      # The broadcast self-echoes to the target cid and the sibling cid on the
+      # same instance (order is not guaranteed).
+      assert String.contains?(encoded_self_echoes, ~s|Type.bitstring("my_target_1")|)
+      assert String.contains?(encoded_self_echoes, ~s|Type.bitstring("sibling")|)
+    end
+
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when the handler changes identity" do
       session_id = "test-session-#{:erlang.unique_integer([:positive])}"
       topic = Realtime.session_announce_topic(session_id)

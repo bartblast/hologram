@@ -109,6 +109,10 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     raise "boom"
   end
 
+  def command(:my_command_self_echo_broadcast_only, _params, server) do
+    put_broadcast(server, :room_a, :test_action, text: "hi")
+  end
+
   def command(:my_command_self_echo_put_broadcast_subscribed, _params, server) do
     server
     |> put_subscription({:instance, server.instance_id})
