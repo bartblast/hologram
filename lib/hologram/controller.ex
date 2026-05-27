@@ -179,11 +179,14 @@ defmodule Hologram.Controller do
   defp handle_validated_command_request(conn, instance_id, module, name, params, target) do
     bindings = SubscriptionRegistry.bindings_of(instance_id) || %{}
 
+    target_subscriptions =
+      for {{_channel, cid} = key, _user_id} <- bindings, cid == target, do: key
+
     server_struct = %{
       Server.from(conn)
       | cid: target,
         instance_id: instance_id,
-        subscriptions: Map.keys(bindings)
+        subscriptions: target_subscriptions
     }
 
     command_result = module.command(name, params, server_struct)

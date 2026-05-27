@@ -615,13 +615,13 @@ defmodule Hologram.ControllerTest do
                ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_instance_id")], [Type.atom("params"), Type.map([[Type.atom("instance_id"), Type.bitstring("my-instance-id")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
-    test "pre-populates server.subscriptions from SubscriptionRegistry bindings for the request's instance_id" do
+    test "pre-populates server.subscriptions with only the target component's bindings on the request's instance_id" do
       :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
       :ok = SubscriptionRegistry.update_identity("my-instance-id", @hologram_session_id, nil)
 
       SubscriptionRegistry.apply_deltas(
         "my-instance-id",
-        [{:room_a, "page"}],
+        [{:room_a, "my_target_1"}, {:room_b, "other_target"}],
         [],
         "test-user-id"
       )
@@ -638,7 +638,7 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("my_target_1")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
 
     test "pre-populates server.subscriptions to an empty list when no registry entry exists" do
