@@ -13,6 +13,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Stateless components cannot handle events. You need a `cid` to make a component stateful.
 - The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
 - Not all Elixir standard library functions are available client-side yet. Check the Client Runtime reference for coverage.
+- Realtime: inside `init/3`/commands use `put_subscription`/`put_broadcast` on the `server` struct (deferred until the handler succeeds). The `Hologram.Realtime.*` functions fire immediately and are only for code outside a handler (background jobs, workers).
 
 ## Architecture
 
@@ -151,6 +152,20 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Default cookie options: `http_only: true`, `path: "/"`, `same_site: :lax`, `secure: true`.
 - Custom options: `http_only`, `path`, `same_site` (`:strict`, `:lax`, `:none`), `secure`, `max_age`, `domain`.
 - Use sessions for sensitive data. Use cookies when you need client-side access or specific cookie behavior.
+
+## Realtime
+
+- Realtime lets server-side code push actions to connected clients without polling. A broadcast dispatches an action that runs in the client's `action/3` handler - the trigger just comes from the server. **Not** Phoenix Channels, `phx-join`, or calling `Phoenix.PubSub` directly.
+- **In handlers (default):** call `put_subscription`, `delete_subscription`, `put_broadcast`, `put_broadcast_except` on the `server` struct inside `init/3` or `command/3`. They are deferred and transactional - applied only after the handler returns successfully, and discarded if it raises (like `put_session`/`put_cookie`).
+- **Outside handlers (escape hatch - background jobs, workers, GenServers, incremental Phoenix adoption):** `Hologram.Realtime.broadcast_action`, `broadcast_action_except`, `subscribe`, `unsubscribe`, `unsubscribe_all`. These fire immediately and do not roll back, and `subscribe`/`unsubscribe` require an explicit cid (e.g. `"page"`). Prefer the in-handler API - reach for these only when there is genuinely no handler.
+- Channels are structured values, never topic strings: a bare atom (`:notifications`) or a tuple of an atom tag plus one or more primitives (`{:room, 42}`, `{:doc, "abc-123", "v2"}`).
+- Identity channels address recipients - `{:instance, id}` (one tab), `{:session, id}` (one session), `{:user, id}` (one user) - built from `server.instance_id`, `server.session_id`, `server.user_id`.
+- Application channels (`:notifications`, `{:room, 42}`) fan a single broadcast out to every component subscribed to them.
+- Subscriptions are per-component (cid). `put_subscription` always subscribes the current component - you cannot subscribe on another component's behalf. They are sticky for the page lifetime and auto-cleaned on navigation, so `delete_subscription` is only for removing one mid-page.
+- A broadcast names only a channel and an action, never a component. `params` is a keyword list at the call site that arrives as a map in the `action/3` handler. The sender's own instance receives its broadcast too - exclude it with `put_broadcast_except`/`broadcast_action_except` and `{:instance, server.instance_id}`.
+- `server.subscriptions` and `server.broadcasts` are readable public fields holding the current component's subscriptions and the broadcasts queued so far.
+- Realtime does no authorization - check permissions yourself before any broadcast, subscribe, or unsubscribe.
+- Delivery is fire-and-forget and subscription-driven (at-most-once, no acks, replay, or ordering guarantees). Treat broadcasts as live nudges to update already-loaded state and keep authoritative data in your data layer.
 
 ## JavaScript Interop
 
