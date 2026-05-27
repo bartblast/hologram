@@ -740,7 +740,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       session
       |> visit(Page17)
       # Both the page's and the component's subscriptions must be registered before
-      # the command, so a scoping regression would surface the page's binding too.      
+      # the command, so a scoping regression would surface the page's binding too.
       |> wait_for_subscription({:room, 17})
       |> wait_for_subscription({:room, 18})
       |> click(button("Report"))

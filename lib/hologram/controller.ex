@@ -506,8 +506,13 @@ defmodule Hologram.Controller do
   # subscribed to the broadcast channel - not only the command's target cid (the
   # scope of `server.subscriptions`).
   defp instance_subscriptions(bindings, subscription_ops) do
+    initial_acc =
+      bindings
+      |> Map.keys()
+      |> MapSet.new()
+
     subscription_ops
-    |> Enum.reduce(MapSet.new(Map.keys(bindings)), fn
+    |> Enum.reduce(initial_acc, fn
       {key, :put}, acc -> MapSet.put(acc, key)
       {key, :delete}, acc -> MapSet.delete(acc, key)
     end)
