@@ -349,7 +349,24 @@ defmodule HologramFeatureTests.Helpers do
   @spec simulate_sse_disconnect(String.t()) :: :ok
   def simulate_sse_disconnect(instance_id) do
     [{^instance_id, entry}] = :ets.lookup(SubscriptionRegistry.ets_table_name(), instance_id)
-    Process.exit(entry.sse_pid, :kill)
+    sse_pid = entry.sse_pid
+
+    # Killing the SSE process makes Ranch log an expected `:killed` request-process
+    # exit at :error level. That line is emitted asynchronously by the connection
+    # process as the exit propagates, so the capture window is held open until the
+    # killed process is confirmed down rather than closing the instant
+    # Process.exit/2 returns.
+    ExUnit.CaptureLog.capture_log(fn ->
+      ref = Process.monitor(sse_pid)
+      Process.exit(sse_pid, :kill)
+
+      receive do
+        {:DOWN, ^ref, :process, ^sse_pid, _reason} -> :ok
+      after
+        1_000 -> :ok
+      end
+    end)
+
     :ok
   end
 
