@@ -371,12 +371,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           prior_channels = channels_of(prior_bindings)
           new_channels = channels_of(new_bindings)
 
-          zero_crossing_channels =
-            prior_channels
-            |> MapSet.difference(new_channels)
-            |> Enum.to_list()
-
-          {dropped_keys, zero_crossing_channels}
+          {dropped_keys, unsub_channels(prior_channels, new_channels)}
 
         [] ->
           {[], []}
@@ -400,12 +395,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           prior_channels = channels_of(prior_bindings)
           new_channels = channels_of(new_bindings)
 
-          zero_crossing_channels =
-            prior_channels
-            |> MapSet.difference(new_channels)
-            |> Enum.to_list()
-
-          {actually_dropped, zero_crossing_channels}
+          {actually_dropped, unsub_channels(prior_channels, new_channels)}
 
         [] ->
           {[], []}
@@ -512,5 +502,11 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
     |> :ets.tab2list()
     |> Enum.filter(fn {_instance_id, entry} -> Map.get(entry, field) == value end)
     |> Enum.map(fn {instance_id, entry} -> {instance_id, entry.sse_pid} end)
+  end
+
+  defp unsub_channels(prior_channels, new_channels) do
+    prior_channels
+    |> MapSet.difference(new_channels)
+    |> Enum.to_list()
   end
 end
