@@ -12,6 +12,8 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page15
   alias HologramFeatureTests.Realtime.Page16
   alias HologramFeatureTests.Realtime.Page17
+  alias HologramFeatureTests.Realtime.Page18
+  alias HologramFeatureTests.Realtime.Page19
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
@@ -52,6 +54,45 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       assert_text(session_1, css("#received"), "delivered")
       assert_text(session_2, css("#received"), "delivered")
+    end
+
+    @sessions 2
+    feature "reaches only the page subscribed to the channel, not another page subscribed to a different channel",
+            %{sessions: [session_1, session_2]} do
+      # session_1 (Page1) subscribes to @channel_1 and session_2 (Page18) to
+      # @channel_2. A broadcast to @channel_1 reaches session_1 and not session_2:
+      # an instance receives a broadcast only when its page subscribed to that
+      # channel.
+      session_1 = visit(session_1, Page1)
+      session_2 = visit(session_2, Page18)
+
+      wait_for_subscription(session_1, @channel_1)
+      wait_for_subscription(session_2, @channel_2)
+
+      Realtime.broadcast_action(@channel_1, :show, message: "delivered to subscriber")
+
+      assert_text(session_1, css("#received"), "delivered to subscriber")
+      refute_text(session_2, css("#received"), "delivered to subscriber", wait_time: 1_000)
+    end
+
+    @sessions 2
+    feature "reaches only the component subscribed to the channel, not a same-cid component subscribed to a different channel",
+            %{sessions: [session_1, session_2]} do
+      # Both sessions render Page19's "widget" component (same cid), but session_1
+      # mounts it at room 1 (subscribes @channel_1) and session_2 at room 2
+      # (subscribes @channel_2). A broadcast to @channel_1 reaches session_1's
+      # widget and not session_2's: even with a shared cid, delivery follows the
+      # channel subscription.
+      session_1 = visit(session_1, Page19, room: 1)
+      session_2 = visit(session_2, Page19, room: 2)
+
+      wait_for_subscription(session_1, @channel_1)
+      wait_for_subscription(session_2, @channel_2)
+
+      Realtime.broadcast_action(@channel_1, :show, message: "delivered to widget")
+
+      assert_text(session_1, css("#received-widget"), "delivered to widget")
+      refute_text(session_2, css("#received-widget"), "delivered to widget", wait_time: 1_000)
     end
   end
 
