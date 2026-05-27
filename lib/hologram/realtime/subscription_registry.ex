@@ -302,13 +302,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
           prior_channels = channels_of(prior_bindings)
           new_channels = channels_of(new_bindings)
 
-          new_channels
-          |> MapSet.difference(prior_channels)
-          |> Enum.each(fn channel -> send(entry.sse_pid, {:sub, channel}) end)
-
-          prior_channels
-          |> MapSet.difference(new_channels)
-          |> Enum.each(fn channel -> send(entry.sse_pid, {:unsub, channel}) end)
+          emit_zero_crossings(entry.sse_pid, prior_channels, new_channels)
 
           {actually_added, actually_dropped}
 
@@ -464,13 +458,7 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         prior_channels = channels_of(entry.bindings)
         new_channels = channels_of(new_bindings_map)
 
-        new_channels
-        |> MapSet.difference(prior_channels)
-        |> Enum.each(fn channel -> send(entry.sse_pid, {:sub, channel}) end)
-
-        prior_channels
-        |> MapSet.difference(new_channels)
-        |> Enum.each(fn channel -> send(entry.sse_pid, {:unsub, channel}) end)
+        emit_zero_crossings(entry.sse_pid, prior_channels, new_channels)
 
       [] ->
         :noop
@@ -507,6 +495,16 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
   defp channels_of(bindings) do
     MapSet.new(bindings, fn {{channel, _cid}, _user_id} -> channel end)
+  end
+
+  defp emit_zero_crossings(sse_pid, prior_channels, new_channels) do
+    new_channels
+    |> MapSet.difference(prior_channels)
+    |> Enum.each(fn channel -> send(sse_pid, {:sub, channel}) end)
+
+    prior_channels
+    |> MapSet.difference(new_channels)
+    |> Enum.each(fn channel -> send(sse_pid, {:unsub, channel}) end)
   end
 
   defp resolve_by_field(field, value) do
