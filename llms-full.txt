@@ -2224,6 +2224,301 @@ When working with cookies, consider the following security best practices:
 - **Analytics** - User tracking (with appropriate consent)
 - **Feature flags** - User-specific feature toggles
 
+### Realtime
+
+Realtime lets your server-side Elixir code dispatch actions to connected clients without the client polling for changes. When something happens on the server - a new chat message, a finished background job, another user's edit - you broadcast an action, and Hologram runs the matching action handler on every subscribed client.
+
+You subscribe and broadcast from your server-side handlers - `init/3` and `command/3`. The actions you broadcast run on the client, in the same `action/3` handlers you already write for user events. A separate API exists for code that doesn't run in a handler, such as background jobs - it's covered in the "Calling Realtime Outside a Handler" section below.
+
+#### Core Concepts
+
+##### Instances
+
+An instance is a single browser tab - one JS execution context. Each instance is identified by an `instance_id` that Hologram mints at the initial page render. It's stable across reconnects and across Hologram's in-page navigation, and it's regenerated on a hard refresh or in a new tab. You can read it as `server.instance_id`.
+
+##### Channels
+
+A channel is the target of a broadcast and the thing a component subscribes to. Channels are structured, typed values, never raw topic strings. A channel is either a bare atom like `:notifications`, or a tuple of an atom tag followed by one or more primitive values, like `{:room, 42}` or `{:doc, "abc-123", "v2"}`.
+
+The framework encodes each channel to an internal topic for you, so you never build or see a topic string, and a malformed channel is rejected with a clear error instead of routing nowhere. There are two kinds: identity channels and application channels.
+
+###### Identity Channels
+
+Identity channels address a recipient by who or what is on the other end. There are three, nested from narrowest to broadest:
+
+- `{:instance, instance_id}` - a single tab
+- `{:session, session_id}` - one session, which may span several tabs
+- `{:user, user_id}` - one authenticated user, which may span several sessions and devices
+
+Each level is independently addressable. A page, layout, or component that wants events on an identity channel subscribes to it explicitly (see "Subscribing to Identity Channels" below).
+
+###### Application Channels
+
+Application channels are channels you define for your domain - a chat room, a document, a notifications feed. They're how you fan out a single broadcast to many recipients without maintaining your own membership table:
+
+- `:notifications`
+- `{:room, 42}`
+- `{:doc, "abc-123", "v2"}`
+
+Every component subscribed to an application channel receives the broadcasts sent to it.
+
+##### Component Targeting with Cid
+
+A `cid` (component id) identifies a stateful component. For the components you place in your templates, it's the `cid` attribute you set on them. The page and the layout are components too, and Hologram assigns them the reserved cids `"page"` and `"layout"`.
+
+Subscriptions are recorded per component, and `put_subscription` always subscribes the component whose handler is running - you can't subscribe on another component's behalf.
+
+Broadcasts never name a component. The publisher names only the channel, and Hologram runs the action on every component subscribed to it - which is what lets a single broadcast update several components at once.
+
+#### How Realtime Calls Behave Inside Handlers
+
+The functions you call inside a server-side handler - `put_subscription`, `delete_subscription`, `put_broadcast`, and `put_broadcast_except` - are deferred and transactional. Nothing happens the moment you call them. Hologram records your intent and applies it only after the handler returns successfully. If the handler raises, every queued subscription change and broadcast is discarded along with the rest of the server state, exactly like Hologram's other server-side operations (`put_session`, `put_cookie`, and so on).
+
+That's why a broadcast can't leak from a handler that fails partway through.
+
+#### Realtime Functions
+
+Hologram provides the following functions for working with realtime inside a server-side handler:
+
+- `put_subscription(server, channel)` - subscribes the current component to a channel
+- `delete_subscription(server, channel)` - removes a subscription added earlier in the page's lifetime
+- `put_broadcast(server, channel, action_name)` - broadcasts an action to a channel
+- `put_broadcast(server, channel, action_name, params)` - broadcasts an action with params
+- `put_broadcast_except(server, except_identities, channel, action_name)` - broadcasts to a channel, excluding one or more identities
+- `put_broadcast_except(server, except_identities, channel, action_name, params)` - same, with params
+
+For code that runs outside a handler, see the "Calling Realtime Outside a Handler" section below.
+
+#### Subscribing to Channels
+
+A component only receives broadcasts for channels it's subscribed to. You subscribe inside `init/3` (or a command) with `put_subscription`.
+
+##### Subscribing in a Handler
+
+Subscribe the current component to a channel by passing the channel to `put_subscription`:
+
+```elixir
+def init(%{id: room_id}, _component, server) do
+  put_subscription(server, {:room, room_id})
+end
+```
+
+##### Subscribing to Identity Channels
+
+Identity channels are subscribed the same way. A layout that wants user-level events declares it in its own `init/3`. Note that `user_id` may be `nil` for anonymous visitors, so guard it before subscribing:
+
+```elixir
+def init(_params, _component, server) do
+  put_subscription(server, {:user, server.user_id})
+end
+```
+
+##### Subscription Lifecycle
+
+A subscription is sticky for the page's lifetime and is cleaned up automatically - you don't unsubscribe on navigation or tab close. When the visitor navigates to another page, Hologram drops the subscriptions the old page declared. If the next page re-declares the same subscription (for example, a layout-level subscription that spans a same-layout navigation), it's preserved without any churn.
+
+Because cleanup is automatic, `delete_subscription` is only needed when you want to remove a subscription mid-page.
+
+##### Removing a Subscription
+
+Remove a subscription declared earlier in the page's lifetime with `delete_subscription`:
+
+```elixir
+def command(:leave_room, %{room_id: room_id}, server) do
+  delete_subscription(server, {:room, room_id})
+end
+```
+
+Removal is authoritative: that component stops receiving broadcasts for that channel, and the removal holds even across reconnects.
+
+##### Inspecting Current Subscriptions
+
+`server.subscriptions` is a public field you can read at any point as you thread the struct through a handler and the helpers it calls - for example, to decide whether to subscribe based on what's already there. It's a list of `{channel, cid}` tuples for the current component - in a command it starts from that component's existing subscriptions, in `init/3` from an empty list.
+
+#### Broadcasting Actions
+
+Broadcasting dispatches an action to every component subscribed to the channel - it runs in the component's `action/3` handler, the same way a user-triggered action does, but the trigger comes from the server. From inside a server-side handler, use `put_broadcast`.
+
+##### Broadcasting in a Handler
+
+For example, a command that persists a new chat message and broadcasts it to the room, with the action handler that adds it to the list on each subscriber:
+
+```elixir
+def command(:send_message, %{room_id: room_id, text: text}, server) do
+  message = Chat.create_message(room_id, text)
+  put_broadcast(server, {:room, room_id}, :add_message, message: message)
+end
+
+def action(:add_message, %{message: message}, component) do
+  put_state(component, messages: [message | component.state.messages])
+end
+```
+
+The publisher names only the channel and the action - it never names a component. `params` is a keyword list at the call site and arrives as a map in the handler, exactly like a client-dispatched action.
+
+##### Broadcasting Without Params
+
+`params` is optional. Omit it for signal-only broadcasts where the action name itself carries the meaning:
+
+```elixir
+# With params
+put_broadcast(server, {:room, 42}, :add_message, text: "hi")
+
+# Signal only, no params
+put_broadcast(server, {:room, 42}, :refresh)
+```
+
+##### Excluding a Recipient
+
+`put_broadcast_except` broadcasts to a channel but skips one or more identities - each identifying an instance, session, or user. A common use is broadcasting a change to a room while skipping the tab that just made it, because that tab already updated itself:
+
+```elixir
+# Broadcast to room 42, but skip the tab that sent the message
+put_broadcast_except(
+  server,
+  {:instance, server.instance_id},
+  {:room, room_id},
+  :add_message,
+  message: message
+)
+```
+
+##### Does the Sender Receive Its Own Broadcast?
+
+Yes. With `put_broadcast`, the instance that triggered the broadcast receives it too, on any of its components subscribed to the channel. In the chat example above, the sender sees their own message appear through the same `add_message` handler as everyone else. If you don't want that, exclude your own instance with `put_broadcast_except` and `{:instance, server.instance_id}`.
+
+##### Inspecting Queued Broadcasts
+
+`server.broadcasts` is a public field you can read at any point as you thread the struct through a handler and the helpers it calls - for example, to avoid queuing a broadcast that's already there. It holds the broadcasts added with `put_broadcast` / `put_broadcast_except` so far, starting empty in each handler.
+
+##### A Complete Example
+
+Subscribe, broadcast, and the action handler together - a complete chat room page:
+
+```elixir
+defmodule MyApp.RoomPage do
+  use Hologram.Page
+
+  route "/rooms/:id"
+
+  layout MyApp.Layout
+
+  def init(%{id: room_id}, component, server) do
+    messages = Chat.recent_messages(room_id)
+    component = put_state(component, room_id: room_id, messages: messages)
+    server = put_subscription(server, {:room, room_id})
+
+    {component, server}
+  end
+
+  def command(:send_message, %{room_id: room_id, text: text}, server) do
+    message = Chat.create_message(room_id, text)
+    put_broadcast(server, {:room, room_id}, :add_message, message: message)
+  end
+
+  def action(:add_message, %{message: message}, component) do
+    put_state(component, messages: [message | component.state.messages])
+  end
+end
+```
+
+`init/3` subscribes the page to the room. Sending a message persists it and broadcasts `add_message` to the room. Every subscriber, including the sender, runs the `add_message` handler and adds the message to its list.
+
+#### Identity on the Server Struct
+
+Three fields on the `server` struct identify the current instance, session, and user. You use them to build identity-channel addresses:
+
+- `server.instance_id` - the current tab. Read-only.
+- `server.session_id` - the current session, managed by Hologram's session system. Read-only.
+- `server.user_id` - the current authenticated user, or `nil` for anonymous visitors. You may set it to signal login (assign the user's id) or logout (set it to `nil`). Hologram reacts to the change.
+
+Address an identity channel by pairing the tag with the matching field:
+
+```elixir
+put_subscription(server, {:user, server.user_id})
+put_subscription(server, {:session, server.session_id})
+put_subscription(server, {:instance, server.instance_id})
+```
+
+#### Calling Realtime Outside a Handler
+
+Everything above runs inside a page or component handler - the idiomatic way to use Realtime in Hologram, where calls are transactional and tied to the page lifecycle. Sometimes, though, the code that needs to broadcast or change a subscription isn't running in a handler at all: a background job finishing work, a worker, a GenServer, or existing Phoenix code in an app adopting Hologram incrementally. For those cases, `Hologram.Realtime` exposes immediate counterparts.
+
+These calls fire immediately and do not roll back - there's no handler success to defer to. Reach for them only when there's genuinely no handler to be in:
+
+- `Hologram.Realtime.broadcast_action(channel, action_name)` - the immediate counterpart to `put_broadcast`
+- `Hologram.Realtime.broadcast_action(channel, action_name, params)` - same, with params
+- `Hologram.Realtime.broadcast_action_except(except_identities, channel, action_name)` - broadcasts while excluding one or more identities
+- `Hologram.Realtime.broadcast_action_except(except_identities, channel, action_name, params)` - same, with params
+- `Hologram.Realtime.subscribe(identity, channel, cid)` - the immediate counterpart to `put_subscription`
+- `Hologram.Realtime.unsubscribe(identity, channel, cid)` - removes one subscription binding
+- `Hologram.Realtime.unsubscribe_all(identity, channel)` - removes every subscription a target has to a channel
+
+##### Broadcasting from Outside a Handler
+
+`broadcast_action` is the immediate counterpart to `put_broadcast`, with the same channel, action, and params shape:
+
+```elixir
+Hologram.Realtime.broadcast_action({:user, user_id}, :show_toast, text: "Saved")
+Hologram.Realtime.broadcast_action({:user, user_id}, :reload_session)
+```
+
+`broadcast_action_except` excludes one or more identities from delivery:
+
+```elixir
+Hologram.Realtime.broadcast_action_except(
+  {:instance, originator_instance_id},
+  {:room, 42},
+  :add_message,
+  message: message
+)
+```
+
+##### Subscribing from Outside a Handler
+
+`subscribe`, `unsubscribe`, and `unsubscribe_all` are the immediate counterparts to `put_subscription` and removal. They require an explicit `cid`, since there's no handler to supply one:
+
+```elixir
+Hologram.Realtime.subscribe({:user, 7}, {:room, 42}, "page")
+Hologram.Realtime.unsubscribe({:user, 7}, {:room, 42}, "page")
+Hologram.Realtime.unsubscribe_all({:user, 7}, {:room, 42})
+```
+
+These calls act on instances that are connected right now. `subscribe` signals currently-connected tabs. It doesn't durably grant a subscription to a user who isn't connected yet. To grant access that persists across reconnects and future tabs, update your data layer (a permission or membership table) so the next time that user's page runs `init/3`, it declares the subscription with `put_subscription`. Tabs that are already open won't re-run `init/3` until they reload, so you can fire `Hologram.Realtime.subscribe` to apply the change to them right away.
+
+##### Example: Notifying a User Across Their Tabs
+
+With the layout subscribed to the user's identity channel, a finished background job can notify every signed-in tab on every device:
+
+```elixir
+Hologram.Realtime.broadcast_action(
+  {:user, user_id},
+  :show_toast,
+  kind: :success,
+  text: "Upload complete"
+)
+```
+
+Because the layout subscribed with the reserved `"layout"` cid, the action runs on the layout component - the natural place for app-wide toasts.
+
+##### Example: Removing a User from a Channel
+
+`unsubscribe_all` is authoritative and channel-wide - the right tool for a kick or a revoked permission. It removes every subscription the user has to the channel, across all their tabs, and the removal holds across reconnects:
+
+```elixir
+Hologram.Realtime.unsubscribe_all({:user, user_id}, {:room, 42})
+```
+
+#### Authorization
+
+Realtime performs no implicit authorization. None of these functions checks whether the caller is allowed to broadcast to, subscribe to, or remove someone from a channel. That's your responsibility: check permissions before the call - "is this user allowed in `{:room, rid}`?" - wherever you make it.
+
+#### Delivery Semantics
+
+Realtime is fire-and-forget, following the standard at-most-once delivery model of pub/sub messaging - the same guarantees you'd get from Phoenix.PubSub or Phoenix Channels. There are no delivery acknowledgements, no replay buffer for clients that were offline, and no ordering or delivery guarantees. Delivery is subscription-driven: a broadcast reaches only the instances with a component subscribed to its channel at the moment it's sent, and within each, only the components that subscribed run the action - Hologram routes by subscription rather than delivering everywhere and filtering on the client. A client that isn't connected simply doesn't receive it. If a channel has no subscribers, a broadcast to it is silently dropped.
+
+Design with this in mind: treat broadcasts as live nudges to update already-loaded state, and keep the authoritative data in your data layer, so a client that missed a broadcast gets the right state the next time it loads.
+
 ### JavaScript Interop
 
 Hologram lets you call JavaScript from your Elixir client-side code, and vice versa. You can import JS modules, call functions, manipulate objects, dispatch DOM events, and work with async code.
