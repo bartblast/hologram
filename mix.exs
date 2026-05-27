@@ -96,6 +96,7 @@ defmodule Hologram.MixProject do
         "Slack" => "https://elixir-lang.slack.com/channels/hologram",
         "Newsletter" => "https://hologram.page/newsletter",
         "Courses" => "https://hologram.page/courses",
+        "UI" => "https://hologram.page/ui",
         "GitHub" => "https://github.com/bartblast/hologram",
         "Sponsor" => "https://github.com/sponsors/bartblast"
       },
