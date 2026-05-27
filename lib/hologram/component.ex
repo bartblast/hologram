@@ -160,21 +160,21 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Removes the subscription binding for `{channel, server.cid}` from the server
-  struct. The binding is removed from `server.subscriptions` and recorded as
-  `:delete` in `__meta__.subscription_ops`. The framework drains
-  `subscription_ops` after the handler returns successfully to drive the
-  `SubscriptionRegistry`. If the handler raises, the queued mutations are
-  discarded along with the rest of the Server state.
+  Removes the subscription on `channel` for the current handler's component.
 
-  `cid` is taken from `server.cid` - set by the framework at handler entry:
-  `"page"` in a page handler, `"layout"` in a layout handler, or the component's
-  cid in a component handler.
+  The subscription is scoped to the component whose handler is running - the
+  page in a page handler, the layout in a layout handler, or the component in a
+  component handler. Takes effect after the handler returns successfully; if the
+  handler raises, it is discarded along with the rest of the changes.
 
-  Idempotent: deleting a `{channel, cid}` key that is not present in
-  `server.subscriptions` is a no-op on the binding list, but the `:delete` op
-  is still recorded so the framework can flush the deletion to the registry.
+  Idempotent: removing a channel that is not subscribed is a no-op.
   """
+  # Removes the {channel, server.cid} key from server.subscriptions and records
+  # it as :delete in __meta__.subscription_ops; the framework drains
+  # subscription_ops after a successful handler return to drive the
+  # SubscriptionRegistry. The :delete op is recorded even when the key is absent
+  # so the deletion still flushes to the registry. cid comes from server.cid,
+  # set by the framework at handler entry ("page" / "layout" / component cid).
   @spec delete_subscription(Server.t(), atom | tuple) :: Server.t()
   def delete_subscription(server, channel) do
     Channel.validate!(channel)
@@ -262,21 +262,21 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Queues an action broadcast on the server struct. The broadcast is appended to
-  `server.broadcasts` and flushed by the framework after the handler returns
-  successfully. If the handler raises, the queued broadcasts are discarded along
-  with the rest of the Server state.
+  Queues an action broadcast to subscribers of `channel`.
 
-  Delivered to every cid that registered the channel via `put_subscription` on
-  each receiving connection.
+  Sent after the handler returns successfully; if the handler raises, it is
+  discarded along with the rest of the changes. Delivered to every cid that
+  subscribed to the channel via `put_subscription` on each receiving connection.
   """
+  # Appended to server.broadcasts; the framework flushes the queue after a
+  # successful handler return.
   @spec put_broadcast(Server.t(), atom | tuple, atom) :: Server.t()
   def put_broadcast(server, channel, action_name) when is_atom(action_name) do
     append_broadcast(server, channel, action_name, %{})
   end
 
   @doc """
-  Queues an action broadcast on the server struct with the given params.
+  Queues an action broadcast to subscribers of `channel` with the given params.
   See `put_broadcast/3` for delivery semantics.
   """
   @spec put_broadcast(Server.t(), atom | tuple, atom, keyword | map) :: Server.t()
@@ -402,20 +402,21 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Adds a subscription binding for `{channel, server.cid}` to the server struct.
-  The binding is appended to `server.subscriptions` and recorded as `:put` in
-  `__meta__.subscription_ops`. The framework drains `subscription_ops` after the
-  handler returns successfully to drive the `SubscriptionRegistry`. If the
-  handler raises, the queued mutations are discarded along with the rest of the
-  Server state.
+  Subscribes the current handler's component to `channel`.
 
-  `cid` is taken from `server.cid` - set by the framework at handler entry:
-  `"page"` in a page handler, `"layout"` in a layout handler, or the component's
-  cid in a component handler.
+  The subscription is scoped to the component whose handler is running - the
+  page in a page handler, the layout in a layout handler, or the component in a
+  component handler. Once subscribed, the component receives actions broadcast
+  on the channel. Takes effect after the handler returns successfully; if the
+  handler raises, it is discarded along with the rest of the changes.
 
-  Idempotent: putting the same `{channel, cid}` key twice does not duplicate it
-  in `server.subscriptions`.
+  Idempotent: subscribing to the same channel twice does not duplicate it.
   """
+  # Appends the {channel, server.cid} key to server.subscriptions and records it
+  # as :put in __meta__.subscription_ops; the framework drains subscription_ops
+  # after a successful handler return to drive the SubscriptionRegistry. cid
+  # comes from server.cid, set by the framework at handler entry ("page" /
+  # "layout" / component cid).
   @spec put_subscription(Server.t(), atom | tuple) :: Server.t()
   def put_subscription(server, channel) do
     Channel.validate!(channel)

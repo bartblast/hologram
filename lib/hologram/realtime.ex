@@ -15,11 +15,12 @@ defmodule Hologram.Realtime do
   Broadcasts an action to subscribers of the given channel.
 
   Immediate counterpart to `put_broadcast`. Called from outside `Hologram.Page`
-  and `Hologram.Component` handlers (`init/3`, `command/3`) - background jobs,
-  GenServers, controllers, plugs, mix tasks. Fires through Phoenix.PubSub.
-  Silent no-op if no connections are subscribed. Delivered to every cid that
-  registered the channel via `put_subscription` on each receiving connection.
+  and `Hologram.Component` handlers (`init/3`, `command/3`) - e.g. background jobs,
+  GenServers, controllers, plugs, mix tasks. Silent no-op if no connections are
+  subscribed. Delivered to every cid that registered the channel via
+  `put_subscription` on each receiving connection.
   """
+  # Fires through Phoenix.PubSub.
   @spec broadcast_action(atom | tuple, atom, keyword | map) :: :ok
   def broadcast_action(channel, action_name, params \\ %{}) do
     Channel.validate!(channel)
@@ -32,9 +33,11 @@ defmodule Hologram.Realtime do
 
   Like `broadcast_action/3` but takes an `excluded_identities` argument first.
   Pass either a single identity tuple - `{:instance, id}`, `{:session, id}`,
-  or `{:user, id}` - or a list of such tuples. Receiving SSE connections drop
-  the broadcast when any of their own identities match an entry in the list.
+  or `{:user, id}` - or a list of such tuples. A connection matching any listed
+  identity does not receive the broadcast.
   """
+  # Exclusion is enforced receiver-side: each SSE connection drops the broadcast
+  # when any of its own identities matches an entry in excluded_identities.
   @spec broadcast_action_except(tuple | [tuple], atom | tuple, atom, keyword | map) :: :ok
   def broadcast_action_except(excluded, channel, action_name, params \\ %{})
 
@@ -68,11 +71,9 @@ defmodule Hologram.Realtime do
     "hologram:channel:#{parts}"
   end
 
-  @doc """
-  Returns the PubSub topic string for an identity channel.
-
-  `kind` must be one of `:instance`, `:session`, or `:user`.
-  """
+  # Returns the PubSub topic string for an identity channel. `kind` must be one
+  # of `:instance`, `:session`, or `:user`.
+  @doc false
   @spec identity_topic(:instance | :session | :user, term) :: String.t()
   def identity_topic(kind, id) when kind in [:instance, :session, :user] do
     "hologram:channel:#{kind}:#{id}"
@@ -135,15 +136,13 @@ defmodule Hologram.Realtime do
     end)
   end
 
-  @doc """
-  Announces an identity change on the announce topic when the post-handler
-  identity differs from the pre-handler identity.
-
-  Compares `session_id` and `user_id` between `pre` and `post`. If either
-  field differs and `pre.session_id` is not `nil`, broadcasts
-  `{:identity_changed, post.session_id, post.user_id}` on
-  `"hologram:announce:session:<pre.session_id>"`. Returns `:ok` either way.
-  """
+  # Announces an identity change on the session announce topic when the
+  # post-handler identity differs from the pre-handler identity. Compares
+  # `session_id` and `user_id` between `pre` and `post`; if either differs and
+  # `pre.session_id` is not nil, broadcasts `{:identity_changed,
+  # post.session_id, post.user_id}` on
+  # `"hologram:announce:session:<pre.session_id>"`. Returns `:ok` either way.
+  @doc false
   @spec maybe_announce_identity_change(Server.t(), Server.t()) :: :ok
   def maybe_announce_identity_change(%Server{} = pre, %Server{} = post) do
     identity_changed? = pre.session_id != post.session_id or pre.user_id != post.user_id
@@ -175,33 +174,28 @@ defmodule Hologram.Realtime do
   end
 
   @doc """
-  Subscribes the connections matching `identity` to a `{channel, cid}` binding.
+  Subscribes the connections identified by `identity` to a `{channel, cid}`
+  binding.
 
-  Validates the channel via `Channel.validate!/1`, resolves the identity tuple
-  to live SSE processes through `SubscriptionRegistry.resolve_identity/1`, and
-  for each matched connection:
+  `identity` is `{:instance, id}`, `{:session, id}`, or `{:user, id}`. Every
+  live connection matching the identity begins receiving broadcasts on `channel`
+  for the given `cid`. An explicit subscribe is a re-grant that supersedes any
+  prior `unsubscribe`/`unsubscribe_all` for the same identity and channel.
 
-    * registers the binding via `SubscriptionRegistry.apply_deltas/4` (which
-      emits a `{:sub, channel}` self-message to the SSE process on a
-      zero-crossing channel),
-
-    * signs a fresh receipt under the entry's current `user_id` (so the
-      authorization stamp tracks the connection's identity at issue time,
-      consistent with the elevation rule), and
-
-    * sends `{:add_sub_receipts, [{channel, cid, token}]}` to the SSE process
-      for client-side merge.
-
-  Then gossips a cluster-wide tombstone auto-purge for both the binding-level
-  key `{identity, channel, cid}` and the channel-wide key `{identity, channel}`:
-  an explicit subscribe is a re-grant that supersedes any prior revocation. This
-  purge fires regardless of whether any connection matched.
-
-  When `identity` resolves to no live connection, no receipt is signed, no
-  binding is registered, and no future state is established - the tombstone
-  auto-purge above is the only effect. Returns `:ok`. Raises `ArgumentError` on
-  an invalid channel.
+  When `identity` resolves to no live connection, the call has no effect on
+  delivery. Returns `:ok`. Raises `ArgumentError` on an invalid channel.
   """
+  # For each live connection the identity resolves to (via
+  # SubscriptionRegistry.resolve_identity/1): registers the binding through
+  # SubscriptionRegistry.apply_deltas/4 (which emits a {:sub, channel}
+  # self-message to the SSE process on a zero-crossing channel), signs a fresh
+  # receipt under the connection's current user_id (so the authorization stamp
+  # tracks identity at issue time, per the elevation rule), and sends
+  # {:add_sub_receipts, [{channel, cid, token}]} to the SSE process for
+  # client-side merge. Then gossips a cluster-wide tombstone auto-purge for both
+  # the binding-level key {identity, channel, cid} and the channel-wide key
+  # {identity, channel} - the re-grant supersedes any prior revocation. The
+  # purge fires regardless of whether any connection matched.
   @spec subscribe(
           {:instance, String.t()} | {:session, term} | {:user, term},
           atom | tuple,
