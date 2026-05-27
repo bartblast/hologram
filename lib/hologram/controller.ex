@@ -203,7 +203,8 @@ defmodule Hologram.Controller do
     Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
 
     # Snapshot self-echoes before flush_broadcasts/1 clears the queue.
-    self_echoes = Realtime.get_self_echoes(processed_server_struct)
+    self_echoes =
+      Realtime.get_self_echoes(processed_server_struct, processed_server_struct.subscriptions)
 
     flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
@@ -299,7 +300,8 @@ defmodule Hologram.Controller do
     # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
     # this Realtime-domain computation lives in the controller; substituting
     # back into HTML here keeps the renderer Realtime-agnostic.
-    self_echoes = Realtime.get_self_echoes(rendered_server_struct)
+    self_echoes =
+      Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
 
     flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
 

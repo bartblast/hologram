@@ -120,8 +120,8 @@ defmodule Hologram.Realtime do
   # `except` list does not cover any of the originator's identities. Caller
   # must invoke this BEFORE `flush_broadcasts/1` clears the broadcasts queue.
   @doc false
-  @spec get_self_echoes(Server.t()) :: [Action.t()]
-  def get_self_echoes(%Server{broadcasts: broadcasts, subscriptions: subscriptions} = server) do
+  @spec get_self_echoes(Server.t(), [tuple]) :: [Action.t()]
+  def get_self_echoes(%Server{broadcasts: broadcasts} = server, subscriptions) do
     own_identities = identity_channels_for(server)
 
     broadcasts

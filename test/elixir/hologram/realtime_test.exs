@@ -255,11 +255,11 @@ defmodule Hologram.RealtimeTest do
     end
   end
 
-  describe "get_self_echoes/1" do
+  describe "get_self_echoes/2" do
     test "returns [] when broadcasts list is empty" do
       server = %Server{instance_id: "originator", broadcasts: []}
 
-      assert get_self_echoes(server) == []
+      assert get_self_echoes(server, server.subscriptions) == []
     end
 
     test "emits one Action per matching binding for a broadcast on a subscribed channel" do
@@ -271,7 +271,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == [
+      assert get_self_echoes(server, server.subscriptions) == [
                %Action{name: :append, params: %{text: "hi"}, target: "msgs"},
                %Action{name: :append, params: %{text: "hi"}, target: "sidebar"}
              ]
@@ -286,7 +286,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == []
+      assert get_self_echoes(server, server.subscriptions) == []
     end
 
     test "emits no Action for an identity-channel broadcast without an explicit subscription" do
@@ -302,7 +302,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == []
+      assert get_self_echoes(server, server.subscriptions) == []
     end
 
     test "emits a self-echo when an identity channel was explicitly subscribed" do
@@ -316,7 +316,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == [
+      assert get_self_echoes(server, server.subscriptions) == [
                %Action{name: :ping, params: %{}, target: "layout"}
              ]
     end
@@ -335,7 +335,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == []
+      assert get_self_echoes(server, server.subscriptions) == []
     end
 
     test "excludes a subscribed broadcast when except covers the originator session" do
@@ -353,7 +353,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == []
+      assert get_self_echoes(server, server.subscriptions) == []
     end
 
     test "excludes a subscribed broadcast when except covers the originator user" do
@@ -372,7 +372,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == []
+      assert get_self_echoes(server, server.subscriptions) == []
     end
 
     test "includes a subscribed broadcast when except covers a non-originator identity only" do
@@ -389,13 +389,13 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == [
+      assert get_self_echoes(server, server.subscriptions) == [
                %Action{name: :append, params: %{text: "hi"}, target: "msgs"}
              ]
     end
 
     test "preserves call order across multiple self-echoed broadcasts" do
-      # The broadcasts list is LIFO: head is the most recent call. get_self_echoes/1
+      # The broadcasts list is LIFO: head is the most recent call. get_self_echoes/2
       # walks it in reverse so the returned list matches call order.
       server = %Server{
         instance_id: "originator",
@@ -406,7 +406,7 @@ defmodule Hologram.RealtimeTest do
         ]
       }
 
-      assert get_self_echoes(server) == [
+      assert get_self_echoes(server, server.subscriptions) == [
                %Action{name: :first, params: %{}, target: "msgs"},
                %Action{name: :second, params: %{}, target: "msgs"}
              ]
