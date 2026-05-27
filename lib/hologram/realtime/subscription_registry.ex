@@ -299,10 +299,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
           :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
 
-          prior_channels =
-            MapSet.new(prior_bindings, fn {{channel, _cid}, _user_id} -> channel end)
-
-          new_channels = MapSet.new(new_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+          prior_channels = channels_of(prior_bindings)
+          new_channels = channels_of(new_bindings)
 
           new_channels
           |> MapSet.difference(prior_channels)
@@ -352,8 +350,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
     validated_channels =
       bindings
-      |> Enum.map(fn {{channel, _cid}, _user_id} -> channel end)
-      |> Enum.uniq()
+      |> channels_of()
+      |> MapSet.to_list()
 
     {:reply, validated_channels, Map.put(refs_without_prior, sse_ref, instance_id)}
   end
@@ -376,11 +374,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
           :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
 
-          prior_channels =
-            MapSet.new(prior_bindings, fn {{channel, _cid}, _user_id} -> channel end)
-
-          new_channels =
-            MapSet.new(new_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+          prior_channels = channels_of(prior_bindings)
+          new_channels = channels_of(new_bindings)
 
           zero_crossing_channels =
             prior_channels
@@ -408,11 +403,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
 
           :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings}})
 
-          prior_channels =
-            MapSet.new(prior_bindings, fn {{channel, _cid}, _user_id} -> channel end)
-
-          new_channels =
-            MapSet.new(new_bindings, fn {{channel, _cid}, _user_id} -> channel end)
+          prior_channels = channels_of(prior_bindings)
+          new_channels = channels_of(new_bindings)
 
           zero_crossing_channels =
             prior_channels
@@ -469,10 +461,8 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         new_bindings_map = Map.new(new_sub_keys, fn key -> {key, authorizing_user_id} end)
         :ets.insert(@table_name, {instance_id, %{entry | bindings: new_bindings_map}})
 
-        prior_channels =
-          MapSet.new(entry.bindings, fn {{channel, _cid}, _user_id} -> channel end)
-
-        new_channels = MapSet.new(new_sub_keys, fn {channel, _cid} -> channel end)
+        prior_channels = channels_of(entry.bindings)
+        new_channels = channels_of(new_bindings_map)
 
         new_channels
         |> MapSet.difference(prior_channels)
@@ -513,6 +503,10 @@ defmodule Hologram.Realtime.SubscriptionRegistry do
         :ets.delete(@table_name, instance_id)
         {:noreply, new_refs}
     end
+  end
+
+  defp channels_of(bindings) do
+    MapSet.new(bindings, fn {{channel, _cid}, _user_id} -> channel end)
   end
 
   defp resolve_by_field(field, value) do
