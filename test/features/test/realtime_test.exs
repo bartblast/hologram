@@ -8,6 +8,10 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page11
   alias HologramFeatureTests.Realtime.Page12
   alias HologramFeatureTests.Realtime.Page13
+  alias HologramFeatureTests.Realtime.Page14
+  alias HologramFeatureTests.Realtime.Page15
+  alias HologramFeatureTests.Realtime.Page16
+  alias HologramFeatureTests.Realtime.Page17
   alias HologramFeatureTests.Realtime.Page2
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
@@ -698,6 +702,50 @@ defmodule HologramFeatureTests.RealtimeTest do
 
       Realtime.broadcast_action(@channel_1, :show, message: "delivered after logout")
       assert_text(session, css("#received"), "delivered after logout")
+    end
+  end
+
+  describe "server struct fields at handler entry" do
+    feature "broadcasts and subscriptions are empty at the start of a page's init/3", %{
+      session: session
+    } do
+      session
+      |> visit(Page14)
+      |> assert_text(css("#broadcasts-page"), "[]")
+      |> assert_text(css("#subscriptions-page"), "[]")
+    end
+
+    feature "broadcasts and subscriptions are empty at the start of a component's init/3", %{
+      session: session
+    } do
+      session
+      |> visit(Page16)
+      |> assert_text(css("#broadcasts-component"), "[]")
+      |> assert_text(css("#subscriptions-component"), "[]")
+    end
+
+    feature "broadcasts is empty and subscriptions holds the page's bindings at the start of a page's command/3",
+            %{session: session} do
+      session
+      |> visit(Page15)
+      # The init subscription must be registered before the command reads it.
+      |> wait_for_subscription({:room, 15})
+      |> click(button("Report"))
+      |> assert_text(css("#broadcasts-page"), "[]")
+      |> assert_text(css("#subscriptions-page"), ~s([{{:room, 15}, "page"}]))
+    end
+
+    feature "broadcasts is empty and subscriptions holds only the component's own bindings at the start of a component's command/3",
+            %{session: session} do
+      session
+      |> visit(Page17)
+      # Both the page's and the component's subscriptions must be registered before
+      # the command, so a scoping regression would surface the page's binding too.      
+      |> wait_for_subscription({:room, 17})
+      |> wait_for_subscription({:room, 18})
+      |> click(button("Report"))
+      |> assert_text(css("#broadcasts-component"), "[]")
+      |> assert_text(css("#subscriptions-component"), ~s([{{:room, 18}, "component_5"}]))
     end
   end
 end
