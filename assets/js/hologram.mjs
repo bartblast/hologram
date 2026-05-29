@@ -30,6 +30,7 @@ import ChangeEvent from "./events/change_event.mjs";
 import ClickEvent from "./events/click_event.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import InputEvent from "./events/input_event.mjs";
+import KeyboardEvent from "./events/keyboard_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
 import SelectEvent from "./events/select_event.mjs";
@@ -639,6 +640,10 @@ export default class Hologram {
 
       case "input":
         return InputEvent;
+
+      case "keydown":
+      case "keyup":
+        return KeyboardEvent;
 
       case "mousemove":
         return MouseEvent;
