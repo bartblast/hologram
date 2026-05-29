@@ -219,7 +219,9 @@ export default class Hologram {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
     if (!eventImpl.isEventIgnored(event)) {
-      event.preventDefault();
+      if (!eventImpl.isDefaultAllowed) {
+        event.preventDefault();
+      }
 
       const eventParam = eventImpl.buildOperationParam(event);
 

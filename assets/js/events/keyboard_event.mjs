@@ -3,6 +3,10 @@
 import Type from "../type.mjs";
 
 export default class KeyboardEvent {
+  // Allow the browser's default action (typing, caret movement, etc.); an
+  // automatic preventDefault would block keyboard input.
+  static isDefaultAllowed = true;
+
   static buildOperationParam(event) {
     return Type.map([
       [Type.atom("alt_key"), Type.boolean(event.altKey)],
