@@ -12,6 +12,15 @@ defmodule Hologram.Runtime.Deserializer do
     # client-side ERTS node name
     :hologram_client,
 
+    # keyboard event
+    :alt_key,
+    :code,
+    :ctrl_key,
+    :key,
+    :meta_key,
+    :repeat,
+    :shift_key,
+
     # mouse event, mouse move event, pointer event
     :page_x,
     :page_y,
