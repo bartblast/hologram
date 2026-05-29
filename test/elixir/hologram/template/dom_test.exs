@@ -571,6 +571,94 @@ defmodule Hologram.Template.DOMTest do
     end)
   end
 
+  describe "build_ast/1, element event attribute with modifiers" do
+    test "no modifier stays a 2-tuple" do
+      # <div $key_down="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "div", [{"$key_down", [text: "my_value"]}], []]}
+             ]
+    end
+
+    test "single modifier" do
+      # <div $key_down.enter="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down.enter", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], ["enter"]]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "combined modifier segment is not split on +" do
+      # <div $key_down.ctrl+k="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down.ctrl+k", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], ["ctrl+k"]]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "multiple modifier segments" do
+      # <div $key_down.ctrl+k.mod_2="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down.ctrl+k.mod_2", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {:{}, [line: 1], ["$key_down", [text: "my_value"], ["ctrl+k", "mod_2"]]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "component $-attribute is not decomposed" do
+      # <Aaa.Bbb $key_down.enter="my_value"></Aaa.Bbb>
+      tags = [
+        {:start_tag, {"Aaa.Bbb", [{"$key_down.enter", [text: "my_value"]}]}},
+        {:end_tag, "Aaa.Bbb"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}]},
+                  [{"$key_down.enter", [text: "my_value"]}],
+                  []
+                ]}
+             ]
+    end
+  end
+
   describe "build_ast/1, expression node" do
     test "in text" do
       tags = [{:text, "abc"}, {:expression, "{1 + 2}"}, {:text, "xyz"}]

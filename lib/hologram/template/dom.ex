@@ -63,10 +63,38 @@ defmodule Hologram.Template.DOM do
     code_acc <> code
   end
 
+  # Splits a "$"-prefixed event attribute name on "." into the bare name and its
+  # raw modifier segments. Names without "$" (or without ".") carry no modifiers.
+  defp decompose_event_attribute_name("$" <> _rest = name) do
+    case String.split(name, ".") do
+      [base_name] -> {base_name, []}
+      [base_name | modifiers] -> {base_name, modifiers}
+    end
+  end
+
+  defp decompose_event_attribute_name(name), do: {name, []}
+
   defp extract_expression_content(expr_str) do
     expr_str
     |> String.slice(1, String.length(expr_str) - 2)
     |> String.trim()
+  end
+
+  defp render_attribute_code({name, value_parts}, :element) do
+    value_code = Enum.map_join(value_parts, ", ", &render_code/1)
+
+    case decompose_event_attribute_name(name) do
+      {base_name, []} ->
+        "{\"#{base_name}\", [#{value_code}]}"
+
+      {base_name, modifiers} ->
+        modifiers_code = Enum.map_join(modifiers, ", ", &"\"#{&1}\"")
+        "{\"#{base_name}\", [#{value_code}], [#{modifiers_code}]}"
+    end
+  end
+
+  defp render_attribute_code({name, value_parts}, _tag_type) do
+    "{\"#{name}\", [" <> Enum.map_join(value_parts, ", ", &render_code/1) <> "]}"
   end
 
   defp render_code({:block_start, "else"}) do
@@ -148,9 +176,7 @@ defmodule Hologram.Template.DOM do
       end
 
     attributes_code =
-      Enum.map_join(attributes, ", ", fn {name, value_parts} ->
-        "{\"#{name}\", [" <> Enum.map_join(value_parts, ", ", &render_code/1) <> "]}"
-      end)
+      Enum.map_join(attributes, ", ", &render_attribute_code(&1, tag_type))
 
     "{:#{tag_type}, #{tag_name_code}, [#{attributes_code}], ["
   end
