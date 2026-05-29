@@ -3,6 +3,8 @@
 import Type from "../type.mjs";
 
 export default class SelectEvent {
+  static isDefaultAllowed = false;
+
   static buildOperationParam(event) {
     const value = event.target.value.substring(
       event.target.selectionStart,

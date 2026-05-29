@@ -670,6 +670,51 @@ describe("Hologram", () => {
         expectedCommand,
       );
     });
+
+    it("does not prevent default when isDefaultAllowed is true", () => {
+      // KeyboardEvent.isDefaultAllowed is true
+      const preventDefault = sinon.spy();
+
+      const keyboardEvent = {
+        altKey: false,
+        code: "Enter",
+        ctrlKey: false,
+        key: "Enter",
+        metaKey: false,
+        repeat: false,
+        shiftKey: false,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      Hologram.handleUiEvent(
+        keyboardEvent,
+        "keydown",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      sinon.assert.notCalled(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("prevents default when isDefaultAllowed is false", () => {
+      // SubmitEvent.isDefaultAllowed is false - a native form submit must always be prevented
+      const preventDefault = sinon.spy();
+      const submitEvent = {
+        target: document.createElement("form"),
+        preventDefault,
+      };
+
+      Hologram.handleUiEvent(
+        submitEvent,
+        "submit",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      sinon.assert.calledOnce(preventDefault);
+    });
   });
 
   describe("handlePrefetchPageSuccess()", () => {

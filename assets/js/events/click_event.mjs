@@ -3,6 +3,8 @@
 import PointerEvent from "./pointer_event.mjs";
 
 export default class ClickEvent {
+  static isDefaultAllowed = false;
+
   static buildOperationParam(event) {
     return PointerEvent.buildOperationParam(event);
   }
