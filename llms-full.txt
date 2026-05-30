@@ -1302,9 +1302,9 @@ The delay can be specified in several ways:
 
 Common use cases include:
 
+- Polling for updates at regular intervals
 - Creating smooth animations by scheduling the next frame
 - Implementing auto-hide notifications
-- Debouncing user interactions
 - Creating timed game mechanics
 
 Note: The delay parameter is only available for actions, not commands.
