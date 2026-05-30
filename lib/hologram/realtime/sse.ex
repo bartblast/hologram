@@ -1,6 +1,8 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
+  require Logger
+
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Realtime
@@ -8,8 +10,6 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
-
-  require Logger
 
   @heartbeat_interval_ms 15_000
   @max_heap_size_words 1_000_000
