@@ -38,7 +38,6 @@ Website: https://hologram.page
 
 * [@absowoot](https://github.com/absowoot)
 * Oban, [@oban-bg](https://github.com/oban-bg)
-* Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 * Robert Urbańczyk, [@robertu](https://github.com/robertu)
 * Moss Piglet, [@moss-piglet](https://github.com/moss-piglet)
 
