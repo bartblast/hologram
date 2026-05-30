@@ -9,6 +9,8 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.Session
 
+  require Logger
+
   @heartbeat_interval_ms 15_000
   @max_heap_size_words 1_000_000
   @receipts_refresh_interval_ms 12 * 60 * 60 * 1000
@@ -238,7 +240,7 @@ defmodule Hologram.Realtime.SSE do
         |> attach_validated_subscriptions(validated_bindings)
         |> subscribe_to_announce_topics()
         |> prepare()
-        |> message_pump(session_id, user_id, message_pump_opts)
+        |> stream_until_closed(session_id, user_id, message_pump_opts)
 
       :error ->
         reject_4xx(conn, "Handshake redemption failed")
@@ -524,5 +526,33 @@ defmodule Hologram.Realtime.SSE do
 
   defp schedule_receipts_refresh(interval_ms) do
     Process.send_after(self(), :refresh_receipts, interval_ms)
+  end
+
+  # Runs the message pump until the stream closes. A write to a transport the
+  # client has already dropped is returned as {:error, _reason} by some servers and
+  # raised as a transport error by others, such as Bandit over HTTP/2. The pump
+  # only guards the returned tuple, so without this rescue the raised variant
+  # escapes a committed chunked response into the endpoint's RenderErrors, which
+  # cannot render an already-sent conn and re-raises as Plug.Conn.AlreadySentError.
+  # Catching it here closes the stream the same way the {:error, _reason} branch does.
+  #
+  # TODO: The :error log below is temporary. I believe every exception that
+  # reaches this rescue is a benign client disconnect (the raised counterpart of
+  # the {:error, :closed} return), but that is an inference, not an observation -
+  # the real exception was masked as Plug.Conn.AlreadySentError and has never
+  # been seen. Logging at :error surfaces it in Sentry for one confirm window.
+  # Next step: once it is confirmed to be a benign transport close, remove the
+  # log and close silently, matching the no-log {:error, :closed} branch above.
+  # If it turns out to be anything else, that is a real bug to fix rather than a
+  # disconnect to swallow.
+  defp stream_until_closed(conn, session_id, user_id, opts) do
+    message_pump(conn, session_id, user_id, opts)
+  rescue
+    exception ->
+      Logger.error("Hologram SSE stream closed by a write error",
+        crash_reason: {exception, __STACKTRACE__}
+      )
+
+      conn
   end
 end

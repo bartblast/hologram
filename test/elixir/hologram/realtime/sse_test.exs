@@ -1,6 +1,7 @@
 defmodule Hologram.Realtime.SSETest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Realtime.SSE
 
   alias Hologram.Compiler.Encoder
@@ -1181,6 +1182,29 @@ defmodule Hologram.Realtime.SSETest do
       Process.sleep(50)
 
       refute Process.alive?(pid)
+    end
+
+    test "exits cleanly when the message pump raises" do
+      conn = conn_with_instance_id()
+
+      {pid, ref} = spawn_monitor(fn -> stream(conn) end)
+      Process.sleep(50)
+
+      log =
+        capture_log(fn ->
+          # An unencodable payload (an anonymous function) forces a raise inside
+          # the pump, standing in for a transport write that raises rather than
+          # returning {:error, :closed}. The process must still exit :normal -
+          # without the rescue it would crash and the exception would escape the
+          # committed chunked response into the endpoint's RenderErrors.
+          send(pid, {:add_sub_receipts, [fn -> :ok end]})
+          assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+        end)
+
+      # TODO: Confirm-window assertion. When the :error log in
+      # stream_until_closed/4 is removed (see its TODO), replace this with an
+      # assertion that the rescue closes the stream silently.
+      assert log =~ "Hologram SSE stream closed by a write error"
     end
 
     test "configures the SSE process's max_heap_size flag" do
