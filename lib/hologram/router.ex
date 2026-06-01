@@ -17,6 +17,7 @@ defmodule Hologram.Router do
   # including the page module resolver and asset registries that the routes
   # below depend on - is not started. Pass the connection straight through to
   # the next plug instead of attempting to serve a Hologram route and crashing.
+  @doc false
   @spec call(Plug.Conn.t(), Plug.opts()) :: Plug.Conn.t()
   def call(conn, opts) do
     if Hologram.enabled?() do
