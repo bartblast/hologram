@@ -239,7 +239,6 @@ defmodule Hologram.Realtime.SSE do
         conn
         |> attach_validated_subscriptions(validated_bindings)
         |> subscribe_to_announce_topics()
-        |> prepare()
         |> stream_until_closed(session_id, user_id, message_pump_opts)
 
       :error ->
@@ -528,16 +527,21 @@ defmodule Hologram.Realtime.SSE do
     Process.send_after(self(), :refresh_receipts, interval_ms)
   end
 
-  # Runs the message pump until the stream closes. A write to a transport the
-  # client has already dropped is returned as {:error, _reason} by some servers
-  # and surfaces as a raised exception or an exit by others, such as Bandit. The
-  # pump only guards the returned tuple, so without this catch the non-tuple
-  # variants escape a committed chunked response into the endpoint's RenderErrors.
-  # RenderErrors wraps the plug in a catch for every kind - error, exit and throw
-  # alike - so any of them reaches put_view, which cannot render an already-sent
-  # conn and re-raises as Plug.Conn.AlreadySentError, masking the original cause.
-  # Catching every kind here closes the stream the same way the {:error, _reason}
-  # branch does, before it can escape. A plain rescue would miss the exit variant.
+  # Opens the chunked response and runs the message pump until the stream closes.
+  # Both writes here can hit a connection the client has already dropped: the
+  # send_chunked/2 header write in prepare/1 commits the response, and every chunk
+  # the pump writes afterward streams over the same socket. The pump guards its
+  # own {:error, _reason} returns, but send_chunked/2 has no such return - it only
+  # raises - and on some servers, such as Bandit, a dropped write surfaces as a
+  # raised exception or an exit either way.
+  #
+  # When send_chunked/2 raises, it never delivers the {:plug_conn, :sent} message,
+  # so the endpoint's RenderErrors finds no sent marker, tries to render an error
+  # page on a conn already in a chunked state, and re-raises as
+  # Plug.Conn.AlreadySentError, masking the original cause. Wrapping prepare/1 and
+  # the pump together and catching every kind ends the request quietly instead.
+  # The returned conn is marked :sent so nothing downstream attempts another write
+  # to the dead socket. A plain rescue would miss the exit variant.
   #
   # TODO: The :error log below is temporary. I believe every cause that reaches
   # this catch is a benign client disconnect (the non-tuple counterpart of the
@@ -549,13 +553,15 @@ defmodule Hologram.Realtime.SSE do
   # to be anything else, that is a real bug to fix rather than a disconnect to
   # swallow.
   defp stream_until_closed(conn, session_id, user_id, opts) do
-    message_pump(conn, session_id, user_id, opts)
+    conn
+    |> prepare()
+    |> message_pump(session_id, user_id, opts)
   catch
     kind, reason ->
       Logger.error("Hologram SSE stream closed by a write error",
         crash_reason: {Exception.normalize(kind, reason, __STACKTRACE__), __STACKTRACE__}
       )
 
-      conn
+      %{conn | state: :sent}
   end
 end
