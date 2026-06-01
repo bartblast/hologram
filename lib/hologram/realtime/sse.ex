@@ -529,28 +529,31 @@ defmodule Hologram.Realtime.SSE do
   end
 
   # Runs the message pump until the stream closes. A write to a transport the
-  # client has already dropped is returned as {:error, _reason} by some servers and
-  # raised as a transport error by others, such as Bandit over HTTP/2. The pump
-  # only guards the returned tuple, so without this rescue the raised variant
-  # escapes a committed chunked response into the endpoint's RenderErrors, which
-  # cannot render an already-sent conn and re-raises as Plug.Conn.AlreadySentError.
-  # Catching it here closes the stream the same way the {:error, _reason} branch does.
+  # client has already dropped is returned as {:error, _reason} by some servers
+  # and surfaces as a raised exception or an exit by others, such as Bandit. The
+  # pump only guards the returned tuple, so without this catch the non-tuple
+  # variants escape a committed chunked response into the endpoint's RenderErrors.
+  # RenderErrors wraps the plug in a catch for every kind - error, exit and throw
+  # alike - so any of them reaches put_view, which cannot render an already-sent
+  # conn and re-raises as Plug.Conn.AlreadySentError, masking the original cause.
+  # Catching every kind here closes the stream the same way the {:error, _reason}
+  # branch does, before it can escape. A plain rescue would miss the exit variant.
   #
-  # TODO: The :error log below is temporary. I believe every exception that
-  # reaches this rescue is a benign client disconnect (the raised counterpart of
-  # the {:error, :closed} return), but that is an inference, not an observation -
-  # the real exception was masked as Plug.Conn.AlreadySentError and has never
-  # been seen. Logging at :error surfaces it in Sentry for one confirm window.
-  # Next step: once it is confirmed to be a benign transport close, remove the
-  # log and close silently, matching the no-log {:error, :closed} branch above.
-  # If it turns out to be anything else, that is a real bug to fix rather than a
-  # disconnect to swallow.
+  # TODO: The :error log below is temporary. I believe every cause that reaches
+  # this catch is a benign client disconnect (the non-tuple counterpart of the
+  # {:error, :closed} return), but that is an inference, not an observation - the
+  # real cause was masked as Plug.Conn.AlreadySentError and has never been seen.
+  # Logging at :error surfaces it in Sentry for one confirm window. Next step:
+  # once it is confirmed to be a benign transport close, remove the log and close
+  # silently, matching the no-log {:error, :closed} branch above. If it turns out
+  # to be anything else, that is a real bug to fix rather than a disconnect to
+  # swallow.
   defp stream_until_closed(conn, session_id, user_id, opts) do
     message_pump(conn, session_id, user_id, opts)
-  rescue
-    exception ->
+  catch
+    kind, reason ->
       Logger.error("Hologram SSE stream closed by a write error",
-        crash_reason: {exception, __STACKTRACE__}
+        crash_reason: {Exception.normalize(kind, reason, __STACKTRACE__), __STACKTRACE__}
       )
 
       conn

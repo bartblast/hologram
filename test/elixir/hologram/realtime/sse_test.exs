@@ -1193,17 +1193,19 @@ defmodule Hologram.Realtime.SSETest do
       log =
         capture_log(fn ->
           # An unencodable payload (an anonymous function) forces a raise inside
-          # the pump, standing in for a transport write that raises rather than
-          # returning {:error, :closed}. The process must still exit :normal -
-          # without the rescue it would crash and the exception would escape the
-          # committed chunked response into the endpoint's RenderErrors.
+          # the pump, standing in for a transport write that does not return
+          # {:error, :closed} but fails instead. stream_until_closed/4 catches
+          # every kind, so the exit variant of the same disconnect is covered too.
+          # The process must still exit :normal - without that catch it would
+          # crash and the failure would escape the committed chunked response
+          # into the endpoint's RenderErrors.
           send(pid, {:add_sub_receipts, [fn -> :ok end]})
           assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
         end)
 
       # TODO: Confirm-window assertion. When the :error log in
       # stream_until_closed/4 is removed (see its TODO), replace this with an
-      # assertion that the rescue closes the stream silently.
+      # assertion that the catch closes the stream silently.
       assert log =~ "Hologram SSE stream closed by a write error"
     end
 
