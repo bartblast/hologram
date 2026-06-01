@@ -34,7 +34,9 @@ defmodule Hologram.Router do
         |> halt()
 
       _session_id ->
-        SSE.stream(conn)
+        conn
+        |> SSE.stream()
+        |> halt()
     end
   end
 
