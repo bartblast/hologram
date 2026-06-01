@@ -1,7 +1,6 @@
 defmodule Hologram.Realtime.SSETest do
   use Hologram.Test.BasicCase, async: false
 
-  import ExUnit.CaptureLog
   import Hologram.Realtime.SSE
 
   alias Hologram.Compiler.Encoder
@@ -1182,52 +1181,6 @@ defmodule Hologram.Realtime.SSETest do
       Process.sleep(50)
 
       refute Process.alive?(pid)
-    end
-
-    test "exits cleanly when the message pump raises" do
-      conn = conn_with_instance_id()
-
-      {pid, ref} = spawn_monitor(fn -> stream(conn) end)
-      Process.sleep(50)
-
-      log =
-        capture_log(fn ->
-          # An unencodable payload (an anonymous function) forces a raise inside
-          # the pump, standing in for a transport write that does not return
-          # {:error, :closed} but fails instead. stream_until_closed/4 catches
-          # every kind, so the exit variant of the same disconnect is covered too.
-          # The process must still exit :normal - without that catch it would
-          # crash and the failure would escape the committed chunked response
-          # into the endpoint's RenderErrors.
-          send(pid, {:add_sub_receipts, [fn -> :ok end]})
-          assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
-        end)
-
-      # TODO: Confirm-window assertion. When the :error log in
-      # stream_until_closed/4 is removed (see its TODO), replace this with an
-      # assertion that the catch closes the stream silently.
-      assert log =~ "Hologram SSE stream closed by a write error"
-    end
-
-    test "exits cleanly when the response commit raises" do
-      # A write to a connection the client has already dropped raises rather than
-      # returning {:error, _reason}. Forcing the conn into a committed state makes
-      # the first write in prepare/1 raise the same way, standing in for a
-      # send_chunked/2 header write that fails on a dead socket. Without prepare/1
-      # inside the catch, that raise would escape the committed stream into the
-      # endpoint's RenderErrors. The catch closes it and marks the conn :sent so
-      # nothing downstream writes to the dead socket again.
-      conn = %{conn_with_instance_id() | state: :chunked}
-
-      log =
-        capture_log(fn ->
-          assert %Plug.Conn{state: :sent} = stream(conn)
-        end)
-
-      # TODO: Confirm-window assertion - see the matching TODO in
-      # stream_until_closed/4 and in the pump-raises test above. When the :error
-      # log is removed, this asserts the commit closes silently instead.
-      assert log =~ "Hologram SSE stream closed by a write error"
     end
 
     test "configures the SSE process's max_heap_size flag" do

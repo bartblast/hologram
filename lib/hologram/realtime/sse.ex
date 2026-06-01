@@ -1,8 +1,6 @@
 defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
-  require Logger
-
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Realtime
@@ -239,7 +237,8 @@ defmodule Hologram.Realtime.SSE do
         conn
         |> attach_validated_subscriptions(validated_bindings)
         |> subscribe_to_announce_topics()
-        |> stream_until_closed(session_id, user_id, message_pump_opts)
+        |> prepare()
+        |> message_pump(session_id, user_id, message_pump_opts)
 
       :error ->
         reject_4xx(conn, "Handshake redemption failed")
@@ -525,43 +524,5 @@ defmodule Hologram.Realtime.SSE do
 
   defp schedule_receipts_refresh(interval_ms) do
     Process.send_after(self(), :refresh_receipts, interval_ms)
-  end
-
-  # Opens the chunked response and runs the message pump until the stream closes.
-  # Both writes here can hit a connection the client has already dropped: the
-  # send_chunked/2 header write in prepare/1 commits the response, and every chunk
-  # the pump writes afterward streams over the same socket. The pump guards its
-  # own {:error, _reason} returns, but send_chunked/2 has no such return - it only
-  # raises - and on some servers, such as Bandit, a dropped write surfaces as a
-  # raised exception or an exit either way.
-  #
-  # When send_chunked/2 raises, it never delivers the {:plug_conn, :sent} message,
-  # so the endpoint's RenderErrors finds no sent marker, tries to render an error
-  # page on a conn already in a chunked state, and re-raises as
-  # Plug.Conn.AlreadySentError, masking the original cause. Wrapping prepare/1 and
-  # the pump together and catching every kind ends the request quietly instead.
-  # The returned conn is marked :sent so nothing downstream attempts another write
-  # to the dead socket. A plain rescue would miss the exit variant.
-  #
-  # TODO: The :error log below is temporary. I believe every cause that reaches
-  # this catch is a benign client disconnect (the non-tuple counterpart of the
-  # {:error, :closed} return), but that is an inference, not an observation - the
-  # real cause was masked as Plug.Conn.AlreadySentError and has never been seen.
-  # Logging at :error surfaces it in Sentry for one confirm window. Next step:
-  # once it is confirmed to be a benign transport close, remove the log and close
-  # silently, matching the no-log {:error, :closed} branch above. If it turns out
-  # to be anything else, that is a real bug to fix rather than a disconnect to
-  # swallow.
-  defp stream_until_closed(conn, session_id, user_id, opts) do
-    conn
-    |> prepare()
-    |> message_pump(session_id, user_id, opts)
-  catch
-    kind, reason ->
-      Logger.error("Hologram SSE stream closed by a write error",
-        crash_reason: {Exception.normalize(kind, reason, __STACKTRACE__), __STACKTRACE__}
-      )
-
-      %{conn | state: :sent}
   end
 end
