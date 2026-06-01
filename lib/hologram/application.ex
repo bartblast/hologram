@@ -13,7 +13,7 @@ defmodule Hologram.Application do
   end
 
   defp children(:dev) do
-    if start_children?() do
+    if Hologram.enabled?() do
       # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
       base_children() ++ [Hologram.LiveReload]
     else
@@ -22,7 +22,7 @@ defmodule Hologram.Application do
   end
 
   defp children(_env) do
-    if start_children?() do
+    if Hologram.enabled?() do
       base_children()
     else
       []
@@ -40,9 +40,5 @@ defmodule Hologram.Application do
       Hologram.Realtime.SubscriptionRegistry,
       Hologram.Realtime.Tombstone
     ]
-  end
-
-  defp start_children? do
-    Hologram.env() not in [:dev, :test] or System.get_env("HOLOGRAM_START") == "1"
   end
 end

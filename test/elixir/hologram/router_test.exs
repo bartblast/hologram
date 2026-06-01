@@ -1,6 +1,7 @@
 defmodule Hologram.RouterTest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Router
   import Hologram.Test.Stubs
   import Mox
@@ -20,6 +21,17 @@ defmodule Hologram.RouterTest do
   setup :set_mox_global
 
   setup do
+    original_hologram_start_flag = System.get_env("HOLOGRAM_START")
+    System.put_env("HOLOGRAM_START", "1")
+
+    on_exit(fn ->
+      if original_hologram_start_flag do
+        System.put_env("HOLOGRAM_START", original_hologram_start_flag)
+      else
+        System.delete_env("HOLOGRAM_START")
+      end
+    end)
+
     setup_asset_path_registry(AssetPathRegistryStub)
     AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
@@ -227,6 +239,59 @@ defmodule Hologram.RouterTest do
       assert conn.resp_body == nil
       assert conn.state == :unset
       assert conn.status == nil
+    end
+  end
+
+  describe "when Hologram is disabled" do
+    setup do
+      System.delete_env("HOLOGRAM_START")
+      :ok
+    end
+
+    test "passes the connection through for a path that would match a Hologram page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/xyz")
+        |> Plug.Test.init_test_session(%{})
+        |> call([])
+
+      assert conn.halted == false
+      assert conn.resp_body == nil
+      assert conn.state == :unset
+      assert conn.status == nil
+    end
+
+    test "passes the connection through for a framework route the router would otherwise handle" do
+      # POST /hologram/command is a real Hologram route. Sent without a valid
+      # CSRF token it is rejected with 403, which proves the route is actually
+      # defined and handled by the router. An undefined path would fall through
+      # to the catch-all and pass through regardless of whether the connection
+      # is short-circuited - so this guards against the route being removed and
+      # the assertions below silently becoming meaningless.
+      build_conn = fn ->
+        :post
+        |> Plug.Test.conn("/hologram/command", "")
+        |> Plug.Test.init_test_session(%{})
+      end
+
+      # Enabled: the router handles the route.
+      System.put_env("HOLOGRAM_START", "1")
+      {handled_conn, _log} = with_log(fn -> call(build_conn.(), []) end)
+
+      assert handled_conn.halted == true
+      assert handled_conn.status == 403
+
+      # Disabled: the router steps aside, leaving the connection untouched for
+      # the next plug.
+      System.delete_env("HOLOGRAM_START")
+      passed_through_conn = call(build_conn.(), [])
+
+      assert passed_through_conn.halted == false
+      assert passed_through_conn.resp_body == nil
+      assert passed_through_conn.state == :unset
+      assert passed_through_conn.status == nil
     end
   end
 end
