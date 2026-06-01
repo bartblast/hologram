@@ -1,4 +1,6 @@
 defmodule Hologram.Router do
+  @moduledoc false
+
   use Plug.Router
 
   alias Hologram.Controller
@@ -10,6 +12,19 @@ defmodule Hologram.Router do
 
   plug :match
   plug :dispatch
+
+  # When Hologram is disabled (see `Hologram.enabled?/0`) its supervision tree -
+  # including the page module resolver and asset registries that the routes
+  # below depend on - is not started. Pass the connection straight through to
+  # the next plug instead of attempting to serve a Hologram route and crashing.
+  @spec call(Plug.Conn.t(), Plug.opts()) :: Plug.Conn.t()
+  def call(conn, opts) do
+    if Hologram.enabled?() do
+      super(conn, opts)
+    else
+      conn
+    end
+  end
 
   post "/hologram/command" do
     Controller.handle_command_request(conn)
