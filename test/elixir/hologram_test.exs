@@ -5,6 +5,34 @@ defmodule HologramTest do
 
   alias Hologram.Test.Fixtures.PhoenixEndpoint
 
+  describe "enabled?/0" do
+    setup do
+      original = System.get_env("HOLOGRAM_START")
+
+      on_exit(fn ->
+        if original do
+          System.put_env("HOLOGRAM_START", original)
+        else
+          System.delete_env("HOLOGRAM_START")
+        end
+      end)
+
+      :ok
+    end
+
+    test "is false in dev/test when HOLOGRAM_START is not set" do
+      System.delete_env("HOLOGRAM_START")
+
+      refute enabled?()
+    end
+
+    test "is true in dev/test when HOLOGRAM_START is set to \"1\"" do
+      System.put_env("HOLOGRAM_START", "1")
+
+      assert enabled?()
+    end
+  end
+
   test "env/0" do
     assert env() == :test
   end

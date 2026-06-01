@@ -2,6 +2,20 @@ defmodule Hologram do
   alias Hologram.Reflection
 
   @doc """
+  Returns `true` when Hologram's runtime is enabled, `false` otherwise.
+
+  Hologram is always enabled outside of the `:dev` and `:test` environments. In
+  `:dev` and `:test` it is disabled unless the `HOLOGRAM_START` environment
+  variable is set to `"1"` (as `mix holo` does). When disabled, Hologram's
+  supervision children are not started and `Hologram.Router` passes requests
+  straight through to the next plug instead of trying to serve them.
+  """
+  @spec enabled?() :: boolean
+  def enabled? do
+    env() not in [:dev, :test] or System.get_env("HOLOGRAM_START") == "1"
+  end
+
+  @doc """
   Returns the current environment.
   """
   @spec env() :: atom
