@@ -176,6 +176,11 @@ defmodule Hologram.RouterTest do
       assert result_conn.status == 200
       assert result_conn.state == :chunked
 
+      # The conn must be halted so the endpoint pipeline does not fall through to a
+      # host router after the stream closes. Without it, the committed response is
+      # re-dispatched and surfaces as a masked Plug.Conn.AlreadySentError.
+      assert result_conn.halted == true
+
       assert result_conn.resp_headers == [
                {"cache-control", "no-cache"},
                {"connection", "keep-alive"},
