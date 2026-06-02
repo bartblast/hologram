@@ -45,4 +45,16 @@ defmodule HologramFeatureTests.Events.KeyboardTest do
       ~r/\{:enter, %\{event: %\{alt_key: false, code: "Enter", ctrl_key: false, key: "Enter", meta_key: false, repeat: false, shift_key: false\}\}\}/
     )
   end
+
+  feature "keys combo", %{session: session} do
+    session
+    |> visit(KeyboardPage)
+    |> send_keys(css("#my_input_ctrl_k"), ["k"])
+    |> assert_text(css("#result"), "nil")
+    |> send_keys(css("#my_input_ctrl_k"), [:control, "k"])
+    |> assert_text(
+      css("#result"),
+      ~r/\{:ctrl_k, %\{event: %\{alt_key: false, code: "KeyK", ctrl_key: true, key: "k", meta_key: false, repeat: false, shift_key: false\}\}\}/
+    )
+  end
 end

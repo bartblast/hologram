@@ -24,9 +24,16 @@ defmodule HologramFeatureTests.Events.KeyboardPage do
       <input $key_down.enter="handle_enter" id="my_input_enter" type="text" />
     </p>
     <p>
+      <input $key_down.ctrl+k="handle_ctrl_k" id="my_input_ctrl_k" type="text" />
+    </p>
+    <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
+  end
+
+  def action(:handle_ctrl_k, params, component) do
+    put_state(component, :result, {:ctrl_k, params})
   end
 
   def action(:handle_enter, params, component) do
