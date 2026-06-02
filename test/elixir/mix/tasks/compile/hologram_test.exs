@@ -48,6 +48,28 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> File.write!(name)
   end
 
+  # Telemetry handler that tracks how many compilations are inside the critical
+  # section at once, recording the running maximum. Public because telemetry
+  # warns when a handler is captured as a local or anonymous function.
+  @spec handle_compiler_telemetry(
+          :telemetry.event_name(),
+          :telemetry.event_measurements(),
+          :telemetry.event_metadata(),
+          Agent.agent()
+        ) :: :ok
+  def handle_compiler_telemetry(event_name, measurements, metadata, tracker)
+
+  def handle_compiler_telemetry([:hologram, :compiler, :start], _measurements, _metadata, tracker) do
+    Agent.update(tracker, fn %{current: current, max: max_seen} ->
+      new_current = current + 1
+      %{current: new_current, max: max(max_seen, new_current)}
+    end)
+  end
+
+  def handle_compiler_telemetry([:hologram, :compiler, :stop], _measurements, _metadata, tracker) do
+    Agent.update(tracker, fn state -> %{state | current: state.current - 1} end)
+  end
+
   defp setup_empty_assets_and_build_dirs(opts) do
     assets_dir = setup_empty_assets_dir()
     build_dir = setup_empty_build_dir()
@@ -305,27 +327,30 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   describe "compiler locking" do
     test "locking mechanism prevents concurrent compilation", %{opts: opts} do
-      tasks =
-        Enum.map(1..3, fn _i ->
-          Task.async(fn ->
-            run(opts)
-            System.system_time(:millisecond)
-          end)
-        end)
+      # The lock guards the actual compilation work, which emits
+      # [:hologram, :compiler, :start] when it enters the critical section and
+      # [:hologram, :compiler, :stop] when it leaves. By tracking how many
+      # compilations are inside the critical section at any moment, we verify the
+      # lock's core guarantee directly: at no point do two compilations overlap.
+      # If the lock failed, two concurrent invocations would be inside the section
+      # together and the observed maximum concurrency would be 2.
+      {:ok, tracker} = Agent.start_link(fn -> %{current: 0, max: 0} end)
 
-      end_times =
-        tasks
-        |> Task.await_many(:infinity)
-        |> Enum.sort()
+      handler_id = "compiler-lock-test"
 
-      [first_end, second_end, third_end] = end_times
+      events = [
+        [:hologram, :compiler, :start],
+        [:hologram, :compiler, :stop]
+      ]
 
-      # Verify end times are spaced apart (indicating serialization)
-      # Each compilation should end at different times (with reasonable gaps)
-      # If they were running in parallel, end times would be very close
-      # Expect at least 1000ms gap between compilations
-      assert second_end - first_end > 1_000
-      assert third_end - second_end > 1_000
+      :telemetry.attach_many(handler_id, events, &__MODULE__.handle_compiler_telemetry/4, tracker)
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      1..3
+      |> Enum.map(fn _i -> Task.async(fn -> run(opts) end) end)
+      |> Task.await_many(:infinity)
+
+      assert Agent.get(tracker, & &1.max) == 1
     end
 
     test "lock file is cleaned up after successful compilation", %{opts: opts} do
