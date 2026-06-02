@@ -72,6 +72,18 @@ defmodule Hologram.Template.EventModifiersTest do
                    fn -> parse(["k+j"]) end
     end
 
+    test "raises for a filter with only a modifier" do
+      assert_raise TemplateSyntaxError,
+                   ~s'keyboard key filter "ctrl" specifies no key',
+                   fn -> parse(["ctrl"]) end
+    end
+
+    test "raises for a filter with only modifiers" do
+      assert_raise TemplateSyntaxError,
+                   ~s'keyboard key filter "shift+alt" specifies no key',
+                   fn -> parse(["shift+alt"]) end
+    end
+
     test "raises for an empty segment" do
       assert_raise TemplateSyntaxError,
                    "keyboard key filter must not be empty",

@@ -74,12 +74,18 @@ defmodule Hologram.Template.EventModifiers do
       |> String.split("+")
       |> Enum.map(&parse_token/1)
 
-    if Enum.count(values, &(&1 not in @modifier_keys)) > 1 do
-      raise TemplateSyntaxError,
-        message: ~s'keyboard key filter "#{segment}" specifies more than one key'
-    end
+    case Enum.count(values, &(&1 not in @modifier_keys)) do
+      1 ->
+        {:key, values}
 
-    {:key, values}
+      0 ->
+        raise TemplateSyntaxError,
+          message: ~s'keyboard key filter "#{segment}" specifies no key'
+
+      _count ->
+        raise TemplateSyntaxError,
+          message: ~s'keyboard key filter "#{segment}" specifies more than one key'
+    end
   end
 
   defp parse_token("") do
