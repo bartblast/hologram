@@ -22,4 +22,15 @@ defmodule HologramFeatureTests.Events.KeyboardTest do
       ~r/\{:key_up, %\{event: %\{alt_key: false, code: "KeyA", ctrl_key: false, key: "a", meta_key: false, repeat: false, shift_key: false\}\}\}/
     )
   end
+
+  feature "typing is not blocked", %{session: session} do
+    session
+    |> visit(KeyboardPage)
+    |> fill_in(css("#my_input_key_down"), with: "abc")
+    |> execute_script(
+      "return document.querySelector('#my_input_key_down').value;",
+      [],
+      fn value -> assert value == "abc" end
+    )
+  end
 end
