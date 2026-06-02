@@ -8,6 +8,7 @@ import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
+import KeyboardEvent from "./events/keyboard_event.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -307,6 +308,21 @@ export default class Renderer {
     return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
       vars,
     ]);
+  }
+
+  // Decides whether a live event satisfies an attribute's modifier filters. Modifiers are a
+  // tagged list; a {:key, values} modifier is matched by the keyboard matcher, and any other
+  // kind does not gate dispatch.
+  static #eventMatchesModifiers(modifiersDom, event) {
+    return modifiersDom.data.every((modifierDom) => {
+      const kind = modifierDom.data[0].value;
+
+      if (kind === "key") {
+        return KeyboardEvent.matchesKeyFilter(modifierDom.data[1], event);
+      }
+
+      return true;
+    });
   }
 
   // Based on filter_allowed_props/2
@@ -812,13 +828,20 @@ export default class Renderer {
         attrsVdom,
       );
 
-      const handler = (event) =>
+      const modifiersDom = attrDom.data[2];
+
+      const handler = (event) => {
+        if (modifiersDom && !$.#eventMatchesModifiers(modifiersDom, event)) {
+          return;
+        }
+
         Hologram.handleUiEvent(
           event,
           effectiveDomEventName,
           attrDom.data[1],
           defaultTarget,
         );
+      };
 
       acc[effectiveDomEventName] = acc[effectiveDomEventName] || [];
       acc[effectiveDomEventName].push(handler);

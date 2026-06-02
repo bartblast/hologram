@@ -1184,6 +1184,160 @@ describe("Renderer", () => {
 
           Hologram.handleUiEvent.restore();
         });
+
+        describe("key filters", () => {
+          it("fires only on the matching key", () => {
+            // <div $key_down.enter="my_action"></div>
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("div"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$key_down"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("key"),
+                      Type.list([Type.bitstring("enter")]),
+                    ]),
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(
+                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
+                  null,
+              );
+
+            // A non-matching key is gated out - the handler never dispatches.
+            vdom.data.on.keydown({key: "Escape"});
+            sinon.assert.notCalled(stub);
+
+            vdom.data.on.keydown({key: "Enter"});
+            sinon.assert.calledOnce(stub);
+
+            sinon.assert.calledWith(
+              stub,
+              {key: "Enter"},
+              "keydown",
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+              ]),
+              defaultTarget,
+            );
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("grouped bindings each fire only on their own key", () => {
+            // <div $key_down.enter="my_enter_action" $key_down.escape="my_escape_action"></div>
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("div"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$key_down"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_enter_action"),
+                    ]),
+                  ]),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("key"),
+                      Type.list([Type.bitstring("enter")]),
+                    ]),
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("$key_down"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_escape_action"),
+                    ]),
+                  ]),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("key"),
+                      Type.list([Type.bitstring("escape")]),
+                    ]),
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(
+                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
+                  null,
+              );
+
+            vdom.data.on.keydown({key: "Enter"});
+            sinon.assert.calledOnce(stub);
+
+            sinon.assert.calledWith(
+              stub,
+              {key: "Enter"},
+              "keydown",
+              Type.list([
+                Type.tuple([
+                  Type.atom("text"),
+                  Type.bitstring("my_enter_action"),
+                ]),
+              ]),
+              defaultTarget,
+            );
+
+            stub.resetHistory();
+
+            vdom.data.on.keydown({key: "Escape"});
+            sinon.assert.calledOnce(stub);
+
+            sinon.assert.calledWith(
+              stub,
+              {key: "Escape"},
+              "keydown",
+              Type.list([
+                Type.tuple([
+                  Type.atom("text"),
+                  Type.bitstring("my_escape_action"),
+                ]),
+              ]),
+              defaultTarget,
+            );
+
+            Hologram.handleUiEvent.restore();
+          });
+        });
       });
 
       describe("default operation target", () => {
