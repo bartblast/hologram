@@ -973,216 +973,235 @@ describe("Renderer", () => {
           Hologram.handleUiEvent.restore();
         });
 
-        it("event type mapping", () => {
-          const node = Type.tuple([
-            Type.atom("element"),
-            Type.bitstring("div"),
-            Type.list([
-              Type.tuple([
-                Type.bitstring("$mouse_move"),
-                Type.list([
-                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+        describe("event name mapping", () => {
+          it("maps $mouse_move to mousemove", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("div"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$mouse_move"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
                 ]),
               ]),
-            ]),
-            Type.list(),
-          ]);
+              Type.list(),
+            ]);
 
-          const vdom = Renderer.renderDom(
-            node,
-            context,
-            slots,
-            defaultTarget,
-            null,
-          );
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              null,
+            );
 
-          assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
-        });
+            assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
+          });
 
-        it("maps $change event to $input event for text input element", () => {
-          const node = Type.tuple([
-            Type.atom("element"),
-            Type.bitstring("input"),
-            Type.list([
-              Type.tuple([
-                Type.bitstring("type"),
-                Type.keywordList([[Type.atom("text"), Type.bitstring("text")]]),
-              ]),
-              Type.tuple([
-                Type.bitstring("$change"),
-                Type.list([
-                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          it("maps $change event to $input event for text input element", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("text")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("$change"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
                 ]),
               ]),
-            ]),
-            Type.list(),
-          ]);
+              Type.list(),
+            ]);
 
-          const vdom = Renderer.renderDom(
-            node,
-            context,
-            slots,
-            defaultTarget,
-            parentTagName,
-          );
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
 
-          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
+            assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
 
-          const stub = sinon
-            .stub(Hologram, "handleUiEvent")
-            .callsFake((..._args) => null);
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake((..._args) => null);
 
-          vdom.data.on.input("dummyEvent");
+            vdom.data.on.input("dummyEvent");
 
-          sinon.assert.calledWith(
-            stub,
-            "dummyEvent",
-            "input",
-            Type.list([
-              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
-            ]),
-            defaultTarget,
-          );
+            sinon.assert.calledWith(
+              stub,
+              "dummyEvent",
+              "input",
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+              ]),
+              defaultTarget,
+            );
 
-          Hologram.handleUiEvent.restore();
-        });
+            Hologram.handleUiEvent.restore();
+          });
 
-        it("keeps $change event for checkbox element", () => {
-          const node = Type.tuple([
-            Type.atom("element"),
-            Type.bitstring("input"),
-            Type.list([
-              Type.tuple([
-                Type.bitstring("type"),
-                Type.keywordList([
-                  [Type.atom("text"), Type.bitstring("checkbox")],
+          it("keeps $change event for checkbox element", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("checkbox")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("$change"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
                 ]),
               ]),
-              Type.tuple([
-                Type.bitstring("$change"),
-                Type.list([
-                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake((..._args) => null);
+
+            vdom.data.on.change("dummyEvent");
+
+            sinon.assert.calledWith(
+              stub,
+              "dummyEvent",
+              "change",
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+              ]),
+              defaultTarget,
+            );
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("maps $change event to $input event for textarea element", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$change"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
                 ]),
               ]),
-            ]),
-            Type.list(),
-          ]);
+              Type.list(),
+            ]);
 
-          const vdom = Renderer.renderDom(
-            node,
-            context,
-            slots,
-            defaultTarget,
-            parentTagName,
-          );
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
 
-          assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
+            assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
 
-          const stub = sinon
-            .stub(Hologram, "handleUiEvent")
-            .callsFake((..._args) => null);
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake((..._args) => null);
 
-          vdom.data.on.change("dummyEvent");
+            vdom.data.on.input("dummyEvent");
 
-          sinon.assert.calledWith(
-            stub,
-            "dummyEvent",
-            "change",
-            Type.list([
-              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
-            ]),
-            defaultTarget,
-          );
+            sinon.assert.calledWith(
+              stub,
+              "dummyEvent",
+              "input",
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+              ]),
+              defaultTarget,
+            );
 
-          Hologram.handleUiEvent.restore();
-        });
+            Hologram.handleUiEvent.restore();
+          });
 
-        it("maps $change event to $input event for textarea element", () => {
-          const node = Type.tuple([
-            Type.atom("element"),
-            Type.bitstring("textarea"),
-            Type.list([
-              Type.tuple([
-                Type.bitstring("$change"),
-                Type.list([
-                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          it("maps $change event to $input event for input element without type attribute", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$change"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
                 ]),
               ]),
-            ]),
-            Type.list(),
-          ]);
+              Type.list(),
+            ]);
 
-          const vdom = Renderer.renderDom(
-            node,
-            context,
-            slots,
-            defaultTarget,
-            parentTagName,
-          );
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
 
-          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
+            assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
 
-          const stub = sinon
-            .stub(Hologram, "handleUiEvent")
-            .callsFake((..._args) => null);
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake((..._args) => null);
 
-          vdom.data.on.input("dummyEvent");
+            vdom.data.on.input("dummyEvent");
 
-          sinon.assert.calledWith(
-            stub,
-            "dummyEvent",
-            "input",
-            Type.list([
-              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
-            ]),
-            defaultTarget,
-          );
-
-          Hologram.handleUiEvent.restore();
-        });
-
-        it("maps $change event to $input event for input element without type attribute", () => {
-          const node = Type.tuple([
-            Type.atom("element"),
-            Type.bitstring("input"),
-            Type.list([
-              Type.tuple([
-                Type.bitstring("$change"),
-                Type.list([
-                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
-                ]),
+            sinon.assert.calledWith(
+              stub,
+              "dummyEvent",
+              "input",
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
               ]),
-            ]),
-            Type.list(),
-          ]);
+              defaultTarget,
+            );
 
-          const vdom = Renderer.renderDom(
-            node,
-            context,
-            slots,
-            defaultTarget,
-            parentTagName,
-          );
-
-          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
-
-          const stub = sinon
-            .stub(Hologram, "handleUiEvent")
-            .callsFake((..._args) => null);
-
-          vdom.data.on.input("dummyEvent");
-
-          sinon.assert.calledWith(
-            stub,
-            "dummyEvent",
-            "input",
-            Type.list([
-              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
-            ]),
-            defaultTarget,
-          );
-
-          Hologram.handleUiEvent.restore();
+            Hologram.handleUiEvent.restore();
+          });
         });
 
         describe("key filters", () => {
