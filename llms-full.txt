@@ -3338,7 +3338,7 @@ Our development roadmap is organized by timeline, with colors representing proxi
 
 - **Client Error Handling** - Implement support for Elixir's error handling features (try/catch/rescue, etc.) on the client side.
 - **Comprehension Parity** - Bring comprehension support to full parity with the Elixir server runtime, including bitstring generators and the `:reduce` option.
-- **DOM Events Support** - Complete implementation of remaining DOM events including keyboard, touch, and window events to achieve full coverage.
+- **DOM Events Support** - Complete implementation of remaining DOM events including touch and window events to achieve full coverage.
 - **Essential Stdlib Functions** - Expand support for the most important Elixir standard library functions needed for Phase 1 use cases: state management, data manipulation, dates/times, strings, and collections.
 - **JS Interop** - Create a clean interface for JavaScript interoperability to leverage existing JavaScript libraries.
 - **Middleware** - Add middleware support with a pre-init hook for components and pages, including access to request headers before init.
