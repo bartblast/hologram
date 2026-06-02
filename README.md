@@ -4,6 +4,18 @@ Build rich, interactive UIs entirely in Elixir using Hologram's declarative comp
 
 Website: https://hologram.page
 
+## Community
+
+- Elixir Forum: https://elixirforum.com/hologram
+- Discord: https://discord.gg/huJWNuqt8J
+- Slack: https://elixir-lang.slack.com/channels/hologram
+
+## Build in Public
+
+- LinkedIn: https://www.linkedin.com/in/bartblast/
+- X: https://x.com/Bart_Blast
+- Bluesky: https://bsky.app/profile/bartblast.com
+
 ## Sponsors
 
 ### Main Sponsor
@@ -38,7 +50,6 @@ Website: https://hologram.page
 
 * [@absowoot](https://github.com/absowoot)
 * Oban, [@oban-bg](https://github.com/oban-bg)
-* Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 * Robert Urbańczyk, [@robertu](https://github.com/robertu)
 * Moss Piglet, [@moss-piglet](https://github.com/moss-piglet)
 

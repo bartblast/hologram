@@ -17,7 +17,6 @@ Benchee.run(
     opts = [
       assets_dir: assets_dir,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
-      formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join([assets_dir, "js"]),
       tmp_dir: tmp_dir,
       static_dir: Path.join(tmp_dir, "static")
@@ -44,13 +43,6 @@ Benchee.run(
       |> Enum.map(fn {entry_name, entry_file_path} ->
         {entry_name, entry_file_path, "page"}
       end)
-
-    page_entry_file_paths =
-      Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path, _bundle_name} ->
-        entry_file_path
-      end)
-
-    Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
 
     entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
 

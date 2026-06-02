@@ -2,6 +2,18 @@ defmodule Mix.Tasks.Compile.Hologram do
   @moduledoc """
   Builds Hologram project JavaScript bundles, the call graph of the code,
   PLTs needed by the runtime and PLTs needed to speed up future compilation.
+
+  ## Telemetry
+
+  Emits the following events around each compilation run, i.e. the critical
+  section guarded by the compiler lock:
+
+    * `[:hologram, :compiler, :start]` - dispatched when a compilation begins,
+      with measurement `%{system_time: System.system_time()}`.
+
+    * `[:hologram, :compiler, :stop]` - dispatched when a compilation ends,
+      whether it succeeds or raises, with measurement `%{duration: native_time}`
+      in `System.monotonic_time/0` native units.
   """
 
   use Mix.Task.Compiler
@@ -37,20 +49,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  defp bin_available?(cmd) do
-    args = ["--version"]
-    opts = [parallelism: true, stderr_to_stdout: true]
-
-    try do
-      case SystemUtils.cmd_cross_platform(cmd, args, opts) do
-        {_output, 0} -> true
-        _cmd_result -> false
-      end
-    rescue
-      _error -> false
-    end
-  end
-
   defp build_default_opts do
     root_dir = Reflection.root_dir()
     assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
@@ -61,8 +59,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       assets_dir: assets_dir,
       build_dir: build_dir,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
-      # Biome is almost x20 faster than Prettier in Hologram benchmarks
-      formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(assets_dir, "js"),
       node_modules_path: node_modules_path,
       static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
@@ -72,6 +68,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp compile(opts) do
     {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
+
+    start_time = System.monotonic_time()
+    :telemetry.execute([:hologram, :compiler, :start], %{system_time: System.system_time()}, %{})
 
     try do
       Logger.info("Hologram: compiler started")
@@ -84,8 +83,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       File.mkdir_p!(opts[:tmp_dir])
 
       Compiler.maybe_install_js_deps(assets_dir, build_dir)
-
-      opts = maybe_adjust_formatter_bin_path(opts)
 
       {old_module_digest_plt, module_digest_plt_dump_path} =
         Compiler.maybe_load_module_digest_plt(build_dir, supervisor: sup)
@@ -139,13 +136,6 @@ defmodule Mix.Tasks.Compile.Hologram do
           {entry_name, entry_file_path, "page"}
         end)
 
-      page_entry_file_paths =
-        Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path, _bundle_name} ->
-          entry_file_path
-        end)
-
-      Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
-
       entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
 
       old_build_static_artifacts =
@@ -173,6 +163,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       :ok
     after
+      duration = System.monotonic_time() - start_time
+      :telemetry.execute([:hologram, :compiler, :stop], %{duration: duration}, %{})
       DynamicSupervisor.stop(sup)
     end
   end
@@ -193,31 +185,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp language_server_build?(opts) do
     path_components = Path.split(opts[:build_dir])
     Enum.any?(@ls_build_dirs, fn dir -> dir in path_components end)
-  end
-
-  defp maybe_adjust_formatter_bin_path(opts) do
-    system_formatter_cmd = "biome"
-
-    formatter_bin_path =
-      Enum.find([opts[:formatter_bin_path], system_formatter_cmd], &bin_available?/1)
-
-    case formatter_bin_path do
-      nil ->
-        raise RuntimeError,
-          message: """
-          Biome formatter failed to run.
-
-          Neither the bundled biome binary nor a system-installed biome could be executed.
-          This can happen on systems where dynamically linked binaries are not supported,
-          such as NixOS or musl-based distributions (e.g., Alpine Linux).
-
-          To fix this, install biome and ensure it's available in your PATH.
-          For installation options, see: https://biomejs.dev/guides/manual-installation/
-          """
-
-      path ->
-        Keyword.put(opts, :formatter_bin_path, path)
-    end
   end
 
   defp maybe_remove_file(lock_path) do

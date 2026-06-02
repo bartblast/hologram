@@ -2,7 +2,7 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @version "0.9.0"
+  @version "0.9.2"
 
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
@@ -64,6 +64,7 @@ defmodule Hologram.MixProject do
       {:plug_crypto, "~> 2.0"},
       {:recode, "~> 0.7", only: :dev, runtime: false},
       {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false},
+      {:telemetry, "~> 1.0"},
       {:uuid, "~> 1.0"},
       {:websock_adapter, "~> 0.5"}
     ]
