@@ -902,6 +902,77 @@ describe("Renderer", () => {
           Hologram.handleUiEvent.restore();
         });
 
+        it("multiple handlers for the same event name", () => {
+          // <input $key_down="my_action_a" $key_down="my_action_b" />
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("$key_down"),
+                Type.list([
+                  Type.tuple([
+                    Type.atom("text"),
+                    Type.bitstring("my_action_a"),
+                  ]),
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$key_down"),
+                Type.list([
+                  Type.tuple([
+                    Type.atom("text"),
+                    Type.bitstring("my_action_b"),
+                  ]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["keydown"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake(
+              (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+            );
+
+          vdom.data.on.keydown("dummyEvent");
+
+          sinon.assert.calledTwice(stub);
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "keydown",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action_a")]),
+            ]),
+            defaultTarget,
+          );
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "keydown",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action_b")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+
         it("event type mapping", () => {
           const node = Type.tuple([
             Type.atom("element"),

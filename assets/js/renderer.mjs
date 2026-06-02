@@ -796,7 +796,7 @@ export default class Renderer {
       return {};
     }
 
-    return attrsDom.data.reduce((acc, attrDom) => {
+    const handlersByEvent = attrsDom.data.reduce((acc, attrDom) => {
       const attributeName = Bitstring.toText(attrDom.data[0]);
 
       if (!attributeName.startsWith("$")) {
@@ -812,7 +812,7 @@ export default class Renderer {
         attrsVdom,
       );
 
-      acc[effectiveDomEventName] = (event) =>
+      const handler = (event) =>
         Hologram.handleUiEvent(
           event,
           effectiveDomEventName,
@@ -820,8 +820,20 @@ export default class Renderer {
           defaultTarget,
         );
 
+      acc[effectiveDomEventName] = acc[effectiveDomEventName] || [];
+      acc[effectiveDomEventName].push(handler);
+
       return acc;
     }, {});
+
+    // A DOM event name can have several bindings on one element (e.g. multiple keyboard key
+    // filters), so each event maps to a single dispatcher that runs every registered handler.
+    return Object.fromEntries(
+      Object.entries(handlersByEvent).map(([eventName, handlers]) => [
+        eventName,
+        (event) => handlers.forEach((handler) => handler(event)),
+      ]),
+    );
   }
 
   // Based on render_dom/3 (list case)
