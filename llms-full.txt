@@ -1133,7 +1133,7 @@ A filter matches as long as the keys it lists are pressed - any extra modifiers 
 ##### Supported Keys
 
 - **Letters and digits** - written as the character itself, e.g. `k` or `7`
-- **Modifier keys** - `alt`, `ctrl`, `meta` (Command on macOS, Windows key on Windows), and `shift`
+- **Modifier keys** - `alt`, `ctrl`, `meta` (Command on macOS, Windows key on Windows), and `shift`, valid only when combined with a key (e.g. `ctrl+k`)
 - **Named keys** - `arrow_up`, `arrow_down`, `arrow_left`, `arrow_right`, `backspace`, `caps_lock`, `delete`, `end`, `enter`, `escape`, `home`, `insert`, `page_up`, `page_down`, `space`, `tab`, and `f1` through `f12`
 
 ##### Symbol Keys
