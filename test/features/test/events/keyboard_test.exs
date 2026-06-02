@@ -67,4 +67,14 @@ defmodule HologramFeatureTests.Events.KeyboardTest do
       ~r/\{:key_down_arrow_up, %\{event: %\{alt_key: false, code: "ArrowUp", ctrl_key: false, key: "ArrowUp", meta_key: false, repeat: false, shift_key: false\}\}\}/
     )
   end
+
+  feature "key filters on key_up", %{session: session} do
+    session
+    |> visit(KeyboardPage)
+    |> send_keys(css("#my_input_key_up_arrow_up"), [:up_arrow])
+    |> assert_text(
+      css("#result"),
+      ~r/\{:key_up_arrow_up, %\{event: %\{alt_key: false, code: "ArrowUp", ctrl_key: false, key: "ArrowUp", meta_key: false, repeat: false, shift_key: false\}\}\}/
+    )
+  end
 end
