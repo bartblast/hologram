@@ -2,6 +2,18 @@ defmodule Mix.Tasks.Compile.Hologram do
   @moduledoc """
   Builds Hologram project JavaScript bundles, the call graph of the code,
   PLTs needed by the runtime and PLTs needed to speed up future compilation.
+
+  ## Telemetry
+
+  Emits the following events around each compilation run, i.e. the critical
+  section guarded by the compiler lock:
+
+    * `[:hologram, :compiler, :start]` - dispatched when a compilation begins,
+      with measurement `%{system_time: System.system_time()}`.
+
+    * `[:hologram, :compiler, :stop]` - dispatched when a compilation ends,
+      whether it succeeds or raises, with measurement `%{duration: native_time}`
+      in `System.monotonic_time/0` native units.
   """
 
   use Mix.Task.Compiler
@@ -56,6 +68,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp compile(opts) do
     {:ok, sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
+
+    start_time = System.monotonic_time()
+    :telemetry.execute([:hologram, :compiler, :start], %{system_time: System.system_time()}, %{})
 
     try do
       Logger.info("Hologram: compiler started")
@@ -148,6 +163,8 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       :ok
     after
+      duration = System.monotonic_time() - start_time
+      :telemetry.execute([:hologram, :compiler, :stop], %{duration: duration}, %{})
       DynamicSupervisor.stop(sup)
     end
   end
