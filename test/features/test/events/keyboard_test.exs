@@ -33,4 +33,16 @@ defmodule HologramFeatureTests.Events.KeyboardTest do
       fn value -> assert value == "abc" end
     )
   end
+
+  feature "single key filter", %{session: session} do
+    session
+    |> visit(KeyboardPage)
+    |> send_keys(css("#my_input_enter"), [:escape])
+    |> assert_text(css("#result"), "nil")
+    |> send_keys(css("#my_input_enter"), [:enter])
+    |> assert_text(
+      css("#result"),
+      ~r/\{:enter, %\{event: %\{alt_key: false, code: "Enter", ctrl_key: false, key: "Enter", meta_key: false, repeat: false, shift_key: false\}\}\}/
+    )
+  end
 end
