@@ -975,6 +975,8 @@ Hologram supports various event types that you can bind to elements in your temp
 - `$change` - triggered when the value of an input element changes
 - `$click` - triggered when an element is clicked
 - `$focus` - triggered when an element receives focus
+- `$key_down` - triggered when a key is pressed down
+- `$key_up` - triggered when a key is released
 - `$mouse_move` - triggered when the mouse cursor moves over an element
 - `$pointer_cancel` - triggered when a pointer event is cancelled (e.g., when the browser decides the pointer will no longer generate events)
 - `$pointer_down` - triggered when a pointer (mouse, touch, pen) is pressed down on an element
@@ -999,6 +1001,20 @@ The `$change` event data structure depends on where the event handler is placed:
 - **Form-level events:** include all form field values as a map, where keys are input names and values are current input values
 
 For detailed information about `$change` event behavior with forms, including synthetic event mapping, usage patterns, and data types for different input types, see the "Event Handling" section in the Forms documentation.
+
+##### Keyboard Events
+
+Keyboard events (`$key_down`, `$key_up`) include:
+
+- `alt_key` - whether the Alt key was held
+- `code` - the physical key code (e.g. `"KeyK"`, `"Enter"`), independent of keyboard layout
+- `ctrl_key` - whether the Ctrl key was held
+- `key` - the value of the key pressed (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), reflecting the layout and modifiers
+- `meta_key` - whether the Meta key (Command on macOS, Windows key on Windows) was held
+- `repeat` - whether the key is being held down and auto-repeating
+- `shift_key` - whether the Shift key was held
+
+To run a handler only for specific keys or key combinations, see the "Keyboard Key Filters" section below.
 
 ##### Mouse Events
 
@@ -1094,6 +1110,62 @@ To trigger a command, use the `command:` key instead of `action:` (note that del
 
 ```holo
 <button $click={command: :my_command, params: %{key: value}}>Click me</button>
+```
+
+#### Keyboard Key Filters
+
+Keyboard events can be filtered to a specific key directly in the template by appending the key to the event name with a dot. The handler then fires only when that key is pressed:
+
+```holo
+<input $key_down.enter="submit_form" />
+```
+
+Combine modifier keys with the key using `+` to match keyboard shortcuts:
+
+```holo
+<input $key_down.ctrl+enter="send_message" />
+```
+
+Filters work on both `$key_down` and `$key_up`, and you can place several filtered bindings on one element - each fires only on its own key or combination. Keys are matched case-insensitively, so `$key_down.k` also matches `Shift`+`K`.
+
+A filter matches as long as the keys it lists are pressed - any extra modifiers held at the same time do not prevent it. So `$key_down.ctrl+enter` still fires when `Shift` is also down, and `$key_down.enter` fires whether or not a modifier is held.
+
+##### Supported Keys
+
+- **Letters and digits** - written as the character itself, e.g. `k` or `7`
+- **Modifier keys** - `alt`, `ctrl`, `meta` (Command on macOS, Windows key on Windows), and `shift`
+- **Named keys** - `arrow_up`, `arrow_down`, `arrow_left`, `arrow_right`, `backspace`, `caps_lock`, `delete`, `end`, `enter`, `escape`, `home`, `insert`, `page_up`, `page_down`, `space`, `tab`, and `f1` through `f12`
+
+##### Symbol Keys
+
+Symbol keys are written as alias words rather than the raw characters (which would clash with the template and filter syntax). Each alias is named after the key on a standard keyboard:
+
+- `` ` `` → `backquote`
+- `\` → `backslash`
+- `[` → `bracket_left`
+- `]` → `bracket_right`
+- `,` → `comma`
+- `=` → `equal`
+- `-` → `minus`
+- `.` → `period`
+- `'` → `quote`
+- `;` → `semicolon`
+- `/` → `slash`
+
+For example, to match `Ctrl`+`/`, write `$key_down.ctrl+slash`.
+
+Keys that require `Shift` to type (such as `?`, `+`, or `&`) do not have aliases - match those in your action handler via the `key` field.
+
+##### Compile-Time Validation
+
+Because Hologram compiles your templates, key filters are parsed and validated at compile time - not when they run in the browser. A misspelled key name like `$key_down.entr` fails the build with a clear error that suggests the closest valid name. In most frameworks a misspelled key is a silent runtime no-op: the handler simply never fires, and you lose time discovering why.
+
+##### Dynamic Keys
+
+Key filters are for keys known at compile time. When the key is determined at runtime - a user-configurable shortcut, or a value from state - bind the bare event and compare against the `key` field in your handler instead:
+
+```holo
+<input $key_down="handle_key" />
 ```
 
 #### Event Targets
