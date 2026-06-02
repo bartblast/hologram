@@ -1,6 +1,15 @@
 "use strict";
 
+import Bitstring from "../bitstring.mjs";
 import Type from "../type.mjs";
+
+// Maps each modifier key name to the live event's corresponding boolean property.
+const MODIFIER_FLAGS = {
+  alt: "altKey",
+  ctrl: "ctrlKey",
+  meta: "metaKey",
+  shift: "shiftKey",
+};
 
 export default class KeyboardEvent {
   // Allow the browser's default action (typing, caret movement, etc.); an
@@ -21,5 +30,19 @@ export default class KeyboardEvent {
 
   static isEventIgnored(_event) {
     return false;
+  }
+
+  // Decides whether a key filter (the values of a {:key, values} modifier) matches a live
+  // event. Each value is either a modifier key, checked against the event's boolean flag, or
+  // the key itself, compared against the lowercased event.key (already the canonical form).
+  static matchesKeyFilter(filterValues, event) {
+    const eventKey = event.key.toLowerCase();
+
+    return filterValues.data.every((boxedValue) => {
+      const value = Bitstring.toText(boxedValue);
+      const flag = MODIFIER_FLAGS[value];
+
+      return flag ? event[flag] === true : value === eventKey;
+    });
   }
 }
