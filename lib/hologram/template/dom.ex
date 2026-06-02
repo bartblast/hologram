@@ -2,6 +2,7 @@ defmodule Hologram.Template.DOM do
   @moduledoc false
 
   alias Hologram.Compiler.AST
+  alias Hologram.Template.EventModifiers
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
 
@@ -88,13 +89,24 @@ defmodule Hologram.Template.DOM do
         "{\"#{base_name}\", [#{value_code}]}"
 
       {base_name, modifiers} ->
-        modifiers_code = Enum.map_join(modifiers, ", ", &"\"#{&1}\"")
-        "{\"#{base_name}\", [#{value_code}], [#{modifiers_code}]}"
+        "{\"#{base_name}\", [#{value_code}], #{render_event_modifiers(base_name, modifiers)}}"
     end
   end
 
   defp render_attribute_code({name, value_parts}, _tag_type) do
     "{\"#{name}\", [" <> Enum.map_join(value_parts, ", ", &render_code/1) <> "]}"
+  end
+
+  # Keyboard events have their raw segments parsed and validated into tagged key filters at
+  # compile time; other events keep their raw segments untouched.
+  defp render_event_modifiers(base_name, modifiers) do
+    if EventModifiers.keyboard_event?(base_name) do
+      modifiers
+      |> EventModifiers.parse()
+      |> inspect()
+    else
+      "[" <> Enum.map_join(modifiers, ", ", &"\"#{&1}\"") <> "]"
+    end
   end
 
   defp render_code({:block_start, "else"}) do

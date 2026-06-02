@@ -584,7 +584,7 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "single modifier" do
+    test "keyboard event with a single key filter" do
       # <div $key_down.enter="my_value"></div>
       tags = [
         {:start_tag, {"div", [{"$key_down.enter", [text: "my_value"]}]}},
@@ -596,13 +596,13 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
-                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], ["enter"]]}],
+                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], [key: ["enter"]]]}],
                   []
                 ]}
              ]
     end
 
-    test "combined modifier segment is not split on +" do
+    test "keyboard event with a combined key filter" do
       # <div $key_down.ctrl+k="my_value"></div>
       tags = [
         {:start_tag, {"div", [{"$key_down.ctrl+k", [text: "my_value"]}]}},
@@ -614,16 +614,16 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
-                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], ["ctrl+k"]]}],
+                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], [key: ["ctrl", "k"]]]}],
                   []
                 ]}
              ]
     end
 
-    test "multiple modifier segments" do
-      # <div $key_down.ctrl+k.mod_2="my_value"></div>
+    test "non-keyboard event keeps its raw modifier segments" do
+      # <div $click.foo="my_value"></div>
       tags = [
-        {:start_tag, {"div", [{"$key_down.ctrl+k.mod_2", [text: "my_value"]}]}},
+        {:start_tag, {"div", [{"$click.foo", [text: "my_value"]}]}},
         {:end_tag, "div"}
       ]
 
@@ -632,12 +632,22 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
-                  [
-                    {:{}, [line: 1], ["$key_down", [text: "my_value"], ["ctrl+k", "mod_2"]]}
-                  ],
+                  [{:{}, [line: 1], ["$click", [text: "my_value"], ["foo"]]}],
                   []
                 ]}
              ]
+    end
+
+    test "raises for an unknown key in a keyboard event" do
+      # <div $key_down.entr="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down.entr", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'unknown keyboard key "entr". Did you mean "enter"?',
+                   fn -> build_ast(tags) end
     end
 
     test "component $-attribute is not decomposed" do
@@ -785,7 +795,7 @@ defmodule Hologram.Template.DOMTest do
     end
 
     test "with implicit keyword list, starting with a key with double quotes" do
-      tags = [{:expression, ~s/{"aaa bbb": 1, c: 2}/}]
+      tags = [{:expression, ~s'{"aaa bbb": 1, c: 2}'}]
 
       assert build_ast(tags) == [expression: {:{}, [line: 1], [["aaa bbb": 1, c: 2]]}]
     end
