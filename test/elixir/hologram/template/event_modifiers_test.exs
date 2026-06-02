@@ -40,8 +40,12 @@ defmodule Hologram.Template.EventModifiersTest do
       assert parse(["arrow_up"]) == [{:key, ["arrowup"]}]
     end
 
-    test "single underscore key is kept verbatim, not treated as a separator" do
-      assert parse(["_"]) == [{:key, ["_"]}]
+    test "symbol alias resolves to its event.key char" do
+      assert parse(["slash"]) == [{:key, ["/"]}]
+    end
+
+    test "modifier combined with a symbol alias" do
+      assert parse(["ctrl+slash"]) == [{:key, ["ctrl", "/"]}]
     end
 
     test "space resolves to the literal space key" do
@@ -58,13 +62,13 @@ defmodule Hologram.Template.EventModifiersTest do
 
     test "raises for an unknown key with a suggestion" do
       assert_raise TemplateSyntaxError,
-                   ~s(unknown keyboard key "entr". Did you mean "enter"?),
+                   ~s'unknown keyboard key "entr". Did you mean "enter"?',
                    fn -> parse(["entr"]) end
     end
 
     test "raises for more than one key in a single filter" do
       assert_raise TemplateSyntaxError,
-                   ~s(keyboard key filter "k+j" specifies more than one key),
+                   ~s'keyboard key filter "k+j" specifies more than one key',
                    fn -> parse(["k+j"]) end
     end
 
@@ -78,6 +82,24 @@ defmodule Hologram.Template.EventModifiersTest do
       assert_raise TemplateSyntaxError,
                    "keyboard key filter must not be empty",
                    fn -> parse(["ctrl+"]) end
+    end
+
+    test "raises for a raw symbol that has an alias" do
+      assert_raise TemplateSyntaxError,
+                   ~s'use "semicolon" instead of the literal ";" in a keyboard key filter',
+                   fn -> parse([";"]) end
+    end
+
+    test "raises for a raw symbol without an alias" do
+      assert_raise TemplateSyntaxError,
+                   ~s'the "_" key has no keyboard key filter alias; match it in the action handler',
+                   fn -> parse(["_"]) end
+    end
+
+    test "raises for a misspelled alias with a suggestion" do
+      assert_raise TemplateSyntaxError,
+                   ~s'unknown keyboard key "slsh". Did you mean "slash"?',
+                   fn -> parse(["slsh"]) end
     end
   end
 end
