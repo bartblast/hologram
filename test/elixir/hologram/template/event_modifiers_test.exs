@@ -15,103 +15,158 @@ defmodule Hologram.Template.EventModifiersTest do
     end
   end
 
-  describe "parse/1" do
+  describe "parse/2 key filter modifier" do
     test "single named key" do
-      assert parse(["enter"]) == [{:key, ["enter"]}]
+      assert parse("$key_down", ["enter"]) == [{:key, ["enter"]}]
     end
 
     test "single character key" do
-      assert parse(["k"]) == [{:key, ["k"]}]
+      assert parse("$key_down", ["k"]) == [{:key, ["k"]}]
     end
 
     test "uppercase key is downcased" do
-      assert parse(["K"]) == [{:key, ["k"]}]
+      assert parse("$key_down", ["K"]) == [{:key, ["k"]}]
     end
 
     test "modifier combined with a key" do
-      assert parse(["ctrl+k"]) == [{:key, ["ctrl", "k"]}]
+      assert parse("$key_down", ["ctrl+k"]) == [{:key, ["ctrl", "k"]}]
     end
 
     test "multiple modifiers combined with a key" do
-      assert parse(["ctrl+shift+k"]) == [{:key, ["ctrl", "shift", "k"]}]
+      assert parse("$key_down", ["ctrl+shift+k"]) == [{:key, ["ctrl", "shift", "k"]}]
     end
 
     test "named key is normalized to its event.key form" do
-      assert parse(["arrow_up"]) == [{:key, ["arrowup"]}]
+      assert parse("$key_down", ["arrow_up"]) == [{:key, ["arrowup"]}]
     end
 
     test "symbol alias resolves to its event.key char" do
-      assert parse(["slash"]) == [{:key, ["/"]}]
+      assert parse("$key_down", ["slash"]) == [{:key, ["/"]}]
     end
 
     test "modifier combined with a symbol alias" do
-      assert parse(["ctrl+slash"]) == [{:key, ["ctrl", "/"]}]
+      assert parse("$key_down", ["ctrl+slash"]) == [{:key, ["ctrl", "/"]}]
     end
 
     test "space resolves to the literal space key" do
-      assert parse(["space"]) == [{:key, [" "]}]
+      assert parse("$key_down", ["space"]) == [{:key, [" "]}]
     end
 
     test "function key" do
-      assert parse(["f5"]) == [{:key, ["f5"]}]
+      assert parse("$key_down", ["f5"]) == [{:key, ["f5"]}]
     end
 
     test "multiple segments become multiple key filters" do
-      assert parse(["enter", "ctrl+k"]) == [{:key, ["enter"]}, {:key, ["ctrl", "k"]}]
+      assert parse("$key_down", ["enter", "ctrl+k"]) == [{:key, ["enter"]}, {:key, ["ctrl", "k"]}]
     end
 
     test "raises for an unknown key with a suggestion" do
       assert_raise TemplateSyntaxError,
                    ~s'unknown keyboard key "entr". Did you mean "enter"?',
-                   fn -> parse(["entr"]) end
+                   fn -> parse("$key_down", ["entr"]) end
     end
 
     test "raises for more than one key in a single filter" do
       assert_raise TemplateSyntaxError,
                    ~s'keyboard key filter "k+j" specifies more than one key',
-                   fn -> parse(["k+j"]) end
+                   fn -> parse("$key_down", ["k+j"]) end
     end
 
     test "raises for a filter with only a modifier" do
       assert_raise TemplateSyntaxError,
                    ~s'keyboard key filter "ctrl" specifies no key',
-                   fn -> parse(["ctrl"]) end
+                   fn -> parse("$key_down", ["ctrl"]) end
     end
 
     test "raises for a filter with only modifiers" do
       assert_raise TemplateSyntaxError,
                    ~s'keyboard key filter "shift+alt" specifies no key',
-                   fn -> parse(["shift+alt"]) end
+                   fn -> parse("$key_down", ["shift+alt"]) end
     end
 
     test "raises for an empty segment" do
       assert_raise TemplateSyntaxError,
                    "keyboard key filter must not be empty",
-                   fn -> parse([""]) end
+                   fn -> parse("$key_down", [""]) end
     end
 
     test "raises for an empty token in a combination" do
       assert_raise TemplateSyntaxError,
                    "keyboard key filter must not be empty",
-                   fn -> parse(["ctrl+"]) end
+                   fn -> parse("$key_down", ["ctrl+"]) end
     end
 
     test "raises for a raw symbol that has an alias" do
       assert_raise TemplateSyntaxError,
                    ~s'use "semicolon" instead of the literal ";" in a keyboard key filter',
-                   fn -> parse([";"]) end
+                   fn -> parse("$key_down", [";"]) end
     end
 
     test "raises for a raw symbol without an alias" do
       assert_raise TemplateSyntaxError,
                    ~s'the "_" key has no keyboard key filter alias; match it in the action handler',
-                   fn -> parse(["_"]) end
+                   fn -> parse("$key_down", ["_"]) end
     end
 
     test "raises for a misspelled alias with a suggestion" do
       assert_raise TemplateSyntaxError,
                    ~s'unknown keyboard key "slsh". Did you mean "slash"?',
-                   fn -> parse(["slsh"]) end
+                   fn -> parse("$key_down", ["slsh"]) end
+    end
+
+    test "raises on a non-keyboard event" do
+      assert_raise TemplateSyntaxError,
+                   ~s'unknown event modifier "enter"',
+                   fn -> parse("$change", ["enter"]) end
+    end
+  end
+
+  describe "parse/2 debounce modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$change", ["debounce(300)"]) == [{:debounce, 300}]
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["debounce(300)"]) == [{:debounce, 300}]
+    end
+
+    test "bare debounce takes the default window" do
+      assert parse("$change", ["debounce"]) == [{:debounce, 250}]
+    end
+
+    test "combined with a key filter on a keyboard event" do
+      assert parse("$key_down", ["enter", "debounce(200)"]) == [
+               {:key, ["enter"]},
+               {:debounce, 200}
+             ]
+    end
+
+    test "large value has no upper bound" do
+      assert parse("$change", ["debounce(60000)"]) == [{:debounce, 60_000}]
+    end
+
+    test "raises for a missing value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce()" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce()"]) end
+    end
+
+    test "raises for a non-integer value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce(abc)" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce(abc)"]) end
+    end
+
+    test "raises for a negative value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce(-5)" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce(-5)"]) end
+    end
+
+    test "raises for a zero value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce(0)" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce(0)"]) end
     end
   end
 end
