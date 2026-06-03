@@ -77,12 +77,6 @@ defmodule Hologram.Template.EventModifiers do
   @spec parse(String.t(), list(String.t())) :: list(modifier)
   def parse(base_name, segments), do: Enum.map(segments, &parse_segment(base_name, &1))
 
-  # Temporary delegator for the single existing keyboard caller. Both keyboard events accept the
-  # same key filters, so a keyboard base name preserves current behavior.
-  # TODO: remove once all callers pass a base name explicitly.
-  @spec parse(list(String.t())) :: list(modifier)
-  def parse(segments), do: parse("$key_down", segments)
-
   defp debounce_error(segment) do
     ~s'debounce modifier "#{segment}" requires a positive integer of milliseconds'
   end
