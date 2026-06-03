@@ -8,6 +8,7 @@ import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
+import KeyboardEvent from "./events/keyboard_event.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -307,6 +308,21 @@ export default class Renderer {
     return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
       vars,
     ]);
+  }
+
+  // Decides whether a live event satisfies an attribute's modifier filters. Modifiers are a
+  // tagged list; a {:key, values} modifier is matched by the keyboard matcher, and any other
+  // kind does not gate dispatch.
+  static #eventMatchesModifiers(modifiersDom, event) {
+    return modifiersDom.data.every((modifierDom) => {
+      const kind = modifierDom.data[0].value;
+
+      if (kind === "key") {
+        return KeyboardEvent.matchesKeyFilter(modifierDom.data[1], event);
+      }
+
+      return true;
+    });
   }
 
   // Based on filter_allowed_props/2
@@ -796,7 +812,7 @@ export default class Renderer {
       return {};
     }
 
-    return attrsDom.data.reduce((acc, attrDom) => {
+    const handlersByEvent = attrsDom.data.reduce((acc, attrDom) => {
       const attributeName = Bitstring.toText(attrDom.data[0]);
 
       if (!attributeName.startsWith("$")) {
@@ -812,16 +828,35 @@ export default class Renderer {
         attrsVdom,
       );
 
-      acc[effectiveDomEventName] = (event) =>
+      const modifiersDom = attrDom.data[2];
+
+      const handler = (event) => {
+        if (modifiersDom && !$.#eventMatchesModifiers(modifiersDom, event)) {
+          return;
+        }
+
         Hologram.handleUiEvent(
           event,
           effectiveDomEventName,
           attrDom.data[1],
           defaultTarget,
         );
+      };
+
+      acc[effectiveDomEventName] = acc[effectiveDomEventName] || [];
+      acc[effectiveDomEventName].push(handler);
 
       return acc;
     }, {});
+
+    // A DOM event name can have several bindings on one element (e.g. multiple keyboard key
+    // filters), so each event maps to a single dispatcher that runs every registered handler.
+    return Object.fromEntries(
+      Object.entries(handlersByEvent).map(([eventName, handlers]) => [
+        eventName,
+        (event) => handlers.forEach((handler) => handler(event)),
+      ]),
+    );
   }
 
   // Based on render_dom/3 (list case)

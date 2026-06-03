@@ -3,6 +3,8 @@
 import Type from "../type.mjs";
 
 export default class MouseEvent {
+  static isDefaultAllowed = false;
+
   static buildOperationParam(event) {
     return Type.map([
       [Type.atom("client_x"), Type.float(event.clientX)],

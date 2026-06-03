@@ -4,6 +4,8 @@ import MouseEvent from "../events/mouse_event.mjs";
 import Type from "../type.mjs";
 
 export default class PointerEvent {
+  static isDefaultAllowed = false;
+
   // TODO: add more fields specific to PointerEvent
   static buildOperationParam(event) {
     const mouseEventDetails = MouseEvent.buildOperationParam(event);

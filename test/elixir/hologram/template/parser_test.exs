@@ -361,6 +361,18 @@ defmodule Hologram.Template.ParserTest do
              ]
     end
 
+    test "event handler with a key filter" do
+      assert parse_markup("<div $key_down.enter={:submit}>") == [
+               start_tag: {"div", [{"$key_down.enter", [expression: "{:submit}"]}]}
+             ]
+    end
+
+    test "event handler with a combined key filter" do
+      assert parse_markup("<div $key_down.ctrl+k={:open_palette}>") == [
+               start_tag: {"div", [{"$key_down.ctrl+k", [expression: "{:open_palette}"]}]}
+             ]
+    end
+
     # TODO: allow dash chars only in attributes
     # test "property with a dash char"
   end

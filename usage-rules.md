@@ -72,7 +72,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 
 ## Events
 
-- Bind events with `$` prefix: `$click`, `$change`, `$submit`, `$blur`, `$focus`, `$mouse_move`, `$pointer_down`, `$pointer_up`, `$pointer_move`, `$pointer_cancel`, `$select`, `$transition_end`, `$transition_start`, `$transition_run`, `$transition_cancel`. **Not** `phx-click` or `phx-change`.
+- Bind events with `$` prefix: `$click`, `$change`, `$submit`, `$blur`, `$focus`, `$key_down`, `$key_up`, `$mouse_move`, `$pointer_down`, `$pointer_up`, `$pointer_move`, `$pointer_cancel`, `$select`, `$transition_end`, `$transition_start`, `$transition_run`, `$transition_cancel`. **Not** `phx-click` or `phx-change`.
 - Text syntax (actions only): `$click="my_action"`.
 - Shorthand with params (actions only): `$click={:my_action, key: value}`.
 - Longhand (actions or commands): `$click={action: :my_action, target: "cid", params: %{key: value}}`.
@@ -80,6 +80,11 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Delays (actions only): `$click={action: :my_action, delay: 1000}`.
 - Event data is available in `params.event` inside the action/command handler.
 - `$change` on an input fires on every keystroke (text inputs) or on selection change (checkboxes, radios, selects). On a form element, it fires on field blur.
+- Keyboard events (`$key_down`, `$key_up`): `params.event` has `key` (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), `code`, `alt_key`, `ctrl_key`, `meta_key`, `shift_key`, `repeat`.
+- Filter keyboard events to a key with a dot: `$key_down.enter="submit"`; combine modifiers with `+`: `$key_down.ctrl+enter="send"`. Works on `$key_down` and `$key_up`, case-insensitive, and matches a superset (extra held modifiers do not block it).
+- Filter keys: letters/digits as the character (`k`, `7`); modifiers `alt`/`ctrl`/`meta`/`shift` (only when combined with a key); named keys (`arrow_up`, `enter`, `escape`, `space`, `tab`, `f1`-`f12`, ...); symbol keys as alias words (`slash`, `period`, `comma`, `minus`, ...) **not** raw characters.
+- Key filters are validated at compile time - a misspelled key like `$key_down.entr` fails the build, **not** a silent runtime no-op.
+- For runtime-determined keys, bind bare `$key_down` and match `params.event.key` in the handler.
 - Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
 
 ## Actions

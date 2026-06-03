@@ -281,7 +281,8 @@ defmodule Hologram.Template.RendererTest do
            {"attr_5", [text: "ccc", expression: {999}, text: "ddd"]},
            {"$attr_6", [text: "eee", expression: {888}, text: "fff"]},
            {"attr_7", []},
-           {"$attr_8", []}
+           {"$attr_8", []},
+           {"$attr_9", [text: "ggg"], ["mod_1"]}
          ], []}
 
       assert render_dom(node, @env, @server) ==

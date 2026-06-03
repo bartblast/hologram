@@ -4,6 +4,8 @@ import SubmitEvent from "./submit_event.mjs";
 import Type from "../type.mjs";
 
 export default class ChangeEvent {
+  static isDefaultAllowed = false;
+
   static buildOperationParam(event) {
     const target = event.target;
     const tagName = target.tagName;

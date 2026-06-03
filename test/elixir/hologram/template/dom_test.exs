@@ -571,6 +571,104 @@ defmodule Hologram.Template.DOMTest do
     end)
   end
 
+  describe "build_ast/1, element event attribute with modifiers" do
+    test "no modifier stays a 2-tuple" do
+      # <div $key_down="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "div", [{"$key_down", [text: "my_value"]}], []]}
+             ]
+    end
+
+    test "keyboard event with a single key filter" do
+      # <div $key_down.enter="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down.enter", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], [key: ["enter"]]]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "keyboard event with a combined key filter" do
+      # <div $key_down.ctrl+k="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down.ctrl+k", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], [key: ["ctrl", "k"]]]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "non-keyboard event keeps its raw modifier segments" do
+      # <div $click.foo="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$click.foo", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [{:{}, [line: 1], ["$click", [text: "my_value"], ["foo"]]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises for an unknown key in a keyboard event" do
+      # <div $key_down.entr="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$key_down.entr", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'unknown keyboard key "entr". Did you mean "enter"?',
+                   fn -> build_ast(tags) end
+    end
+
+    test "component $-attribute is not decomposed" do
+      # <Aaa.Bbb $key_down.enter="my_value"></Aaa.Bbb>
+      tags = [
+        {:start_tag, {"Aaa.Bbb", [{"$key_down.enter", [text: "my_value"]}]}},
+        {:end_tag, "Aaa.Bbb"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:Aaa, :Bbb]}]},
+                  [{"$key_down.enter", [text: "my_value"]}],
+                  []
+                ]}
+             ]
+    end
+  end
+
   describe "build_ast/1, expression node" do
     test "in text" do
       tags = [{:text, "abc"}, {:expression, "{1 + 2}"}, {:text, "xyz"}]
@@ -697,7 +795,7 @@ defmodule Hologram.Template.DOMTest do
     end
 
     test "with implicit keyword list, starting with a key with double quotes" do
-      tags = [{:expression, ~s/{"aaa bbb": 1, c: 2}/}]
+      tags = [{:expression, ~s'{"aaa bbb": 1, c: 2}'}]
 
       assert build_ast(tags) == [expression: {:{}, [line: 1], [["aaa bbb": 1, c: 2]]}]
     end
