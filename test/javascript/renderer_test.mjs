@@ -1357,6 +1357,205 @@ describe("Renderer", () => {
             Hologram.handleUiEvent.restore();
           });
         });
+
+        describe("debounce", () => {
+          let clock;
+
+          beforeEach(() => {
+            clock = sinon.useFakeTimers();
+          });
+
+          afterEach(() => {
+            clock.restore();
+          });
+
+          it("dispatches once after the window rather than on each event", () => {
+            // <button $click.debounce(250)="my_action"></button>
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("button"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$click"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  Type.list([
+                    Type.tuple([Type.atom("debounce"), Type.integer(250)]),
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(
+                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
+                  null,
+              );
+
+            const element = {};
+            const firstEvent = {currentTarget: element};
+            const lastEvent = {currentTarget: element};
+
+            // A burst schedules nothing immediately and coalesces to one dispatch.
+            vdom.data.on.click(firstEvent);
+            vdom.data.on.click(lastEvent);
+            sinon.assert.notCalled(stub);
+
+            clock.tick(250);
+
+            // Trailing edge: one dispatch carrying the final event of the burst, not the first.
+            sinon.assert.calledOnce(stub);
+            const [dispatchedEvent, dispatchedType] = stub.getCall(0).args;
+            assert.strictEqual(dispatchedEvent, lastEvent);
+            assert.strictEqual(dispatchedType, "click");
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("applies the debounce regardless of its position among the modifiers", () => {
+            // [key: ["enter"], debounce: 200] and [debounce: 200, key: ["enter"]] behave the same.
+            const keyFilter = Type.tuple([
+              Type.atom("key"),
+              Type.list([Type.bitstring("enter")]),
+            ]);
+
+            const debounce = Type.tuple([
+              Type.atom("debounce"),
+              Type.integer(200),
+            ]);
+
+            const buildNode = (modifiers) =>
+              Type.tuple([
+                Type.atom("element"),
+                Type.bitstring("div"),
+                Type.list([
+                  Type.tuple([
+                    Type.bitstring("$key_down"),
+                    Type.list([
+                      Type.tuple([
+                        Type.atom("text"),
+                        Type.bitstring("my_action"),
+                      ]),
+                    ]),
+                    modifiers,
+                  ]),
+                ]),
+                Type.list(),
+              ]);
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(
+                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
+                  null,
+              );
+
+            for (const modifiers of [
+              Type.list([keyFilter, debounce]),
+              Type.list([debounce, keyFilter]),
+            ]) {
+              const vdom = Renderer.renderDom(
+                buildNode(modifiers),
+                context,
+                slots,
+                defaultTarget,
+                parentTagName,
+              );
+
+              vdom.data.on.keydown({key: "Enter", currentTarget: {}});
+              sinon.assert.notCalled(stub);
+
+              clock.tick(200);
+              sinon.assert.calledOnce(stub);
+
+              stub.resetHistory();
+            }
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("keeps a stable slot across re-renders when action params change", () => {
+            // The same binding re-rendered with a different evaluated param must still coalesce -
+            // the slot key must not depend on the action spec, only on the static name/modifiers.
+            const buildNode = (paramValue) =>
+              Type.tuple([
+                Type.atom("element"),
+                Type.bitstring("button"),
+                Type.list([
+                  Type.tuple([
+                    Type.bitstring("$click"),
+                    Type.list([
+                      Type.tuple([
+                        Type.atom("expression"),
+                        Type.tuple([
+                          Type.atom("my_action"),
+                          Type.keywordList([
+                            [Type.atom("n"), Type.integer(paramValue)],
+                          ]),
+                        ]),
+                      ]),
+                    ]),
+                    Type.list([
+                      Type.tuple([Type.atom("debounce"), Type.integer(250)]),
+                    ]),
+                  ]),
+                ]),
+                Type.list(),
+              ]);
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(
+                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
+                  null,
+              );
+
+            const element = {};
+
+            // First render (param 1) schedules a debounce timer for the element.
+            const vdom1 = Renderer.renderDom(
+              buildNode(1),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            vdom1.data.on.click({currentTarget: element});
+
+            // A re-render with a changed param must reuse the same slot, so the next event
+            // cancels the pending timer instead of scheduling a second one.
+            const vdom2 = Renderer.renderDom(
+              buildNode(2),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            vdom2.data.on.click({currentTarget: element});
+
+            clock.tick(250);
+
+            sinon.assert.calledOnce(stub);
+
+            Hologram.handleUiEvent.restore();
+          });
+        });
       });
 
       describe("default operation target", () => {
