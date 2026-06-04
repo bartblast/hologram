@@ -1212,7 +1212,7 @@ Hologram calls `preventDefault` on interaction events by default, so a bound eve
 <a href="/files/report.pdf" download $click.allow_default="track_download">Download</a>
 ```
 
-Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters and `.debounce`.
+Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters, `.debounce`, and `.throttle`.
 
 #### Event Flow
 
