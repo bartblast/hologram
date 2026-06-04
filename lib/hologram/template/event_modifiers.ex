@@ -52,10 +52,20 @@ defmodule Hologram.Template.EventModifiers do
                 ) ++ for(n <- 1..12, do: "f#{n}")
 
   @typedoc """
-  A parsed event modifier: a keyboard key filter, a debounce window in milliseconds, or an
-  opt-out of the framework's default preventDefault.
+  An event binding's parsed modifiers, keyed by type. Sparse - only the modifiers present on the
+  binding appear.
   """
-  @type modifier :: {:allow_default} | {:debounce, pos_integer} | {:key, list(String.t())}
+  @type modifiers :: %{
+          optional(:allow_default) => true,
+          optional(:debounce) => pos_integer,
+          optional(:key) => list(list(String.t()))
+        }
+
+  @typedoc """
+  A single parsed modifier in its intermediate tagged form, before aggregation into the map.
+  """
+  @type tagged_modifier ::
+          {:allow_default} | {:debounce, pos_integer} | {:key, list(String.t())}
 
   @doc """
   Returns true if the given event attribute base name carries keyboard key filters.
@@ -64,23 +74,37 @@ defmodule Hologram.Template.EventModifiers do
   def keyboard_event?(base_name), do: base_name in @keyboard_events
 
   @doc """
-  Parses the raw modifier segments of an event attribute into tagged modifiers.
+  Parses the raw modifier segments of an event attribute into a map of modifiers keyed by type.
 
-  `base_name` is the event's bare name (e.g. `"$key_down"`) and decides which modifiers a
-  segment may be. A `debounce(ms)` segment becomes `{:debounce, ms}` and an `allow_default`
-  segment becomes `{:allow_default}` - both are valid on any event. A keyboard key filter becomes
-  a `{:key, values}` tuple holding the resolved modifier flags and the single matched key, and is
-  valid only on keyboard events.
+  `base_name` is the event's bare name (e.g. `"$key_down"`) and decides which modifiers a segment
+  may be. The map is sparse, holding only the modifiers present on the binding:
+
+    * `:allow_default` - `true` when the binding opts out of the framework's preventDefault, valid
+      on any event
+    * `:debounce` - the debounce window in milliseconds, valid on any event
+    * `:key` - the keyboard key filters as a list, each a list of the resolved modifier flags and
+      the single matched key, valid only on keyboard events
 
   Raises `Hologram.TemplateSyntaxError` for a debounce value that is not a positive integer, a
   key filter on a non-keyboard event, an empty segment, an unknown key, more than one key in a
   single filter, or more than one debounce modifier.
   """
-  @spec parse(String.t(), list(String.t())) :: list(modifier)
+  @spec parse(String.t(), list(String.t())) :: modifiers
   def parse(base_name, segments) do
     segments
     |> Enum.map(&parse_segment(base_name, &1))
     |> validate_single_debounce()
+    |> aggregate()
+  end
+
+  # Collapses the tagged modifier list into a map keyed by type. Key filters accumulate under
+  # :key (several may apply), while debounce and allow_default are single-valued.
+  defp aggregate(modifiers) do
+    Enum.reduce(modifiers, %{}, fn
+      {:key, values}, acc -> Map.update(acc, :key, [values], &(&1 ++ [values]))
+      {:debounce, ms}, acc -> Map.put(acc, :debounce, ms)
+      {:allow_default}, acc -> Map.put(acc, :allow_default, true)
+    end)
   end
 
   defp debounce_error(segment) do

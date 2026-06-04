@@ -17,50 +17,44 @@ defmodule Hologram.Template.EventModifiersTest do
 
   describe "parse/2 allow_default modifier" do
     test "on a non-keyboard event" do
-      assert parse("$click", ["allow_default"]) == [{:allow_default}]
+      assert parse("$click", ["allow_default"]) == %{allow_default: true}
     end
 
     test "on a keyboard event" do
-      assert parse("$key_down", ["allow_default"]) == [{:allow_default}]
+      assert parse("$key_down", ["allow_default"]) == %{allow_default: true}
     end
 
     test "combined with a key filter on a keyboard event" do
-      assert parse("$key_down", ["enter", "allow_default"]) == [
-               {:key, ["enter"]},
-               {:allow_default}
-             ]
+      assert parse("$key_down", ["enter", "allow_default"]) ==
+               %{allow_default: true, key: [["enter"]]}
     end
 
     test "combined with a debounce window" do
-      assert parse("$change", ["allow_default", "debounce(300)"]) == [
-               {:allow_default},
-               {:debounce, 300}
-             ]
+      assert parse("$change", ["allow_default", "debounce(300)"]) ==
+               %{allow_default: true, debounce: 300}
     end
   end
 
   describe "parse/2 debounce modifier" do
     test "on a non-keyboard event" do
-      assert parse("$change", ["debounce(300)"]) == [{:debounce, 300}]
+      assert parse("$change", ["debounce(300)"]) == %{debounce: 300}
     end
 
     test "on a keyboard event" do
-      assert parse("$key_down", ["debounce(300)"]) == [{:debounce, 300}]
+      assert parse("$key_down", ["debounce(300)"]) == %{debounce: 300}
     end
 
     test "bare debounce takes the default window" do
-      assert parse("$change", ["debounce"]) == [{:debounce, 250}]
+      assert parse("$change", ["debounce"]) == %{debounce: 250}
     end
 
     test "combined with a key filter on a keyboard event" do
-      assert parse("$key_down", ["enter", "debounce(200)"]) == [
-               {:key, ["enter"]},
-               {:debounce, 200}
-             ]
+      assert parse("$key_down", ["enter", "debounce(200)"]) ==
+               %{debounce: 200, key: [["enter"]]}
     end
 
     test "large value has no upper bound" do
-      assert parse("$change", ["debounce(60000)"]) == [{:debounce, 60_000}]
+      assert parse("$change", ["debounce(60000)"]) == %{debounce: 60_000}
     end
 
     test "raises for a missing value" do
@@ -96,47 +90,47 @@ defmodule Hologram.Template.EventModifiersTest do
 
   describe "parse/2 key filter modifier" do
     test "single named key" do
-      assert parse("$key_down", ["enter"]) == [{:key, ["enter"]}]
+      assert parse("$key_down", ["enter"]) == %{key: [["enter"]]}
     end
 
     test "single character key" do
-      assert parse("$key_down", ["k"]) == [{:key, ["k"]}]
+      assert parse("$key_down", ["k"]) == %{key: [["k"]]}
     end
 
     test "uppercase key is downcased" do
-      assert parse("$key_down", ["K"]) == [{:key, ["k"]}]
+      assert parse("$key_down", ["K"]) == %{key: [["k"]]}
     end
 
     test "modifier combined with a key" do
-      assert parse("$key_down", ["ctrl+k"]) == [{:key, ["ctrl", "k"]}]
+      assert parse("$key_down", ["ctrl+k"]) == %{key: [["ctrl", "k"]]}
     end
 
     test "multiple modifiers combined with a key" do
-      assert parse("$key_down", ["ctrl+shift+k"]) == [{:key, ["ctrl", "shift", "k"]}]
+      assert parse("$key_down", ["ctrl+shift+k"]) == %{key: [["ctrl", "shift", "k"]]}
     end
 
     test "named key is normalized to its event.key form" do
-      assert parse("$key_down", ["arrow_up"]) == [{:key, ["arrowup"]}]
+      assert parse("$key_down", ["arrow_up"]) == %{key: [["arrowup"]]}
     end
 
     test "symbol alias resolves to its event.key char" do
-      assert parse("$key_down", ["slash"]) == [{:key, ["/"]}]
+      assert parse("$key_down", ["slash"]) == %{key: [["/"]]}
     end
 
     test "modifier combined with a symbol alias" do
-      assert parse("$key_down", ["ctrl+slash"]) == [{:key, ["ctrl", "/"]}]
+      assert parse("$key_down", ["ctrl+slash"]) == %{key: [["ctrl", "/"]]}
     end
 
     test "space resolves to the literal space key" do
-      assert parse("$key_down", ["space"]) == [{:key, [" "]}]
+      assert parse("$key_down", ["space"]) == %{key: [[" "]]}
     end
 
     test "function key" do
-      assert parse("$key_down", ["f5"]) == [{:key, ["f5"]}]
+      assert parse("$key_down", ["f5"]) == %{key: [["f5"]]}
     end
 
     test "multiple segments become multiple key filters" do
-      assert parse("$key_down", ["enter", "ctrl+k"]) == [{:key, ["enter"]}, {:key, ["ctrl", "k"]}]
+      assert parse("$key_down", ["enter", "ctrl+k"]) == %{key: [["enter"], ["ctrl", "k"]]}
     end
 
     test "raises for an unknown key with a suggestion" do
