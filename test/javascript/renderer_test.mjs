@@ -1266,11 +1266,10 @@ describe("Renderer", () => {
             Hologram.handleUiEvent.restore();
           });
 
-          it("composes with a key filter and a debounce window", () => {
-            // <input $key_down.enter.allow_default.debounce(200)="my_action" />
+          it("composes with a key filter", () => {
+            // <input $key_down.enter.allow_default="my_action" />
             const modifiers = Type.map([
               [Type.atom("allow_default"), Type.boolean(true)],
-              [Type.atom("debounce"), Type.integer(200)],
               [
                 Type.atom("key"),
                 Type.list([Type.list([Type.bitstring("enter")])]),
@@ -1664,6 +1663,135 @@ describe("Renderer", () => {
               ]),
               defaultTarget,
             );
+
+            Hologram.handleUiEvent.restore();
+          });
+        });
+
+        describe("throttle", () => {
+          let clock;
+
+          beforeEach(() => {
+            clock = sinon.useFakeTimers();
+          });
+
+          afterEach(() => {
+            clock.restore();
+          });
+
+          it("dispatches on the leading edge and again on the trailing edge", () => {
+            // <button $click.throttle(100)="my_action"></button>
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("button"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$click"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  Type.map([[Type.atom("throttle"), Type.integer(100)]]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+            const firstEvent = {currentTarget: element};
+            const lastEvent = {currentTarget: element};
+
+            vdom.data.on.click(firstEvent);
+            vdom.data.on.click(lastEvent);
+
+            // handleUiEvent runs synchronously on every event. The first dispatches immediately
+            // (leading edge); the second is held.
+            sinon.assert.calledTwice(stub);
+            sinon.assert.calledOnce(dispatches[0]);
+            sinon.assert.notCalled(dispatches[1]);
+
+            clock.tick(100);
+
+            // Trailing edge: the latest held event dispatches.
+            sinon.assert.calledOnce(dispatches[0]);
+            sinon.assert.calledOnce(dispatches[1]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("composes a key filter with a throttle window", () => {
+            // <div $key_down.enter.throttle(100)="my_action"></div>
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("div"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$key_down"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  Type.map([
+                    [
+                      Type.atom("key"),
+                      Type.list([Type.list([Type.bitstring("enter")])]),
+                    ],
+                    [Type.atom("throttle"), Type.integer(100)],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+
+            // A non-matching key is gated out before anything is scheduled.
+            vdom.data.on.keydown({key: "Escape", currentTarget: element});
+            sinon.assert.notCalled(Hologram.handleUiEvent);
+
+            // Matching keys are throttled: the first dispatches on the leading edge, a second is
+            // held and dispatches on the trailing edge.
+            vdom.data.on.keydown({key: "Enter", currentTarget: element});
+            vdom.data.on.keydown({key: "Enter", currentTarget: element});
+            sinon.assert.calledOnce(dispatches[0]);
+            sinon.assert.notCalled(dispatches[1]);
+
+            clock.tick(100);
+            sinon.assert.calledOnce(dispatches[1]);
 
             Hologram.handleUiEvent.restore();
           });

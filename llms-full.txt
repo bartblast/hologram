@@ -1204,6 +1204,28 @@ Debouncing is easy to confuse with the `delay` option covered in the binding syn
 
 In short, `delay` postpones an action you have already decided to dispatch, while `.debounce` decides whether to dispatch at all - collapsing a rapid burst into one trailing call.
 
+#### Throttling
+
+Throttling caps how often a high-frequency event dispatches while it keeps firing. Append `.throttle(ms)` to dispatch at most once per `ms`: the first event fires immediately, then at most one dispatch per window, with the latest event of each window dispatched on its trailing edge. It is built for continuous feedback - a live cursor readout, a drag preview, a scroll-position indicator.
+
+```holo
+<div $mouse_move.throttle(100)="update_readout"></div>
+```
+
+Used without a value, `.throttle` applies a default window of 100 milliseconds - around ten updates per second, smooth enough to feel live without flooding the action pipeline:
+
+```holo
+<div $pointer_move.throttle="update_readout"></div>
+```
+
+Throttling works on any event and combines with key filters, and each binding keeps its own window. Like debouncing, the value is validated at compile time. A binding cannot carry both `.throttle` and `.debounce` - they are opposite strategies, so combining them fails the build.
+
+##### Throttle vs Debounce
+
+Both tame high-frequency events, in opposite ways. `.debounce` waits for activity to settle and then dispatches once - reach for it when you only care about the final state, like a search query after the user stops typing. `.throttle` dispatches at a steady capped rate while activity continues - reach for it when you want regular updates during the interaction.
+
+In short, debounce fires once after activity stops, while throttle fires repeatedly at a capped rate during it.
+
 #### Allowing the Native Default
 
 Hologram calls `preventDefault` on interaction events by default, so a bound event does not also trigger the browser's native behaviour - a bound form does not reload the page, a bound link does not navigate. The exception is keyboard events (`$key_down`, `$key_up`), which Hologram never prevents, so typing and shortcuts always work. Append `allow_default` to a single binding so Hologram does not call `preventDefault` for it - the browser's native default then proceeds, and the action still dispatches.
