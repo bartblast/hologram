@@ -23,16 +23,6 @@ defmodule Hologram.Template.EventModifiersTest do
     test "on a keyboard event" do
       assert parse("$key_down", ["allow_default"]) == %{allow_default: true}
     end
-
-    test "combined with a key filter on a keyboard event" do
-      assert parse("$key_down", ["enter", "allow_default"]) ==
-               %{allow_default: true, key: [["enter"]]}
-    end
-
-    test "combined with a debounce window" do
-      assert parse("$change", ["allow_default", "debounce(300)"]) ==
-               %{allow_default: true, debounce: 300}
-    end
   end
 
   describe "parse/2 debounce modifier" do
@@ -46,11 +36,6 @@ defmodule Hologram.Template.EventModifiersTest do
 
     test "bare debounce takes the default window" do
       assert parse("$change", ["debounce"]) == %{debounce: 250}
-    end
-
-    test "combined with a key filter on a keyboard event" do
-      assert parse("$key_down", ["enter", "debounce(200)"]) ==
-               %{debounce: 200, key: [["enter"]]}
     end
 
     test "large value has no upper bound" do
@@ -207,16 +192,6 @@ defmodule Hologram.Template.EventModifiersTest do
       assert parse("$mouse_move", ["throttle"]) == %{throttle: 100}
     end
 
-    test "combined with allow_default" do
-      assert parse("$click", ["throttle(100)", "allow_default"]) ==
-               %{allow_default: true, throttle: 100}
-    end
-
-    test "combined with a key filter on a keyboard event" do
-      assert parse("$key_down", ["enter", "throttle(200)"]) ==
-               %{key: [["enter"]], throttle: 200}
-    end
-
     test "large value has no upper bound" do
       assert parse("$mouse_move", ["throttle(60000)"]) == %{throttle: 60_000}
     end
@@ -250,8 +225,30 @@ defmodule Hologram.Template.EventModifiersTest do
                    "an event binding may include at most one throttle modifier",
                    fn -> parse("$mouse_move", ["throttle(100)", "throttle(200)"]) end
     end
+  end
 
-    test "raises when combined with a debounce modifier" do
+  describe "parse/2 modifier combinations" do
+    test "allow_default composes with another modifier" do
+      assert parse("$key_down", ["allow_default", "enter"]) ==
+               %{allow_default: true, key: [["enter"]]}
+    end
+
+    test "debounce composes with another modifier" do
+      assert parse("$change", ["debounce(300)", "allow_default"]) ==
+               %{allow_default: true, debounce: 300}
+    end
+
+    test "a key filter composes with another modifier" do
+      assert parse("$key_down", ["enter", "debounce(200)"]) ==
+               %{debounce: 200, key: [["enter"]]}
+    end
+
+    test "throttle composes with another modifier" do
+      assert parse("$mouse_move", ["throttle(100)", "allow_default"]) ==
+               %{allow_default: true, throttle: 100}
+    end
+
+    test "rejects debounce and throttle together" do
       assert_raise TemplateSyntaxError,
                    "an event binding may not combine debounce and throttle modifiers",
                    fn -> parse("$change", ["debounce(300)", "throttle(100)"]) end
