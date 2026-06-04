@@ -10,6 +10,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
+import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -860,6 +861,7 @@ export default class Renderer {
       const modifiersDom = attrDom.data[2];
       const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
       const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
+      const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
 
       const handler = (event) => {
         if (modifiersDom && !$.#eventMatchesModifiers(modifiersDom, event)) {
@@ -882,13 +884,16 @@ export default class Renderer {
           return;
         }
 
-        if (debounceMs === null) {
-          dispatch();
-        } else {
-          // Slot key = the attribute's position: stable across re-renders (attributes are never
-          // removed, only nilled in place) and independent of the action spec's evaluated params.
-          // currentTarget is read synchronously here - the browser nulls it after dispatch.
+        // Slot key = the attribute's position: stable across re-renders (attributes are never
+        // removed, only nilled in place) and independent of the action spec's evaluated params.
+        // currentTarget is read synchronously here - the browser nulls it after dispatch. Debounce
+        // and throttle are mutually exclusive (enforced at compile time), so at most one applies.
+        if (debounceMs !== null) {
           Debouncer.run(event.currentTarget, attrIndex, debounceMs, dispatch);
+        } else if (throttleMs !== null) {
+          Throttler.run(event.currentTarget, attrIndex, throttleMs, dispatch);
+        } else {
+          dispatch();
         }
       };
 
@@ -1062,6 +1067,22 @@ export default class Renderer {
       defaultTarget,
       parentTagName,
     );
+  }
+
+  // Returns the throttle window in milliseconds from a modifiers map, or null when there is no
+  // throttle modifier.
+  static #throttleMsFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return null;
+    }
+
+    const throttle = Erlang_Maps["get/3"](
+      Type.atom("throttle"),
+      modifiersDom,
+      null,
+    );
+
+    return throttle === null ? null : Number(throttle.value);
   }
 
   static #updateFormInputChecked(element, newChecked) {
