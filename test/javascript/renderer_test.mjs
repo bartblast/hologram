@@ -1226,7 +1226,9 @@ describe("Renderer", () => {
 
           it("passes allowDefault true when the modifier is present", () => {
             const vdom = Renderer.renderDom(
-              buildNode(Type.list([Type.tuple([Type.atom("allow_default")])])),
+              buildNode(
+                Type.map([[Type.atom("allow_default"), Type.boolean(true)]]),
+              ),
               context,
               slots,
               defaultTarget,
@@ -1246,7 +1248,7 @@ describe("Renderer", () => {
 
           it("passes allowDefault false when the modifier is absent", () => {
             const vdom = Renderer.renderDom(
-              buildNode(Type.list([])),
+              buildNode(Type.map()),
               context,
               slots,
               defaultTarget,
@@ -1266,13 +1268,13 @@ describe("Renderer", () => {
 
           it("composes with a key filter and a debounce window", () => {
             // <input $key_down.enter.allow_default.debounce(200)="my_action" />
-            const modifiers = Type.list([
-              Type.tuple([
+            const modifiers = Type.map([
+              [Type.atom("allow_default"), Type.boolean(true)],
+              [Type.atom("debounce"), Type.integer(200)],
+              [
                 Type.atom("key"),
-                Type.list([Type.bitstring("enter")]),
-              ]),
-              Type.tuple([Type.atom("allow_default")]),
-              Type.tuple([Type.atom("debounce"), Type.integer(200)]),
+                Type.list([Type.list([Type.bitstring("enter")])]),
+              ],
             ]);
 
             const node = Type.tuple([
@@ -1343,9 +1345,7 @@ describe("Renderer", () => {
                       Type.bitstring("my_action"),
                     ]),
                   ]),
-                  Type.list([
-                    Type.tuple([Type.atom("debounce"), Type.integer(250)]),
-                  ]),
+                  Type.map([[Type.atom("debounce"), Type.integer(250)]]),
                 ]),
               ]),
               Type.list(),
@@ -1391,36 +1391,39 @@ describe("Renderer", () => {
             Hologram.handleUiEvent.restore();
           });
 
-          it("applies the debounce regardless of its position among the modifiers", () => {
-            // [key: ["enter"], debounce: 200] and [debounce: 200, key: ["enter"]] behave the same.
-            const keyFilter = Type.tuple([
-              Type.atom("key"),
-              Type.list([Type.bitstring("enter")]),
-            ]);
-
-            const debounce = Type.tuple([
-              Type.atom("debounce"),
-              Type.integer(200),
-            ]);
-
-            const buildNode = (modifiers) =>
-              Type.tuple([
-                Type.atom("element"),
-                Type.bitstring("div"),
-                Type.list([
-                  Type.tuple([
-                    Type.bitstring("$key_down"),
-                    Type.list([
-                      Type.tuple([
-                        Type.atom("text"),
-                        Type.bitstring("my_action"),
-                      ]),
+          it("composes a key filter with a debounce window", () => {
+            // <div $key_down.enter.debounce(200)="my_action"></div>
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("div"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$key_down"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
                     ]),
-                    modifiers,
+                  ]),
+                  Type.map([
+                    [Type.atom("debounce"), Type.integer(200)],
+                    [
+                      Type.atom("key"),
+                      Type.list([Type.list([Type.bitstring("enter")])]),
+                    ],
                   ]),
                 ]),
-                Type.list(),
-              ]);
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
 
             let dispatch;
             sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
@@ -1428,24 +1431,16 @@ describe("Renderer", () => {
               return dispatch;
             });
 
-            for (const modifiers of [
-              Type.list([keyFilter, debounce]),
-              Type.list([debounce, keyFilter]),
-            ]) {
-              const vdom = Renderer.renderDom(
-                buildNode(modifiers),
-                context,
-                slots,
-                defaultTarget,
-                parentTagName,
-              );
+            // A non-matching key is gated out before anything is scheduled.
+            vdom.data.on.keydown({key: "Escape", currentTarget: {}});
+            sinon.assert.notCalled(Hologram.handleUiEvent);
 
-              vdom.data.on.keydown({key: "Enter", currentTarget: {}});
-              sinon.assert.notCalled(dispatch);
+            // A matching key schedules a debounced dispatch.
+            vdom.data.on.keydown({key: "Enter", currentTarget: {}});
+            sinon.assert.notCalled(dispatch);
 
-              clock.tick(200);
-              sinon.assert.calledOnce(dispatch);
-            }
+            clock.tick(200);
+            sinon.assert.calledOnce(dispatch);
 
             Hologram.handleUiEvent.restore();
           });
@@ -1471,9 +1466,7 @@ describe("Renderer", () => {
                         ]),
                       ]),
                     ]),
-                    Type.list([
-                      Type.tuple([Type.atom("debounce"), Type.integer(250)]),
-                    ]),
+                    Type.map([[Type.atom("debounce"), Type.integer(250)]]),
                   ]),
                 ]),
                 Type.list(),
@@ -1537,11 +1530,11 @@ describe("Renderer", () => {
                       Type.bitstring("my_action"),
                     ]),
                   ]),
-                  Type.list([
-                    Type.tuple([
+                  Type.map([
+                    [
                       Type.atom("key"),
-                      Type.list([Type.bitstring("enter")]),
-                    ]),
+                      Type.list([Type.list([Type.bitstring("enter")])]),
+                    ],
                   ]),
                 ]),
               ]),
@@ -1597,11 +1590,11 @@ describe("Renderer", () => {
                       Type.bitstring("my_enter_action"),
                     ]),
                   ]),
-                  Type.list([
-                    Type.tuple([
+                  Type.map([
+                    [
                       Type.atom("key"),
-                      Type.list([Type.bitstring("enter")]),
-                    ]),
+                      Type.list([Type.list([Type.bitstring("enter")])]),
+                    ],
                   ]),
                 ]),
                 Type.tuple([
@@ -1612,11 +1605,11 @@ describe("Renderer", () => {
                       Type.bitstring("my_escape_action"),
                     ]),
                   ]),
-                  Type.list([
-                    Type.tuple([
+                  Type.map([
+                    [
                       Type.atom("key"),
-                      Type.list([Type.bitstring("escape")]),
-                    ]),
+                      Type.list([Type.list([Type.bitstring("escape")])]),
+                    ],
                   ]),
                 ]),
               ]),

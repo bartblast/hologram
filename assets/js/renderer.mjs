@@ -160,15 +160,15 @@ export default class Renderer {
     return Bitstring.concat(bitstringChunks);
   }
 
-  // Returns true when the modifiers list carries an allow_default modifier, which opts the
-  // binding out of the framework's preventDefault. Position-independent among the modifiers.
+  // Returns true when the modifiers map carries an allow_default modifier, which opts the binding
+  // out of the framework's preventDefault.
   static #allowDefaultFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
     }
 
-    return modifiersDom.data.some(
-      (modifierDom) => modifierDom.data[0].value === "allow_default",
+    return Type.isTrue(
+      Erlang_Maps["is_key/2"](Type.atom("allow_default"), modifiersDom),
     );
   }
 
@@ -213,19 +213,20 @@ export default class Renderer {
     );
   }
 
-  // Returns the debounce window in milliseconds from a modifiers list, or null when there is no
-  // debounce modifier. Position-independent - the debounce modifier may sit anywhere among the
-  // tagged modifiers (e.g. before or after a key filter).
+  // Returns the debounce window in milliseconds from a modifiers map, or null when there is no
+  // debounce modifier.
   static #debounceMsFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return null;
     }
 
-    const debounceDom = modifiersDom.data.find(
-      (modifierDom) => modifierDom.data[0].value === "debounce",
+    const debounce = Erlang_Maps["get/3"](
+      Type.atom("debounce"),
+      modifiersDom,
+      null,
     );
 
-    return debounceDom ? Number(debounceDom.data[1].value) : null;
+    return debounce === null ? null : Number(debounce.value);
   }
 
   static #determineInputType(tagName, attrs) {
@@ -342,15 +343,15 @@ export default class Renderer {
   // tagged list; a {:key, values} modifier is matched by the keyboard matcher, and any other
   // kind does not gate dispatch.
   static #eventMatchesModifiers(modifiersDom, event) {
-    return modifiersDom.data.every((modifierDom) => {
-      const kind = modifierDom.data[0].value;
+    const keyFilters = Erlang_Maps["get/3"](
+      Type.atom("key"),
+      modifiersDom,
+      Type.list(),
+    );
 
-      if (kind === "key") {
-        return KeyboardEvent.matchesKeyFilter(modifierDom.data[1], event);
-      }
-
-      return true;
-    });
+    return keyFilters.data.every((keyFilter) =>
+      KeyboardEvent.matchesKeyFilter(keyFilter, event),
+    );
   }
 
   // Based on filter_allowed_props/2
