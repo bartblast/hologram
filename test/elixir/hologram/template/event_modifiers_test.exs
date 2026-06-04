@@ -15,6 +15,85 @@ defmodule Hologram.Template.EventModifiersTest do
     end
   end
 
+  describe "parse/2 allow_default modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$click", ["allow_default"]) == [{:allow_default}]
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["allow_default"]) == [{:allow_default}]
+    end
+
+    test "combined with a key filter on a keyboard event" do
+      assert parse("$key_down", ["enter", "allow_default"]) == [
+               {:key, ["enter"]},
+               {:allow_default}
+             ]
+    end
+
+    test "combined with a debounce window" do
+      assert parse("$change", ["allow_default", "debounce(300)"]) == [
+               {:allow_default},
+               {:debounce, 300}
+             ]
+    end
+  end
+
+  describe "parse/2 debounce modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$change", ["debounce(300)"]) == [{:debounce, 300}]
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["debounce(300)"]) == [{:debounce, 300}]
+    end
+
+    test "bare debounce takes the default window" do
+      assert parse("$change", ["debounce"]) == [{:debounce, 250}]
+    end
+
+    test "combined with a key filter on a keyboard event" do
+      assert parse("$key_down", ["enter", "debounce(200)"]) == [
+               {:key, ["enter"]},
+               {:debounce, 200}
+             ]
+    end
+
+    test "large value has no upper bound" do
+      assert parse("$change", ["debounce(60000)"]) == [{:debounce, 60_000}]
+    end
+
+    test "raises for a missing value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce()" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce()"]) end
+    end
+
+    test "raises for a non-integer value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce(abc)" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce(abc)"]) end
+    end
+
+    test "raises for a negative value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce(-5)" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce(-5)"]) end
+    end
+
+    test "raises for a zero value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'debounce modifier "debounce(0)" requires a positive integer of milliseconds',
+                   fn -> parse("$change", ["debounce(0)"]) end
+    end
+
+    test "raises for more than one debounce modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one debounce modifier",
+                   fn -> parse("$click", ["debounce(100)", "debounce(500)"]) end
+    end
+  end
+
   describe "parse/2 key filter modifier" do
     test "single named key" do
       assert parse("$key_down", ["enter"]) == [{:key, ["enter"]}]
@@ -118,85 +197,6 @@ defmodule Hologram.Template.EventModifiersTest do
       assert_raise TemplateSyntaxError,
                    ~s'unknown event modifier "enter"',
                    fn -> parse("$change", ["enter"]) end
-    end
-  end
-
-  describe "parse/2 debounce modifier" do
-    test "on a non-keyboard event" do
-      assert parse("$change", ["debounce(300)"]) == [{:debounce, 300}]
-    end
-
-    test "on a keyboard event" do
-      assert parse("$key_down", ["debounce(300)"]) == [{:debounce, 300}]
-    end
-
-    test "bare debounce takes the default window" do
-      assert parse("$change", ["debounce"]) == [{:debounce, 250}]
-    end
-
-    test "combined with a key filter on a keyboard event" do
-      assert parse("$key_down", ["enter", "debounce(200)"]) == [
-               {:key, ["enter"]},
-               {:debounce, 200}
-             ]
-    end
-
-    test "large value has no upper bound" do
-      assert parse("$change", ["debounce(60000)"]) == [{:debounce, 60_000}]
-    end
-
-    test "raises for a missing value" do
-      assert_raise TemplateSyntaxError,
-                   ~s'debounce modifier "debounce()" requires a positive integer of milliseconds',
-                   fn -> parse("$change", ["debounce()"]) end
-    end
-
-    test "raises for a non-integer value" do
-      assert_raise TemplateSyntaxError,
-                   ~s'debounce modifier "debounce(abc)" requires a positive integer of milliseconds',
-                   fn -> parse("$change", ["debounce(abc)"]) end
-    end
-
-    test "raises for a negative value" do
-      assert_raise TemplateSyntaxError,
-                   ~s'debounce modifier "debounce(-5)" requires a positive integer of milliseconds',
-                   fn -> parse("$change", ["debounce(-5)"]) end
-    end
-
-    test "raises for a zero value" do
-      assert_raise TemplateSyntaxError,
-                   ~s'debounce modifier "debounce(0)" requires a positive integer of milliseconds',
-                   fn -> parse("$change", ["debounce(0)"]) end
-    end
-
-    test "raises for more than one debounce modifier" do
-      assert_raise TemplateSyntaxError,
-                   "an event binding may include at most one debounce modifier",
-                   fn -> parse("$click", ["debounce(100)", "debounce(500)"]) end
-    end
-  end
-
-  describe "parse/2 allow_default modifier" do
-    test "on a non-keyboard event" do
-      assert parse("$click", ["allow_default"]) == [{:allow_default}]
-    end
-
-    test "on a keyboard event" do
-      assert parse("$key_down", ["allow_default"]) == [{:allow_default}]
-    end
-
-    test "combined with a key filter on a keyboard event" do
-      assert parse("$key_down", ["enter", "allow_default"]) == [
-               {:key, ["enter"]},
-               {:allow_default}
-             ]
-    end
-
-    test "combined with a debounce window" do
-      assert parse("$change", ["allow_default", "debounce(300)"]) == [
-               {:allow_default},
-               {:debounce, 300}
-             ]
     end
   end
 end
