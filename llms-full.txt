@@ -1112,6 +1112,20 @@ To trigger a command, use the `command:` key instead of `action:` (note that del
 <button $click={command: :my_command, params: %{key: value}}>Click me</button>
 ```
 
+#### Event Targets
+
+By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
+
+```holo
+<button $click={action: :my_action, target: "other_component"}>Click me</button>
+```
+
+Valid targets include:
+
+- `"page"` - targets the current page
+- `"layout"` - targets the current layout component
+- a string representing a component ID (CID) - targets a specific component by its unique identifier within the application
+
 #### Keyboard Key Filters
 
 Keyboard events can be filtered to a specific key directly in the template by appending the key to the event name with a dot. The handler then fires only when that key is pressed:
@@ -1199,20 +1213,6 @@ Hologram calls `preventDefault` on interaction events by default, so a bound bin
 ```
 
 Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters and `.debounce`.
-
-#### Event Targets
-
-By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
-
-```holo
-<button $click={action: :my_action, target: "other_component"}>Click me</button>
-```
-
-Valid targets include:
-
-- `"page"` - targets the current page
-- `"layout"` - targets the current layout component
-- a string representing a component ID (CID) - targets a specific component by its unique identifier within the application
 
 #### Event Flow
 
