@@ -78,6 +78,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Longhand (actions or commands): `$click={action: :my_action, target: "cid", params: %{key: value}}`.
 - Trigger commands with longhand: `$click={command: :my_command, params: %{key: value}}`.
 - Delays (actions only): `$click={action: :my_action, delay: 1000}`.
+- Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
 - Event data is available in `params.event` inside the action/command handler.
 - `$change` on an input fires on every keystroke (text inputs) or on selection change (checkboxes, radios, selects). On a form element, it fires on field blur.
 - Keyboard events (`$key_down`, `$key_up`): `params.event` has `key` (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), `code`, `alt_key`, `ctrl_key`, `meta_key`, `shift_key`, `repeat`.
@@ -87,8 +88,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - For runtime-determined keys, bind bare `$key_down` and match `params.event.key` in the handler.
 - Debounce high-frequency events by appending `.debounce(ms)`, coalescing a burst into one trailing dispatch that carries the last event's data: `$change.debounce(300)="search"`. Bare `.debounce` uses a 250ms default. Works on any event, combines with key filters (`$key_down.enter.debounce(300)`), each binding keeps its own timer, and the window is validated at compile time (`$change.debounce(0)` fails the build).
 - `.debounce` is an event modifier (gates whether and when an event dispatches) - distinct from the `delay` action option (postpones an already-decided dispatch, also settable via `put_action`).
-- Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
-
+- Append `allow_default` so Hologram does not call `preventDefault` for that binding, letting the browser's native default run while the action still dispatches: `$click.allow_default="track"`. Hologram prevents the default on interaction events except keyboard (`$key_down`/`$key_up`), so `allow_default` is meaningful on `$click`/`$submit`/cancelable pointer events. Composes with key filters and `.debounce`.
 ## Actions
 
 - Actions are client-side. Define with `def action(name, params, component)`. **Not** `handle_event`.

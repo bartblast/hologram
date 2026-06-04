@@ -1112,6 +1112,20 @@ To trigger a command, use the `command:` key instead of `action:` (note that del
 <button $click={command: :my_command, params: %{key: value}}>Click me</button>
 ```
 
+#### Event Targets
+
+By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
+
+```holo
+<button $click={action: :my_action, target: "other_component"}>Click me</button>
+```
+
+Valid targets include:
+
+- `"page"` - targets the current page
+- `"layout"` - targets the current layout component
+- a string representing a component ID (CID) - targets a specific component by its unique identifier within the application
+
 #### Keyboard Key Filters
 
 Keyboard events can be filtered to a specific key directly in the template by appending the key to the event name with a dot. The handler then fires only when that key is pressed:
@@ -1190,19 +1204,15 @@ Debouncing is easy to confuse with the `delay` option covered in the binding syn
 
 In short, `delay` postpones an action you have already decided to dispatch, while `.debounce` decides whether to dispatch at all - collapsing a rapid burst into one trailing call.
 
-#### Event Targets
+#### Allowing the Native Default
 
-By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
+Hologram calls `preventDefault` on interaction events by default, so a bound event does not also trigger the browser's native behaviour - a bound form does not reload the page, a bound link does not navigate. The exception is keyboard events (`$key_down`, `$key_up`), which Hologram never prevents, so typing and shortcuts always work. Append `allow_default` to a single binding so Hologram does not call `preventDefault` for it - the browser's native default then proceeds, and the action still dispatches.
 
 ```holo
-<button $click={action: :my_action, target: "other_component"}>Click me</button>
+<a href="/files/report.pdf" download $click.allow_default="track_download">Download</a>
 ```
 
-Valid targets include:
-
-- `"page"` - targets the current page
-- `"layout"` - targets the current layout component
-- a string representing a component ID (CID) - targets a specific component by its unique identifier within the application
+Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters and `.debounce`.
 
 #### Event Flow
 

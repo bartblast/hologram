@@ -596,7 +596,14 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
-                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], [key: ["enter"]]]}],
+                  [
+                    {:{}, [line: 1],
+                     [
+                       "$key_down",
+                       [text: "my_value"],
+                       {:%{}, [line: 1], [key: [["enter"]]]}
+                     ]}
+                  ],
                   []
                 ]}
              ]
@@ -614,7 +621,14 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
-                  [{:{}, [line: 1], ["$key_down", [text: "my_value"], [key: ["ctrl", "k"]]]}],
+                  [
+                    {:{}, [line: 1],
+                     [
+                       "$key_down",
+                       [text: "my_value"],
+                       {:%{}, [line: 1], [key: [["ctrl", "k"]]]}
+                     ]}
+                  ],
                   []
                 ]}
              ]
@@ -632,7 +646,14 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
-                  [{:{}, [line: 1], ["$click", [text: "my_value"], [debounce: 500]]}],
+                  [
+                    {:{}, [line: 1],
+                     [
+                       "$click",
+                       [text: "my_value"],
+                       {:%{}, [line: 1], [debounce: 500]}
+                     ]}
+                  ],
                   []
                 ]}
              ]
