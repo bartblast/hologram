@@ -1190,6 +1190,16 @@ Debouncing is easy to confuse with the `delay` option covered in the binding syn
 
 In short, `delay` postpones an action you have already decided to dispatch, while `.debounce` decides whether to dispatch at all - collapsing a rapid burst into one trailing call.
 
+#### Allowing the Native Default
+
+Hologram calls `preventDefault` on interaction events by default, so a bound binding does not also trigger the browser's native behaviour - a bound form does not reload the page, a bound link does not navigate. The exception is keyboard events (`$key_down`, `$key_up`), which Hologram never prevents, so typing and shortcuts always work. Append `allow_default` to a single binding so Hologram does not call `preventDefault` for it - the browser's native default then proceeds, and the action still dispatches.
+
+```holo
+<a href="/files/report.pdf" download $click.allow_default="track_download">Download</a>
+```
+
+Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters and `.debounce`.
+
 #### Event Targets
 
 By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
