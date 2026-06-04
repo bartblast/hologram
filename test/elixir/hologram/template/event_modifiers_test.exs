@@ -175,4 +175,28 @@ defmodule Hologram.Template.EventModifiersTest do
                    fn -> parse("$click", ["debounce(100)", "debounce(500)"]) end
     end
   end
+
+  describe "parse/2 allow_default modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$click", ["allow_default"]) == [{:allow_default}]
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["allow_default"]) == [{:allow_default}]
+    end
+
+    test "combined with a key filter on a keyboard event" do
+      assert parse("$key_down", ["enter", "allow_default"]) == [
+               {:key, ["enter"]},
+               {:allow_default}
+             ]
+    end
+
+    test "combined with a debounce window" do
+      assert parse("$change", ["allow_default", "debounce(300)"]) == [
+               {:allow_default},
+               {:debounce, 300}
+             ]
+    end
+  end
 end

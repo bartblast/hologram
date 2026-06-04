@@ -52,9 +52,10 @@ defmodule Hologram.Template.EventModifiers do
                 ) ++ for(n <- 1..12, do: "f#{n}")
 
   @typedoc """
-  A parsed event modifier: a keyboard key filter or a debounce window in milliseconds.
+  A parsed event modifier: a keyboard key filter, a debounce window in milliseconds, or an
+  opt-out of the framework's default preventDefault.
   """
-  @type modifier :: {:key, list(String.t())} | {:debounce, pos_integer}
+  @type modifier :: {:allow_default} | {:debounce, pos_integer} | {:key, list(String.t())}
 
   @doc """
   Returns true if the given event attribute base name carries keyboard key filters.
@@ -66,9 +67,10 @@ defmodule Hologram.Template.EventModifiers do
   Parses the raw modifier segments of an event attribute into tagged modifiers.
 
   `base_name` is the event's bare name (e.g. `"$key_down"`) and decides which modifiers a
-  segment may be. A `debounce(ms)` segment becomes `{:debounce, ms}` and is valid on any event.
-  A keyboard key filter becomes a `{:key, values}` tuple holding the resolved modifier flags and
-  the single matched key, and is valid only on keyboard events.
+  segment may be. A `debounce(ms)` segment becomes `{:debounce, ms}` and an `allow_default`
+  segment becomes `{:allow_default}` - both are valid on any event. A keyboard key filter becomes
+  a `{:key, values}` tuple holding the resolved modifier flags and the single matched key, and is
+  valid only on keyboard events.
 
   Raises `Hologram.TemplateSyntaxError` for a debounce value that is not a positive integer, a
   key filter on a non-keyboard event, an empty segment, an unknown key, more than one key in a
@@ -179,7 +181,11 @@ defmodule Hologram.Template.EventModifiers do
     end
   end
 
-  # Universal modifiers are valid on any event. Currently only debounce.
+  # Universal modifiers are valid on any event.
+  defp parse_universal_modifier(segment)
+
+  defp parse_universal_modifier("allow_default"), do: {:allow_default}
+
   defp parse_universal_modifier("debounce"), do: {:debounce, @default_debounce_ms}
 
   defp parse_universal_modifier(segment) do
