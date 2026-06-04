@@ -71,11 +71,15 @@ defmodule Hologram.Template.EventModifiers do
   the single matched key, and is valid only on keyboard events.
 
   Raises `Hologram.TemplateSyntaxError` for a debounce value that is not a positive integer, a
-  key filter on a non-keyboard event, an empty segment, an unknown key, or more than one key in
-  a single filter.
+  key filter on a non-keyboard event, an empty segment, an unknown key, more than one key in a
+  single filter, or more than one debounce modifier.
   """
   @spec parse(String.t(), list(String.t())) :: list(modifier)
-  def parse(base_name, segments), do: Enum.map(segments, &parse_segment(base_name, &1))
+  def parse(base_name, segments) do
+    segments
+    |> Enum.map(&parse_segment(base_name, &1))
+    |> validate_single_debounce()
+  end
 
   defp debounce_error(segment) do
     ~s'debounce modifier "#{segment}" requires a positive integer of milliseconds'
@@ -200,5 +204,16 @@ defmodule Hologram.Template.EventModifiers do
       :error ->
         ~s'the "#{char}" key has no keyboard key filter alias; match it in the action handler'
     end
+  end
+
+  # An event binding has a single debounce window and the client reads only the first debounce
+  # modifier, so more than one would silently drop the rest. Fail the build instead.
+  defp validate_single_debounce(modifiers) do
+    if Enum.count(modifiers, &match?({:debounce, _ms}, &1)) > 1 do
+      raise TemplateSyntaxError,
+        message: "an event binding may include at most one debounce modifier"
+    end
+
+    modifiers
   end
 end

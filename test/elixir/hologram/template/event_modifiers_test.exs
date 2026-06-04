@@ -168,5 +168,11 @@ defmodule Hologram.Template.EventModifiersTest do
                    ~s'debounce modifier "debounce(0)" requires a positive integer of milliseconds',
                    fn -> parse("$change", ["debounce(0)"]) end
     end
+
+    test "raises for more than one debounce modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one debounce modifier",
+                   fn -> parse("$click", ["debounce(100)", "debounce(500)"]) end
+    end
   end
 end
