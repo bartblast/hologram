@@ -1561,6 +1561,120 @@ describe("Renderer", () => {
             Hologram.handleUiEvent.restore();
           });
         });
+
+        describe("allow default", () => {
+          const buildNode = (modifiers) =>
+            Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("button"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$click"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  modifiers,
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+          it("passes allowDefault true when the modifier is present", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(Type.list([Type.tuple([Type.atom("allow_default")])])),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(() => null);
+
+            vdom.data.on.click("dummyEvent");
+
+            assert.isTrue(stub.getCall(0).args[4]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("passes allowDefault false when the modifier is absent", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(Type.list([])),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(() => null);
+
+            vdom.data.on.click("dummyEvent");
+
+            assert.isFalse(stub.getCall(0).args[4]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("composes with a key filter and a debounce window", () => {
+            // <input $key_down.enter.allow_default.debounce(200)="my_action" />
+            const modifiers = Type.list([
+              Type.tuple([
+                Type.atom("key"),
+                Type.list([Type.bitstring("enter")]),
+              ]),
+              Type.tuple([Type.atom("allow_default")]),
+              Type.tuple([Type.atom("debounce"), Type.integer(200)]),
+            ]);
+
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$key_down"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  modifiers,
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(() => null);
+
+            // The key filter gates - a non-matching key never reaches handleUiEvent.
+            vdom.data.on.keydown({key: "Escape", currentTarget: {}});
+            sinon.assert.notCalled(stub);
+
+            // A matching key reaches handleUiEvent synchronously with allowDefault set.
+            vdom.data.on.keydown({key: "Enter", currentTarget: {}});
+            sinon.assert.calledOnce(stub);
+            assert.isTrue(stub.getCall(0).args[4]);
+
+            Hologram.handleUiEvent.restore();
+          });
+        });
       });
 
       describe("default operation target", () => {

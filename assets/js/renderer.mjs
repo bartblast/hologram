@@ -160,6 +160,18 @@ export default class Renderer {
     return Bitstring.concat(bitstringChunks);
   }
 
+  // Returns true when the modifiers list carries an allow_default modifier, which opts the
+  // binding out of the framework's preventDefault. Position-independent among the modifiers.
+  static #allowDefaultFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return false;
+    }
+
+    return modifiersDom.data.some(
+      (modifierDom) => modifierDom.data[0].value === "allow_default",
+    );
+  }
+
   // Based on build_layout_props_dom/2
   // Deps: [:maps.from_list/1, :maps.merge/2]
   static #buildLayoutPropsDom(pageModuleProxy, pageState) {
@@ -845,6 +857,7 @@ export default class Renderer {
       );
 
       const modifiersDom = attrDom.data[2];
+      const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
       const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
 
       const handler = (event) => {
@@ -861,6 +874,7 @@ export default class Renderer {
           effectiveDomEventName,
           attrDom.data[1],
           defaultTarget,
+          allowDefault,
         );
 
         if (dispatch === null) {
