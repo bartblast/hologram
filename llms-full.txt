@@ -1206,7 +1206,7 @@ In short, `delay` postpones an action you have already decided to dispatch, whil
 
 #### Allowing the Native Default
 
-Hologram calls `preventDefault` on interaction events by default, so a bound binding does not also trigger the browser's native behaviour - a bound form does not reload the page, a bound link does not navigate. The exception is keyboard events (`$key_down`, `$key_up`), which Hologram never prevents, so typing and shortcuts always work. Append `allow_default` to a single binding so Hologram does not call `preventDefault` for it - the browser's native default then proceeds, and the action still dispatches.
+Hologram calls `preventDefault` on interaction events by default, so a bound event does not also trigger the browser's native behaviour - a bound form does not reload the page, a bound link does not navigate. The exception is keyboard events (`$key_down`, `$key_up`), which Hologram never prevents, so typing and shortcuts always work. Append `allow_default` to a single binding so Hologram does not call `preventDefault` for it - the browser's native default then proceeds, and the action still dispatches.
 
 ```holo
 <a href="/files/report.pdf" download $click.allow_default="track_download">Download</a>
