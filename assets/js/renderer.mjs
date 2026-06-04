@@ -4,6 +4,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Debouncer from "./debouncer.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
@@ -198,6 +199,21 @@ export default class Renderer {
       opts,
       Type.atom("from_context"),
     );
+  }
+
+  // Returns the debounce window in milliseconds from a modifiers list, or null when there is no
+  // debounce modifier. Position-independent - the debounce modifier may sit anywhere among the
+  // tagged modifiers (e.g. before or after a key filter).
+  static #debounceMsFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return null;
+    }
+
+    const debounceDom = modifiersDom.data.find(
+      (modifierDom) => modifierDom.data[0].value === "debounce",
+    );
+
+    return debounceDom ? Number(debounceDom.data[1].value) : null;
   }
 
   static #determineInputType(tagName, attrs) {
@@ -812,7 +828,7 @@ export default class Renderer {
       return {};
     }
 
-    const handlersByEvent = attrsDom.data.reduce((acc, attrDom) => {
+    const handlersByEvent = attrsDom.data.reduce((acc, attrDom, attrIndex) => {
       const attributeName = Bitstring.toText(attrDom.data[0]);
 
       if (!attributeName.startsWith("$")) {
@@ -829,18 +845,36 @@ export default class Renderer {
       );
 
       const modifiersDom = attrDom.data[2];
+      const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
 
       const handler = (event) => {
         if (modifiersDom && !$.#eventMatchesModifiers(modifiersDom, event)) {
           return;
         }
 
-        Hologram.handleUiEvent(
+        // Process the event synchronously: handleUiEvent runs preventDefault and reads the event
+        // payload now, while the event is live, then returns the dispatch (or null when ignored).
+        // Only the dispatch is debounced - deferring preventDefault would let the browser's native
+        // default fire before it could be blocked.
+        const dispatch = Hologram.handleUiEvent(
           event,
           effectiveDomEventName,
           attrDom.data[1],
           defaultTarget,
         );
+
+        if (dispatch === null) {
+          return;
+        }
+
+        if (debounceMs === null) {
+          dispatch();
+        } else {
+          // Slot key = the attribute's position: stable across re-renders (attributes are never
+          // removed, only nilled in place) and independent of the action spec's evaluated params.
+          // currentTarget is read synchronously here - the browser nulls it after dispatch.
+          Debouncer.run(event.currentTarget, attrIndex, debounceMs, dispatch);
+        }
       };
 
       acc[effectiveDomEventName] = acc[effectiveDomEventName] || [];

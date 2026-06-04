@@ -620,10 +620,10 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
-    test "non-keyboard event keeps its raw modifier segments" do
-      # <div $click.foo="my_value"></div>
+    test "non-keyboard event with a debounce modifier" do
+      # <div $click.debounce(500)="my_value"></div>
       tags = [
-        {:start_tag, {"div", [{"$click.foo", [text: "my_value"]}]}},
+        {:start_tag, {"div", [{"$click.debounce(500)", [text: "my_value"]}]}},
         {:end_tag, "div"}
       ]
 
@@ -632,7 +632,7 @@ defmodule Hologram.Template.DOMTest do
                 [
                   :element,
                   "div",
-                  [{:{}, [line: 1], ["$click", [text: "my_value"], ["foo"]]}],
+                  [{:{}, [line: 1], ["$click", [text: "my_value"], [debounce: 500]]}],
                   []
                 ]}
              ]

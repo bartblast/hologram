@@ -214,17 +214,28 @@ export default class Hologram {
     }
   }
 
+  // Processes a UI event and returns a dispatch function that runs the resulting action or
+  // command, or null when the event is ignored. The edge concerns that must happen during the
+  // event itself - the ignored-event check, preventDefault, and reading the event payload (the
+  // browser nulls currentTarget once dispatch returns) - run synchronously here. Callers invoke
+  // the returned dispatch immediately, or hand it to the debouncer so that only the dispatch is
+  // deferred while preventDefault still takes effect on every event.
   // Deps: [:maps.get/3]
   static handleUiEvent(event, eventType, operationSpecDom, defaultTarget) {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
-    if (!eventImpl.isEventIgnored(event)) {
-      if (!eventImpl.isDefaultAllowed) {
-        event.preventDefault();
-      }
+    if (eventImpl.isEventIgnored(event)) {
+      return null;
+    }
 
-      const eventParam = eventImpl.buildOperationParam(event);
+    if (!eventImpl.isDefaultAllowed) {
+      event.preventDefault();
+    }
 
+    const eventParam = eventImpl.buildOperationParam(event);
+    const eventTarget = event.target;
+
+    return () => {
       const operation = Operation.fromSpecDom(
         operationSpecDom,
         defaultTarget,
@@ -232,20 +243,18 @@ export default class Hologram {
       );
 
       if (Operation.isAction(operation)) {
-        let delay;
-
         switch (Hologram.#getActionName(operation)) {
           case "__load_prefetched_page__":
             return Hologram.executeLoadPrefetchedPageAction(
               operation,
-              event.target,
+              eventTarget,
             );
 
           case "__prefetch_page__":
-            return Hologram.executePrefetchPageAction(operation, event.target);
+            return Hologram.executePrefetchPageAction(operation, eventTarget);
 
-          default:
-            delay = Erlang_Maps["get/3"](
+          default: {
+            const delay = Erlang_Maps["get/3"](
               Type.atom("delay"),
               operation,
               Type.integer(0),
@@ -256,11 +265,12 @@ export default class Hologram {
             } else {
               return Hologram.scheduleAction(operation);
             }
+          }
         }
       } else {
         Client.sendCommand(operation);
       }
-    }
+    };
   }
 
   // Made public to make tests easier

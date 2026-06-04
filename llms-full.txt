@@ -1168,6 +1168,28 @@ Key filters are for keys known at compile time. When the key is determined at ru
 <input $key_down="handle_key" />
 ```
 
+#### Debouncing
+
+High-frequency events - typing in a search box, moving the pointer, scrolling a list - can fire many times per second, dispatching an action on every one. Append `.debounce(ms)` to the event name to coalesce a burst into a single dispatch: the handler runs once, `ms` milliseconds after the events stop, carrying the data from the final event.
+
+```holo
+<input $change.debounce(300)="search" />
+```
+
+Used without a value, `.debounce` applies a default window of 250 milliseconds - long enough to coalesce a burst of events, short enough to stay responsive once they settle:
+
+```holo
+<input $key_down.debounce="handle_key" />
+```
+
+Debouncing works on any event, not only keyboard events, and it combines with key filters - `$key_down.enter.debounce(300)` debounces only the Enter key. Each binding keeps its own timer, so several debounced bindings on one element never interfere. Like key filters, the window is validated at compile time: a non-positive or non-integer value such as `$change.debounce(0)` fails the build rather than misbehaving in the browser.
+
+##### Debounce vs Delay
+
+Debouncing is easy to confuse with the `delay` option covered in the binding syntax above, but they address different concerns and live in different places by design. `.debounce` is an event concern: it shapes the stream of events at the edge, before any action is chosen, so it attaches to the event name as a modifier, like a key filter. `delay` is an action concern: it is a property of the action being dispatched, so it lives in the action specification and can even be set programmatically with `put_action`, where there is no event for a modifier to attach to.
+
+In short, `delay` postpones an action you have already decided to dispatch, while `.debounce` decides whether to dispatch at all - collapsing a rapid burst into one trailing call.
+
 #### Event Targets
 
 By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:

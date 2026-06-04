@@ -85,6 +85,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Filter keys: letters/digits as the character (`k`, `7`); modifiers `alt`/`ctrl`/`meta`/`shift` (only when combined with a key); named keys (`arrow_up`, `enter`, `escape`, `space`, `tab`, `f1`-`f12`, ...); symbol keys as alias words (`slash`, `period`, `comma`, `minus`, ...) **not** raw characters.
 - Key filters are validated at compile time - a misspelled key like `$key_down.entr` fails the build, **not** a silent runtime no-op.
 - For runtime-determined keys, bind bare `$key_down` and match `params.event.key` in the handler.
+- Debounce high-frequency events by appending `.debounce(ms)`, coalescing a burst into one trailing dispatch that carries the last event's data: `$change.debounce(300)="search"`. Bare `.debounce` uses a 250ms default. Works on any event, combines with key filters (`$key_down.enter.debounce(300)`), each binding keeps its own timer, and the window is validated at compile time (`$change.debounce(0)` fails the build).
+- `.debounce` is an event modifier (gates whether and when an event dispatches) - distinct from the `delay` action option (postpones an already-decided dispatch, also settable via `put_action`).
 - Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
 
 ## Actions

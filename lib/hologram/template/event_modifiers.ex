@@ -23,6 +23,16 @@ defmodule Hologram.Template.EventModifiers do
   # Reverse map (char -> alias name), used to suggest the alias when a raw symbol is written.
   @alias_by_char Map.new(@char_by_alias, fn {name, char} -> {char, name} end)
 
+  # A debounce modifier segment: "debounce(<digits>)". The captured group is validated as a
+  # positive integer separately, so the error message can name the offending segment.
+  @debounce_regex ~r/^debounce\((.*)\)$/
+
+  # Milliseconds applied by the bare "debounce" segment (no parentheses). A general-purpose
+  # default in the conventional 200-300ms range, long enough to coalesce a burst of events and
+  # short enough to stay responsive once they settle. High-frequency events usually pass an
+  # explicit, smaller value.
+  @default_debounce_ms 250
+
   # Event attribute base names that carry keyboard key filters.
   @keyboard_events ["$key_down", "$key_up"]
 
@@ -41,6 +51,11 @@ defmodule Hologram.Template.EventModifiers do
                   home insert page_down page_up tab
                 ) ++ for(n <- 1..12, do: "f#{n}")
 
+  @typedoc """
+  A parsed event modifier: a keyboard key filter or a debounce window in milliseconds.
+  """
+  @type modifier :: {:key, list(String.t())} | {:debounce, pos_integer}
+
   @doc """
   Returns true if the given event attribute base name carries keyboard key filters.
   """
@@ -48,14 +63,27 @@ defmodule Hologram.Template.EventModifiers do
   def keyboard_event?(base_name), do: base_name in @keyboard_events
 
   @doc """
-  Parses the raw modifier segments of a keyboard event attribute into tagged key filters.
+  Parses the raw modifier segments of an event attribute into tagged modifiers.
 
-  Each segment becomes a `{:key, values}` tuple holding the resolved modifier flags and the
-  single matched key. Raises `Hologram.TemplateSyntaxError` for an empty segment, an unknown
-  multi-character key, or more than one key in a single filter.
+  `base_name` is the event's bare name (e.g. `"$key_down"`) and decides which modifiers a
+  segment may be. A `debounce(ms)` segment becomes `{:debounce, ms}` and is valid on any event.
+  A keyboard key filter becomes a `{:key, values}` tuple holding the resolved modifier flags and
+  the single matched key, and is valid only on keyboard events.
+
+  Raises `Hologram.TemplateSyntaxError` for a debounce value that is not a positive integer, a
+  key filter on a non-keyboard event, an empty segment, an unknown key, more than one key in a
+  single filter, or more than one debounce modifier.
   """
-  @spec parse(list(String.t())) :: list({:key, list(String.t())})
-  def parse(segments), do: Enum.map(segments, &parse_segment/1)
+  @spec parse(String.t(), list(String.t())) :: list(modifier)
+  def parse(base_name, segments) do
+    segments
+    |> Enum.map(&parse_segment(base_name, &1))
+    |> validate_single_debounce()
+  end
+
+  defp debounce_error(segment) do
+    ~s'debounce modifier "#{segment}" requires a positive integer of milliseconds'
+  end
 
   defp did_you_mean(name) do
     candidates = @modifier_keys ++ @named_keys ++ Map.keys(@char_by_alias)
@@ -68,7 +96,23 @@ defmodule Hologram.Template.EventModifiers do
     end
   end
 
-  defp parse_segment(segment) do
+  defp parse_debounce_value(segment, value) do
+    case Integer.parse(value) do
+      {ms, ""} when ms > 0 -> {:debounce, ms}
+      _fallback -> raise TemplateSyntaxError, message: debounce_error(segment)
+    end
+  end
+
+  # Key filters are valid only on keyboard events.
+  defp parse_key_filter(base_name, segment) do
+    if keyboard_event?(base_name) do
+      parse_keyboard_segment(segment)
+    else
+      raise TemplateSyntaxError, message: ~s'unknown event modifier "#{segment}"'
+    end
+  end
+
+  defp parse_keyboard_segment(segment) do
     values =
       segment
       |> String.split("+")
@@ -85,6 +129,13 @@ defmodule Hologram.Template.EventModifiers do
       _count ->
         raise TemplateSyntaxError,
           message: ~s'keyboard key filter "#{segment}" specifies more than one key'
+    end
+  end
+
+  defp parse_segment(base_name, segment) do
+    case parse_universal_modifier(segment) do
+      :error -> parse_key_filter(base_name, segment)
+      modifier -> modifier
     end
   end
 
@@ -128,6 +179,23 @@ defmodule Hologram.Template.EventModifiers do
     end
   end
 
+  # Universal modifiers are valid on any event. Currently only debounce.
+  defp parse_universal_modifier("debounce"), do: {:debounce, @default_debounce_ms}
+
+  defp parse_universal_modifier(segment) do
+    case Regex.run(@debounce_regex, segment) do
+      [_match, value] ->
+        parse_debounce_value(segment, value)
+
+      nil ->
+        if String.starts_with?(segment, "debounce") do
+          raise TemplateSyntaxError, message: debounce_error(segment)
+        else
+          :error
+        end
+    end
+  end
+
   defp raw_symbol_message(char) do
     case Map.fetch(@alias_by_char, char) do
       {:ok, name} ->
@@ -136,5 +204,16 @@ defmodule Hologram.Template.EventModifiers do
       :error ->
         ~s'the "#{char}" key has no keyboard key filter alias; match it in the action handler'
     end
+  end
+
+  # An event binding has a single debounce window and the client reads only the first debounce
+  # modifier, so more than one would silently drop the rest. Fail the build instead.
+  defp validate_single_debounce(modifiers) do
+    if Enum.count(modifiers, &match?({:debounce, _ms}, &1)) > 1 do
+      raise TemplateSyntaxError,
+        message: "an event binding may include at most one debounce modifier"
+    end
+
+    modifiers
   end
 end
