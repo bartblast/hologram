@@ -87,6 +87,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - For runtime-determined keys, bind bare `$key_down` and match `params.event.key` in the handler.
 - Debounce high-frequency events by appending `.debounce(ms)`, coalescing a burst into one trailing dispatch that carries the last event's data: `$change.debounce(300)="search"`. Bare `.debounce` uses a 250ms default. Works on any event, combines with key filters (`$key_down.enter.debounce(300)`), each binding keeps its own timer, and the window is validated at compile time (`$change.debounce(0)` fails the build).
 - `.debounce` is an event modifier (gates whether and when an event dispatches) - distinct from the `delay` action option (postpones an already-decided dispatch, also settable via `put_action`).
+- Append `allow_default` so Hologram does not call `preventDefault` for that binding, letting the browser's native default run while the action still dispatches: `$click.allow_default="track"`. Hologram prevents the default on all events except keyboard (`$key_down`/`$key_up`), so `allow_default` is meaningful on `$click`/`$submit`/cancelable pointer events. Composes with key filters and `.debounce`.
 - Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
 
 ## Actions
