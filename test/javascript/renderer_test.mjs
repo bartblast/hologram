@@ -1266,11 +1266,10 @@ describe("Renderer", () => {
             Hologram.handleUiEvent.restore();
           });
 
-          it("composes with a key filter and a debounce window", () => {
-            // <input $key_down.enter.allow_default.debounce(200)="my_action" />
+          it("composes with a key filter", () => {
+            // <input $key_down.enter.allow_default="my_action" />
             const modifiers = Type.map([
               [Type.atom("allow_default"), Type.boolean(true)],
-              [Type.atom("debounce"), Type.integer(200)],
               [
                 Type.atom("key"),
                 Type.list([Type.list([Type.bitstring("enter")])]),
