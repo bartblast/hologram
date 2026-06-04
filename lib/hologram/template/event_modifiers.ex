@@ -100,11 +100,13 @@ defmodule Hologram.Template.EventModifiers do
   # Collapses the tagged modifier list into a map keyed by type. Key filters accumulate under
   # :key (several may apply), while debounce and allow_default are single-valued.
   defp aggregate(modifiers) do
-    Enum.reduce(modifiers, %{}, fn
-      {:key, values}, acc -> Map.update(acc, :key, [values], &(&1 ++ [values]))
+    modifiers
+    |> Enum.reduce(%{}, fn
+      {:key, values}, acc -> Map.update(acc, :key, [values], &[values | &1])
       {:debounce, ms}, acc -> Map.put(acc, :debounce, ms)
       {:allow_default}, acc -> Map.put(acc, :allow_default, true)
     end)
+    |> reverse_key_filters()
   end
 
   defp debounce_error(segment) do
@@ -235,6 +237,15 @@ defmodule Hologram.Template.EventModifiers do
         ~s'the "#{char}" key has no keyboard key filter alias; match it in the action handler'
     end
   end
+
+  # Key filters are prepended during aggregation, so restore their written order.
+  defp reverse_key_filters(modifiers)
+
+  defp reverse_key_filters(%{key: filters} = modifiers) do
+    %{modifiers | key: Enum.reverse(filters)}
+  end
+
+  defp reverse_key_filters(modifiers), do: modifiers
 
   # An event binding has a single debounce window and the client reads only the first debounce
   # modifier, so more than one would silently drop the rest. Fail the build instead.
