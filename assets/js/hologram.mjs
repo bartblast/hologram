@@ -221,14 +221,22 @@ export default class Hologram {
   // the returned dispatch immediately, or hand it to the debouncer so that only the dispatch is
   // deferred while preventDefault still takes effect on every event.
   // Deps: [:maps.get/3]
-  static handleUiEvent(event, eventType, operationSpecDom, defaultTarget) {
+  static handleUiEvent(
+    event,
+    eventType,
+    operationSpecDom,
+    defaultTarget,
+    allowDefault = false,
+  ) {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
     if (eventImpl.isEventIgnored(event)) {
       return null;
     }
 
-    if (!eventImpl.isDefaultAllowed) {
+    // allowDefault is the binding's allow_default modifier: it opts this binding out of the
+    // framework's preventDefault so the browser's native default proceeds.
+    if (!eventImpl.isDefaultAllowed && !allowDefault) {
       event.preventDefault();
     }
 

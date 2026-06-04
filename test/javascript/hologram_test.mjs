@@ -711,8 +711,10 @@ describe("Hologram", () => {
     });
 
     it("prevents default when isDefaultAllowed is false", () => {
-      // SubmitEvent.isDefaultAllowed is false - a native form submit must always be prevented
+      // SubmitEvent.isDefaultAllowed is false, so a native form submit is prevented by default
+
       const preventDefault = sinon.spy();
+
       const submitEvent = {
         target: document.createElement("form"),
         preventDefault,
@@ -726,6 +728,31 @@ describe("Hologram", () => {
       );
 
       sinon.assert.calledOnce(preventDefault);
+    });
+
+    it("allows the default when allowDefault is set", () => {
+      // The binding's allow_default modifier opts out of the framework preventDefault, even for
+      // an isDefaultAllowed: false event like submit.
+
+      const preventDefault = sinon.spy();
+
+      const submitEvent = {
+        target: document.createElement("form"),
+        preventDefault,
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        submitEvent,
+        "submit",
+        actionSpecDom,
+        defaultTarget,
+        true,
+      );
+
+      dispatch();
+
+      sinon.assert.notCalled(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
     });
   });
 
