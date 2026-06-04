@@ -193,4 +193,68 @@ defmodule Hologram.Template.EventModifiersTest do
                    fn -> parse("$change", ["enter"]) end
     end
   end
+
+  describe "parse/2 throttle modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$mouse_move", ["throttle(100)"]) == %{throttle: 100}
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["throttle(100)"]) == %{throttle: 100}
+    end
+
+    test "bare throttle takes the default window" do
+      assert parse("$mouse_move", ["throttle"]) == %{throttle: 100}
+    end
+
+    test "combined with allow_default" do
+      assert parse("$click", ["throttle(100)", "allow_default"]) ==
+               %{allow_default: true, throttle: 100}
+    end
+
+    test "combined with a key filter on a keyboard event" do
+      assert parse("$key_down", ["enter", "throttle(200)"]) ==
+               %{key: [["enter"]], throttle: 200}
+    end
+
+    test "large value has no upper bound" do
+      assert parse("$mouse_move", ["throttle(60000)"]) == %{throttle: 60_000}
+    end
+
+    test "raises for a missing value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'throttle modifier "throttle()" requires a positive integer of milliseconds',
+                   fn -> parse("$mouse_move", ["throttle()"]) end
+    end
+
+    test "raises for a non-integer value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'throttle modifier "throttle(abc)" requires a positive integer of milliseconds',
+                   fn -> parse("$mouse_move", ["throttle(abc)"]) end
+    end
+
+    test "raises for a negative value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'throttle modifier "throttle(-5)" requires a positive integer of milliseconds',
+                   fn -> parse("$mouse_move", ["throttle(-5)"]) end
+    end
+
+    test "raises for a zero value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'throttle modifier "throttle(0)" requires a positive integer of milliseconds',
+                   fn -> parse("$mouse_move", ["throttle(0)"]) end
+    end
+
+    test "raises for more than one throttle modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one throttle modifier",
+                   fn -> parse("$mouse_move", ["throttle(100)", "throttle(200)"]) end
+    end
+
+    test "raises when combined with a debounce modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may not combine debounce and throttle modifiers",
+                   fn -> parse("$change", ["debounce(300)", "throttle(100)"]) end
+    end
+  end
 end

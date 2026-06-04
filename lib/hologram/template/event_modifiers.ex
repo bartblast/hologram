@@ -33,6 +33,12 @@ defmodule Hologram.Template.EventModifiers do
   # explicit, smaller value.
   @default_debounce_ms 250
 
+  # Milliseconds applied by the bare "throttle" segment (no parentheses). A general-purpose max
+  # update rate of ~10 dispatches per second: smooth enough to feel live for continuous feedback
+  # (cursor, drag, scroll), light enough not to spam the render pipeline. Interactions wanting
+  # finer or coarser updates pass an explicit value.
+  @default_throttle_ms 100
+
   # Event attribute base names that carry keyboard key filters.
   @keyboard_events ["$key_down", "$key_up"]
 
@@ -51,6 +57,10 @@ defmodule Hologram.Template.EventModifiers do
                   home insert page_down page_up tab
                 ) ++ for(n <- 1..12, do: "f#{n}")
 
+  # A throttle modifier segment: "throttle(<digits>)". The captured group is validated as a
+  # positive integer separately, so the error message can name the offending segment.
+  @throttle_regex ~r/^throttle\((.*)\)$/
+
   @typedoc """
   An event binding's parsed modifiers, keyed by type. Sparse - only the modifiers present on the
   binding appear.
@@ -58,14 +68,18 @@ defmodule Hologram.Template.EventModifiers do
   @type modifiers :: %{
           optional(:allow_default) => true,
           optional(:debounce) => pos_integer,
-          optional(:key) => list(list(String.t()))
+          optional(:key) => list(list(String.t())),
+          optional(:throttle) => pos_integer
         }
 
   @typedoc """
   A single parsed modifier in its intermediate tagged form, before aggregation into the map.
   """
   @type tagged_modifier ::
-          {:allow_default} | {:debounce, pos_integer} | {:key, list(String.t())}
+          {:allow_default}
+          | {:debounce, pos_integer}
+          | {:key, list(String.t())}
+          | {:throttle, pos_integer}
 
   @doc """
   Returns true if the given event attribute base name carries keyboard key filters.
@@ -84,16 +98,18 @@ defmodule Hologram.Template.EventModifiers do
     * `:debounce` - the debounce window in milliseconds, valid on any event
     * `:key` - the keyboard key filters as a list, each a list of the resolved modifier flags and
       the single matched key, valid only on keyboard events
+    * `:throttle` - the throttle window in milliseconds, valid on any event
 
-  Raises `Hologram.TemplateSyntaxError` for a debounce value that is not a positive integer, a
-  key filter on a non-keyboard event, an empty segment, an unknown key, more than one key in a
-  single filter, or more than one debounce modifier.
+  Raises `Hologram.TemplateSyntaxError` for a debounce or throttle value that is not a positive
+  integer, a key filter on a non-keyboard event, an empty segment, an unknown key, more than one
+  key in a single filter, more than one debounce or throttle modifier, or a binding that combines
+  debounce and throttle.
   """
   @spec parse(String.t(), list(String.t())) :: modifiers
   def parse(base_name, segments) do
     segments
     |> Enum.map(&parse_segment(base_name, &1))
-    |> validate_single_debounce()
+    |> validate_window_modifiers()
     |> aggregate()
   end
 
@@ -104,6 +120,7 @@ defmodule Hologram.Template.EventModifiers do
     |> Enum.reduce(%{}, fn
       {:key, values}, acc -> Map.update(acc, :key, [values], &[values | &1])
       {:debounce, ms}, acc -> Map.put(acc, :debounce, ms)
+      {:throttle, ms}, acc -> Map.put(acc, :throttle, ms)
       {:allow_default}, acc -> Map.put(acc, :allow_default, true)
     end)
     |> reverse_key_filters()
@@ -167,6 +184,13 @@ defmodule Hologram.Template.EventModifiers do
     end
   end
 
+  defp parse_throttle_value(segment, value) do
+    case Integer.parse(value) do
+      {ms, ""} when ms > 0 -> {:throttle, ms}
+      _fallback -> raise TemplateSyntaxError, message: throttle_error(segment)
+    end
+  end
+
   defp parse_token("") do
     raise TemplateSyntaxError, message: "keyboard key filter must not be empty"
   end
@@ -214,17 +238,24 @@ defmodule Hologram.Template.EventModifiers do
 
   defp parse_universal_modifier("debounce"), do: {:debounce, @default_debounce_ms}
 
-  defp parse_universal_modifier(segment) do
-    case Regex.run(@debounce_regex, segment) do
-      [_match, value] ->
-        parse_debounce_value(segment, value)
+  defp parse_universal_modifier("throttle"), do: {:throttle, @default_throttle_ms}
 
-      nil ->
-        if String.starts_with?(segment, "debounce") do
-          raise TemplateSyntaxError, message: debounce_error(segment)
-        else
-          :error
-        end
+  defp parse_universal_modifier(segment) do
+    cond do
+      captures = Regex.run(@debounce_regex, segment) ->
+        parse_debounce_value(segment, List.last(captures))
+
+      captures = Regex.run(@throttle_regex, segment) ->
+        parse_throttle_value(segment, List.last(captures))
+
+      String.starts_with?(segment, "debounce") ->
+        raise TemplateSyntaxError, message: debounce_error(segment)
+
+      String.starts_with?(segment, "throttle") ->
+        raise TemplateSyntaxError, message: throttle_error(segment)
+
+      true ->
+        :error
     end
   end
 
@@ -247,14 +278,32 @@ defmodule Hologram.Template.EventModifiers do
 
   defp reverse_key_filters(modifiers), do: modifiers
 
-  # An event binding has a single debounce window and the client reads only the first debounce
-  # modifier, so more than one would silently drop the rest. Fail the build instead.
-  defp validate_single_debounce(modifiers) do
-    if Enum.count(modifiers, &match?({:debounce, _ms}, &1)) > 1 do
-      raise TemplateSyntaxError,
-        message: "an event binding may include at most one debounce modifier"
-    end
+  defp throttle_error(segment) do
+    ~s'throttle modifier "#{segment}" requires a positive integer of milliseconds'
+  end
 
-    modifiers
+  # Debounce and throttle each control the dispatch window and the client reads a single one, so a
+  # binding carries at most one of each and never both - the two are contradictory (wait for quiet
+  # vs fire at a steady rate). Fail the build otherwise.
+  defp validate_window_modifiers(modifiers) do
+    debounce_count = Enum.count(modifiers, &match?({:debounce, _ms}, &1))
+    throttle_count = Enum.count(modifiers, &match?({:throttle, _ms}, &1))
+
+    cond do
+      debounce_count > 1 ->
+        raise TemplateSyntaxError,
+          message: "an event binding may include at most one debounce modifier"
+
+      throttle_count > 1 ->
+        raise TemplateSyntaxError,
+          message: "an event binding may include at most one throttle modifier"
+
+      debounce_count > 0 and throttle_count > 0 ->
+        raise TemplateSyntaxError,
+          message: "an event binding may not combine debounce and throttle modifiers"
+
+      true ->
+        modifiers
+    end
   end
 end
