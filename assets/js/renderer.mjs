@@ -852,13 +852,20 @@ export default class Renderer {
           return;
         }
 
-        const dispatch = () =>
-          Hologram.handleUiEvent(
-            event,
-            effectiveDomEventName,
-            attrDom.data[1],
-            defaultTarget,
-          );
+        // Process the event synchronously: handleUiEvent runs preventDefault and reads the event
+        // payload now, while the event is live, then returns the dispatch (or null when ignored).
+        // Only the dispatch is debounced - deferring preventDefault would let the browser's native
+        // default fire before it could be blocked.
+        const dispatch = Hologram.handleUiEvent(
+          event,
+          effectiveDomEventName,
+          attrDom.data[1],
+          defaultTarget,
+        );
+
+        if (dispatch === null) {
+          return;
+        }
 
         if (debounceMs === null) {
           dispatch();

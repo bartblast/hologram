@@ -405,12 +405,14 @@ describe("Hologram", () => {
     });
 
     it("regular action without delay", () => {
-      Hologram.handleUiEvent(
+      const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         actionSpecDom,
         defaultTarget,
       );
+
+      dispatch();
 
       sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
@@ -456,12 +458,14 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handleUiEvent(
+      const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         delayedActionSpecDom,
         defaultTarget,
       );
+
+      dispatch();
 
       sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
@@ -513,12 +517,14 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handleUiEvent(
+      const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         actionSpecDom,
         defaultTarget,
       );
+
+      dispatch();
 
       sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executeActionStub);
@@ -574,12 +580,14 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handleUiEvent(
+      const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         actionSpecDom,
         defaultTarget,
       );
+
+      dispatch();
 
       sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executeActionStub);
@@ -630,12 +638,14 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handleUiEvent(
+      const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         commandSpecDom,
         defaultTarget,
       );
+
+      dispatch();
 
       sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
@@ -687,12 +697,14 @@ describe("Hologram", () => {
         target: {id: "dummy_node"},
       };
 
-      Hologram.handleUiEvent(
+      const dispatch = Hologram.handleUiEvent(
         keyboardEvent,
         "keydown",
         actionSpecDom,
         defaultTarget,
       );
+
+      dispatch();
 
       sinon.assert.notCalled(preventDefault);
       sinon.assert.calledOnce(executeActionStub);

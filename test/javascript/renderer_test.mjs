@@ -1399,29 +1399,34 @@ describe("Renderer", () => {
               parentTagName,
             );
 
-            const stub = sinon
-              .stub(Hologram, "handleUiEvent")
-              .callsFake(
-                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
-                  null,
-              );
+            // Each event returns its own dispatch so the trailing edge can be identified.
+            const dispatches = [];
+            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
 
             const element = {};
             const firstEvent = {currentTarget: element};
             const lastEvent = {currentTarget: element};
 
-            // A burst schedules nothing immediately and coalesces to one dispatch.
             vdom.data.on.click(firstEvent);
             vdom.data.on.click(lastEvent);
-            sinon.assert.notCalled(stub);
+
+            // handleUiEvent runs synchronously on every event (so preventDefault is never
+            // deferred), but no dispatch has fired yet - only the timer is pending.
+            sinon.assert.calledTwice(stub);
+            assert.strictEqual(stub.getCall(0).args[0], firstEvent);
+            assert.strictEqual(stub.getCall(1).args[0], lastEvent);
+            sinon.assert.notCalled(dispatches[0]);
+            sinon.assert.notCalled(dispatches[1]);
 
             clock.tick(250);
 
-            // Trailing edge: one dispatch carrying the final event of the burst, not the first.
-            sinon.assert.calledOnce(stub);
-            const [dispatchedEvent, dispatchedType] = stub.getCall(0).args;
-            assert.strictEqual(dispatchedEvent, lastEvent);
-            assert.strictEqual(dispatchedType, "click");
+            // Trailing edge: only the final event's dispatch runs.
+            sinon.assert.notCalled(dispatches[0]);
+            sinon.assert.calledOnce(dispatches[1]);
 
             Hologram.handleUiEvent.restore();
           });
@@ -1457,12 +1462,11 @@ describe("Renderer", () => {
                 Type.list(),
               ]);
 
-            const stub = sinon
-              .stub(Hologram, "handleUiEvent")
-              .callsFake(
-                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
-                  null,
-              );
+            let dispatch;
+            sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              dispatch = sinon.spy();
+              return dispatch;
+            });
 
             for (const modifiers of [
               Type.list([keyFilter, debounce]),
@@ -1477,12 +1481,10 @@ describe("Renderer", () => {
               );
 
               vdom.data.on.keydown({key: "Enter", currentTarget: {}});
-              sinon.assert.notCalled(stub);
+              sinon.assert.notCalled(dispatch);
 
               clock.tick(200);
-              sinon.assert.calledOnce(stub);
-
-              stub.resetHistory();
+              sinon.assert.calledOnce(dispatch);
             }
 
             Hologram.handleUiEvent.restore();
@@ -1517,12 +1519,12 @@ describe("Renderer", () => {
                 Type.list(),
               ]);
 
-            const stub = sinon
-              .stub(Hologram, "handleUiEvent")
-              .callsFake(
-                (_event, _eventType, _operationSpecVdom, _defaultTarget) =>
-                  null,
-              );
+            const dispatches = [];
+            sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
 
             const element = {};
 
@@ -1551,7 +1553,10 @@ describe("Renderer", () => {
 
             clock.tick(250);
 
-            sinon.assert.calledOnce(stub);
+            // Both events share one slot, so the second cancels the first's timer -
+            // only the later dispatch survives.
+            sinon.assert.notCalled(dispatches[0]);
+            sinon.assert.calledOnce(dispatches[1]);
 
             Hologram.handleUiEvent.restore();
           });
