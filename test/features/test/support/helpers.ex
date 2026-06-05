@@ -343,6 +343,7 @@ defmodule HologramFeatureTests.Helpers do
   releases the modifiers so each call is self-contained.
   """
   def send_keys(session, keys) do
+    # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
     Browser.send_keys(session, List.wrap(keys) ++ [:null])
   end
 
