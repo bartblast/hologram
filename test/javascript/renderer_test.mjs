@@ -5235,6 +5235,107 @@ describe("Renderer", () => {
     });
   });
 
+  describe("window node", () => {
+    beforeEach(() => {
+      Renderer.windowBindings = [];
+    });
+
+    it("renders nil and collects the binding scoped to the enclosing component", () => {
+      // <window $key_down="my_action" />
+      const actionSpecDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+      ]);
+
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("window"),
+        Type.list([Type.tuple([Type.bitstring("$key_down"), actionSpecDom])]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, Type.nil());
+      assert.equal(Renderer.windowBindings.length, 1);
+      assert.equal(Renderer.windowBindings[0].eventName, "keydown");
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      Renderer.windowBindings[0].handler("dummyEvent");
+
+      sinon.assert.calledWith(
+        stub,
+        "dummyEvent",
+        "keydown",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+
+    it("collects a binding per window event", () => {
+      // <window $key_down="my_down_action" $key_up="my_up_action" />
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("window"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$key_down"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_down_action")]),
+            ]),
+          ]),
+          Type.tuple([
+            Type.bitstring("$key_up"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_up_action")]),
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      assert.deepStrictEqual(
+        Renderer.windowBindings.map((binding) => binding.eventName),
+        ["keydown", "keyup"],
+      );
+    });
+
+    it("collects nothing for a bare window tag", () => {
+      // <window />
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("window"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, Type.nil());
+      assert.equal(Renderer.windowBindings.length, 0);
+    });
+  });
+
   describe("context", () => {
     it("emitted in page, accessed in component nested in page", () => {
       initComponentRegistryEntry(Type.bitstring("layout"));

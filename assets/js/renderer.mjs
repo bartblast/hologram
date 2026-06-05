@@ -18,6 +18,11 @@ import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
+  // Window event bindings collected during the current render, each an {eventName, handler}
+  // descriptor. A <window> tag pushes here instead of producing a vnode. renderPage() resets this,
+  // and the render loop drains it after patching to reconcile real window listeners.
+  static windowBindings = [];
+
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
@@ -84,6 +89,8 @@ export default class Renderer {
 
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
+    Renderer.windowBindings = [];
+
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
     const cid = Type.bitstring("page");
@@ -173,6 +180,73 @@ export default class Renderer {
     );
   }
 
+  // Builds one event binding from a "$"-prefixed attribute, shared by element and window bindings.
+  // Returns an {eventName, handler} descriptor (the handler runs modifier matching, dispatch, and
+  // debounce/throttle), or null when the attribute is not an event binding. slotKey identifies the
+  // binding for debounce/throttle windows - the attribute index for elements, the binding index for
+  // window bindings, which all share the same currentTarget.
+  static #buildEventBinding(
+    attrDom,
+    slotKey,
+    tagName,
+    attrsVdom,
+    defaultTarget,
+  ) {
+    const attributeName = Bitstring.toText(attrDom.data[0]);
+
+    if (!attributeName.startsWith("$")) {
+      return null;
+    }
+
+    const originalEventName = attributeName.substring(1);
+    const normalizedEventName = $.#normalizeEventName(originalEventName);
+
+    const effectiveDomEventName = $.#mapEventName(
+      normalizedEventName,
+      tagName,
+      attrsVdom,
+    );
+
+    const modifiersDom = attrDom.data[2];
+    const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
+    const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
+    const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
+
+    const handler = (event) => {
+      if (modifiersDom && !$.#eventMatchesModifiers(modifiersDom, event)) {
+        return;
+      }
+
+      // Process the event synchronously: handleUiEvent runs preventDefault and reads the event
+      // payload now, while the event is live, then returns the dispatch (or null when ignored).
+      // Only the dispatch is debounced - deferring preventDefault would let the browser's native
+      // default fire before it could be blocked.
+      const dispatch = Hologram.handleUiEvent(
+        event,
+        effectiveDomEventName,
+        attrDom.data[1],
+        defaultTarget,
+        allowDefault,
+      );
+
+      if (dispatch === null) {
+        return;
+      }
+
+      // currentTarget is read synchronously here - the browser nulls it after dispatch. Debounce and
+      // throttle are mutually exclusive (enforced at compile time), so at most one applies.
+      if (debounceMs !== null) {
+        Debouncer.run(event.currentTarget, slotKey, debounceMs, dispatch);
+      } else if (throttleMs !== null) {
+        Throttler.run(event.currentTarget, slotKey, throttleMs, dispatch);
+      } else {
+        dispatch();
+      }
+    };
+
+    return {eventName: effectiveDomEventName, handler};
+  }
+
   // Based on build_layout_props_dom/2
   // Deps: [:maps.from_list/1, :maps.merge/2]
   static #buildLayoutPropsDom(pageModuleProxy, pageState) {
@@ -205,6 +279,26 @@ export default class Renderer {
       .map((propDom) => Renderer.#normalizePropName(propDom));
 
     return Erlang_Maps["from_list/1"](Type.list(propsTuples));
+  }
+
+  // Records a <window> tag's event bindings into the per-render accumulator. Each binding is keyed
+  // by its position across all window bindings this render, so debounce/throttle windows stay
+  // independent even though every window listener shares the same currentTarget. A bare <window />
+  // (no attributes) records nothing.
+  static #collectWindowBindings(attrsDom, defaultTarget) {
+    attrsDom.data.forEach((attrDom) => {
+      const binding = $.#buildEventBinding(
+        attrDom,
+        $.windowBindings.length,
+        "window",
+        {},
+        defaultTarget,
+      );
+
+      if (binding !== null) {
+        $.windowBindings.push(binding);
+      }
+    });
   }
 
   static #contextKey(opts) {
@@ -742,6 +836,14 @@ export default class Renderer {
       );
     }
 
+    // A <window> tag has no DOM node: it records its event bindings for the render loop to reconcile
+    // into real window listeners, with the enclosing component (defaultTarget) as the default
+    // dispatch target, and renders nil.
+    if (currentTagName === "window") {
+      Renderer.#collectWindowBindings(dom.data[2], defaultTarget);
+      return Type.nil();
+    }
+
     const attrsDom = dom.data[2];
 
     const {attrs: attrsVdom, props: propsVdom} =
@@ -842,63 +944,23 @@ export default class Renderer {
       return {};
     }
 
+    // Slot key = the attribute's position: stable across re-renders (attributes are never removed,
+    // only nilled in place) and independent of the action spec's evaluated params.
     const handlersByEvent = attrsDom.data.reduce((acc, attrDom, attrIndex) => {
-      const attributeName = Bitstring.toText(attrDom.data[0]);
+      const binding = $.#buildEventBinding(
+        attrDom,
+        attrIndex,
+        tagName,
+        attrsVdom,
+        defaultTarget,
+      );
 
-      if (!attributeName.startsWith("$")) {
+      if (binding === null) {
         return acc;
       }
 
-      const originalEventName = attributeName.substring(1);
-      const normalizedEventName = $.#normalizeEventName(originalEventName);
-
-      const effectiveDomEventName = $.#mapEventName(
-        normalizedEventName,
-        tagName,
-        attrsVdom,
-      );
-
-      const modifiersDom = attrDom.data[2];
-      const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
-      const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
-      const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
-
-      const handler = (event) => {
-        if (modifiersDom && !$.#eventMatchesModifiers(modifiersDom, event)) {
-          return;
-        }
-
-        // Process the event synchronously: handleUiEvent runs preventDefault and reads the event
-        // payload now, while the event is live, then returns the dispatch (or null when ignored).
-        // Only the dispatch is debounced - deferring preventDefault would let the browser's native
-        // default fire before it could be blocked.
-        const dispatch = Hologram.handleUiEvent(
-          event,
-          effectiveDomEventName,
-          attrDom.data[1],
-          defaultTarget,
-          allowDefault,
-        );
-
-        if (dispatch === null) {
-          return;
-        }
-
-        // Slot key = the attribute's position: stable across re-renders (attributes are never
-        // removed, only nilled in place) and independent of the action spec's evaluated params.
-        // currentTarget is read synchronously here - the browser nulls it after dispatch. Debounce
-        // and throttle are mutually exclusive (enforced at compile time), so at most one applies.
-        if (debounceMs !== null) {
-          Debouncer.run(event.currentTarget, attrIndex, debounceMs, dispatch);
-        } else if (throttleMs !== null) {
-          Throttler.run(event.currentTarget, attrIndex, throttleMs, dispatch);
-        } else {
-          dispatch();
-        }
-      };
-
-      acc[effectiveDomEventName] = acc[effectiveDomEventName] || [];
-      acc[effectiveDomEventName].push(handler);
+      acc[binding.eventName] = acc[binding.eventName] || [];
+      acc[binding.eventName].push(binding.handler);
 
       return acc;
     }, {});
