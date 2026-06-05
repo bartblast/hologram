@@ -23,6 +23,7 @@ describe("Sse", () => {
   let fetchStub;
   let mockEventSource;
   let originalInstanceId;
+  let originalWindow;
 
   const binding = (channel, cid) => Type.tuple([channel, Type.bitstring(cid)]);
 
@@ -85,6 +86,7 @@ describe("Sse", () => {
     globalThis.EventSource = sinon.stub().returns(mockEventSource);
     fetchStub = sinon.stub(globalThis, "fetch");
 
+    originalWindow = globalThis.window;
     globalThis.window = {location: {reload: sinon.spy()}};
 
     originalInstanceId = App.instanceId;
@@ -95,7 +97,7 @@ describe("Sse", () => {
     sinon.restore();
 
     delete globalThis.EventSource;
-    delete globalThis.window;
+    globalThis.window = originalWindow;
 
     App.instanceId = originalInstanceId;
 
