@@ -5237,7 +5237,7 @@ describe("Renderer", () => {
 
   describe("window node", () => {
     beforeEach(() => {
-      Renderer.windowBindings = [];
+      Renderer.globalBindings = [];
     });
 
     it("renders nil and collects the binding scoped to the enclosing component", () => {
@@ -5262,8 +5262,9 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, Type.nil());
-      assert.equal(Renderer.windowBindings.length, 1);
-      assert.equal(Renderer.windowBindings[0].eventName, "keydown");
+      assert.equal(Renderer.globalBindings.length, 1);
+      assert.equal(Renderer.globalBindings[0].eventName, "keydown");
+      assert.equal(Renderer.globalBindings[0].target, window);
 
       const stub = sinon
         .stub(Hologram, "handleUiEvent")
@@ -5271,7 +5272,7 @@ describe("Renderer", () => {
           (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
         );
 
-      Renderer.windowBindings[0].handler("dummyEvent");
+      Renderer.globalBindings[0].handler("dummyEvent");
 
       sinon.assert.calledWith(
         stub,
@@ -5309,7 +5310,7 @@ describe("Renderer", () => {
       Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       assert.deepStrictEqual(
-        Renderer.windowBindings.map((binding) => binding.eventName),
+        Renderer.globalBindings.map((binding) => binding.eventName),
         ["keydown", "keyup"],
       );
     });
@@ -5332,7 +5333,43 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, Type.nil());
-      assert.equal(Renderer.windowBindings.length, 0);
+      assert.equal(Renderer.globalBindings.length, 0);
+    });
+  });
+
+  describe("document node", () => {
+    beforeEach(() => {
+      Renderer.globalBindings = [];
+    });
+
+    it("renders nil and collects the binding with the document target", () => {
+      // <document $key_down="my_action" />
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("document"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$key_down"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, Type.nil());
+      assert.equal(Renderer.globalBindings.length, 1);
+      assert.equal(Renderer.globalBindings[0].eventName, "keydown");
+      assert.equal(Renderer.globalBindings[0].target, document);
     });
   });
 

@@ -11,12 +11,12 @@ import {
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
+import GlobalEventRegistry from "../../assets/js/global_event_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
-import WindowEventRegistry from "../../assets/js/window_event_registry.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
 
@@ -1062,21 +1062,23 @@ describe("Hologram", () => {
 
   describe("render()", () => {
     afterEach(() => {
-      Renderer.windowBindings = [];
+      Renderer.globalBindings = [];
       sinon.restore();
     });
 
-    it("reconciles the window bindings collected during the render", () => {
-      const bindings = [{eventName: "keydown", handler: () => {}}];
+    it("reconciles the global bindings collected during the render", () => {
+      const bindings = [
+        {target: window, eventName: "keydown", handler: () => {}},
+      ];
 
-      // renderPage() collects the page's <window> bindings into Renderer.windowBindings.
+      // renderPage() collects the page's <window>/<document> bindings into Renderer.globalBindings.
       sinon.stub(Renderer, "renderPage").callsFake(() => {
-        Renderer.windowBindings = bindings;
+        Renderer.globalBindings = bindings;
         return {sel: "html", data: {}, children: []};
       });
 
       sinon.stub(Vdom, "patchVirtualDocument");
-      const reconcileStub = sinon.stub(WindowEventRegistry, "reconcile");
+      const reconcileStub = sinon.stub(GlobalEventRegistry, "reconcile");
 
       Hologram.render();
 

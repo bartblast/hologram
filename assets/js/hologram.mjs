@@ -8,6 +8,7 @@ import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
+import GlobalEventRegistry from "./global_event_registry.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
@@ -24,7 +25,6 @@ import Sse from "./sse.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
-import WindowEventRegistry from "./window_event_registry.mjs";
 
 // Events
 import ChangeEvent from "./events/change_event.mjs";
@@ -350,10 +350,11 @@ export default class Hologram {
       newVirtualDocument,
     );
 
-    // renderPage() collected this render's <window> bindings into Renderer.windowBindings; now that
-    // the DOM is patched, reconcile them into real window listeners. Every page-entry path reaches
-    // render() through #mountPage, so this also tears down a previous page's listeners on navigation.
-    WindowEventRegistry.reconcile(Renderer.windowBindings);
+    // renderPage() collected this render's <window>/<document> bindings into Renderer.globalBindings;
+    // now that the DOM is patched, reconcile them into real listeners on their targets. Every
+    // page-entry path reaches render() through #mountPage, so this also tears down a previous page's
+    // listeners on navigation.
+    GlobalEventRegistry.reconcile(Renderer.globalBindings);
 
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
   }

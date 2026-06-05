@@ -18,10 +18,11 @@ import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
-  // Window event bindings collected during the current render, each an {eventName, handler}
-  // descriptor. A <window> tag pushes here instead of producing a vnode. renderPage() resets this,
-  // and the render loop drains it after patching to reconcile real window listeners.
-  static windowBindings = [];
+  // Global event bindings collected during the current render, each a {target, eventName, handler}
+  // descriptor. A <window> tag pushes here (with the window target) instead of producing a vnode.
+  // renderPage() resets this, and the render loop drains it after patching to reconcile real
+  // listeners on each binding's target.
+  static globalBindings = [];
 
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
@@ -89,7 +90,7 @@ export default class Renderer {
 
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
-    Renderer.windowBindings = [];
+    Renderer.globalBindings = [];
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
@@ -281,22 +282,23 @@ export default class Renderer {
     return Erlang_Maps["from_list/1"](Type.list(propsTuples));
   }
 
-  // Records a <window> tag's event bindings into the per-render accumulator. Each binding is keyed
-  // by its position across all window bindings this render, so debounce/throttle windows stay
-  // independent even though every window listener shares the same currentTarget. A bare <window />
-  // (no attributes) records nothing.
-  static #collectWindowBindings(attrsDom, defaultTarget) {
+  // Records a <window>/<document> tag's event bindings into the per-render accumulator, tagged with
+  // the target the listener attaches to. Each binding is keyed by its position across all global
+  // bindings this render, so debounce/throttle windows stay independent even though listeners on one
+  // target share a currentTarget. A bare tag (no attributes) records nothing. A global target has no
+  // element tag name, so event-name mapping is skipped (passed null).
+  static #collectGlobalBindings(target, attrsDom, defaultTarget) {
     attrsDom.data.forEach((attrDom) => {
       const binding = $.#buildEventBinding(
         attrDom,
-        $.windowBindings.length,
-        "window",
+        $.globalBindings.length,
+        null,
         {},
         defaultTarget,
       );
 
       if (binding !== null) {
-        $.windowBindings.push(binding);
+        $.globalBindings.push({...binding, target});
       }
     });
   }
@@ -836,11 +838,12 @@ export default class Renderer {
       );
     }
 
-    // A <window> tag has no DOM node: it records its event bindings for the render loop to reconcile
-    // into real window listeners, with the enclosing component (defaultTarget) as the default
-    // dispatch target, and renders nil.
-    if (currentTagName === "window") {
-      Renderer.#collectWindowBindings(dom.data[2], defaultTarget);
+    // A <window> or <document> tag has no DOM node: it records its event bindings for the render loop
+    // to reconcile into real listeners on the window or document, with the enclosing component
+    // (defaultTarget) as the default dispatch target, and renders nil.
+    if (currentTagName === "window" || currentTagName === "document") {
+      const target = currentTagName === "window" ? window : document;
+      Renderer.#collectGlobalBindings(target, dom.data[2], defaultTarget);
       return Type.nil();
     }
 
