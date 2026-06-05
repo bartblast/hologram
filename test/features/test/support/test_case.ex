@@ -22,6 +22,7 @@ defmodule HologramFeatureTests.TestCase do
           cookies: 1,
           has_text?: 2,
           refute_has: 2,
+          send_keys: 2,
           visit: 2
         ]
 

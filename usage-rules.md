@@ -81,6 +81,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
 - Event data is available in `params.event` inside the action/command handler.
 - `$change` on an input fires on every keystroke (text inputs) or on selection change (checkboxes, radios, selects). On a form element, it fires on field blur.
+- Bind global events (not tied to any element, e.g. a global keyboard shortcut) with the `<window>` tag, which attaches to the global `window`: `<window $key_down.ctrl+k="open_palette" />`. It renders nothing and reuses the same `$event` syntax, key filters, and modifiers as element bindings.
+- A `<window>` follows the same targeting rules as a regular element and accepts only event bindings (any other attribute fails the build). Its listener lives only while the tag renders, so a `<window>` behind a conditional listens only while that condition holds.
 - Keyboard events (`$key_down`, `$key_up`): `params.event` has `key` (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), `code`, `alt_key`, `ctrl_key`, `meta_key`, `shift_key`, `repeat`.
 - Filter keyboard events to a key with a dot: `$key_down.enter="submit"`; combine modifiers with `+`: `$key_down.ctrl+enter="send"`. Works on `$key_down` and `$key_up`, case-insensitive, and matches a superset (extra held modifiers do not block it).
 - Filter keys: letters/digits as the character (`k`, `7`); modifiers `alt`/`ctrl`/`meta`/`shift` (only when combined with a key); named keys (`arrow_up`, `enter`, `escape`, `space`, `tab`, `f1`-`f12`, ...); symbol keys as alias words (`slash`, `period`, `comma`, `minus`, ...) **not** raw characters.

@@ -28,5 +28,9 @@ defmodule Hologram.Template.HelpersTest do
     test "SVG element that can be self-closed" do
       refute void_element?("path")
     end
+
+    test "window element" do
+      assert void_element?("window")
+    end
   end
 end

@@ -5,6 +5,7 @@ defmodule Hologram.Template.DOM do
   alias Hologram.Template.EventModifiers
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
+  alias Hologram.TemplateSyntaxError
 
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
   @type dom_node ::
@@ -168,6 +169,10 @@ defmodule Hologram.Template.DOM do
   defp render_code({:start_tag, {tag_name, attributes}}) do
     tag_type = Helpers.tag_type(tag_name)
 
+    if tag_name == "window" do
+      validate_window_attributes(attributes)
+    end
+
     tag_name_code =
       if tag_type == :element do
         "\"#{tag_name}\""
@@ -211,4 +216,16 @@ defmodule Hologram.Template.DOM do
   end
 
   defp substitute_module_attributes(ast), do: ast
+
+  # The <window> tag binds events to the browser window and nothing else, so each attribute
+  # must be an event binding (a "$"-prefixed name). Any other attribute fails the build.
+  defp validate_window_attributes(attributes) do
+    Enum.each(attributes, fn {name, _value_parts} ->
+      unless String.starts_with?(name, "$") do
+        raise TemplateSyntaxError,
+          message:
+            ~s'the <window> tag accepts only event bindings, but got the "#{name}" attribute'
+      end
+    end)
+  end
 end

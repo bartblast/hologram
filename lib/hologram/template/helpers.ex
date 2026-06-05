@@ -52,6 +52,6 @@ defmodule Hologram.Template.Helpers do
   """
   @spec void_element?(String.t()) :: boolean
   def void_element?(tag_name) do
-    tag_name in @void_html_elements || tag_name == "slot"
+    tag_name in @void_html_elements || tag_name in ["slot", "window"]
   end
 end
