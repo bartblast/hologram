@@ -335,6 +335,18 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Sends keys to the page (the active element), releasing any held modifier keys afterward.
+
+  Wallaby's session-level `send_keys/2` posts to the WebDriver `/keys` endpoint, where modifier keys
+  (Ctrl, Shift, ...) stay pressed across calls. A chord like `[:control, "k"]` would otherwise leave
+  Ctrl held, turning a later click into a Ctrl+click. The trailing `:null` (the WebDriver NULL key)
+  releases the modifiers so each call is self-contained.
+  """
+  def send_keys(session, keys) do
+    Browser.send_keys(session, List.wrap(keys) ++ [:null])
+  end
+
+  @doc """
   Simulates a network blip by killing the SSE process attached to the given
   `instance_id`.
 
