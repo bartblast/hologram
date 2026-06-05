@@ -754,6 +754,14 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "window node" do
+    test "renders no markup" do
+      node = {:element, "window", [{"$key_down", [text: "my_action"]}], []}
+
+      assert render_dom(node, @env, @server) == {"", %{}, @server}
+    end
+  end
+
   describe "context" do
     setup do
       setup_asset_path_registry(AssetPathRegistryStub)
