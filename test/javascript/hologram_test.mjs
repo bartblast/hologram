@@ -13,7 +13,10 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
+import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
+import Vdom from "../../assets/js/vdom.mjs";
+import WindowEventRegistry from "../../assets/js/window_event_registry.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
 
@@ -1054,6 +1057,30 @@ describe("Hologram", () => {
       Hologram.queueSelfEchoes(Type.list([action1, action2]));
 
       assert.deepStrictEqual(InitActionQueue.dequeueAll(), [action1, action2]);
+    });
+  });
+
+  describe("render()", () => {
+    afterEach(() => {
+      Renderer.windowBindings = [];
+      sinon.restore();
+    });
+
+    it("reconciles the window bindings collected during the render", () => {
+      const bindings = [{eventName: "keydown", handler: () => {}}];
+
+      // renderPage() collects the page's <window> bindings into Renderer.windowBindings.
+      sinon.stub(Renderer, "renderPage").callsFake(() => {
+        Renderer.windowBindings = bindings;
+        return {sel: "html", data: {}, children: []};
+      });
+
+      sinon.stub(Vdom, "patchVirtualDocument");
+      const reconcileStub = sinon.stub(WindowEventRegistry, "reconcile");
+
+      Hologram.render();
+
+      sinon.assert.calledOnceWithExactly(reconcileStub, bindings);
     });
   });
 
