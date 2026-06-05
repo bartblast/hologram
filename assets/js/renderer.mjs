@@ -200,6 +200,14 @@ export default class Renderer {
     }
 
     const originalEventName = attributeName.substring(1);
+
+    // click_outside is not a per-element listener: the dismissing click lands on another element,
+    // so it is collected as a document-level "click" binding in #renderElement. Returning null here
+    // keeps it out of the element's "on" map.
+    if (originalEventName === "click_outside") {
+      return null;
+    }
+
     const normalizedEventName = $.#normalizeEventName(originalEventName);
 
     const effectiveDomEventName = $.#mapEventName(
@@ -280,6 +288,42 @@ export default class Renderer {
       .map((propDom) => Renderer.#normalizePropName(propDom));
 
     return Erlang_Maps["from_list/1"](Type.list(propsTuples));
+  }
+
+  // Records each $click_outside attribute on the element as a document-level "click" binding: it
+  // listens on the document (the dismissing click lands on another element) and dispatches only when
+  // the click target is outside the bound element's subtree. The element is read from the vnode's
+  // live `.elm` at dispatch - Snabbdom sets it during patch, and the binding is only reconciled into
+  // a real listener after that. The Hologram event type is the synthetic "click_outside" - the DSL
+  // name unchanged, deliberately not run through #normalizeEventName, since there is no DOM event to
+  // map to.
+  static #collectClickOutsideBindings(attrsDom, elementVnode, defaultTarget) {
+    attrsDom.data.forEach((attrDom) => {
+      if (Bitstring.toText(attrDom.data[0]) !== "$click_outside") {
+        return;
+      }
+
+      const operationSpecDom = attrDom.data[1];
+
+      const handler = (event) => {
+        if (elementVnode.elm.contains(event.target)) {
+          return;
+        }
+
+        const dispatch = Hologram.handleUiEvent(
+          event,
+          "click_outside",
+          operationSpecDom,
+          defaultTarget,
+        );
+
+        if (dispatch !== null) {
+          dispatch();
+        }
+      };
+
+      $.listenerBindings.push({target: document, eventName: "click", handler});
+    });
   }
 
   // Records a <window>/<document> tag's event bindings into the per-render accumulator, tagged with
@@ -939,7 +983,15 @@ export default class Renderer {
       data.key = `__hologramScript__:${childrenVdom[0]}`;
     }
 
-    return vnode(currentTagName, data, childrenVdom);
+    const elementVnode = vnode(currentTagName, data, childrenVdom);
+
+    Renderer.#collectClickOutsideBindings(
+      attrsDom,
+      elementVnode,
+      defaultTarget,
+    );
+
+    return elementVnode;
   }
 
   static #renderEventListeners(attrsDom, tagName, attrsVdom, defaultTarget) {

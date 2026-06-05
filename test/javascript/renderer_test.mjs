@@ -5373,6 +5373,128 @@ describe("Renderer", () => {
     });
   });
 
+  describe("click_outside binding", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    const clickOutsideElement = (specDom, children = Type.list()) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([Type.tuple([Type.bitstring("$click_outside"), specDom])]),
+        children,
+      ]);
+
+    beforeEach(() => {
+      Renderer.listenerBindings = [];
+    });
+
+    it("attaches no per-element listener and collects a document-level click binding", () => {
+      // <div $click_outside="my_action"></div>
+      const vdom = Renderer.renderDom(
+        clickOutsideElement(actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(vdom.data.on, {});
+
+      assert.equal(Renderer.listenerBindings.length, 1);
+      assert.equal(Renderer.listenerBindings[0].target, document);
+      assert.equal(Renderer.listenerBindings[0].eventName, "click");
+    });
+
+    it("dispatches only when the click lands outside the bound element", () => {
+      const vdom = Renderer.renderDom(
+        clickOutsideElement(actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the bound element's containment here.
+      const insideTarget = {};
+      const outsideTarget = {};
+      vdom.elm = {contains: (target) => target === insideTarget};
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      const handler = Renderer.listenerBindings[0].handler;
+
+      handler({target: insideTarget});
+      sinon.assert.notCalled(stub);
+
+      const outsideEvent = {target: outsideTarget};
+      handler(outsideEvent);
+
+      sinon.assert.calledOnceWithExactly(
+        stub,
+        outsideEvent,
+        "click_outside",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+
+    it("nested bindings each gate on their own subtree", () => {
+      // <div $click_outside="outer_action"><div $click_outside="inner_action"></div></div>
+      const outerSpecDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("outer_action")]),
+      ]);
+
+      const innerSpecDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("inner_action")]),
+      ]);
+
+      const outerVdom = Renderer.renderDom(
+        clickOutsideElement(
+          outerSpecDom,
+          Type.list([clickOutsideElement(innerSpecDom)]),
+        ),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const innerVdom = outerVdom.children[0];
+
+      // A click inside the outer element but outside the inner one.
+      outerVdom.elm = {contains: () => true};
+      innerVdom.elm = {contains: () => false};
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      const event = {target: {}};
+      Renderer.listenerBindings.forEach((binding) => binding.handler(event));
+
+      // Only the inner binding (whose subtree excludes the target) dispatches.
+      sinon.assert.calledOnceWithExactly(
+        stub,
+        event,
+        "click_outside",
+        innerSpecDom,
+        defaultTarget,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+  });
+
   describe("context", () => {
     it("emitted in page, accessed in component nested in page", () => {
       initComponentRegistryEntry(Type.bitstring("layout"));
