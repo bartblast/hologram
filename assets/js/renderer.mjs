@@ -322,7 +322,15 @@ export default class Renderer {
         }
       };
 
-      $.listenerBindings.push({target: document, eventName: "click", handler});
+      // Capture phase: Hologram renders synchronously inside the click handler, so a bubble-phase
+      // listener installed while the opening click is still bubbling would fire for that very click
+      // and self-dismiss. Capture sidesteps it - that phase has already passed by install time.
+      $.listenerBindings.push({
+        target: document,
+        eventName: "click",
+        handler,
+        capture: true,
+      });
     });
   }
 

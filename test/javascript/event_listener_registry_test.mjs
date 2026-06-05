@@ -33,6 +33,7 @@ describe("EventListenerRegistry", () => {
         windowAddSpy,
         "keydown",
         sinon.match.func,
+        false,
       );
     });
 
@@ -95,6 +96,7 @@ describe("EventListenerRegistry", () => {
         windowRemoveSpy,
         "keydown",
         sinon.match.func,
+        false,
       );
 
       window.dispatchEvent(new window.Event("keydown"));
@@ -116,12 +118,14 @@ describe("EventListenerRegistry", () => {
         windowAddSpy,
         "keydown",
         sinon.match.func,
+        false,
       );
 
       sinon.assert.calledOnceWithExactly(
         documentAddSpy,
         "keydown",
         sinon.match.func,
+        false,
       );
 
       // Dropping the window binding removes only the window listener; the document one stays.
@@ -133,6 +137,7 @@ describe("EventListenerRegistry", () => {
         windowRemoveSpy,
         "keydown",
         sinon.match.func,
+        false,
       );
 
       sinon.assert.notCalled(documentRemoveSpy);
@@ -142,6 +147,73 @@ describe("EventListenerRegistry", () => {
 
       sinon.assert.notCalled(windowHandler);
       sinon.assert.calledOnce(documentHandler);
+    });
+
+    it("installs a capture-phase listener when a binding sets capture", () => {
+      EventListenerRegistry.reconcile([
+        {
+          target: document,
+          eventName: "click",
+          handler: sinon.spy(),
+          capture: true,
+        },
+      ]);
+
+      sinon.assert.calledOnceWithExactly(
+        documentAddSpy,
+        "click",
+        sinon.match.func,
+        true,
+      );
+    });
+
+    it("keeps capture and bubble listeners for the same target and event separate", () => {
+      const bubbleHandler = sinon.spy();
+      const captureHandler = sinon.spy();
+
+      EventListenerRegistry.reconcile([
+        {target: document, eventName: "click", handler: bubbleHandler},
+        {
+          target: document,
+          eventName: "click",
+          handler: captureHandler,
+          capture: true,
+        },
+      ]);
+
+      // Two distinct real listeners - one per phase.
+      sinon.assert.calledTwice(documentAddSpy);
+
+      sinon.assert.calledWithExactly(
+        documentAddSpy,
+        "click",
+        sinon.match.func,
+        false,
+      );
+
+      sinon.assert.calledWithExactly(
+        documentAddSpy,
+        "click",
+        sinon.match.func,
+        true,
+      );
+
+      // Dropping the bubble binding removes only the bubble listener; the capture one stays.
+      EventListenerRegistry.reconcile([
+        {
+          target: document,
+          eventName: "click",
+          handler: captureHandler,
+          capture: true,
+        },
+      ]);
+
+      sinon.assert.calledOnceWithExactly(
+        documentRemoveSpy,
+        "click",
+        sinon.match.func,
+        false,
+      );
     });
   });
 });

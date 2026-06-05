@@ -5405,6 +5405,10 @@ describe("Renderer", () => {
       assert.equal(Renderer.listenerBindings.length, 1);
       assert.equal(Renderer.listenerBindings[0].target, document);
       assert.equal(Renderer.listenerBindings[0].eventName, "click");
+
+      // Capture phase so the opening click - which renders the element synchronously, mid-bubble -
+      // is not seen as an outside click by the listener it installs.
+      assert.isTrue(Renderer.listenerBindings[0].capture);
     });
 
     it("dispatches only when the click lands outside the bound element", () => {
