@@ -690,6 +690,39 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, window tag" do
+    test "with an event binding" do
+      # <window $key_down.ctrl+k="open_palette" />
+      tags = [{:self_closing_tag, {"window", [{"$key_down.ctrl+k", [text: "open_palette"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "window",
+                  [
+                    {:{}, [line: 1],
+                     [
+                       "$key_down",
+                       [text: "open_palette"],
+                       {:%{}, [line: 1], [key: [["ctrl", "k"]]]}
+                     ]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises for a non-event attribute" do
+      # <window class="my_class" />
+      tags = [{:self_closing_tag, {"window", [{"class", [text: "my_class"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the <window> tag accepts only event bindings, but got the "class" attribute',
+                   fn -> build_ast(tags) end
+    end
+  end
+
   describe "build_ast/1, expression node" do
     test "in text" do
       tags = [{:text, "abc"}, {:expression, "{1 + 2}"}, {:text, "xyz"}]
