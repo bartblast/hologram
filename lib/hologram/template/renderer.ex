@@ -98,9 +98,10 @@ defmodule Hologram.Template.Renderer do
     render_dom(env.slots[:default], %Env{env | slots: []}, server_struct)
   end
 
-  # The <window> tag binds events to the browser window on the client. It has no server
-  # rendering - it produces no markup and no hydration node.
-  def render_dom({:element, "window", _attrs_dom, []}, _env, server_struct) do
+  # The <window> and <document> tags bind events to the window or document on the client. They have
+  # no server rendering - they produce no markup and no hydration node.
+  def render_dom({:element, tag_name, _attrs_dom, []}, _env, server_struct)
+      when tag_name in ["window", "document"] do
     {"", %{}, server_struct}
   end
 

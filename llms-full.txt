@@ -1126,15 +1126,17 @@ Valid targets include:
 - `"layout"` - targets the current layout component
 - a string representing a component ID (CID) - targets a specific component by its unique identifier within the application
 
-#### Window-Level Events
+#### Window and Document Events
 
-Some events are not tied to any rendered element - a global keyboard shortcut, a paste anywhere on the page, a warning before the user leaves the page. Bind these with the `<window>` tag, which attaches the event to the global `window` rather than to an element. It renders nothing and reuses the same `$event` syntax, keyboard key filters, and modifiers as element bindings:
+Some events are not tied to any rendered element - a global keyboard shortcut, a paste anywhere on the page, a warning before the user leaves the page. Bind these with the `<window>` and `<document>` tags, which attach the event to the global `window` or the `document` rather than to an element. They render nothing and reuse the same `$event` syntax, keyboard key filters, and modifiers as element bindings:
 
 ```holo
 <window $key_down.ctrl+k="open_palette" />
 ```
 
-A `<window>` binding follows the same targeting rules as a regular element. It accepts only event bindings - any other attribute fails the build. The listener lives as long as the tag is in the template, so a `<window>` behind a conditional listens only while that condition holds.
+Both tags follow the same targeting rules as a regular element and accept only event bindings - any other attribute fails the build. Each tag's listener lives as long as the tag is in the template, so one behind a conditional listens only while that condition holds.
+
+Reach for `<window>` for window events such as resize and scroll, and `<document>` for document events such as a tab becoming visible or hidden. Events that bubble, like keyboard and pointer events, reach both, so either tag works for a global shortcut.
 
 #### Keyboard Key Filters
 

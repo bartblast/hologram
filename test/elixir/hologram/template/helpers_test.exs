@@ -32,5 +32,9 @@ defmodule Hologram.Template.HelpersTest do
     test "window element" do
       assert void_element?("window")
     end
+
+    test "document element" do
+      assert void_element?("document")
+    end
   end
 end
