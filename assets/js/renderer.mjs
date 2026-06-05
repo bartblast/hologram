@@ -18,11 +18,11 @@ import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
-  // Global event bindings collected during the current render, each a {target, eventName, handler}
-  // descriptor. A <window> tag pushes here (with the window target) instead of producing a vnode.
-  // renderPage() resets this, and the render loop drains it after patching to reconcile real
-  // listeners on each binding's target.
-  static globalBindings = [];
+  // Event listener bindings collected during the current render, each a {target, eventName, handler}
+  // descriptor. A <window> or <document> tag pushes here (with the window or document target) instead
+  // of producing a vnode. renderPage() resets this, and the render loop drains it after patching to
+  // reconcile real listeners on each binding's target.
+  static listenerBindings = [];
 
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
@@ -90,7 +90,7 @@ export default class Renderer {
 
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
-    Renderer.globalBindings = [];
+    Renderer.listenerBindings = [];
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
@@ -283,22 +283,22 @@ export default class Renderer {
   }
 
   // Records a <window>/<document> tag's event bindings into the per-render accumulator, tagged with
-  // the target the listener attaches to. Each binding is keyed by its position across all global
+  // the target the listener attaches to. Each binding is keyed by its position across all listener
   // bindings this render, so debounce/throttle windows stay independent even though listeners on one
-  // target share a currentTarget. A bare tag (no attributes) records nothing. A global target has no
-  // element tag name, so event-name mapping is skipped (passed null).
-  static #collectGlobalBindings(target, attrsDom, defaultTarget) {
+  // target share a currentTarget. A bare tag (no attributes) records nothing. A listener target has
+  // no element tag name, so event-name mapping is skipped (passed null).
+  static #collectListenerBindings(target, attrsDom, defaultTarget) {
     attrsDom.data.forEach((attrDom) => {
       const binding = $.#buildEventBinding(
         attrDom,
-        $.globalBindings.length,
+        $.listenerBindings.length,
         null,
         {},
         defaultTarget,
       );
 
       if (binding !== null) {
-        $.globalBindings.push({...binding, target});
+        $.listenerBindings.push({...binding, target});
       }
     });
   }
@@ -843,7 +843,7 @@ export default class Renderer {
     // (defaultTarget) as the default dispatch target, and renders nil.
     if (currentTagName === "window" || currentTagName === "document") {
       const target = currentTagName === "window" ? window : document;
-      Renderer.#collectGlobalBindings(target, dom.data[2], defaultTarget);
+      Renderer.#collectListenerBindings(target, dom.data[2], defaultTarget);
       return Type.nil();
     }
 

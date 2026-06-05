@@ -5237,7 +5237,7 @@ describe("Renderer", () => {
 
   describe("window node", () => {
     beforeEach(() => {
-      Renderer.globalBindings = [];
+      Renderer.listenerBindings = [];
     });
 
     it("renders nil and collects the binding scoped to the enclosing component", () => {
@@ -5262,9 +5262,9 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, Type.nil());
-      assert.equal(Renderer.globalBindings.length, 1);
-      assert.equal(Renderer.globalBindings[0].eventName, "keydown");
-      assert.equal(Renderer.globalBindings[0].target, window);
+      assert.equal(Renderer.listenerBindings.length, 1);
+      assert.equal(Renderer.listenerBindings[0].eventName, "keydown");
+      assert.equal(Renderer.listenerBindings[0].target, window);
 
       const stub = sinon
         .stub(Hologram, "handleUiEvent")
@@ -5272,7 +5272,7 @@ describe("Renderer", () => {
           (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
         );
 
-      Renderer.globalBindings[0].handler("dummyEvent");
+      Renderer.listenerBindings[0].handler("dummyEvent");
 
       sinon.assert.calledWith(
         stub,
@@ -5310,7 +5310,7 @@ describe("Renderer", () => {
       Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       assert.deepStrictEqual(
-        Renderer.globalBindings.map((binding) => binding.eventName),
+        Renderer.listenerBindings.map((binding) => binding.eventName),
         ["keydown", "keyup"],
       );
     });
@@ -5333,13 +5333,13 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, Type.nil());
-      assert.equal(Renderer.globalBindings.length, 0);
+      assert.equal(Renderer.listenerBindings.length, 0);
     });
   });
 
   describe("document node", () => {
     beforeEach(() => {
-      Renderer.globalBindings = [];
+      Renderer.listenerBindings = [];
     });
 
     it("renders nil and collects the binding with the document target", () => {
@@ -5367,9 +5367,9 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, Type.nil());
-      assert.equal(Renderer.globalBindings.length, 1);
-      assert.equal(Renderer.globalBindings[0].eventName, "keydown");
-      assert.equal(Renderer.globalBindings[0].target, document);
+      assert.equal(Renderer.listenerBindings.length, 1);
+      assert.equal(Renderer.listenerBindings[0].eventName, "keydown");
+      assert.equal(Renderer.listenerBindings[0].target, document);
     });
   });
 

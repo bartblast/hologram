@@ -11,7 +11,7 @@ import {
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
-import GlobalEventRegistry from "../../assets/js/global_event_registry.mjs";
+import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
@@ -1062,7 +1062,7 @@ describe("Hologram", () => {
 
   describe("render()", () => {
     afterEach(() => {
-      Renderer.globalBindings = [];
+      Renderer.listenerBindings = [];
       sinon.restore();
     });
 
@@ -1071,14 +1071,14 @@ describe("Hologram", () => {
         {target: window, eventName: "keydown", handler: () => {}},
       ];
 
-      // renderPage() collects the page's <window>/<document> bindings into Renderer.globalBindings.
+      // renderPage() collects the page's <window>/<document> bindings into Renderer.listenerBindings.
       sinon.stub(Renderer, "renderPage").callsFake(() => {
-        Renderer.globalBindings = bindings;
+        Renderer.listenerBindings = bindings;
         return {sel: "html", data: {}, children: []};
       });
 
       sinon.stub(Vdom, "patchVirtualDocument");
-      const reconcileStub = sinon.stub(GlobalEventRegistry, "reconcile");
+      const reconcileStub = sinon.stub(EventListenerRegistry, "reconcile");
 
       Hologram.render();
 

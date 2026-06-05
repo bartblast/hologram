@@ -1,13 +1,13 @@
 "use strict";
 
-// One reconciled listener per (target, DOM event name). Global event bindings (<window>,
-// <document>) have no DOM node to host them, so the registry installs exactly one real listener per
-// (target, event name) and fans it out to every binding for that pair. The desired set is rebuilt
+// One reconciled listener per (target, DOM event name). Window and document event bindings have no
+// DOM node to host them, so the registry installs exactly one real listener per (target, event name)
+// and fans it out to every binding for that pair. The desired set is rebuilt
 // each render and reconciled against the live set, per target: an event name gaining its first
 // binding on a target adds a real listener, losing its last binding removes it, and one present in
 // both keeps its listener and just swaps its handler list (read lazily at dispatch), so ordinary
 // re-renders cause no listener churn. Targets are reconciled independently of one another.
-export default class GlobalEventRegistry {
+export default class EventListenerRegistry {
   static #entriesByTarget = new Map();
 
   // Reconciles the live listeners against `bindings`, an array of {target, eventName, handler}
@@ -81,4 +81,4 @@ export default class GlobalEventRegistry {
   }
 }
 
-const $ = GlobalEventRegistry;
+const $ = EventListenerRegistry;

@@ -2,9 +2,9 @@
 
 import {sinon} from "./support/helpers.mjs";
 
-import GlobalEventRegistry from "../../assets/js/global_event_registry.mjs";
+import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 
-describe("GlobalEventRegistry", () => {
+describe("EventListenerRegistry", () => {
   let windowAddSpy;
   let windowRemoveSpy;
   let documentAddSpy;
@@ -19,13 +19,13 @@ describe("GlobalEventRegistry", () => {
 
   afterEach(() => {
     // Tear down any listeners installed by the test, then restore the spies.
-    GlobalEventRegistry.reconcile([]);
+    EventListenerRegistry.reconcile([]);
     sinon.restore();
   });
 
   describe("reconcile()", () => {
     it("installs one real listener when an event first gains a binding on a target", () => {
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: window, eventName: "keydown", handler: sinon.spy()},
       ]);
 
@@ -37,7 +37,7 @@ describe("GlobalEventRegistry", () => {
     });
 
     it("installs a single listener for multiple bindings of the same target and event", () => {
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: window, eventName: "keydown", handler: sinon.spy()},
         {target: window, eventName: "keydown", handler: sinon.spy()},
       ]);
@@ -49,7 +49,7 @@ describe("GlobalEventRegistry", () => {
       const handler1 = sinon.spy();
       const handler2 = sinon.spy();
 
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: window, eventName: "keydown", handler: handler1},
         {target: window, eventName: "keydown", handler: handler2},
       ]);
@@ -65,11 +65,11 @@ describe("GlobalEventRegistry", () => {
       const oldHandler = sinon.spy();
       const newHandler = sinon.spy();
 
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: window, eventName: "keydown", handler: oldHandler},
       ]);
 
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: window, eventName: "keydown", handler: newHandler},
       ]);
 
@@ -85,11 +85,11 @@ describe("GlobalEventRegistry", () => {
     it("removes the real listener when the last binding for an event goes away", () => {
       const handler = sinon.spy();
 
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: window, eventName: "keydown", handler},
       ]);
 
-      GlobalEventRegistry.reconcile([]);
+      EventListenerRegistry.reconcile([]);
 
       sinon.assert.calledOnceWithExactly(
         windowRemoveSpy,
@@ -106,7 +106,7 @@ describe("GlobalEventRegistry", () => {
       const windowHandler = sinon.spy();
       const documentHandler = sinon.spy();
 
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: window, eventName: "keydown", handler: windowHandler},
         {target: document, eventName: "keydown", handler: documentHandler},
       ]);
@@ -125,7 +125,7 @@ describe("GlobalEventRegistry", () => {
       );
 
       // Dropping the window binding removes only the window listener; the document one stays.
-      GlobalEventRegistry.reconcile([
+      EventListenerRegistry.reconcile([
         {target: document, eventName: "keydown", handler: documentHandler},
       ]);
 
