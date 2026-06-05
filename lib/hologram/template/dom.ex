@@ -169,8 +169,8 @@ defmodule Hologram.Template.DOM do
   defp render_code({:start_tag, {tag_name, attributes}}) do
     tag_type = Helpers.tag_type(tag_name)
 
-    if tag_name == "window" do
-      validate_window_attributes(attributes)
+    if tag_name in ["window", "document"] do
+      validate_reserved_tag_attributes(tag_name, attributes)
     end
 
     tag_name_code =
@@ -217,14 +217,14 @@ defmodule Hologram.Template.DOM do
 
   defp substitute_module_attributes(ast), do: ast
 
-  # The <window> tag binds events to the browser window and nothing else, so each attribute
-  # must be an event binding (a "$"-prefixed name). Any other attribute fails the build.
-  defp validate_window_attributes(attributes) do
+  # The <window> and <document> tags bind events to the window or document and nothing else, so each
+  # attribute must be an event binding (a "$"-prefixed name). Any other attribute fails the build.
+  defp validate_reserved_tag_attributes(tag_name, attributes) do
     Enum.each(attributes, fn {name, _value_parts} ->
       unless String.starts_with?(name, "$") do
         raise TemplateSyntaxError,
           message:
-            ~s'the <window> tag accepts only event bindings, but got the "#{name}" attribute'
+            ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'
       end
     end)
   end
