@@ -974,6 +974,7 @@ Hologram supports various event types that you can bind to elements in your temp
 - `$blur` - triggered when an element loses focus
 - `$change` - triggered when the value of an input element changes
 - `$click` - triggered when an element is clicked
+- `$click_outside` - triggered when a click occurs outside an element and its descendants
 - `$focus` - triggered when an element receives focus
 - `$key_down` - triggered when a key is pressed down
 - `$key_up` - triggered when a key is released
@@ -1033,7 +1034,7 @@ Mouse events (like `$mouse_move`) include:
 
 ##### Pointer Events
 
-Pointer events (like `$click`, `$pointer_cancel`, `$pointer_down`, `$pointer_move`, `$pointer_up`) include:
+Pointer events (like `$click`, `$click_outside`, `$pointer_cancel`, `$pointer_down`, `$pointer_move`, `$pointer_up`) include:
 
 - `client_x` - X coordinate relative to the client area (viewport)
 - `client_y` - Y coordinate relative to the client area (viewport)
@@ -1057,6 +1058,10 @@ Click events are ignored in the following cases:
 - When the middle mouse button is clicked
 
 This behavior prevents interference with browser's built-in functionality like opening links in new tabs, selecting text, or using browser extensions.
+
+###### Click-Outside Event
+
+The `$click_outside` event fires when a click lands anywhere outside the bound element and its descendants - the gesture behind dismissible UI like dropdowns, popovers, modals, and menus. A click on the element or inside it does nothing. It is usually rendered only while the element is open, behind a conditional, so it listens for outside clicks just then.
 
 ##### Select Event
 
