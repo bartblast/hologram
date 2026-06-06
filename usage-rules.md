@@ -72,7 +72,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 
 ## Events
 
-- Bind events with `$` prefix: `$click`, `$click_outside`, `$change`, `$submit`, `$blur`, `$focus`, `$key_down`, `$key_up`, `$mouse_move`, `$pointer_down`, `$pointer_up`, `$pointer_move`, `$pointer_cancel`, `$select`, `$transition_end`, `$transition_start`, `$transition_run`, `$transition_cancel`. **Not** `phx-click` or `phx-change`.
+- Bind events with `$` prefix: `$click`, `$click_outside`, `$change`, `$submit`, `$blur`, `$focus`, `$key_down`, `$key_up`, `$mouse_move`, `$pointer_down`, `$pointer_up`, `$pointer_move`, `$pointer_cancel`, `$scroll`, `$select`, `$transition_end`, `$transition_start`, `$transition_run`, `$transition_cancel`. **Not** `phx-click` or `phx-change`.
 - Text syntax (actions only): `$click="my_action"`.
 - Shorthand with params (actions only): `$click={:my_action, key: value}`.
 - Longhand (actions or commands): `$click={action: :my_action, target: "cid", params: %{key: value}}`.
@@ -85,6 +85,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - A `<window>` or `<document>` binding follows the same targeting rules as a regular element and accepts only event bindings (any other attribute fails the build). Its listener lives only while the tag renders, so one behind a conditional listens only while that condition holds.
 - Use `<window>` for window events (resize, scroll) and `<document>` for document events (tab visibility). Bubbling events like keyboard and pointer reach both, so either tag works for a global shortcut.
 - `$click_outside` fires when a click lands anywhere outside the bound element and its descendants - for dismissible UI like dropdowns, popovers, modals, and menus. A click on or inside the element does nothing. Usually rendered only while the element is open (behind a conditional) so it listens for outside clicks just then.
+- `$scroll` fires when a scrollable element, or the page, is scrolled - bind it to an element to track that element, or to `<window>` / `<document>` to track the page. `params.event` has `scroll_left` and `scroll_top`. It fires rapidly, so pair it with `.throttle(ms)` or `.debounce(ms)`.
 - Keyboard events (`$key_down`, `$key_up`): `params.event` has `key` (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), `code`, `alt_key`, `ctrl_key`, `meta_key`, `shift_key`, `repeat`.
 - Filter keyboard events to a key with a dot: `$key_down.enter="submit"`; combine modifiers with `+`: `$key_down.ctrl+enter="send"`. Works on `$key_down` and `$key_up`, case-insensitive, and matches a superset (extra held modifiers do not block it).
 - Filter keys: letters/digits as the character (`k`, `7`); modifiers `alt`/`ctrl`/`meta`/`shift` (only when combined with a key); named keys (`arrow_up`, `enter`, `escape`, `space`, `tab`, `f1`-`f12`, ...); symbol keys as alias words (`slash`, `period`, `comma`, `minus`, ...) **not** raw characters.

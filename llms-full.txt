@@ -983,6 +983,7 @@ Hologram supports various event types that you can bind to elements in your temp
 - `$pointer_down` - triggered when a pointer (mouse, touch, pen) is pressed down on an element
 - `$pointer_move` - triggered when a pointer moves while over an element
 - `$pointer_up` - triggered when a pointer (mouse, touch, pen) is released from an element
+- `$scroll` - triggered when a scrollable element or the page is scrolled
 - `$select` - triggered when text is selected in an input or textarea element
 - `$submit` - triggered when a form is submitted
 - `$transition_cancel` - triggered when a CSS transition is cancelled before it completes
@@ -1062,6 +1063,15 @@ This behavior prevents interference with browser's built-in functionality like o
 ###### Click-Outside Event
 
 The `$click_outside` event fires when a click lands anywhere outside the bound element and its descendants - the gesture behind dismissible UI like dropdowns, popovers, modals, and menus. A click on the element or inside it does nothing. It is usually rendered only while the element is open, behind a conditional, so it listens for outside clicks just then.
+
+##### Scroll Event
+
+The `$scroll` event fires when a scrollable element, or the page, is scrolled - bind it to an element to track that element, or to `<window>` / `<document>` to track the page. It includes:
+
+- `scroll_left` - the horizontal scroll offset of the scrolled element or page
+- `scroll_top` - the vertical scroll offset of the scrolled element or page
+
+Scroll fires rapidly, so pair it with `.throttle(ms)` or `.debounce(ms)` to coalesce the stream.
 
 ##### Select Event
 
