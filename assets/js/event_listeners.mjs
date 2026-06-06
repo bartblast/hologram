@@ -5,7 +5,7 @@
 // that installs the listener wired to dispatcher and returns a detach() teardown. The registry
 // owns the reconciliation; these own the transport - how a listener is actually installed - so a
 // new transport (a DOM event, an observer) is a new factory here, not a registry change.
-export default class Listeners {
+export default class EventListeners {
   // A DOM addEventListener/removeEventListener listener. The key separates a capture-phase
   // listener from a bubble-phase one for the same target and event, so the two reconcile as
   // independent listeners.

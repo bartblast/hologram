@@ -5263,7 +5263,7 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(result, Type.nil());
       assert.equal(Renderer.listenerBindings.length, 1);
-      assert.equal(Renderer.listenerBindings[0].eventName, "keydown");
+      assert.equal(Renderer.listenerBindings[0].key, "bubble:keydown");
       assert.equal(Renderer.listenerBindings[0].target, window);
 
       const stub = sinon
@@ -5310,8 +5310,8 @@ describe("Renderer", () => {
       Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       assert.deepStrictEqual(
-        Renderer.listenerBindings.map((binding) => binding.eventName),
-        ["keydown", "keyup"],
+        Renderer.listenerBindings.map((binding) => binding.key),
+        ["bubble:keydown", "bubble:keyup"],
       );
     });
 
@@ -5368,7 +5368,7 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(result, Type.nil());
       assert.equal(Renderer.listenerBindings.length, 1);
-      assert.equal(Renderer.listenerBindings[0].eventName, "keydown");
+      assert.equal(Renderer.listenerBindings[0].key, "bubble:keydown");
       assert.equal(Renderer.listenerBindings[0].target, document);
     });
   });
@@ -5404,11 +5404,10 @@ describe("Renderer", () => {
 
       assert.equal(Renderer.listenerBindings.length, 1);
       assert.equal(Renderer.listenerBindings[0].target, document);
-      assert.equal(Renderer.listenerBindings[0].eventName, "click");
 
-      // Capture phase so the opening click - which renders the element synchronously, mid-bubble -
-      // is not seen as an outside click by the listener it installs.
-      assert.isTrue(Renderer.listenerBindings[0].capture);
+      // Capture phase (key prefix) so the opening click - which renders the element synchronously,
+      // mid-bubble - is not seen as an outside click by the listener it installs.
+      assert.equal(Renderer.listenerBindings[0].key, "capture:click");
     });
 
     it("dispatches only when the click lands outside the bound element", () => {

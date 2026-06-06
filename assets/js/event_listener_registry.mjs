@@ -1,29 +1,28 @@
 "use strict";
 
-// One reconciled listener per (target, DOM event name, phase). Window and document event bindings
-// have no DOM node to host them, so the registry installs exactly one real listener per
-// (target, event name, capture flag) and fans it out to every binding for that triple. The desired
-// set is rebuilt each render and reconciled against the live set, per target: a listener gaining its
-// first binding adds a real listener, losing its last binding removes it, and one present in both
-// keeps its listener and just swaps its handler list (read lazily at dispatch), so ordinary
-// re-renders cause no listener churn. Targets are reconciled independently of one another.
+// One reconciled listener per (target, key). Window and document event bindings have no DOM node
+// to host them, so the registry installs exactly one real listener per (target, key) and fans it
+// out to every binding for that pair. The desired set is rebuilt each render and reconciled
+// against the live set, per target: a listener gaining its first binding attaches a real listener,
+// losing its last binding detaches it, and one present in both keeps its listener and just swaps
+// its handler list (read lazily at dispatch), so ordinary re-renders cause no listener churn.
+// Targets are reconciled independently of one another.
 //
-// The capture flag lets a binding listen in the capture phase instead of the default bubble phase.
-// Click-outside needs it: Hologram renders synchronously inside the click handler, so a bubble-phase
-// document listener installed while the opening click is still bubbling would fire for that very
-// click and immediately dismiss the element. A capture-phase listener installed at that point does
-// not - the capture phase has already passed - so the opening click is never seen as an outside one.
+// How a listener is actually installed - a DOM addEventListener, a ResizeObserver - is the
+// binding's own concern: each carries an attach(dispatcher) that installs the real listener and
+// returns a detach() teardown (see event_listeners.mjs). The key tells listeners on one target
+// apart - a capture-phase listener from a bubble-phase one, a DOM event from an observer - so
+// each reconciles independently.
 export default class EventListenerRegistry {
   static #entriesByTarget = new Map();
 
-  // Reconciles the live listeners against `bindings`, an array of {target, eventName, handler,
-  // capture} descriptors collected during the current render (capture defaults to false). Adds,
-  // refreshes, or removes exactly one real listener per (target, event name, capture) so the live
-  // set matches current demand.
+  // Reconciles the live listeners against `bindings`, an array of {target, key, attach, handler}
+  // descriptors collected during the current render. Attaches, refreshes, or detaches exactly one
+  // real listener per (target, key) so the live set matches current demand.
   static reconcile(bindings) {
     const desiredByTarget = new Map();
 
-    for (const {target, eventName, handler, capture = false} of bindings) {
+    for (const {target, key, attach, handler} of bindings) {
       let desiredByKey = desiredByTarget.get(target);
 
       if (desiredByKey === undefined) {
@@ -31,20 +30,19 @@ export default class EventListenerRegistry {
         desiredByTarget.set(target, desiredByKey);
       }
 
-      const key = $.#listenerKey(eventName, capture);
       let desired = desiredByKey.get(key);
 
       if (desired === undefined) {
-        desired = {eventName, capture, handlers: []};
+        desired = {attach, handlers: []};
         desiredByKey.set(key, desired);
       }
 
       desired.handlers.push(handler);
     }
 
-    // Add or refresh: an existing (target, event, capture) entry keeps its real listener and just
-    // swaps its handler list; a new one gets one real listener whose dispatcher reads the entry's
-    // handlers lazily, so a later refresh takes effect without re-registering.
+    // Attach or refresh: an existing (target, key) entry keeps its real listener and just swaps its
+    // handler list; a new one attaches one real listener whose dispatcher reads the entry's
+    // handlers lazily, so a later refresh takes effect without re-attaching.
     for (const [target, desiredByKey] of desiredByTarget) {
       let liveByKey = $.#entriesByTarget.get(target);
 
@@ -57,20 +55,10 @@ export default class EventListenerRegistry {
         const entry = liveByKey.get(key);
 
         if (entry === undefined) {
-          const newEntry = {
-            dispatcher: null,
-            eventName: desired.eventName,
-            capture: desired.capture,
-            handlers: desired.handlers,
-          };
+          const newEntry = {detach: null, handlers: desired.handlers};
 
-          newEntry.dispatcher = (event) =>
-            newEntry.handlers.forEach((handler) => handler(event));
-
-          target.addEventListener(
-            desired.eventName,
-            newEntry.dispatcher,
-            desired.capture,
+          newEntry.detach = desired.attach((event) =>
+            newEntry.handlers.forEach((handler) => handler(event)),
           );
 
           liveByKey.set(key, newEntry);
@@ -80,19 +68,14 @@ export default class EventListenerRegistry {
       }
     }
 
-    // Remove: any live (target, event, capture) absent from this render has lost its last binding,
-    // so drop its real listener. A target left with no listeners drops out of the registry.
+    // Detach: any live (target, key) absent from this render has lost its last binding, so tear
+    // down its real listener. A target left with no listeners drops out of the registry.
     for (const [target, liveByKey] of $.#entriesByTarget) {
       const desiredByKey = desiredByTarget.get(target);
 
       for (const [key, entry] of liveByKey) {
         if (desiredByKey === undefined || !desiredByKey.has(key)) {
-          target.removeEventListener(
-            entry.eventName,
-            entry.dispatcher,
-            entry.capture,
-          );
-
+          entry.detach();
           liveByKey.delete(key);
         }
       }
@@ -101,12 +84,6 @@ export default class EventListenerRegistry {
         $.#entriesByTarget.delete(target);
       }
     }
-  }
-
-  // Composite key distinguishing a capture-phase listener from a bubble-phase one for the same
-  // target and event name, so the two reconcile as independent listeners.
-  static #listenerKey(eventName, capture) {
-    return `${capture ? "capture" : "bubble"}\0${eventName}`;
   }
 }
 

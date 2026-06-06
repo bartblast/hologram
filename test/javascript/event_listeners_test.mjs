@@ -2,9 +2,9 @@
 
 import {assert, sinon} from "./support/helpers.mjs";
 
-import Listeners from "../../assets/js/listeners.mjs";
+import EventListeners from "../../assets/js/event_listeners.mjs";
 
-describe("Listeners", () => {
+describe("EventListeners", () => {
   describe("domEvent()", () => {
     it("attaches and detaches a DOM event listener on the target", () => {
       const target = {
@@ -13,7 +13,7 @@ describe("Listeners", () => {
       };
 
       const dispatcher = sinon.spy();
-      const detach = Listeners.domEvent(target, "click", true).attach(
+      const detach = EventListeners.domEvent(target, "click", true).attach(
         dispatcher,
       );
 
@@ -40,7 +40,7 @@ describe("Listeners", () => {
         removeEventListener: sinon.spy(),
       };
 
-      Listeners.domEvent(target, "click").attach(sinon.spy());
+      EventListeners.domEvent(target, "click").attach(sinon.spy());
 
       sinon.assert.calledOnceWithExactly(
         target.addEventListener,
@@ -52,8 +52,8 @@ describe("Listeners", () => {
 
     it("keys a bubble-phase listener distinctly from a capture-phase one", () => {
       assert.notEqual(
-        Listeners.domEvent(window, "click").key,
-        Listeners.domEvent(window, "click", true).key,
+        EventListeners.domEvent(window, "click").key,
+        EventListeners.domEvent(window, "click", true).key,
       );
     });
   });

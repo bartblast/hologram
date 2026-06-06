@@ -5,6 +5,7 @@
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
+import EventListeners from "./event_listeners.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
@@ -18,10 +19,10 @@ import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
-  // Event listener bindings collected during the current render, each a {target, eventName, handler}
-  // descriptor. A <window> or <document> tag pushes here (with the window or document target) instead
-  // of producing a vnode. renderPage() resets this, and the render loop drains it after patching to
-  // reconcile real listeners on each binding's target.
+  // Event listener bindings collected during the current render, each a {target, key, attach,
+  // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
+  // the window or document target) instead of producing a vnode. renderPage() resets this, and the
+  // render loop drains it after patching to reconcile real listeners on each binding's target.
   static listenerBindings = [];
 
   // Based on render_dom/3
@@ -325,12 +326,8 @@ export default class Renderer {
       // Capture phase: Hologram renders synchronously inside the click handler, so a bubble-phase
       // listener installed while the opening click is still bubbling would fire for that very click
       // and self-dismiss. Capture sidesteps it - that phase has already passed by install time.
-      $.listenerBindings.push({
-        target: document,
-        eventName: "click",
-        handler,
-        capture: true,
-      });
+      const {key, attach} = EventListeners.domEvent(document, "click", true);
+      $.listenerBindings.push({target: document, key, attach, handler});
     });
   }
 
@@ -350,7 +347,17 @@ export default class Renderer {
       );
 
       if (binding !== null) {
-        $.listenerBindings.push({...binding, target});
+        const {key, attach} = EventListeners.domEvent(
+          target,
+          binding.eventName,
+        );
+
+        $.listenerBindings.push({
+          target,
+          key,
+          attach,
+          handler: binding.handler,
+        });
       }
     });
   }
