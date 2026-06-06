@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.Events.ScrollPage do
 
   def init(_params, component, _server) do
     put_state(component,
+      document_scroll: nil,
       element_scroll: nil,
       window_scroll: nil
     )
@@ -17,11 +18,15 @@ defmodule HologramFeatureTests.Events.ScrollPage do
 
   def template do
     ~HOLO"""
+    <document $scroll="record_document_scroll" />
     <window $scroll="record_window_scroll" />
     <div $scroll="record_element_scroll" id="scroller" style="width: 100px; height: 100px; overflow: auto">
       <div style="width: 1000px; height: 1000px">Content</div>
     </div>
     <div style="width: 3000px; height: 2000px">Spacer</div>
+    <p>
+      Document: <strong id="document_result"><code>{inspect(@document_scroll)}</code></strong>
+    </p>
     <p>
       Element: <strong id="element_result"><code>{inspect(@element_scroll)}</code></strong>
     </p>
@@ -29,6 +34,14 @@ defmodule HologramFeatureTests.Events.ScrollPage do
       Window: <strong id="window_result"><code>{inspect(@window_scroll)}</code></strong>
     </p>
     """
+  end
+
+  def action(
+        :record_document_scroll,
+        %{event: %{scroll_left: scroll_left, scroll_top: scroll_top}},
+        component
+      ) do
+    put_state(component, :document_scroll, {scroll_left, scroll_top})
   end
 
   def action(
