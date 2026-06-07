@@ -543,7 +543,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => from_list_2(emptyList, opts),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(atomAbc),
       );
     });
 
@@ -872,7 +872,7 @@ describe("Erlang_Sets", () => {
       assertBoxedError(
         () => new_1(opts),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(atomAbc),
       );
     });
 

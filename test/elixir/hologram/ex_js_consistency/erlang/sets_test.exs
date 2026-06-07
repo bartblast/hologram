@@ -287,7 +287,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "raises CaseClauseError for invalid versions" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :sets.from_list([], version: :abc)
       end
     end
@@ -553,7 +553,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "raises CaseClauseError for invalid versions" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :sets.new(version: :abc)
       end
     end

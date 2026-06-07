@@ -477,13 +477,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "raises CaseClauseError if the fourth argument is not an atom" do
-      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg("all"), fn ->
         :string.replace("Hello World !", " ", "_", "all")
       end
     end
 
     test "raises CaseClauseError if the fourth argument is an unrecognized atom" do
-      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:invalid), fn ->
         :string.replace("Hello World", " ", "_", :invalid)
       end
     end
@@ -597,13 +597,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "raises CaseClauseError if the third argument is not an atom" do
-      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg("all"), fn ->
         :string.split("Hello World !", " ", "all")
       end
     end
 
     test "raises CaseClauseError if the third argument is an unrecognized atom" do
-      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:invalid), fn ->
         :string.split("hello world", " ", :invalid)
       end
     end

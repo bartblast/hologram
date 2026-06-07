@@ -296,7 +296,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(fun, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -538,7 +538,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(fun, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1290,7 +1290,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldl(fun, acc, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -2156,7 +2156,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(1), Type.atom("a")),
         "CaseClauseError",
-        "no case clause matching: :a",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("a")),
       );
     });
 
@@ -2168,7 +2168,9 @@ describe("Erlang_Lists", () => {
             Type.improperList([Type.integer(1), Type.integer(2)]),
           ),
         "CaseClauseError",
-        "no case clause matching: [1 | 2]",
+        Interpreter.buildCaseClauseErrorMsg(
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ),
       );
     });
 
@@ -2710,7 +2712,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => map(fun, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 

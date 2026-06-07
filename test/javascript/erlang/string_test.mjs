@@ -990,7 +990,7 @@ describe("Erlang_String", () => {
               Type.bitstring("all"),
             ),
           "CaseClauseError",
-          'no case clause matching: "all"',
+          Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
         );
       });
 
@@ -1004,7 +1004,7 @@ describe("Erlang_String", () => {
               Type.atom("invalid"),
             ),
           "CaseClauseError",
-          "no case clause matching: :invalid",
+          Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
         );
       });
     });
@@ -1186,7 +1186,7 @@ describe("Erlang_String", () => {
             Type.bitstring("all"),
           ),
         "CaseClauseError",
-        'no case clause matching: "all"',
+        Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
       );
     });
 
@@ -1199,7 +1199,7 @@ describe("Erlang_String", () => {
             Type.atom("invalid"),
           ),
         "CaseClauseError",
-        "no case clause matching: :invalid",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
       );
     });
   });
