@@ -10,6 +10,36 @@ defmodule Hologram.ReflectionTest do
   alias Hologram.Test.Fixtures.Reflection.Module8
   alias Hologram.Test.Fixtures.Reflection.Module9
 
+  # Reproduces the way some Erlang libraries (e.g. luerl) name their modules with an
+  # "Elixir." prefix for interop. Such modules are compiled by the Erlang compiler, so
+  # they lack the __info__/1 function that the Elixir compiler injects, and must not be
+  # treated as Elixir modules.
+  defp build_elixir_named_erlang_module do
+    module = Hologram.Test.Fixtures.Reflection.ErlangModuleWithElixirName
+
+    sources = [
+      "-module('#{module}').",
+      "-export([my_fun/0]).",
+      "my_fun() -> my_value."
+    ]
+
+    forms =
+      Enum.map(sources, fn source ->
+        charlist = String.to_charlist(source)
+        :merl.quote(charlist)
+      end)
+
+    {:ok, ^module, binary} = :compile.forms(forms, [:debug_info])
+    {:module, ^module} = :code.load_binary(module, ~c"nofile", binary)
+
+    on_exit(fn ->
+      :code.purge(module)
+      :code.delete(module)
+    end)
+
+    module
+  end
+
   describe "alias?/1" do
     test "atom which is an alias" do
       assert alias?(Calendar.ISO)
@@ -103,6 +133,10 @@ defmodule Hologram.ReflectionTest do
       refute elixir_module?(:maps)
     end
 
+    test "Erlang module that uses Elixir-style naming" do
+      refute elixir_module?(build_elixir_named_erlang_module())
+    end
+
     test "atom that starts with a lowercase letter and is not an existing Erlang module" do
       refute elixir_module?(:my_module)
     end
@@ -127,6 +161,10 @@ defmodule Hologram.ReflectionTest do
 
     test "existing Erlang module" do
       assert erlang_module?(:maps)
+    end
+
+    test "Erlang module that uses Elixir-style naming" do
+      assert erlang_module?(build_elixir_named_erlang_module())
     end
 
     test "atom that starts with a lowercase letter and is not an existing Erlang module" do
