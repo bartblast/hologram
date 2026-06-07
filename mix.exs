@@ -15,7 +15,7 @@ defmodule Hologram.MixProject do
       "format.js":
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' -u --write",
       "format.js.check":
-        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' -u --no-error-on-unmatched-pattern",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern -u",
       setup: [
         "deps.get",
         "cmd --cd assets npm install",
