@@ -990,7 +990,7 @@ describe("Erlang_String", () => {
               Type.bitstring("all"),
             ),
           "CaseClauseError",
-          'no case clause matching: "all"',
+          Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
         );
       });
 
@@ -1004,7 +1004,7 @@ describe("Erlang_String", () => {
               Type.atom("invalid"),
             ),
           "CaseClauseError",
-          "no case clause matching: :invalid",
+          Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
         );
       });
     });
@@ -1186,7 +1186,7 @@ describe("Erlang_String", () => {
             Type.bitstring("all"),
           ),
         "CaseClauseError",
-        'no case clause matching: "all"',
+        Interpreter.buildCaseClauseErrorMsg(Type.bitstring("all")),
       );
     });
 
@@ -1199,7 +1199,7 @@ describe("Erlang_String", () => {
             Type.atom("invalid"),
           ),
         "CaseClauseError",
-        "no case clause matching: :invalid",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("invalid")),
       );
     });
   });
@@ -1300,13 +1300,13 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("uses range check for character (codepoint 68976)", () => {
+      it("titlecases Garay character (codepoint 68976)", () => {
         const input = Type.bitstring(String.fromCodePoint(68_976));
         const result = titlecase(input);
 
         assert.deepStrictEqual(
           result,
-          Type.bitstring(String.fromCodePoint(68_976)),
+          Type.bitstring(String.fromCodePoint(68_944)),
         );
       });
 

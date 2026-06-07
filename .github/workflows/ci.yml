@@ -24,49 +24,66 @@ jobs:
     name: Lib Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
-      # Specify the Elixir and OTP versions to use when building
-      # and running the workflow steps.
+      # Each supported Elixir version is tested against a single Erlang/OTP version,
+      # staggered so the matrix collectively spans the full supported OTP range (24-28).
+      # The newest Elixir is tested against all three OTP versions it supports, since
+      # that is where OTP and type-system differences are most likely to surface.
+      # OTP compatibility per Elixir version:
+      # https://hexdocs.pm/elixir/compatibility-and-deprecations.html#between-elixir-and-erlang-otp
+      #
+      # Notes on the bounds:
+      # - Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0, so 1.15 is the floor.
+      # - Elixir 1.15+ requires Erlang/OTP 24+ (and cowlib 2.14+ requires OTP 23+).
+      # - Node.js only builds the JS step (actual JS runs in browsers), so we pin the latest LTS
+      #   only, matching .tool-versions for dev/prod/CI parity. Floor rationale: the Web Crypto API
+      #   requires Node 19+, and a few JS libs used by Hologram require Node 20+.
+      # - Windows only smoke-tests the newest Elixir across its OTP range: Windows failures are
+      #   OS-specific (paths, shell), not Elixir-version-specific, so Ubuntu carries full coverage.
+      #   TODO: change windows-2022 back to windows-latest when erlef/setup-beam supports win25.
       matrix:
-        # TODO: change back to windows-latest when erlef/setup-beam supports win25
-        os: [ubuntu-latest, windows-2022]
-        elixir:
-          # Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0
-          # - "1.13.4"
-          # - "1.14.5"
-          - "1.15.8"
-          - "1.16.3"
-          - "1.17.3"
-          - "1.18.2"
-        otp:
-          # See: https://hexdocs.pm/elixir/compatibility-and-deprecations.html#between-elixir-and-erlang-otp
-          # cowlib 2.14+ requires Erlang/OTP 23+.
-          # - "22.3"
-          # Elixir 1.15+ requires Erlang/OTP 24+.
-          # - "23.3"
-          - "24.3"
-          - "25.3"
-          - "26.2"
-          - "27.2"
-        node:
-          #  Web Crypto API requires Node 19+.
-          # - "18.20.4"
-          # A few JS libs used by Hologram require Node 20+.
-          # - "19.9.0"
-          # Node.js only tests the build step. Actual JS runs in browsers.
-          # Use latest LTS version only.
-          # Must match .tool-versions for dev/prod/CI parity.
-          - "24.13.0"
-        exclude:
-          - elixir: "1.15.8"
-            otp: "27.2"
-          - elixir: "1.16.3"
-            otp: "27.2"
-          - elixir: "1.17.3"
+        include:
+          - os: ubuntu-latest
+            elixir: "1.15.8"
             otp: "24.3"
-          - elixir: "1.18.2"
-            otp: "24.3"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.16.3"
+            otp: "25.3"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.17.3"
+            otp: "26.2"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.18.2"
+            otp: "27.2"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.19.5"
+            otp: "26.2"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.19.5"
+            otp: "27.2"
+            node: "24.13.0"
+          - os: ubuntu-latest
+            elixir: "1.19.5"
+            otp: "28.5"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.19.5"
+            otp: "26.2"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.19.5"
+            otp: "27.2"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.19.5"
+            otp: "28.5"
+            node: "24.13.0"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '24.13.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.19.5') && contains(matrix.otp, '28.5') && contains(matrix.node, '24.13.0') }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
@@ -243,10 +260,10 @@ jobs:
       matrix:
         elixir:
           # Run feature tests on latest pinned stable Elixir version only
-          - "1.18.2"
+          - "1.19.5"
         otp:
           # Run feature tests on latest pinned stable OTP version only
-          - "27.2"
+          - "28.5"
         node:
           # Run feature tests on latest LTS version only.
           # Must match .tool-versions for dev/prod/CI parity.

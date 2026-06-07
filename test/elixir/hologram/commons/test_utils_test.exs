@@ -126,7 +126,13 @@ defmodule Hologram.Commons.TestUtilsTest do
 
   test "build_match_error_msg/1" do
     result = build_match_error_msg(%{b: 2, a: 1})
-    expected = "no match of right hand side value: %{a: 1, b: 2}"
+
+    expected =
+      if Version.match?(System.version(), ">= 1.19.0") do
+        "no match of right hand side value:\n\n    %{a: 1, b: 2}\n"
+      else
+        "no match of right hand side value: %{a: 1, b: 2}"
+      end
 
     assert result == expected
   end
@@ -140,13 +146,10 @@ defmodule Hologram.Commons.TestUtilsTest do
 
     test "single similar function" do
       result = build_undefined_function_error_msg({MyModule, :my_fun, 2}, [{:my_other_fun, 3}])
+      indent = if Version.match?(System.version(), ">= 1.19.0"), do: "    ", else: "      "
 
       expected =
-        normalize_newlines("""
-        function MyModule.my_fun/2 is undefined or private. Did you mean:
-
-              * my_other_fun/3
-        """)
+        "function MyModule.my_fun/2 is undefined or private. Did you mean:\n\n#{indent}* my_other_fun/3\n"
 
       assert result == expected
     end
@@ -158,13 +161,11 @@ defmodule Hologram.Commons.TestUtilsTest do
           {:my_other_fun_2, 4}
         ])
 
-      expected =
-        normalize_newlines("""
-        function MyModule.my_fun/2 is undefined or private. Did you mean:
+      indent = if Version.match?(System.version(), ">= 1.19.0"), do: "    ", else: "      "
 
-              * my_other_fun_1/3
-              * my_other_fun_2/4
-        """)
+      expected =
+        "function MyModule.my_fun/2 is undefined or private. Did you mean:\n\n" <>
+          "#{indent}* my_other_fun_1/3\n#{indent}* my_other_fun_2/4\n"
 
       assert result == expected
     end

@@ -270,7 +270,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
     test "raises FunctionClauseError if the second argument is not a list" do
       expected_msg =
-        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 1])
+        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 2])
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.from_list([], :invalid)
@@ -279,7 +279,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
     # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the second argument is an a improper list" do
-      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 1])
+      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 2])
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.from_list([], [1 | 2])
@@ -287,7 +287,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "raises CaseClauseError for invalid versions" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :sets.from_list([], version: :abc)
       end
     end
@@ -536,7 +536,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
     test "raises FunctionClauseError if the first argument is not a list" do
       expected_msg =
-        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 1])
+        build_function_clause_error_msg(":proplists.get_value/3", [:version, :invalid, 2])
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.new(:invalid)
@@ -545,7 +545,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
     # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is an a improper list" do
-      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 1])
+      expected_msg = build_function_clause_error_msg(":proplists.get_value/3", [:version, 2, 2])
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :sets.new([1 | 2])
@@ -553,7 +553,7 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
 
     test "raises CaseClauseError for invalid versions" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :sets.new(version: :abc)
       end
     end

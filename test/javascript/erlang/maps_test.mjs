@@ -66,7 +66,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => find(Type.string("a"), Type.integer(1)),
         "BadMapError",
-        "expected a map, got: 1",
+        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
       );
     });
   });
@@ -152,7 +152,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(fun, Type.integer(10), Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
   });
@@ -271,7 +271,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(Type.atom("a"), Type.integer(1)),
         "BadMapError",
-        "expected a map, got: 1",
+        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -309,7 +309,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => get(Type.atom("a"), Type.integer(1), defaultValue),
         "BadMapError",
-        "expected a map, got: 1",
+        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -410,7 +410,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(map1),
       );
     });
 
@@ -421,7 +421,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect(map1, map2),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(map2),
       );
     });
 
@@ -611,7 +611,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(fun, map1, map2),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(map1),
       );
     });
 
@@ -622,7 +622,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => intersect_with(fun, map1, map2),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(map2),
       );
     });
 
@@ -675,7 +675,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => is_key(atomA, atomAbc),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(atomAbc),
       );
     });
   });
@@ -707,7 +707,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => iterator(atomAbc),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(atomAbc),
       );
     });
   });
@@ -732,7 +732,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => keys(atomAbc),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(atomAbc),
       );
     });
   });
@@ -822,7 +822,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(fun, Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
   });
@@ -884,7 +884,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge(Type.integer(123), map),
         "BadMapError",
-        "expected a map, got: 123",
+        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -894,7 +894,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge(map, Type.integer(123)),
         "BadMapError",
-        "expected a map, got: 123",
+        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
       );
     });
   });
@@ -1062,7 +1062,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(combiner, Type.integer(123), map),
         "BadMapError",
-        "expected a map, got: 123",
+        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1072,7 +1072,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => merge_with(combiner, map, Type.integer(123)),
         "BadMapError",
-        "expected a map, got: 123",
+        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
       );
     });
   });
@@ -1169,7 +1169,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => put(Type.atom("a"), Type.integer(1), Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1230,7 +1230,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => remove(Type.atom("b"), Type.integer(123)),
         "BadMapError",
-        "expected a map, got: 123",
+        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
       );
     });
 
@@ -1327,7 +1327,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => take(Type.atom("a"), Type.integer(123)),
         "BadMapError",
-        "expected a map, got: 123",
+        Interpreter.buildBadMapErrorMsg(Type.integer(123)),
       );
     });
   });
@@ -1371,7 +1371,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => to_list(Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1386,7 +1386,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => to_list(iterator),
         "BadMapError",
-        "expected a map, got: {:a, 1, :none}",
+        Interpreter.buildBadMapErrorMsg(iterator),
       );
     });
   });
@@ -1425,7 +1425,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(Type.atom("a"), Type.integer(1), Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
   });
@@ -1450,7 +1450,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fun(atomAbc),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(atomAbc),
       );
     });
   });

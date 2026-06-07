@@ -7753,7 +7753,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => is_map_key(atomA, atomAbc),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(atomAbc),
       );
     });
   });
@@ -9692,7 +9692,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_get(Type.atom("a"), Type.integer(1)),
         "BadMapError",
-        "expected a map, got: 1",
+        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -9724,7 +9724,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_size(Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
   });

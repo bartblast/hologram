@@ -10,6 +10,7 @@ defmodule Hologram.Commons.TestUtils do
   defdelegate port(str), to: IEx.Helpers
   defdelegate ref(str), to: IEx.Helpers
 
+  # Keep this message in sync with Interpreter.buildArgumentErrorMsg in assets/js/interpreter.mjs.
   @doc """
   Builds an error message for ArgumentError.
   """
@@ -22,6 +23,7 @@ defmodule Hologram.Commons.TestUtils do
     """)
   end
 
+  # Keep this message in sync with Interpreter.buildBadFunctionErrorMsg in assets/js/interpreter.mjs.
   @doc """
   Builds an error message for BadFunctionError.
   """
@@ -30,6 +32,34 @@ defmodule Hologram.Commons.TestUtils do
     "expected a function, got: " <> KernelUtils.inspect(term)
   end
 
+  # Keep this message in sync with Interpreter.buildBadMapErrorMsg in assets/js/interpreter.mjs.
+  @doc """
+  Builds an error message for BadMapError.
+  """
+  @spec build_bad_map_error_msg(any) :: String.t()
+  def build_bad_map_error_msg(term) do
+    build_value_error_msg("expected a map, got", term)
+  end
+
+  # Keep this message in sync with Interpreter.buildCaseClauseErrorMsg in assets/js/interpreter.mjs.
+  @doc """
+  Builds an error message for CaseClauseError.
+  """
+  @spec build_case_clause_error_msg(any) :: String.t()
+  def build_case_clause_error_msg(term) do
+    build_value_error_msg("no case clause matching", term)
+  end
+
+  # Keep this message in sync with Interpreter.buildErlangErrorMsg in assets/js/interpreter.mjs.
+  @doc """
+  Builds an error message for ErlangError.
+  """
+  @spec build_erlang_error_msg(String.t()) :: String.t()
+  def build_erlang_error_msg(blame) do
+    "Erlang error: #{blame}"
+  end
+
+  # Keep this message in sync with Interpreter.buildFunctionClauseErrorMsg in assets/js/interpreter.mjs.
   @doc """
   Builds an error message for FunctionClauseError.
   """
@@ -76,14 +106,39 @@ defmodule Hologram.Commons.TestUtils do
     """)
   end
 
+  # Keep this message in sync with Interpreter.buildKeyErrorMsg in assets/js/interpreter.mjs.
+  @doc """
+  Builds an error message for KeyError.
+
+  Produces the running Elixir version's format - the inspected value moved onto its
+  own indented line as of Elixir 1.19.
+  """
+  @spec build_key_error_msg(any, map) :: String.t()
+  def build_key_error_msg(key, map) do
+    inspected_key = KernelUtils.inspect(key)
+    inspected_map = KernelUtils.inspect(map)
+
+    if Version.match?(System.version(), ">= 1.19.0") do
+      "key #{inspected_key} not found in:\n\n    #{inspected_map}\n"
+    else
+      "key #{inspected_key} not found in: #{inspected_map}"
+    end
+  end
+
+  # Keep this message in sync with Interpreter.buildMatchErrorMsg in assets/js/interpreter.mjs.
   @doc """
   Builds an error message for MatchError.
   """
   @spec build_match_error_msg(term) :: String.t()
   def build_match_error_msg(right) do
-    "no match of right hand side value: " <> KernelUtils.inspect(right)
+    build_value_error_msg("no match of right hand side value", right)
   end
 
+  defp build_module_not_available_error(module_name, fun, arity) do
+    "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available)"
+  end
+
+  # Keep this message in sync with Interpreter.buildUndefinedFunctionErrorMsg in assets/js/interpreter.mjs.
   @doc """
   Builds an error message for UndefinedFunctionError.
   """
@@ -110,14 +165,39 @@ defmodule Hologram.Commons.TestUtils do
 
     similar_funs_info =
       if Enum.any?(similar_funs) do
+        indent = if Version.match?(System.version(), ">= 1.19.0"), do: "    ", else: "      "
+
         Enum.reduce(similar_funs, ". Did you mean:\n\n", fn {fun, arity}, acc ->
-          "#{acc}      * #{fun}/#{arity}\n"
+          "#{acc}#{indent}* #{fun}/#{arity}\n"
         end)
       else
         ""
       end
 
     "#{undefined_mfa_info}#{similar_funs_info}"
+  end
+
+  # The inspected value moved onto its own indented line as of Elixir 1.19; earlier versions
+  # keep it inline. The newest (multi-line) form is mirrored inline by
+  # buildBadMapErrorMsg/buildCaseClauseErrorMsg/buildMatchErrorMsg/buildWithClauseErrorMsg in
+  # assets/js/interpreter.mjs.
+  defp build_value_error_msg(label, term) do
+    value = KernelUtils.inspect(term)
+
+    if Version.match?(System.version(), ">= 1.19.0") do
+      "#{label}:\n\n    #{value}\n"
+    else
+      "#{label}: #{value}"
+    end
+  end
+
+  # Keep this message in sync with Interpreter.buildWithClauseErrorMsg in assets/js/interpreter.mjs.
+  @doc """
+  Builds an error message for WithClauseError.
+  """
+  @spec build_with_clause_error_msg(any) :: String.t()
+  def build_with_clause_error_msg(term) do
+    build_value_error_msg("no with clause matching", term)
   end
 
   @doc """
@@ -140,9 +220,5 @@ defmodule Hologram.Commons.TestUtils do
   @spec wrap_term(any) :: any
   def wrap_term(value) do
     value
-  end
-
-  defp build_module_not_available_error(module_name, fun, arity) do
-    "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available)"
   end
 end

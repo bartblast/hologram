@@ -24,7 +24,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirLocalsTest do
       end
 
       test "raises BadMapError when the first argument is not a map" do
-        assert_error BadMapError, "expected a map, got: :x", fn ->
+        assert_error BadMapError, build_bad_map_error_msg(:x), fn ->
           :elixir_locals.yank(:x, :b)
         end
       end

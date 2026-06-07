@@ -927,7 +927,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
@@ -945,7 +948,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
@@ -963,7 +969,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
@@ -981,7 +990,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => match(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
@@ -1371,7 +1383,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
@@ -1389,7 +1404,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
@@ -1407,7 +1425,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
@@ -1425,7 +1446,10 @@ describe("Erlang_Binary", () => {
         assertBoxedError(
           () => matches(subject, pattern, options),
           "ArgumentError",
-          Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+          Interpreter.buildArgumentErrorMsg(
+            3,
+            "specified part is not wholly inside binary",
+          ),
         );
       });
 
