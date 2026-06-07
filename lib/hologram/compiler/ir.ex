@@ -8,6 +8,11 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.IR
   alias Hologram.Compiler.Transformer
 
+  # `%Context{}` literals carry the struct's `MapSet.new()` default, which newer Dialyzer
+  # reads as a concrete MapSet and won't unify with the opaque `MapSet.t()` in the specs of
+  # the functions these contexts are passed to.
+  @dialyzer {:no_opaque, [build_function_capture_ir: 3, for_module: 2, for_term!: 1]}
+
   @type t ::
           IR.AnonymousFunctionCall.t()
           | IR.AnonymousFunctionType.t()

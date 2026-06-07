@@ -1,6 +1,10 @@
 defmodule Hologram.Compiler.Encoder do
   @moduledoc false
 
+  # See Hologram.Compiler.IR: a `%Context{}` default MapSet reads as concrete and won't unify
+  # with the opaque `MapSet.t()` in the spec.
+  @dialyzer {:no_opaque, {:encode_term!, 1}}
+
   if Application.compile_env(:hologram, :debug_encoder) do
     use Interceptor.Annotated,
       config: %{
