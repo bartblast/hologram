@@ -19,6 +19,10 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Template.Renderer
   alias Hologram.Template.Renderer.Env
 
+  # See Hologram.Compiler.IR: `%Context{}` defaults read as concrete MapSets and won't unify
+  # with the opaque `MapSet.t()` in the specs these helpers delegate to / pass into.
+  @dialyzer :no_opaque
+
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate clean_dir(file_path), to: FileUtils, as: :recreate_dir
   defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
