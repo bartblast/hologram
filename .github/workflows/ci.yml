@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       # Each supported Elixir version is tested against a single Erlang/OTP version,
-      # staggered so the matrix collectively spans the full supported OTP range (24-28).
+      # staggered so the matrix collectively spans the full supported OTP range (24-29).
       # The newest Elixir is tested against all three OTP versions it supports, since
       # that is where OTP and type-system differences are most likely to surface.
       # OTP compatibility per Elixir version:
@@ -60,30 +60,34 @@ jobs:
             node: "24.13.0"
           - os: ubuntu-latest
             elixir: "1.19.5"
-            otp: "26.2"
+            otp: "28.5"
             node: "24.13.0"
           - os: ubuntu-latest
-            elixir: "1.19.5"
+            elixir: "1.20.0"
             otp: "27.2"
             node: "24.13.0"
           - os: ubuntu-latest
-            elixir: "1.19.5"
+            elixir: "1.20.0"
             otp: "28.5"
             node: "24.13.0"
-          - os: windows-2022
-            elixir: "1.19.5"
-            otp: "26.2"
+          - os: ubuntu-latest
+            elixir: "1.20.0"
+            otp: "29.0"
             node: "24.13.0"
           - os: windows-2022
-            elixir: "1.19.5"
+            elixir: "1.20.0"
             otp: "27.2"
             node: "24.13.0"
           - os: windows-2022
-            elixir: "1.19.5"
+            elixir: "1.20.0"
             otp: "28.5"
+            node: "24.13.0"
+          - os: windows-2022
+            elixir: "1.20.0"
+            otp: "29.0"
             node: "24.13.0"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.19.5') && contains(matrix.otp, '28.5') && contains(matrix.node, '24.13.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.20.0') && contains(matrix.otp, '29.0') && contains(matrix.node, '24.13.0') }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
@@ -260,10 +264,10 @@ jobs:
       matrix:
         elixir:
           # Run feature tests on latest pinned stable Elixir version only
-          - "1.19.5"
+          - "1.20.0"
         otp:
           # Run feature tests on latest pinned stable OTP version only
-          - "28.5"
+          - "29.0"
         node:
           # Run feature tests on latest LTS version only.
           # Must match .tool-versions for dev/prod/CI parity.
