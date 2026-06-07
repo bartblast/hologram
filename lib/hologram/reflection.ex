@@ -120,6 +120,12 @@ defmodule Hologram.Reflection do
   @doc """
   Returns true if the given term is an existing Elixir module, or false otherwise.
 
+  Some Erlang modules use Elixir-style naming for interop (e.g. the atom `Luerl`,
+  whose source is the Erlang file `Elixir.Luerl.erl`). Such modules are compiled by
+  the Erlang compiler and are not Elixir modules, so they return false even though
+  their names look like Elixir aliases. They are detected by the absence of the
+  `__info__/1` function that the Elixir compiler injects into every Elixir module.
+
   ## Examples
 
       iex> elixir_module?(Calendar.ISO)
@@ -130,7 +136,7 @@ defmodule Hologram.Reflection do
 
       iex> elixir_module?(:my_module)
       false
-      
+
       iex> elixir_module?(123)
       false
   """
@@ -141,7 +147,7 @@ defmodule Hologram.Reflection do
     alias?(term) &&
       case Code.ensure_loaded(term) do
         {:module, _module} ->
-          true
+          function_exported?(term, :__info__, 1)
 
         _fallback ->
           false
@@ -153,6 +159,11 @@ defmodule Hologram.Reflection do
   @doc """
   Returns true if the given term is an existing Erlang module, or false otherwise.
 
+  An Erlang module is detected by the absence of the `__info__/1` function that the
+  Elixir compiler injects into every Elixir module. This means Erlang modules that
+  use Elixir-style naming for interop (e.g. the atom `Luerl`, whose source is the
+  Erlang file `Elixir.Luerl.erl`) are correctly recognized as Erlang modules.
+
   ## Examples
 
       iex> erlang_module?(:maps)
@@ -160,9 +171,9 @@ defmodule Hologram.Reflection do
 
       iex> erlang_module?(:my_module)
       false
-      
+
       iex> erlang_module?(Calendar.ISO)
-      false 
+      false
 
       iex> erlang_module?(123)
       false
@@ -171,19 +182,13 @@ defmodule Hologram.Reflection do
   def erlang_module?(term)
 
   def erlang_module?(term) when is_atom(term) do
-    first =
-      term
-      |> Atom.to_string()
-      |> String.first()
+    case Code.ensure_loaded(term) do
+      {:module, _module} ->
+        !function_exported?(term, :__info__, 1)
 
-    first >= "a" && first <= "z" &&
-      case Code.ensure_loaded(term) do
-        {:module, _module} ->
-          true
-
-        _fallback ->
-          false
-      end
+      _fallback ->
+        false
+    end
   end
 
   def erlang_module?(_term), do: false
