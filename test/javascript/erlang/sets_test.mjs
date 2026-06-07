@@ -512,7 +512,7 @@ describe("Erlang_Sets", () => {
     it("raises FunctionClauseError if the second argument is not a list", () => {
       const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
-        [Type.atom("version"), Type.atom("invalid"), integer1],
+        [Type.atom("version"), Type.atom("invalid"), integer2],
       );
 
       assertBoxedError(
@@ -845,7 +845,7 @@ describe("Erlang_Sets", () => {
     it("raises FunctionClauseError if the first argument is not a list", () => {
       const expectedMsg = Interpreter.buildFunctionClauseErrorMsg(
         ":proplists.get_value/3",
-        [Type.atom("version"), Type.atom("invalid"), integer1],
+        [Type.atom("version"), Type.atom("invalid"), integer2],
       );
 
       assertBoxedError(
