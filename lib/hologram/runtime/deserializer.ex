@@ -111,8 +111,9 @@ defmodule Hologram.Runtime.Deserializer do
       when version in [3, 2] do
     bytes = Base.decode16!(hex, case: :lower)
     leftover_bit_count = String.to_integer(leftover_bits)
+    full_byte_count = byte_size(bytes) - 1
 
-    <<full_bytes::binary-size(byte_size(bytes) - 1), left_aligned_leftover_byte::integer>> = bytes
+    <<full_bytes::binary-size(^full_byte_count), left_aligned_leftover_byte::integer>> = bytes
     right_aligned_leftover_byte = Bitwise.bsr(left_aligned_leftover_byte, 8 - leftover_bit_count)
     <<full_bytes::binary, right_aligned_leftover_byte::size(leftover_bit_count)>>
   end
