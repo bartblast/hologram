@@ -6,7 +6,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module3 do
     iii = 123
     bbb = wrap_term("abc")
     fff = 1.23
-    my_map = %{my_key: 123}
+    my_map = wrap_term(%{my_key: 123})
 
     [
       <<5.0>>,
