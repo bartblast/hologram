@@ -1373,7 +1373,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         "you attempted to apply a function named :fun_0 on 123. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module"
 
       assert_error ArgumentError, expected_msg, fn ->
-        :erlang.apply(wrap_term(123), :fun_0, [])
+        123
+        |> wrap_term()
+        |> :erlang.apply(:fun_0, [])
       end
     end
 
