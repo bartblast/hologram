@@ -1300,13 +1300,13 @@ describe("Erlang_String", () => {
         );
       });
 
-      it("uses range check for character (codepoint 68976)", () => {
+      it("titlecases Garay character (codepoint 68976)", () => {
         const input = Type.bitstring(String.fromCodePoint(68_976));
         const result = titlecase(input);
 
         assert.deepStrictEqual(
           result,
-          Type.bitstring(String.fromCodePoint(68_976)),
+          Type.bitstring(String.fromCodePoint(68_944)),
         );
       });
 

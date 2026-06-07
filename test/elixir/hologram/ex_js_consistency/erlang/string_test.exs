@@ -671,9 +671,9 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.titlecase(input) == expected
     end
 
-    test "uses range check for character (codepoint 68976)" do
+    test "titlecases Garay character (codepoint 68976)" do
       input = <<68_976::utf8>>
-      expected = <<68_976::utf8>>
+      expected = <<68_944::utf8>>
 
       assert :string.titlecase(input) == expected
     end
