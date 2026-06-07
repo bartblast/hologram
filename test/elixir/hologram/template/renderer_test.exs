@@ -623,7 +623,7 @@ defmodule Hologram.Template.RendererTest do
          [{"cid", [text: "my_component"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
 
       assert_raise KeyError,
-                   ~r/^key :c not found in: %\{.+\}$/,
+                   ~r/^key :c not found in:\s+%\{.+\}$/s,
                    fn ->
                      render_dom(node, @env, @server)
                    end
