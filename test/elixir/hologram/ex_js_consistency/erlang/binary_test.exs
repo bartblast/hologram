@@ -11,15 +11,16 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
   @binary <<5, 19, 72, 33>>
 
-  # Erlang/OTP 27 on Linux with Elixir 1.18.x returns a more specific error message
-  # for invalid scope in :binary.match/3. Other combinations return "invalid options".
+  # Erlang/OTP 28+ returns a more specific error message for invalid scope in
+  # :binary.match/3 and :binary.matches/3. Erlang/OTP 27 on Unix with Elixir 1.18.x
+  # also returned it; other combinations return "invalid options".
   defp binary_match_invalid_scope_error_msg do
     otp_release = String.to_integer(System.otp_release())
     %{major: major, minor: minor} = Version.parse!(System.version())
     elixir_1_18? = major == 1 and minor == 18
     {os_type, _os_name} = :os.type()
 
-    if os_type == :unix and otp_release == 27 and elixir_1_18? do
+    if otp_release >= 28 or (os_type == :unix and otp_release == 27 and elixir_1_18?) do
       build_argument_error_msg(3, "specified part is not wholly inside binary")
     else
       build_argument_error_msg(3, "invalid options")
