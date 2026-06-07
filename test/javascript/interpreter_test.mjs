@@ -508,26 +508,14 @@ describe("Interpreter", () => {
     ]);
 
     const result = Interpreter.buildKeyErrorMsg(key, map);
-    const expected = "key :c not found in: %{a: 1, b: 2}";
+    const expected = "key :c not found in:\n\n    %{a: 1, b: 2}\n";
 
     assert.equal(result, expected);
   });
 
   it("buildMatchErrorMsg()", () => {
     const result = Interpreter.buildMatchErrorMsg(Type.atom("abc"));
-    const expected = "no match of right hand side value: :abc";
-
-    assert.equal(result, expected);
-  });
-
-  it("buildProtocolUndefinedErrorMsg()", () => {
-    const result = Interpreter.buildProtocolUndefinedErrorMsg(
-      "String.Chars",
-      Type.tuple([Type.integer(1), Type.integer(2)]),
-    );
-
-    const expected =
-      "protocol String.Chars not implemented for type Tuple\n\nGot value:\n\n    {1, 2}";
+    const expected = "no match of right hand side value:\n\n    :abc\n";
 
     assert.equal(result, expected);
   });
@@ -3100,7 +3088,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(myAtom, Type.atom("abc"), context),
           "MatchError",
-          "no match of right hand side value: :xyz",
+          Interpreter.buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -3111,7 +3099,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(myInteger, Type.atom("abc"), context),
           "MatchError",
-          "no match of right hand side value: 2",
+          Interpreter.buildMatchErrorMsg(myInteger),
         );
       });
     });
@@ -3148,7 +3136,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: <<2::size(2)>>",
+          Interpreter.buildMatchErrorMsg(myBitstring),
         );
       });
 
@@ -3160,7 +3148,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(myAtom, emptyBitstringPattern, context),
           "MatchError",
-          "no match of right hand side value: :abc",
+          Interpreter.buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -3197,7 +3185,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: <<2>>",
+          Interpreter.buildMatchErrorMsg(myBitstring),
         );
       });
 
@@ -3214,7 +3202,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: :abc",
+          Interpreter.buildMatchErrorMsg(myAtom),
         );
       });
 
@@ -3381,7 +3369,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: <<1, 2>>",
+          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -3401,7 +3389,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: <<1, 2>>",
+          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -3421,7 +3409,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: <<1, 2>>",
+          Interpreter.buildMatchErrorMsg(multiSegmentBitstringValue),
         );
       });
 
@@ -3847,7 +3835,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            'no match of right hand side value: "hello"',
+            Interpreter.buildMatchErrorMsg(myBitstring),
           );
         });
 
@@ -3872,7 +3860,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            'no match of right hand side value: "hello"',
+            Interpreter.buildMatchErrorMsg(myBitstring),
           );
         });
 
@@ -3896,7 +3884,7 @@ describe("Interpreter", () => {
                 context,
               ),
             "MatchError",
-            'no match of right hand side value: "hello"',
+            Interpreter.buildMatchErrorMsg(myBitstring),
           );
         });
       });
@@ -4010,7 +3998,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          "no match of right hand side value: <<170>>",
+          Interpreter.buildMatchErrorMsg(right),
         );
       });
 
@@ -4154,7 +4142,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          "no match of right hand side value: <<170>>",
+          Interpreter.buildMatchErrorMsg(right),
         );
       });
 
@@ -5179,7 +5167,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          "no match of right hand side value: %{x: 1, y: 2}",
+          Interpreter.buildMatchErrorMsg(right),
         );
       });
 
@@ -5196,7 +5184,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          "no match of right hand side value: %{x: 1, y: 3}",
+          Interpreter.buildMatchErrorMsg(right),
         );
       });
 
@@ -5208,7 +5196,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          "no match of right hand side value: :abc",
+          Interpreter.buildMatchErrorMsg(right),
         );
       });
 
@@ -5247,7 +5235,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          "no match of right hand side value: %{}",
+          Interpreter.buildMatchErrorMsg(right),
         );
       });
 
@@ -5422,7 +5410,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 3",
+          Interpreter.buildMatchErrorMsg(Type.integer(3)),
         );
       });
 
@@ -5460,7 +5448,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 3",
+          Interpreter.buildMatchErrorMsg(Type.integer(3)),
         );
       });
 
@@ -5507,7 +5495,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 3",
+          Interpreter.buildMatchErrorMsg(context.vars.x),
         );
       });
 
@@ -5531,7 +5519,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 2",
+          Interpreter.buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -5615,7 +5603,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 2",
+          Interpreter.buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -5640,7 +5628,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 1",
+          Interpreter.buildMatchErrorMsg(Type.integer(1)),
         );
       });
 
@@ -5666,7 +5654,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 2",
+          Interpreter.buildMatchErrorMsg(Type.integer(2)),
         );
       });
 
@@ -5692,7 +5680,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: 1",
+          Interpreter.buildMatchErrorMsg(Type.integer(1)),
         );
       });
 
@@ -6671,7 +6659,7 @@ describe("Interpreter", () => {
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
           "MatchError",
-          "no match of right hand side value: [1, 2]",
+          Interpreter.buildMatchErrorMsg(right),
         );
       });
     });
@@ -7060,7 +7048,7 @@ describe("Interpreter", () => {
     assertBoxedError(
       () => Interpreter.raiseBadMapError(Type.atom("abc")),
       "BadMapError",
-      "expected a map, got: :abc",
+      Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
     );
   });
 
@@ -7068,7 +7056,7 @@ describe("Interpreter", () => {
     assertBoxedError(
       () => Interpreter.raiseCaseClauseError(Type.atom("abc")),
       "CaseClauseError",
-      "no case clause matching: :abc",
+      Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
     );
   });
 
@@ -7116,16 +7104,6 @@ describe("Interpreter", () => {
     );
   });
 
-  it("raiseProtocolUndefinedError()", () => {
-    const term = Type.tuple([Type.integer(1), Type.integer(2)]);
-
-    assertBoxedError(
-      () => Interpreter.raiseProtocolUndefinedError("String.Chars", term),
-      "Protocol.UndefinedError",
-      Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
-    );
-  });
-
   it("raiseUndefinedFunctionError()", () => {
     assertBoxedError(
       () => Interpreter.raiseUndefinedFunctionError("my_message"),
@@ -7138,7 +7116,7 @@ describe("Interpreter", () => {
     assertBoxedError(
       () => Interpreter.raiseWithClauseError(Type.atom("abc")),
       "WithClauseError",
-      "no with clause matching: :abc",
+      Interpreter.buildWithClauseErrorMsg(Type.atom("abc")),
     );
   });
 
@@ -7538,7 +7516,7 @@ describe("Interpreter", () => {
               context,
             ),
           "MatchError",
-          "no match of right hand side value: :ok",
+          Interpreter.buildMatchErrorMsg(context.vars.a),
         );
       });
     });
@@ -7712,7 +7690,7 @@ describe("Interpreter", () => {
               context,
             ),
           "WithClauseError",
-          "no with clause matching: :ok",
+          Interpreter.buildWithClauseErrorMsg(context.vars.a),
         );
       });
     });

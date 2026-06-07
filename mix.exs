@@ -13,9 +13,9 @@ defmodule Hologram.MixProject do
         "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** scripts/** test/javascript/** --no-error-on-unmatched-pattern",
       f: ["format", "format.js", "cmd cd test/features && mix format && mix format.js"],
       "format.js":
-        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --config 'assets/.prettierrc.json' -u --write",
       "format.js.check":
-        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'scripts/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern -u",
       setup: [
         "deps.get",
         "cmd --cd assets npm install",
@@ -38,6 +38,15 @@ defmodule Hologram.MixProject do
         extra_applications: [:logger]
       ]
     end
+  end
+
+  def cli do
+    [
+      preferred_envs: [
+        t: :test,
+        "test.js": :test
+      ]
+    ]
   end
 
   def deps do
@@ -104,13 +113,6 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  def preferred_cli_env do
-    [
-      t: :test,
-      "test.js": :test
-    ]
-  end
-
   def project do
     [
       aliases: aliases(),
@@ -145,12 +147,11 @@ defmodule Hologram.MixProject do
         ],
         source_ref: "v#{@version}"
       ],
-      elixir: "~> 1.0",
+      elixir: "~> 1.15",
       elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
       homepage_url: "https://hologram.page/",
       package: package(),
-      preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/bartblast/hologram",
       test_paths: ["test/elixir"],

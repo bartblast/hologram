@@ -1268,7 +1268,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "doesn't evaluate the second argument if the first argument is false" do
-      assert :erlang.andalso(false, apply(:impossible, [])) == false
+      assert :erlang.andalso(false, apply(wrap_term(:impossible), [])) == false
     end
 
     test "raises ArgumentError if the first argument is not a boolean" do
@@ -1373,7 +1373,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         "you attempted to apply a function named :fun_0 on 123. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module"
 
       assert_error ArgumentError, expected_msg, fn ->
-        :erlang.apply(123, :fun_0, [])
+        123
+        |> wrap_term()
+        |> :erlang.apply(:fun_0, [])
       end
     end
 
@@ -4637,7 +4639,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_error BadMapError, "expected a map, got: :abc", {:erlang, :is_map_key, [:x, :abc]}
+      assert_error BadMapError, build_bad_map_error_msg(:abc), {:erlang, :is_map_key, [:x, :abc]}
     end
   end
 
@@ -5462,7 +5464,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_error BadMapError, "expected a map, got: 1", {:erlang, :map_get, [:a, 1]}
+      assert_error BadMapError, build_bad_map_error_msg(1), {:erlang, :map_get, [:a, 1]}
     end
 
     test "raises KeyError if the map doesn't contain the given key" do
@@ -5477,7 +5479,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises BadMapError if the argument is not a map" do
       assert_error BadMapError,
-                   "expected a map, got: :abc",
+                   build_bad_map_error_msg(:abc),
                    {:erlang, :map_size, [:abc]}
     end
   end
@@ -5576,7 +5578,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "doesn't evaluate the second argument if the first argument is true" do
-      assert :erlang.orelse(true, apply(:impossible, [])) == true
+      assert :erlang.orelse(true, apply(wrap_term(:impossible), [])) == true
     end
 
     test "raises ArgumentError if the first argument is not a boolean" do

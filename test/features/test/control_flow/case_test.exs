@@ -55,7 +55,7 @@ defmodule HologramFeatureTests.ControlFlow.CaseTest do
 
   feature "no matching clause", %{session: session} do
     assert_js_error session,
-                    "(CaseClauseError) no case clause matching: 3",
+                    "(CaseClauseError) no case clause matching:\n\n    3",
                     fn ->
                       session
                       |> visit(CasePage)

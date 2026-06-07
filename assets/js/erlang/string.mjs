@@ -503,8 +503,7 @@ const Erlang_String = {
         (codepoint >= 4304 && codepoint <= 4346) ||
         (codepoint >= 8072 && codepoint <= 8079) ||
         (codepoint >= 8088 && codepoint <= 8095) ||
-        (codepoint >= 8104 && codepoint <= 8111) ||
-        (codepoint >= 68976 && codepoint <= 68997)
+        (codepoint >= 8104 && codepoint <= 8111)
       ) {
         return [codepoint];
       } else if (Object.hasOwn(MAPPING, codepoint)) {

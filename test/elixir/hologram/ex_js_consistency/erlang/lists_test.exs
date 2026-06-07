@@ -54,7 +54,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the second argument is not a list" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.all(fn elem -> elem > 1 end, :abc)
       end
     end
@@ -118,7 +118,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the second argument is not a list" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.any(&(&1 > 2), :abc)
       end
     end
@@ -453,7 +453,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the third argument is not a list", %{fun: fun} do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.foldl(fun, [], :abc)
       end
     end
@@ -969,13 +969,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises CaseClauseError if the second argument is not a list" do
       assert_error CaseClauseError,
-                   "no case clause matching: :a",
+                   build_case_clause_error_msg(:a),
                    fn -> :lists.keysort(1, :a) end
     end
 
     test "raises CaseClauseError if the second argument is a two-element improper list" do
       assert_error CaseClauseError,
-                   "no case clause matching: [1 | 2]",
+                   build_case_clause_error_msg([1 | 2]),
                    fn -> :lists.keysort(1, [1 | 2]) end
     end
 
@@ -1259,7 +1259,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the second argument is not a list", %{fun: fun} do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.map(fun, :abc)
       end
     end
