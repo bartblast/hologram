@@ -113,7 +113,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCapturePage do
 
   def action(:partially_applied_remote_erlang_function_capture, _params, component) do
     fun = &:lists.member(&1, [:a, :b])
-    result = fun.(:b)
+    result = fun.(wrap_term(:b))
 
     put_state(component, :result, result)
   end
