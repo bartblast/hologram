@@ -912,8 +912,17 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp transform_variable(name, meta) when is_list(meta) do
-    version = Keyword.get(meta, :version)
-    transform_variable(name, version)
+    case to_string(name) do
+      # Elixir 1.20+ expands captures into an anonymous function whose generated params are
+      # all named :"_&", with the :capture metadata holding the original &N index. Normalize
+      # them to the same :"$N" variables that source-code captures produce.
+      "_&" ->
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        %IR.Variable{name: :"$#{Keyword.fetch!(meta, :capture)}", version: nil}
+
+      _other ->
+        transform_variable(name, Keyword.get(meta, :version))
+    end
   end
 
   defp transform_variable(name, version) do
