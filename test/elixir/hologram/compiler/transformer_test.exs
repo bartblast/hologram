@@ -1999,9 +1999,14 @@ defmodule Hologram.Compiler.TransformerTest do
     test "AST from BEAM file" do
       {param_1_name, param_1_version, param_2_name, param_2_version} =
         cond do
-          Version.match?(System.version(), ">= 1.20.0") -> {:"$1", nil, :"$2", nil}
-          Version.match?(System.version(), ">= 1.17.0") -> {:"$2", nil, :"$3", nil}
-          true -> {:x1, 0, :x2, 1}
+          Version.match?(System.version(), ">= 1.20.0") ->
+            {:"$1", nil, :"$2", nil}
+
+          Version.match?(System.version(), ">= 1.17.0") ->
+            {:"$2", nil, :"$3", nil}
+
+          true ->
+            {:x1, 0, :x2, 1}
         end
 
       assert transform_module_and_fetch_expr(Module33) == %IR.AnonymousFunctionType{
@@ -2079,9 +2084,14 @@ defmodule Hologram.Compiler.TransformerTest do
     test "AST from BEAM file" do
       {param_1_name, param_1_version, param_2_name, param_2_version} =
         cond do
-          Version.match?(System.version(), ">= 1.20.0") -> {:"$1", nil, :"$2", nil}
-          Version.match?(System.version(), ">= 1.17.0") -> {:"$2", nil, :"$3", nil}
-          true -> {:x1, 0, :x2, 1}
+          Version.match?(System.version(), ">= 1.20.0") ->
+            {:"$1", nil, :"$2", nil}
+
+          Version.match?(System.version(), ">= 1.17.0") ->
+            {:"$2", nil, :"$3", nil}
+
+          true ->
+            {:x1, 0, :x2, 1}
         end
 
       assert transform_module_and_fetch_expr(Module15) == %IR.AnonymousFunctionType{
