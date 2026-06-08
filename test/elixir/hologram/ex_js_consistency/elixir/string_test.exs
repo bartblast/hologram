@@ -75,7 +75,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.contains?(:hello, "test")
+        :hello
+        |> wrap_term()
+        |> String.contains?("test")
       end
     end
 
@@ -90,7 +92,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.contains?(subject, "test")
+        subject
+        |> wrap_term()
+        |> String.contains?("test")
       end
     end
 
@@ -151,7 +155,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.downcase(:abc, :default)
+        :abc
+        |> wrap_term()
+        |> String.downcase(:default)
       end
     end
 
@@ -168,7 +174,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.downcase(arg_1, :default)
+        arg_1
+        |> wrap_term()
+        |> String.downcase(:default)
       end
     end
 
@@ -227,7 +235,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
                      "def replace(subject, pattern, replacement, options) when -is_binary(subject)- and (is_binary(replacement) or -is_function(replacement, 1)-) and is_list(options)"
                    ]),
                    fn ->
-                     String.replace(:abc, "ab", "xy")
+                     :abc
+                     |> wrap_term()
+                     |> String.replace("ab", "xy")
                    end
     end
   end
@@ -251,7 +261,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.trim(bitstring)
+        bitstring
+        |> wrap_term()
+        |> String.trim()
       end
     end
 
@@ -263,7 +275,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.trim(:abc)
+        :abc
+        |> wrap_term()
+        |> String.trim()
       end
     end
   end
@@ -294,7 +308,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.upcase(:abc, :default)
+        :abc
+        |> wrap_term()
+        |> String.upcase(:default)
       end
     end
 
@@ -311,7 +327,9 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        String.upcase(arg_1, :default)
+        arg_1
+        |> wrap_term()
+        |> String.upcase(:default)
       end
     end
 

@@ -25,7 +25,11 @@ defmodule Hologram.ExJsConsistency.Elixir.CodeTest do
           "def ensure_compiled(module) when -is_atom(module)-"
         ])
 
-      assert_error FunctionClauseError, expected_msg, fn -> Code.ensure_compiled(1) end
+      assert_error FunctionClauseError, expected_msg, fn ->
+        1
+        |> wrap_term()
+        |> Code.ensure_compiled()
+      end
     end
   end
 end

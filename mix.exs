@@ -149,22 +149,22 @@ defmodule Hologram.MixProject do
         source_ref: "v#{@version}"
       ],
       elixir: "~> 1.15",
-      elixirc_options: [warnings_as_errors: true],
+      elixirc_options: [
+        # These modules are used only in tests to test whether Hex.Solver's implementations
+        # for Inspect and String.Chars protocols are excluded when building runtime and pages JavaScript files.
+        no_warn_undefined: [
+          Inspect.Hex.Solver.PackageRange,
+          String.Chars.Hex.Solver.PackageRange
+        ],
+        warnings_as_errors: true
+      ],
       elixirc_paths: elixirc_paths(Mix.env()),
       homepage_url: "https://hologram.page/",
       package: package(),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/bartblast/hologram",
       test_paths: ["test/elixir"],
-      version: @version,
-      xref: [
-        # These modules are used only in tests to test whether Hex.Solver's implementations
-        # for Inspect and String.Chars protocols are excluded when building runtime and pages JavaScript files.
-        exclude: [
-          Inspect.Hex.Solver.PackageRange,
-          String.Chars.Hex.Solver.PackageRange
-        ]
-      ]
+      version: @version
     ]
   end
 
