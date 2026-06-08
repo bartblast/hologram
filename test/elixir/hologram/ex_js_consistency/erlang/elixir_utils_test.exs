@@ -93,6 +93,13 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
         assert :elixir_utils.jaro_similarity([97, 98, [99]], [97, 98, [99]]) == 1.0
       end
 
+      test "handles improper chardata (list with a binary tail)" do
+        # [104, 101 | "llo"] is "hello" as improper chardata, which makes cp/1
+        # yield a multi-element improper tail.
+        assert :elixir_utils.jaro_similarity([104, 101 | "llo"], "world") ==
+                 :elixir_utils.jaro_similarity("hello", "world")
+      end
+
       # Error case tests
       # - Top-level invalid argument raises :unicode_util.cp/1 error
       # - Single-element list with invalid type raises :unicode_util.cp/1 error
