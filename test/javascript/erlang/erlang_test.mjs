@@ -5488,7 +5488,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError if the first argument is a float", () => {
+    it("raises ArithmeticError if the first argument is a float", () => {
       assertBoxedError(
         () => testedFun(Type.float(5.5), Type.integer(2)),
         "ArgumentError",
@@ -5496,7 +5496,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError if the second argument is a float", () => {
+    it("raises ArithmeticError if the second argument is a float", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.float(2.5)),
         "ArgumentError",
@@ -5504,7 +5504,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError if the first argument is not a number", () => {
+    it("raises ArithmeticError if the first argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(2)),
         "ArgumentError",
@@ -5512,7 +5512,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError if the second argument is not a number", () => {
+    it("raises ArithmeticError if the second argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.atom("abc")),
         "ArgumentError",

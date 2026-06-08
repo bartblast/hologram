@@ -3474,7 +3474,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
 
-    test "raises ArgumentError if the first argument is a float" do
+    test "raises ArithmeticError if the first argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5.5, 2)", fn ->
         assert 5.5
                |> wrap_term()
@@ -3482,13 +3482,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
 
-    test "raises ArgumentError if the second argument is a float" do
+    test "raises ArithmeticError if the second argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, 2.5)", fn ->
         assert :erlang.div(5, wrap_term(2.5))
       end
     end
 
-    test "raises ArgumentError if the first argument is not a number" do
+    test "raises ArithmeticError if the first argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(:abc, 2)", fn ->
         assert :abc
                |> wrap_term()
@@ -3496,7 +3496,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
 
-    test "raises ArgumentError if the second argument is not a number" do
+    test "raises ArithmeticError if the second argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, :abc)", fn ->
         assert :erlang.div(5, wrap_term(:abc))
       end
