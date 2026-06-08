@@ -48,7 +48,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # <<>> = <<1::1, 0::1>>
     test "left empty bitstring != right non-empty bitstring" do
       assert_error MatchError, build_match_error_msg(<<2::size(2)>>), fn ->
-        <<>> = <<1::1, 0::1>>
+        <<>> = wrap_term(<<1::1, 0::1>>)
       end
     end
 
@@ -127,14 +127,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # <<1, 2::size(7)>> = <<1, 2>>
     test "last segment in left multi-segment bitstring doesn't match, because there are too few bits" do
       assert_error MatchError, build_match_error_msg(<<1, 2>>), fn ->
-        <<1, 2::size(7)>> = <<1, 2>>
+        <<1, 2::size(7)>> = wrap_term(<<1, 2>>)
       end
     end
 
     # <<1, 2::size(9)>> = <<1, 2>>
     test "last segment in left multi-segment bitstring doesn't match, because there are too many bits" do
       assert_error MatchError, build_match_error_msg(<<1, 2>>), fn ->
-        <<1, 2::size(9)>> = <<1, 2>>
+        <<1, 2::size(9)>> = wrap_term(<<1, 2>>)
       end
     end
 
