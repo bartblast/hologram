@@ -5491,7 +5491,7 @@ describe("Erlang", () => {
     it("raises ArithmeticError if the first argument is a float", () => {
       assertBoxedError(
         () => testedFun(Type.float(5.5), Type.integer(2)),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(5.5, 2)",
       );
     });
@@ -5499,7 +5499,7 @@ describe("Erlang", () => {
     it("raises ArithmeticError if the second argument is a float", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.float(2.5)),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(5, 2.5)",
       );
     });
@@ -5507,7 +5507,7 @@ describe("Erlang", () => {
     it("raises ArithmeticError if the first argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(2)),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(:abc, 2)",
       );
     });
@@ -5515,7 +5515,7 @@ describe("Erlang", () => {
     it("raises ArithmeticError if the second argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.atom("abc")),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(5, :abc)",
       );
     });
