@@ -37,7 +37,12 @@ const Erlang_Elixir_Utils = {
         codePoints.push(Number(codepoint.value));
 
         if (Type.isImproperList(result)) {
-          current = result.data[1];
+          // cp/1 may return a multi-element improper tail, e.g. [codepoint | [rest | tail]];
+          // reconstruct it rather than dropping everything past the second element.
+          current =
+            result.data.length === 2
+              ? result.data[1]
+              : Type.improperList(result.data.slice(1));
 
           if (Type.isBitstring(current) && Bitstring.isEmpty(current)) {
             break;
