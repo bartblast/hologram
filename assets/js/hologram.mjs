@@ -35,6 +35,7 @@ import InputEvent from "./events/input_event.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
+import ResizeEvent from "./events/resize_event.mjs";
 import ScrollEvent from "./events/scroll_event.mjs";
 import SelectEvent from "./events/select_event.mjs";
 import SubmitEvent from "./events/submit_event.mjs";
@@ -685,6 +686,9 @@ export default class Hologram {
       case "pointermove":
       case "pointerup":
         return PointerEvent;
+
+      case "resize":
+        return ResizeEvent;
 
       case "scroll":
         return ScrollEvent;
