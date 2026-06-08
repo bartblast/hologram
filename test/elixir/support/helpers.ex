@@ -69,7 +69,9 @@ defmodule Hologram.Test.Helpers do
       if is_regex(wrap_term(unquote(expected_msg))) do
         assert error_msg =~ unquote(expected_msg)
       else
-        assert error_msg == unquote(expected_msg)
+        # wrap_term/1 keeps the Elixir 1.20+ type checker from flagging a distinct-type
+        # comparison here when expected_msg is a regex literal (this branch is dead in that case).
+        assert error_msg == wrap_term(unquote(expected_msg))
       end
     end
   end
