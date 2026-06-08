@@ -305,6 +305,116 @@ describe("Erlang_String", () => {
     });
   });
 
+  describe("jaro_similarity/2", () => {
+    const jaroSimilarity = Erlang_String["jaro_similarity/2"];
+
+    it("returns 1.0 for identical strings", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("hello"),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns 1.0 when both inputs are empty", () => {
+      const result = jaroSimilarity(Type.bitstring(""), Type.bitstring(""));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns 0.0 for completely different inputs", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("abc"),
+        Type.bitstring("xyz"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 0.0 when first input is empty", () => {
+      const result = jaroSimilarity(
+        Type.bitstring(""),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 0.0 when second input is empty", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("hello"),
+        Type.bitstring(""),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 1.0 for identical single characters", () => {
+      const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("a"));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns 0.0 for different single characters", () => {
+      const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("b"));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 0.0 for completely transposed two-character string", () => {
+      const result = jaroSimilarity(Type.bitstring("ab"), Type.bitstring("ba"));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns similarity score with partial transposition", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("abcd"),
+        Type.bitstring("abdc"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.9166666666666666));
+    });
+
+    it("handles slight deviations", () => {
+      assert.deepStrictEqual(
+        jaroSimilarity(Type.bitstring("martha"), Type.bitstring("marhta")),
+        Type.float(0.9444444444444445),
+      );
+
+      assert.deepStrictEqual(
+        jaroSimilarity(Type.bitstring("dwayne"), Type.bitstring("duane")),
+        Type.float(0.8222222222222223),
+      );
+
+      assert.deepStrictEqual(
+        jaroSimilarity(Type.bitstring("dixon"), Type.bitstring("dicksonx")),
+        Type.float(0.7666666666666666),
+      );
+    });
+
+    it("is case sensitive", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("Hello"),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.8666666666666667));
+    });
+
+    it("compares by grapheme cluster, not codepoint", () => {
+      // "e̊" (e + U+030A combining ring above) is a single grapheme cluster,
+      // so "e̊llo" has 4 graphemes versus 5 in "hello".
+      const result = jaroSimilarity(
+        Type.bitstring("e̊llo"),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.7833333333333333));
+    });
+  });
+
   describe("join/2", () => {
     const join = Erlang_String["join/2"];
 
@@ -2011,6 +2121,78 @@ describe("Erlang_String", () => {
           ]),
         );
       });
+    });
+  });
+
+  describe("to_graphemes/1", () => {
+    const toGraphemes = Erlang_String["to_graphemes/1"];
+
+    it("ASCII binary", () => {
+      const result = toGraphemes(Type.bitstring("abc"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]),
+      );
+    });
+
+    it("groups combining marks into a single grapheme cluster", () => {
+      const result = toGraphemes(Type.bitstring("e̊x"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.list([Type.integer(101), Type.integer(778)]),
+          Type.integer(120),
+        ]),
+      );
+    });
+
+    it("empty binary", () => {
+      const result = toGraphemes(Type.bitstring(""));
+
+      assert.deepStrictEqual(result, Type.list());
+    });
+
+    it("charlist input", () => {
+      const result = toGraphemes(Type.charlist("ab"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(97), Type.integer(98)]),
+      );
+    });
+
+    it("improper chardata (list with a binary tail)", () => {
+      // [104, 101 | "llo"] - gc/1 yields a multi-element improper tail here.
+      const result = toGraphemes(
+        Type.improperList([
+          Type.integer(104),
+          Type.integer(101),
+          Type.bitstring("llo"),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(104),
+          Type.integer(101),
+          Type.integer(108),
+          Type.integer(108),
+          Type.integer(111),
+        ]),
+      );
+    });
+
+    it("raises ArgumentError for invalid character data", () => {
+      const invalid = Bitstring.fromBytes([255]);
+
+      assertBoxedError(
+        () => toGraphemes(invalid),
+        "ArgumentError",
+        "argument error: <<255>>",
+      );
     });
   });
 });
