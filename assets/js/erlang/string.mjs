@@ -95,6 +95,81 @@ const Erlang_String = {
   // End find/3
   // Deps: [:unicode.characters_to_binary/1]
 
+  // Start jaro_similarity/2
+  "jaro_similarity/2": (string1, string2) => {
+    // Like :string.jaro_similarity/2, the comparison is done by grapheme cluster.
+    // Each grapheme is reduced to a comparable key (a single codepoint, or the
+    // joined codepoints of a multi-codepoint cluster).
+    const toGraphemeKeys = (str) =>
+      Erlang_String["to_graphemes/1"](str).data.map((grapheme) =>
+        Type.isInteger(grapheme)
+          ? "c" + grapheme.value.toString()
+          : "g" + grapheme.data.map((codepoint) => codepoint.value).join(","),
+      );
+
+    const graphemes1 = toGraphemeKeys(string1);
+    const graphemes2 = toGraphemeKeys(string2);
+    const len1 = graphemes1.length;
+    const len2 = graphemes2.length;
+
+    if (len1 === 0 && len2 === 0) {
+      return Type.float(1.0);
+    }
+
+    if (len1 === 0 || len2 === 0) {
+      return Type.float(0.0);
+    }
+
+    const matchWindow = Math.max(Math.floor(Math.max(len1, len2) / 2) - 1, 0);
+    const matches1 = new Array(len1).fill(false);
+    const matches2 = new Array(len2).fill(false);
+    let matchCount = 0;
+
+    for (let i = 0; i < len1; i++) {
+      const start = Math.max(0, i - matchWindow);
+      const end = Math.min(i + matchWindow + 1, len2);
+
+      for (let j = start; j < end; j++) {
+        if (!matches2[j] && graphemes1[i] === graphemes2[j]) {
+          matches1[i] = true;
+          matches2[j] = true;
+          matchCount++;
+
+          break;
+        }
+      }
+    }
+
+    if (matchCount === 0) {
+      return Type.float(0.0);
+    }
+
+    let transpositions = 0;
+    let k = 0;
+
+    for (let i = 0; i < len1; i++) {
+      if (matches1[i]) {
+        while (!matches2[k]) k++;
+
+        if (graphemes1[i] !== graphemes2[k]) {
+          transpositions++;
+        }
+
+        k++;
+      }
+    }
+
+    const similarity =
+      (matchCount / len1 +
+        matchCount / len2 +
+        (matchCount - transpositions / 2) / matchCount) /
+      3;
+
+    return Type.float(similarity);
+  },
+  // End jaro_similarity/2
+  // Deps: [:string.to_graphemes/1]
+
   // Start join/2
   "join/2": function (list, separator) {
     if (!Type.isList(list)) {

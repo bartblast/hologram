@@ -305,6 +305,116 @@ describe("Erlang_String", () => {
     });
   });
 
+  describe("jaro_similarity/2", () => {
+    const jaroSimilarity = Erlang_String["jaro_similarity/2"];
+
+    it("returns 1.0 for identical strings", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("hello"),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns 1.0 when both inputs are empty", () => {
+      const result = jaroSimilarity(Type.bitstring(""), Type.bitstring(""));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns 0.0 for completely different inputs", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("abc"),
+        Type.bitstring("xyz"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 0.0 when first input is empty", () => {
+      const result = jaroSimilarity(
+        Type.bitstring(""),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 0.0 when second input is empty", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("hello"),
+        Type.bitstring(""),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 1.0 for identical single characters", () => {
+      const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("a"));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns 0.0 for different single characters", () => {
+      const result = jaroSimilarity(Type.bitstring("a"), Type.bitstring("b"));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns 0.0 for completely transposed two-character string", () => {
+      const result = jaroSimilarity(Type.bitstring("ab"), Type.bitstring("ba"));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns similarity score with partial transposition", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("abcd"),
+        Type.bitstring("abdc"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.9166666666666666));
+    });
+
+    it("handles slight deviations", () => {
+      assert.deepStrictEqual(
+        jaroSimilarity(Type.bitstring("martha"), Type.bitstring("marhta")),
+        Type.float(0.9444444444444445),
+      );
+
+      assert.deepStrictEqual(
+        jaroSimilarity(Type.bitstring("dwayne"), Type.bitstring("duane")),
+        Type.float(0.8222222222222223),
+      );
+
+      assert.deepStrictEqual(
+        jaroSimilarity(Type.bitstring("dixon"), Type.bitstring("dicksonx")),
+        Type.float(0.7666666666666666),
+      );
+    });
+
+    it("is case sensitive", () => {
+      const result = jaroSimilarity(
+        Type.bitstring("Hello"),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.8666666666666667));
+    });
+
+    it("compares by grapheme cluster, not codepoint", () => {
+      // "e̊" (e + U+030A combining ring above) is a single grapheme cluster,
+      // so "e̊llo" has 4 graphemes versus 5 in "hello".
+      const result = jaroSimilarity(
+        Type.bitstring("e̊llo"),
+        Type.bitstring("hello"),
+      );
+
+      assert.deepStrictEqual(result, Type.float(0.7833333333333333));
+    });
+  });
+
   describe("join/2", () => {
     const join = Erlang_String["join/2"];
 
