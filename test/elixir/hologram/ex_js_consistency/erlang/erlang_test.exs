@@ -11,6 +11,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2
 
+  # :erlang.andalso/2 and :erlang.orelse/2 are short-circuit operators rather than
+  # exported functions, so calling them by MFA trips the Elixir 1.20 undefined-function
+  # check even though they resolve at runtime.
+  @compile {:no_warn_undefined, [{:erlang, :andalso, 2}, {:erlang, :orelse, 2}]}
+
   @moduletag :consistency
 
   describe "*/2" do
