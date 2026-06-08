@@ -581,6 +581,51 @@ const Erlang_String = {
   },
   // End titlecase/1
   // Deps: [:unicode_util.cp/1]
+
+  // Start to_graphemes/1
+  "to_graphemes/1": (string) => {
+    const graphemes = [];
+    let current = string;
+
+    while (true) {
+      const result = Erlang_Unicode_Util["gc/1"](current);
+
+      // An empty list signals the end of the input.
+      if (Type.isList(result) && result.data.length === 0) {
+        break;
+      }
+
+      // gc/1 returns {:error, rest} for invalid character data.
+      if (Type.isTuple(result) && result.data.length === 2) {
+        const [tag, rest] = result.data;
+
+        if (Type.isAtom(tag) && tag.value === "error") {
+          Interpreter.raiseArgumentError(
+            `argument error: ${Interpreter.inspect(rest)}`,
+          );
+        }
+      }
+
+      // gc/1 returns [grapheme_cluster | rest].
+      graphemes.push(result.data[0]);
+
+      if (Type.isImproperList(result)) {
+        current = result.data[1];
+
+        if (Type.isBitstring(current) && Bitstring.isEmpty(current)) {
+          break;
+        }
+      } else if (result.data.length > 1) {
+        current = Type.list(result.data.slice(1));
+      } else {
+        break;
+      }
+    }
+
+    return Type.list(graphemes);
+  },
+  // End to_graphemes/1
+  // Deps: [:unicode_util.gc/1]
 };
 
 export default Erlang_String;

@@ -996,4 +996,28 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       end
     end
   end
+
+  describe "to_graphemes/1" do
+    test "ASCII binary" do
+      assert :string.to_graphemes("abc") == [97, 98, 99]
+    end
+
+    test "groups combining marks into a single grapheme cluster" do
+      assert :string.to_graphemes("e̊x") == [[101, 778], 120]
+    end
+
+    test "empty binary" do
+      assert :string.to_graphemes("") == []
+    end
+
+    test "charlist input" do
+      assert :string.to_graphemes(~c"ab") == [97, 98]
+    end
+
+    test "raises ArgumentError for invalid character data" do
+      assert_error ArgumentError, "argument error: <<255>>", fn ->
+        :string.to_graphemes(<<255>>)
+      end
+    end
+  end
 end
