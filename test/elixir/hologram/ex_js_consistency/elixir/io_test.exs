@@ -60,9 +60,9 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        # credo:disable-for-next-line Credo.Check.Warning.IoInspect
         123
         |> wrap_term()
+        # credo:disable-for-next-line Credo.Check.Warning.IoInspect
         |> IO.inspect(:abc, [])
       end
     end
