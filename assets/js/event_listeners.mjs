@@ -18,4 +18,30 @@ export default class EventListeners {
       },
     };
   }
+
+  // A ResizeObserver listener for a single element. The key is constant - an element has at most
+  // one resize observer - so a re-render refreshes it rather than stacking a second. The
+  // observer's initial on-observe fire is suppressed, so $resize means "size changed" to match
+  // the window resize event; every later change dispatches its ResizeObserverEntry.
+  static resizeObserver(element) {
+    return {
+      key: "resize-observer",
+      attach: (dispatcher) => {
+        let initialFire = true;
+
+        const observer = new ResizeObserver((entries) => {
+          if (initialFire) {
+            initialFire = false;
+            return;
+          }
+
+          dispatcher(entries[0]);
+        });
+
+        observer.observe(element);
+
+        return () => observer.disconnect();
+      },
+    };
+  }
 }

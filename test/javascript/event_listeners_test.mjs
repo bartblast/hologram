@@ -57,4 +57,54 @@ describe("EventListeners", () => {
       );
     });
   });
+
+  describe("resizeObserver()", () => {
+    let observers;
+    let originalResizeObserver;
+
+    beforeEach(() => {
+      observers = [];
+      originalResizeObserver = globalThis.ResizeObserver;
+
+      globalThis.ResizeObserver = class {
+        constructor(callback) {
+          this.callback = callback;
+          this.observe = sinon.spy();
+          this.disconnect = sinon.spy();
+          observers.push(this);
+        }
+      };
+    });
+
+    afterEach(() => {
+      globalThis.ResizeObserver = originalResizeObserver;
+    });
+
+    it("observes the element and disconnects on detach", () => {
+      const element = {};
+
+      const detach = EventListeners.resizeObserver(element).attach(sinon.spy());
+      const observer = observers[0];
+
+      sinon.assert.calledOnceWithExactly(observer.observe, element);
+
+      detach();
+
+      sinon.assert.calledOnce(observer.disconnect);
+    });
+
+    it("suppresses the initial fire and dispatches the entry on later changes", () => {
+      const dispatcher = sinon.spy();
+
+      EventListeners.resizeObserver({}).attach(dispatcher);
+      const observer = observers[0];
+      const entry = {borderBoxSize: [{blockSize: 10, inlineSize: 20}]};
+
+      observer.callback([entry]);
+      sinon.assert.notCalled(dispatcher);
+
+      observer.callback([entry]);
+      sinon.assert.calledOnceWithExactly(dispatcher, entry);
+    });
+  });
 });
