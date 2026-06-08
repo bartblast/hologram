@@ -911,6 +911,7 @@ defmodule Hologram.Compiler.Transformer do
     build_try_rescue_clause(variable, [], body, context)
   end
 
+  # sobelow_skip ["DOS.BinToAtom"]
   defp transform_variable(name, meta) when is_list(meta) do
     case to_string(name) do
       # Elixir 1.20+ expands captures into an anonymous function whose generated params are
