@@ -2992,32 +2992,41 @@ defmodule Hologram.Compiler.CallGraphTest do
     #
     # Original source:
     #   def to_gregorian_seconds(%{calendar: calendar, year: year, month: month, day: day,
-    #         hour: hour, minute: minute, second: second, microsecond: {microsecond, precision}}) do
+    #         hour: hour, minute: minute, second: second,
+    #         microsecond: {microsecond, precision}} = _naive_datetime) do
     #     {days, day_fraction} =
     #       calendar.naive_datetime_to_iso_days(year, month, day, hour, minute, second,
     #         {microsecond, precision})
     #     ...
     #   end
+    #
+    # Elixir 1.20 added the `= _naive_datetime` binding to the head, so the map pattern is
+    # wrapped in a match; earlier versions expose the bare map pattern as the parameter.
     test "NaiveDateTime.to_gregorian_seconds/1 dynamically dispatches calendar.naive_datetime_to_iso_days/7",
          %{ir_plt: ir_plt} do
       assert [fun_def] = find_fun_defs(ir_plt, NaiveDateTime, :to_gregorian_seconds, 1)
 
+      map_param =
+        case fun_def.clause.params do
+          [%IR.MatchOperator{left: %IR.MapType{} = map}] -> map
+          [%IR.MapType{} = map] -> map
+        end
+
+      assert %IR.MapType{
+               data: [
+                 {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
+                 {%IR.AtomType{value: :year}, _year},
+                 {%IR.AtomType{value: :month}, _month},
+                 {%IR.AtomType{value: :day}, _day},
+                 {%IR.AtomType{value: :hour}, _hour},
+                 {%IR.AtomType{value: :minute}, _minute},
+                 {%IR.AtomType{value: :second}, _second},
+                 {%IR.AtomType{value: :microsecond}, _microsecond}
+               ]
+             } = map_param
+
       assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
-                 params: [
-                   %IR.MapType{
-                     data: [
-                       {%IR.AtomType{value: :calendar}, %IR.Variable{name: :calendar}},
-                       {%IR.AtomType{value: :year}, _year},
-                       {%IR.AtomType{value: :month}, _month},
-                       {%IR.AtomType{value: :day}, _day},
-                       {%IR.AtomType{value: :hour}, _hour},
-                       {%IR.AtomType{value: :minute}, _minute},
-                       {%IR.AtomType{value: :second}, _second},
-                       {%IR.AtomType{value: :microsecond}, _microsecond}
-                     ]
-                   }
-                 ],
                  body: %IR.Block{
                    expressions: [
                      %IR.MatchOperator{

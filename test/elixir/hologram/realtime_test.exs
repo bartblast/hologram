@@ -71,7 +71,9 @@ defmodule Hologram.RealtimeTest do
 
     test "raises ArgumentError when channel fails validation" do
       assert_raise ArgumentError, fn ->
-        broadcast_action("not-a-valid-channel", :ping)
+        "not-a-valid-channel"
+        |> wrap_term()
+        |> broadcast_action(:ping)
       end
     end
   end

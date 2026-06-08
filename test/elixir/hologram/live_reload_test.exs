@@ -6,7 +6,7 @@
 
 defmodule Hologram.LiveReloadTest do
   use Hologram.Test.BasicCase, async: false
-  require Logger
+
   alias Hologram.LiveReload
 
   @debounce_delay LiveReload.debounce_delay()

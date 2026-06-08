@@ -157,7 +157,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:"in (list)", _params, component) do
-    put_state(component, :result, @integer_a in @list_a)
+    put_state(component, :result, wrap_term(@integer_a) in @list_a)
   end
 
   def action(:"in (map)", _params, component) do
@@ -169,7 +169,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:"not in (list)", _params, component) do
-    put_state(component, :result, @integer_a not in @list_a)
+    put_state(component, :result, wrap_term(@integer_a) not in @list_a)
   end
 
   def action(:"not in (map)", _params, component) do

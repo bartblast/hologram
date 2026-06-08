@@ -1426,12 +1426,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "is a non-last member of an improper list" do
-      assert :lists.member(2, [1, 2 | 3]) == true
+      assert :lists.member(2, wrap_term([1, 2 | 3])) == true
     end
 
     test "is the last member of an improper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
-        :lists.member(3, [1, 2 | 3])
+        :lists.member(3, wrap_term([1, 2 | 3]))
       end
     end
 
@@ -1441,7 +1441,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "is not a member of an improper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
-        :lists.member(4, [1, 2 | 3])
+        :lists.member(4, wrap_term([1, 2 | 3]))
       end
     end
 
@@ -1453,7 +1453,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a list"),
                    fn ->
-                     :lists.member(2, :abc)
+                     :lists.member(2, wrap_term(:abc))
                    end
     end
   end

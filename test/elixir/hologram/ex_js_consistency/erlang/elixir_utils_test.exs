@@ -9,7 +9,10 @@ defmodule Elixir.Hologram.ExJsConsistency.Erlang.ElixirUtilsTest do
 
   @moduletag :consistency
 
-  if Version.match?(System.version(), ">= 1.17.0") do
+  # :elixir_utils.jaro_similarity/2 exists only in Elixir 1.17-1.19. Elixir 1.20 (which
+  # requires Erlang/OTP 27+) removed it in favor of :string.jaro_similarity/2, which has
+  # its own consistency tests in test/elixir/hologram/ex_js_consistency/erlang/string_test.exs.
+  if Version.match?(System.version(), ">= 1.17.0 and < 1.20.0") do
     describe "jaro_similarity/2" do
       test "returns 1.0 for identical strings" do
         assert :elixir_utils.jaro_similarity("hello", "hello") == 1.0

@@ -48,7 +48,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # <<>> = <<1::1, 0::1>>
     test "left empty bitstring != right non-empty bitstring" do
       assert_error MatchError, build_match_error_msg(<<2::size(2)>>), fn ->
-        <<>> = <<1::1, 0::1>>
+        <<>> = wrap_term(<<1::1, 0::1>>)
       end
     end
 
@@ -127,14 +127,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # <<1, 2::size(7)>> = <<1, 2>>
     test "last segment in left multi-segment bitstring doesn't match, because there are too few bits" do
       assert_error MatchError, build_match_error_msg(<<1, 2>>), fn ->
-        <<1, 2::size(7)>> = <<1, 2>>
+        <<1, 2::size(7)>> = wrap_term(<<1, 2>>)
       end
     end
 
     # <<1, 2::size(9)>> = <<1, 2>>
     test "last segment in left multi-segment bitstring doesn't match, because there are too many bits" do
       assert_error MatchError, build_match_error_msg(<<1, 2>>), fn ->
-        <<1, 2::size(9)>> = <<1, 2>>
+        <<1, 2::size(9)>> = wrap_term(<<1, 2>>)
       end
     end
 
@@ -292,7 +292,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = wrap_term(16)
 
-      result = <<value::float-size(size)-signed>> = <<123.45::size(size)>>
+      result = <<value::float-size(^size)-signed>> = <<123.45::size(size)>>
 
       assert result == <<123.45::size(size)>>
       assert value == 123.4375
@@ -304,7 +304,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
       # 170 == 0b10101010
       assert_error MatchError, build_match_error_msg(<<170>>), fn ->
-        <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+        <<_value::float-size(^size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       end
     end
 
@@ -359,7 +359,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = wrap_term(16)
 
-      result = <<value::float-size(size)-unsigned>> = <<123.45::size(size)>>
+      result = <<value::float-size(^size)-unsigned>> = <<123.45::size(size)>>
 
       assert result == <<123.45::size(size)>>
       assert value == 123.4375
@@ -371,7 +371,8 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
       # 170 == 0b10101010
       assert_error MatchError, build_match_error_msg(<<170>>), fn ->
-        <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+        <<_value::float-size(^size)-unsigned>> =
+          <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       end
     end
 

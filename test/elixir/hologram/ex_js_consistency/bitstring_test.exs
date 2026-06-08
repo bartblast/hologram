@@ -12,54 +12,55 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   # The build_from_value/1 and build_from_value_with_*_*_modifier/1 helpers
   # enable to built bitstrings with specific value and modifier combinations,
-  # which wouldn't compile otherwise.
+  # which wouldn't compile otherwise. Values are passed through wrap_term/1 so the
+  # Elixir 1.20+ type checker doesn't reject the deliberate type/modifier mismatches.
 
   defp build_from_value(value) do
-    <<value>>
+    <<wrap_term(value)>>
   end
 
   defp build_from_value_with_binary_type_modifier(value) do
-    <<value::binary>>
+    <<wrap_term(value)::binary>>
   end
 
   defp build_from_value_with_bitstring_type_modifier(value) do
-    <<value::bitstring>>
+    <<wrap_term(value)::bitstring>>
   end
 
   defp build_from_value_with_float_type_modifier(value) do
-    <<value::float>>
+    <<wrap_term(value)::float>>
   end
 
   defp build_from_value_with_integer_type_modifier(value) do
-    <<value::integer>>
+    <<wrap_term(value)::integer>>
   end
 
   defp build_from_value_with_signed_signedness_modifier(value) do
-    <<value::signed>>
+    <<wrap_term(value)::signed>>
   end
 
   defp build_from_value_with_size_modifier(value, size) do
-    <<value::size(size)>>
+    <<wrap_term(value)::size(size)>>
   end
 
   defp build_from_value_with_size_and_unit_modifier(value, size) do
-    <<value::size(size)-unit(2)>>
+    <<wrap_term(value)::size(size)-unit(2)>>
   end
 
   defp build_from_value_with_unsigned_signedness_modifier(value) do
-    <<value::signed>>
+    <<wrap_term(value)::signed>>
   end
 
   defp build_from_value_with_utf8_type_modifier(value) do
-    <<value::utf8>>
+    <<wrap_term(value)::utf8>>
   end
 
   defp build_from_value_with_utf16_type_modifier(value) do
-    <<value::utf16>>
+    <<wrap_term(value)::utf16>>
   end
 
   defp build_from_value_with_utf32_type_modifier(value) do
-    <<value::utf32>>
+    <<wrap_term(value)::utf32>>
   end
 
   describe "number and structure of segments" do
