@@ -92,6 +92,7 @@ export default class Renderer {
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
     Renderer.listenerBindings = [];
+    Renderer.resizeBindings = [];
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
@@ -113,6 +114,25 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
+  // An element's observer target is its live DOM node, which Snabbdom sets on the vnode only during
+  // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
+  // once `.elm` exists. renderPage() resets this.
+  static resizeBindings = [];
+
+  // Resolves this render's deferred resize bindings into {target, key, attach, handler} registry
+  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The observer
+  // target and its attach are built here from that element; a persistent element keeps the same
+  // `.elm`, so the registry keeps its observer across renders and only swaps the handler.
+  static resolveResizeBindings() {
+    return $.resizeBindings.map(({vnode, handler}) => {
+      const element = vnode.elm;
+      const {key, attach} = EventListeners.resizeObserver(element);
+
+      return {target: element, key, attach, handler};
+    });
   }
 
   static toBitstring(term) {
@@ -209,6 +229,14 @@ export default class Renderer {
       return null;
     }
 
+    // resize on a real element is delivered by a ResizeObserver, not a DOM event, so it is collected
+    // as an observer binding in #renderElement. Returning null keeps it out of the element's "on"
+    // map, where the browser would never fire it. A <window> binding (tagName null) keeps flowing
+    // through here onto the native resize DOM event.
+    if (originalEventName === "resize" && tagName !== null) {
+      return null;
+    }
+
     const normalizedEventName = $.#normalizeEventName(originalEventName);
 
     const effectiveDomEventName = $.#mapEventName(
@@ -217,12 +245,34 @@ export default class Renderer {
       attrsVdom,
     );
 
+    const handler = $.#buildEventHandler(
+      attrDom,
+      slotKey,
+      effectiveDomEventName,
+      defaultTarget,
+    );
+
+    return {eventName: effectiveDomEventName, handler};
+  }
+
+  // Builds the handler an event binding fans an event into: it matches the event against any filter
+  // modifiers, dispatches through handleUiEvent, and runs the dispatch under the binding's
+  // debounce/throttle window. slotKey scopes that window within getThrottleTarget(event) - the
+  // object whose timers the window lives on. A DOM event reads its currentTarget there (the default);
+  // a ResizeObserverEntry has none, so the observer path passes a getter reading the entry's target.
+  static #buildEventHandler(
+    attrDom,
+    slotKey,
+    effectiveDomEventName,
+    defaultTarget,
+    getThrottleTarget = (event) => event.currentTarget,
+  ) {
     const modifiersDom = attrDom.data[2];
     const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
     const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
     const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
 
-    const handler = (event) => {
+    return (event) => {
       if (modifiersDom && !$.#eventMatchesModifiers(modifiersDom, event)) {
         return;
       }
@@ -243,18 +293,19 @@ export default class Renderer {
         return;
       }
 
-      // currentTarget is read synchronously here - the browser nulls it after dispatch. Debounce and
-      // throttle are mutually exclusive (enforced at compile time), so at most one applies.
+      // The throttle target is read synchronously here - a DOM event nulls its currentTarget after
+      // dispatch. Debounce and throttle are mutually exclusive (enforced at compile time), so at
+      // most one applies.
+      const throttleTarget = getThrottleTarget(event);
+
       if (debounceMs !== null) {
-        Debouncer.run(event.currentTarget, slotKey, debounceMs, dispatch);
+        Debouncer.run(throttleTarget, slotKey, debounceMs, dispatch);
       } else if (throttleMs !== null) {
-        Throttler.run(event.currentTarget, slotKey, throttleMs, dispatch);
+        Throttler.run(throttleTarget, slotKey, throttleMs, dispatch);
       } else {
         dispatch();
       }
     };
-
-    return {eventName: effectiveDomEventName, handler};
   }
 
   // Based on build_layout_props_dom/2
@@ -359,6 +410,31 @@ export default class Renderer {
           handler: binding.handler,
         });
       }
+    });
+  }
+
+  // Records each $resize attribute on the element as a deferred resize-observer binding. Element
+  // resize is delivered by a ResizeObserver, not a DOM event, so it cannot ride the element's "on"
+  // map, and the observer's target is the element's live DOM node, which Snabbdom sets on the vnode
+  // only during patch. So the binding carries the vnode and its handler, and resolveResizeBindings
+  // turns it into a registry binding once `.elm` exists. The handler keys its debounce/throttle
+  // window on the entry's target (the observed element), as a ResizeObserverEntry has no
+  // currentTarget. The Hologram event type is "resize", the same one the window binding dispatches.
+  static #collectResizeBindings(attrsDom, elementVnode, defaultTarget) {
+    attrsDom.data.forEach((attrDom, attrIndex) => {
+      if (Bitstring.toText(attrDom.data[0]) !== "$resize") {
+        return;
+      }
+
+      const handler = $.#buildEventHandler(
+        attrDom,
+        attrIndex,
+        "resize",
+        defaultTarget,
+        (event) => event.target,
+      );
+
+      $.resizeBindings.push({vnode: elementVnode, handler});
     });
   }
 
@@ -1005,6 +1081,8 @@ export default class Renderer {
       elementVnode,
       defaultTarget,
     );
+
+    Renderer.#collectResizeBindings(attrsDom, elementVnode, defaultTarget);
 
     return elementVnode;
   }

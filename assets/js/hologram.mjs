@@ -353,11 +353,16 @@ export default class Hologram {
       newVirtualDocument,
     );
 
-    // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings;
-    // now that the DOM is patched, reconcile them into real listeners on their targets. Every
+    // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
+    // and its element-resize bindings into Renderer.resizeBindings; now that the DOM is patched,
+    // reconcile both into real listeners on their targets. Resize bindings are resolved here because
+    // an observer's target is the element's live DOM node, which exists only after patch. Every
     // page-entry path reaches render() through #mountPage, so this also tears down a previous page's
     // listeners on navigation.
-    EventListenerRegistry.reconcile(Renderer.listenerBindings);
+    EventListenerRegistry.reconcile([
+      ...Renderer.listenerBindings,
+      ...Renderer.resolveResizeBindings(),
+    ]);
 
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
   }
