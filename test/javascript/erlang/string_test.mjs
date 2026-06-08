@@ -2163,6 +2163,28 @@ describe("Erlang_String", () => {
       );
     });
 
+    it("improper chardata (list with a binary tail)", () => {
+      // [104, 101 | "llo"] - gc/1 yields a multi-element improper tail here.
+      const result = toGraphemes(
+        Type.improperList([
+          Type.integer(104),
+          Type.integer(101),
+          Type.bitstring("llo"),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(104),
+          Type.integer(101),
+          Type.integer(108),
+          Type.integer(108),
+          Type.integer(111),
+        ]),
+      );
+    });
+
     it("raises ArgumentError for invalid character data", () => {
       const invalid = Bitstring.fromBytes([255]);
 

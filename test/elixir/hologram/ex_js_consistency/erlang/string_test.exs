@@ -1071,6 +1071,10 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.to_graphemes(~c"ab") == [97, 98]
     end
 
+    test "improper chardata (list with a binary tail)" do
+      assert :string.to_graphemes([104, 101 | "llo"]) == [104, 101, 108, 108, 111]
+    end
+
     test "raises ArgumentError for invalid character data" do
       assert_error ArgumentError, "argument error: <<255>>", fn ->
         :string.to_graphemes(<<255>>)

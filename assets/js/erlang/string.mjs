@@ -685,7 +685,12 @@ const Erlang_String = {
       graphemes.push(result.data[0]);
 
       if (Type.isImproperList(result)) {
-        current = result.data[1];
+        // gc/1 may return a multi-element improper tail, e.g. [grapheme | [rest | tail]];
+        // reconstruct it rather than dropping everything past the second element.
+        current =
+          result.data.length === 2
+            ? result.data[1]
+            : Type.improperList(result.data.slice(1));
 
         if (Type.isBitstring(current) && Bitstring.isEmpty(current)) {
           break;
