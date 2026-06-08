@@ -3471,25 +3471,29 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the first argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5.5, 2)", fn ->
-        assert :erlang.div(5.5, 2)
+        assert 5.5
+               |> wrap_term()
+               |> :erlang.div(2)
       end
     end
 
     test "raises ArgumentError if the second argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, 2.5)", fn ->
-        assert :erlang.div(5, 2.5)
+        assert :erlang.div(5, wrap_term(2.5))
       end
     end
 
     test "raises ArgumentError if the first argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(:abc, 2)", fn ->
-        assert :erlang.div(:abc, 2)
+        assert :abc
+               |> wrap_term()
+               |> :erlang.div(2)
       end
     end
 
     test "raises ArgumentError if the second argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, :abc)", fn ->
-        assert :erlang.div(5, :abc)
+        assert :erlang.div(5, wrap_term(:abc))
       end
     end
   end
@@ -5668,25 +5672,29 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArithmeticError if the first argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5.5, 2)", fn ->
-        assert :erlang.rem(5.5, 2)
+        assert 5.5
+               |> wrap_term()
+               |> :erlang.rem(2)
       end
     end
 
     test "raises ArithmeticError if the second argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, 2.5)", fn ->
-        assert :erlang.rem(5, 2.5)
+        assert :erlang.rem(5, wrap_term(2.5))
       end
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(:abc, 2)", fn ->
-        assert :erlang.rem(:abc, 2)
+        assert :abc
+               |> wrap_term()
+               |> :erlang.rem(2)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, :abc)", fn ->
-        assert :erlang.rem(5, :abc)
+        assert :erlang.rem(5, wrap_term(:abc))
       end
     end
   end
