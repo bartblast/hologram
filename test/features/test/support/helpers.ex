@@ -330,6 +330,17 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, "document.location.reload();")
   end
 
+  @doc """
+  Executes a script and returns its result to the caller.
+
+  `Wallaby.Browser.execute_script/2` only exposes the result through a callback and returns the
+  session, so this wraps the underlying driver call that yields the value directly.
+  """
+  def script_result(session, script) do
+    {:ok, value} = session.driver.execute_script(session, script)
+    value
+  end
+
   def scroll_to(session, x, y) do
     Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
   end
