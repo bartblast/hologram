@@ -74,7 +74,9 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        URI.encode(:hello, &URI.char_unreserved?/1)
+        :hello
+        |> wrap_term()
+        |> URI.encode(&URI.char_unreserved?/1)
       end
     end
 
@@ -87,7 +89,9 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        URI.encode(string, &URI.char_unreserved?/1)
+        string
+        |> wrap_term()
+        |> URI.encode(&URI.char_unreserved?/1)
       end
     end
 
@@ -98,7 +102,7 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        URI.encode("hello", :not_a_function)
+        URI.encode("hello", wrap_term(:not_a_function))
       end
     end
 
@@ -111,7 +115,7 @@ defmodule Hologram.ExJsConsistency.Elixir.URITest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        URI.encode("hello", predicate)
+        URI.encode("hello", wrap_term(predicate))
       end
     end
   end

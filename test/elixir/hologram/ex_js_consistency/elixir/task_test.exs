@@ -18,7 +18,9 @@ defmodule Hologram.ExJsConsistency.Elixir.TaskTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        Task.await(123)
+        123
+        |> wrap_term()
+        |> Task.await()
       end
     end
   end
