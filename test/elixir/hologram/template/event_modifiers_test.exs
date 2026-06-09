@@ -179,6 +179,16 @@ defmodule Hologram.Template.EventModifiersTest do
     end
   end
 
+  describe "parse/2 stop_propagation modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$click", ["stop_propagation"]) == %{stop_propagation: true}
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["stop_propagation"]) == %{stop_propagation: true}
+    end
+  end
+
   describe "parse/2 throttle modifier" do
     test "on a non-keyboard event" do
       assert parse("$mouse_move", ["throttle(100)"]) == %{throttle: 100}
@@ -241,6 +251,11 @@ defmodule Hologram.Template.EventModifiersTest do
     test "a key filter composes with another modifier" do
       assert parse("$key_down", ["enter", "debounce(200)"]) ==
                %{debounce: 200, key: [["enter"]]}
+    end
+
+    test "stop_propagation composes with another modifier" do
+      assert parse("$click", ["stop_propagation", "allow_default"]) ==
+               %{allow_default: true, stop_propagation: true}
     end
 
     test "throttle composes with another modifier" do

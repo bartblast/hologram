@@ -69,6 +69,7 @@ defmodule Hologram.Template.EventModifiers do
           optional(:allow_default) => true,
           optional(:debounce) => pos_integer,
           optional(:key) => list(list(String.t())),
+          optional(:stop_propagation) => true,
           optional(:throttle) => pos_integer
         }
 
@@ -79,6 +80,7 @@ defmodule Hologram.Template.EventModifiers do
           {:allow_default}
           | {:debounce, pos_integer}
           | {:key, list(String.t())}
+          | {:stop_propagation}
           | {:throttle, pos_integer}
 
   @doc """
@@ -98,6 +100,8 @@ defmodule Hologram.Template.EventModifiers do
     * `:debounce` - the debounce window in milliseconds, valid on any event
     * `:key` - the keyboard key filters as a list, each a list of the resolved modifier flags and
       the single matched key, valid only on keyboard events
+    * `:stop_propagation` - `true` when the binding stops the event from propagating past the
+      bound element, valid on any event
     * `:throttle` - the throttle window in milliseconds, valid on any event
 
   Raises `Hologram.TemplateSyntaxError` for a debounce or throttle value that is not a positive
@@ -121,6 +125,7 @@ defmodule Hologram.Template.EventModifiers do
       {:key, values}, acc -> Map.update(acc, :key, [values], &[values | &1])
       {:debounce, ms}, acc -> Map.put(acc, :debounce, ms)
       {:throttle, ms}, acc -> Map.put(acc, :throttle, ms)
+      {:stop_propagation}, acc -> Map.put(acc, :stop_propagation, true)
       {:allow_default}, acc -> Map.put(acc, :allow_default, true)
     end)
     |> reverse_key_filters()
@@ -237,6 +242,8 @@ defmodule Hologram.Template.EventModifiers do
   defp parse_universal_modifier("allow_default"), do: {:allow_default}
 
   defp parse_universal_modifier("debounce"), do: {:debounce, @default_debounce_ms}
+
+  defp parse_universal_modifier("stop_propagation"), do: {:stop_propagation}
 
   defp parse_universal_modifier("throttle"), do: {:throttle, @default_throttle_ms}
 
