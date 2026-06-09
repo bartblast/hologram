@@ -23,6 +23,12 @@ defmodule Hologram.Template.EventModifiersTest do
     test "on a keyboard event" do
       assert parse("$key_down", ["allow_default"]) == %{allow_default: true}
     end
+
+    test "raises for more than one allow_default modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one allow_default modifier",
+                   fn -> parse("$click", ["allow_default", "allow_default"]) end
+    end
   end
 
   describe "parse/2 debounce modifier" do
@@ -172,6 +178,18 @@ defmodule Hologram.Template.EventModifiersTest do
                    fn -> parse("$key_down", ["slsh"]) end
     end
 
+    test "raises for a repeated key filter" do
+      assert_raise TemplateSyntaxError,
+                   ~s'keyboard key filter "enter" is repeated',
+                   fn -> parse("$key_down", ["enter", "enter"]) end
+    end
+
+    test "raises for key filters that match the same keys" do
+      assert_raise TemplateSyntaxError,
+                   ~s'keyboard key filters "ctrl+shift+k" and "shift+ctrl+k" match the same keys',
+                   fn -> parse("$key_down", ["ctrl+shift+k", "shift+ctrl+k"]) end
+    end
+
     test "raises on a non-keyboard event" do
       assert_raise TemplateSyntaxError,
                    ~s'unknown event modifier "enter"',
@@ -186,6 +204,12 @@ defmodule Hologram.Template.EventModifiersTest do
 
     test "on a keyboard event" do
       assert parse("$key_down", ["stop_propagation"]) == %{stop_propagation: true}
+    end
+
+    test "raises for more than one stop_propagation modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one stop_propagation modifier",
+                   fn -> parse("$click", ["stop_propagation", "stop_propagation"]) end
     end
   end
 
