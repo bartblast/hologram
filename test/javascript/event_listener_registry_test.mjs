@@ -3,6 +3,7 @@
 import {sinon} from "./support/helpers.mjs";
 
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
+import EventListeners from "../../assets/js/event_listeners.mjs";
 
 describe("EventListenerRegistry", () => {
   let windowAddSpy;
@@ -26,7 +27,11 @@ describe("EventListenerRegistry", () => {
   describe("reconcile()", () => {
     it("installs one real listener when an event first gains a binding on a target", () => {
       EventListenerRegistry.reconcile([
-        {target: window, eventName: "keydown", handler: sinon.spy()},
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: sinon.spy(),
+        },
       ]);
 
       sinon.assert.calledOnceWithExactly(
@@ -39,8 +44,16 @@ describe("EventListenerRegistry", () => {
 
     it("installs a single listener for multiple bindings of the same target and event", () => {
       EventListenerRegistry.reconcile([
-        {target: window, eventName: "keydown", handler: sinon.spy()},
-        {target: window, eventName: "keydown", handler: sinon.spy()},
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: sinon.spy(),
+        },
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: sinon.spy(),
+        },
       ]);
 
       sinon.assert.calledOnce(windowAddSpy);
@@ -51,8 +64,16 @@ describe("EventListenerRegistry", () => {
       const handler2 = sinon.spy();
 
       EventListenerRegistry.reconcile([
-        {target: window, eventName: "keydown", handler: handler1},
-        {target: window, eventName: "keydown", handler: handler2},
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: handler1,
+        },
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: handler2,
+        },
       ]);
 
       const event = new window.Event("keydown");
@@ -67,11 +88,19 @@ describe("EventListenerRegistry", () => {
       const newHandler = sinon.spy();
 
       EventListenerRegistry.reconcile([
-        {target: window, eventName: "keydown", handler: oldHandler},
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: oldHandler,
+        },
       ]);
 
       EventListenerRegistry.reconcile([
-        {target: window, eventName: "keydown", handler: newHandler},
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: newHandler,
+        },
       ]);
 
       sinon.assert.calledOnce(windowAddSpy);
@@ -87,7 +116,11 @@ describe("EventListenerRegistry", () => {
       const handler = sinon.spy();
 
       EventListenerRegistry.reconcile([
-        {target: window, eventName: "keydown", handler},
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler,
+        },
       ]);
 
       EventListenerRegistry.reconcile([]);
@@ -109,8 +142,16 @@ describe("EventListenerRegistry", () => {
       const documentHandler = sinon.spy();
 
       EventListenerRegistry.reconcile([
-        {target: window, eventName: "keydown", handler: windowHandler},
-        {target: document, eventName: "keydown", handler: documentHandler},
+        {
+          target: window,
+          ...EventListeners.domEvent(window, "keydown"),
+          handler: windowHandler,
+        },
+        {
+          target: document,
+          ...EventListeners.domEvent(document, "keydown"),
+          handler: documentHandler,
+        },
       ]);
 
       // Each target gets its own real listener.
@@ -130,7 +171,11 @@ describe("EventListenerRegistry", () => {
 
       // Dropping the window binding removes only the window listener; the document one stays.
       EventListenerRegistry.reconcile([
-        {target: document, eventName: "keydown", handler: documentHandler},
+        {
+          target: document,
+          ...EventListeners.domEvent(document, "keydown"),
+          handler: documentHandler,
+        },
       ]);
 
       sinon.assert.calledOnceWithExactly(
@@ -153,9 +198,8 @@ describe("EventListenerRegistry", () => {
       EventListenerRegistry.reconcile([
         {
           target: document,
-          eventName: "click",
+          ...EventListeners.domEvent(document, "click", true),
           handler: sinon.spy(),
-          capture: true,
         },
       ]);
 
@@ -172,12 +216,15 @@ describe("EventListenerRegistry", () => {
       const captureHandler = sinon.spy();
 
       EventListenerRegistry.reconcile([
-        {target: document, eventName: "click", handler: bubbleHandler},
         {
           target: document,
-          eventName: "click",
+          ...EventListeners.domEvent(document, "click"),
+          handler: bubbleHandler,
+        },
+        {
+          target: document,
+          ...EventListeners.domEvent(document, "click", true),
           handler: captureHandler,
-          capture: true,
         },
       ]);
 
@@ -202,9 +249,8 @@ describe("EventListenerRegistry", () => {
       EventListenerRegistry.reconcile([
         {
           target: document,
-          eventName: "click",
+          ...EventListeners.domEvent(document, "click", true),
           handler: captureHandler,
-          capture: true,
         },
       ]);
 

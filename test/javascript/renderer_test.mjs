@@ -5263,7 +5263,7 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(result, Type.nil());
       assert.equal(Renderer.listenerBindings.length, 1);
-      assert.equal(Renderer.listenerBindings[0].eventName, "keydown");
+      assert.equal(Renderer.listenerBindings[0].key, "bubble:keydown");
       assert.equal(Renderer.listenerBindings[0].target, window);
 
       const stub = sinon
@@ -5310,8 +5310,8 @@ describe("Renderer", () => {
       Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       assert.deepStrictEqual(
-        Renderer.listenerBindings.map((binding) => binding.eventName),
-        ["keydown", "keyup"],
+        Renderer.listenerBindings.map((binding) => binding.key),
+        ["bubble:keydown", "bubble:keyup"],
       );
     });
 
@@ -5368,7 +5368,7 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(result, Type.nil());
       assert.equal(Renderer.listenerBindings.length, 1);
-      assert.equal(Renderer.listenerBindings[0].eventName, "keydown");
+      assert.equal(Renderer.listenerBindings[0].key, "bubble:keydown");
       assert.equal(Renderer.listenerBindings[0].target, document);
     });
   });
@@ -5404,11 +5404,10 @@ describe("Renderer", () => {
 
       assert.equal(Renderer.listenerBindings.length, 1);
       assert.equal(Renderer.listenerBindings[0].target, document);
-      assert.equal(Renderer.listenerBindings[0].eventName, "click");
 
-      // Capture phase so the opening click - which renders the element synchronously, mid-bubble -
-      // is not seen as an outside click by the listener it installs.
-      assert.isTrue(Renderer.listenerBindings[0].capture);
+      // Capture phase (key prefix) so the opening click - which renders the element synchronously,
+      // mid-bubble - is not seen as an outside click by the listener it installs.
+      assert.equal(Renderer.listenerBindings[0].key, "capture:click");
     });
 
     it("dispatches only when the click lands outside the bound element", () => {
@@ -5496,6 +5495,127 @@ describe("Renderer", () => {
       );
 
       Hologram.handleUiEvent.restore();
+    });
+  });
+
+  describe("resize binding", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    const resizeElement = (specDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([Type.tuple([Type.bitstring("$resize"), specDom])]),
+        Type.list(),
+      ]);
+
+    beforeEach(() => {
+      Renderer.listenerBindings = [];
+      Renderer.resizeBindings = [];
+    });
+
+    it("adds no per-element listener and collects a deferred binding carrying the vnode", () => {
+      // <div $resize="my_action"></div>
+      const vdom = Renderer.renderDom(
+        resizeElement(actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Element resize rides a ResizeObserver, so nothing is added to the element's "on" map.
+      assert.deepStrictEqual(vdom.data.on, {});
+
+      assert.equal(Renderer.resizeBindings.length, 1);
+      assert.equal(Renderer.resizeBindings[0].vnode, vdom);
+    });
+
+    it("dispatches the observer entry through the bound element's handler", () => {
+      Renderer.renderDom(
+        resizeElement(actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      const entry = {
+        target: {},
+        borderBoxSize: [{blockSize: 10, inlineSize: 20}],
+      };
+
+      Renderer.resizeBindings[0].handler(entry);
+
+      sinon.assert.calledOnceWithExactly(
+        stub,
+        entry,
+        "resize",
+        actionSpecDom,
+        defaultTarget,
+        false,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+
+    it("resolves deferred bindings into observer registry bindings after patch", () => {
+      const vdom = Renderer.renderDom(
+        resizeElement(actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the bound element here.
+      const element = {};
+      vdom.elm = element;
+
+      const originalResizeObserver = globalThis.ResizeObserver;
+      globalThis.ResizeObserver = class {
+        observe() {}
+        disconnect() {}
+      };
+
+      let resolved;
+
+      try {
+        resolved = Renderer.resolveResizeBindings();
+      } finally {
+        globalThis.ResizeObserver = originalResizeObserver;
+      }
+
+      assert.equal(resolved.length, 1);
+      assert.equal(resolved[0].target, element);
+      assert.equal(resolved[0].key, "resize-observer");
+      assert.equal(resolved[0].handler, Renderer.resizeBindings[0].handler);
+      assert.isFunction(resolved[0].attach);
+    });
+
+    it("a <window> $resize stays a DOM-event listener binding, not an observer one", () => {
+      // <window $resize="my_action" />
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("window"),
+        Type.list([Type.tuple([Type.bitstring("$resize"), actionSpecDom])]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      assert.equal(Renderer.resizeBindings.length, 0);
+      assert.equal(Renderer.listenerBindings.length, 1);
+      assert.equal(Renderer.listenerBindings[0].key, "bubble:resize");
+      assert.equal(Renderer.listenerBindings[0].target, window);
     });
   });
 

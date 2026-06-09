@@ -331,6 +331,17 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, "document.location.reload();")
   end
 
+  @doc """
+  Executes a script and returns its result to the caller.
+
+  `Wallaby.Browser.execute_script/2` only exposes the result through a callback and returns the
+  session, so this wraps the underlying driver call that yields the value directly.
+  """
+  def script_result(session, script) do
+    {:ok, value} = session.driver.execute_script(session, script)
+    value
+  end
+
   def scroll_to(session, x, y) do
     Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
   end
@@ -387,6 +398,23 @@ defmodule HologramFeatureTests.Helpers do
   def sleep(session, duration) do
     :timer.sleep(duration)
     session
+  end
+
+  @doc """
+  Reads the text content of the element matching `css_selector` and evaluates it as an Elixir term.
+
+  Intended for elements that render a value via `inspect/1`, so the test can compare the recorded
+  value field by field rather than against a formatted string.
+  """
+  def term_at(session, css_selector) do
+    script = "return document.querySelector('#{css_selector}').textContent;"
+
+    {term, _bindings} =
+      session
+      |> script_result(script)
+      |> Code.eval_string()
+
+    term
   end
 
   def visit(session, path_or_url) when is_binary(path_or_url) do
