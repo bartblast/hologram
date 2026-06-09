@@ -983,6 +983,7 @@ Hologram supports various event types that you can bind to elements in your temp
 - `$pointer_down` - triggered when a pointer (mouse, touch, pen) is pressed down on an element
 - `$pointer_move` - triggered when a pointer moves while over an element
 - `$pointer_up` - triggered when a pointer (mouse, touch, pen) is released from an element
+- `$resize` - triggered when an element or the browser window is resized
 - `$scroll` - triggered when a scrollable element or the page is scrolled
 - `$select` - triggered when text is selected in an input or textarea element
 - `$submit` - triggered when a form is submitted
@@ -1063,6 +1064,20 @@ This behavior prevents interference with browser's built-in functionality like o
 ###### Click-Outside Event
 
 The `$click_outside` event fires when a click lands anywhere outside the bound element and its descendants - the gesture behind dismissible UI like dropdowns, popovers, modals, and menus. A click on the element or inside it does nothing. It is usually rendered only while the element is open, behind a conditional, so it listens for outside clicks just then.
+
+##### Resize Event
+
+The `$resize` event fires when the bound target's size changes - bind it to an element to track that element, or to `<window>` to react to the browser window being resized. It reports changes only: there is no initial dispatch when the element first renders. An element resize includes the element's box sizes, each a map with `inline_size` (the width, in horizontal writing mode) and `block_size` (the height):
+
+- `border_box_size` - the element's outer size, including padding and border
+- `content_box_size` - the element's inner size, excluding padding and border
+- `device_pixel_content_box_size` - the content box in device pixels, for pixel-perfect canvas and WebGL rendering, or `nil` where the browser does not support it
+
+`device_pixel_content_box_size` is part of the official Resize Observer spec, but no Safari version implements it - WebKit computes device-pixel sizes only after the paint cycle, while resize observations are delivered before it. Until that gap closes, the field is `nil` on every Apple device, including all iOS browsers - code that reads it must handle `nil`.
+
+A window resize includes no fields - the native event provides no size data.
+
+Both bindings fire rapidly during a continuous resize - a window-edge drag, a dragged splitter pane, an animated layout - so pair them with `.throttle(ms)` or `.debounce(ms)` to coalesce the stream.
 
 ##### Scroll Event
 
