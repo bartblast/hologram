@@ -216,6 +216,26 @@ describe("Erlang_Elixir_Utils", () => {
       assertBoxedStrictEqual(result, Type.float(1.0));
     });
 
+    it("handles improper chardata (list with a binary tail)", () => {
+      // [104, 101 | "llo"] is "hello" as improper chardata, which makes cp/1
+      // yield a multi-element improper tail.
+      const improperResult = jaroSimilarity(
+        Type.improperList([
+          Type.integer(104),
+          Type.integer(101),
+          Type.bitstring("llo"),
+        ]),
+        Type.bitstring("world"),
+      );
+
+      const binaryResult = jaroSimilarity(
+        Type.bitstring("hello"),
+        Type.bitstring("world"),
+      );
+
+      assertBoxedStrictEqual(improperResult, binaryResult);
+    });
+
     // Error case tests
     // - Top-level invalid argument raises :unicode_util.cp/1 error
     // - Single-element list with invalid type raises :unicode_util.cp/1 error

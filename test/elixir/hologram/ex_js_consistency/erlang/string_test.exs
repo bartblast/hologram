@@ -145,6 +145,63 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
   end
 
+  # :string.jaro_similarity/2 was introduced in Erlang/OTP 27.
+  if String.to_integer(System.otp_release()) >= 27 do
+    describe "jaro_similarity/2" do
+      test "returns 1.0 for identical strings" do
+        assert :string.jaro_similarity("hello", "hello") == 1.0
+      end
+
+      test "returns 1.0 when both inputs are empty" do
+        assert :string.jaro_similarity("", "") == 1.0
+      end
+
+      test "returns 0.0 for completely different inputs" do
+        assert :string.jaro_similarity("abc", "xyz") == 0.0
+      end
+
+      test "returns 0.0 when first input is empty" do
+        assert :string.jaro_similarity("", "hello") == 0.0
+      end
+
+      test "returns 0.0 when second input is empty" do
+        assert :string.jaro_similarity("hello", "") == 0.0
+      end
+
+      test "returns 1.0 for identical single characters" do
+        assert :string.jaro_similarity("a", "a") == 1.0
+      end
+
+      test "returns 0.0 for different single characters" do
+        assert :string.jaro_similarity("a", "b") == 0.0
+      end
+
+      test "returns 0.0 for completely transposed two-character string" do
+        assert :string.jaro_similarity("ab", "ba") == 0.0
+      end
+
+      test "returns similarity score with partial transposition" do
+        assert :string.jaro_similarity("abcd", "abdc") == 0.9166666666666666
+      end
+
+      test "handles slight deviations" do
+        assert :string.jaro_similarity("martha", "marhta") == 0.9444444444444445
+        assert :string.jaro_similarity("dwayne", "duane") == 0.8222222222222223
+        assert :string.jaro_similarity("dixon", "dicksonx") == 0.7666666666666666
+      end
+
+      test "is case sensitive" do
+        assert :string.jaro_similarity("Hello", "hello") == 0.8666666666666667
+      end
+
+      test "compares by grapheme cluster, not codepoint" do
+        # "e̊" (e + U+030A combining ring above) is a single grapheme cluster,
+        # so "e̊llo" has 4 graphemes versus 5 in "hello".
+        assert :string.jaro_similarity("e̊llo", "hello") == 0.7833333333333333
+      end
+    end
+  end
+
   describe "join/2" do
     test "single element" do
       assert :string.join([~c"hello"], ~c", ") == ~c"hello"
@@ -477,13 +534,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "raises CaseClauseError if the fourth argument is not an atom" do
-      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg("all"), fn ->
         :string.replace("Hello World !", " ", "_", "all")
       end
     end
 
     test "raises CaseClauseError if the fourth argument is an unrecognized atom" do
-      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:invalid), fn ->
         :string.replace("Hello World", " ", "_", :invalid)
       end
     end
@@ -597,13 +654,13 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "raises CaseClauseError if the third argument is not an atom" do
-      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg("all"), fn ->
         :string.split("Hello World !", " ", "all")
       end
     end
 
     test "raises CaseClauseError if the third argument is an unrecognized atom" do
-      assert_error CaseClauseError, "no case clause matching: :invalid", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:invalid), fn ->
         :string.split("hello world", " ", :invalid)
       end
     end
@@ -671,9 +728,9 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
       assert :string.titlecase(input) == expected
     end
 
-    test "uses range check for character (codepoint 68976)" do
+    test "titlecases Garay character (codepoint 68976)" do
       input = <<68_976::utf8>>
-      expected = <<68_976::utf8>>
+      expected = <<68_944::utf8>>
 
       assert :string.titlecase(input) == expected
     end
@@ -993,6 +1050,34 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :string.titlecase([3.14])
+      end
+    end
+  end
+
+  describe "to_graphemes/1" do
+    test "ASCII binary" do
+      assert :string.to_graphemes("abc") == [97, 98, 99]
+    end
+
+    test "groups combining marks into a single grapheme cluster" do
+      assert :string.to_graphemes("e̊x") == [[101, 778], 120]
+    end
+
+    test "empty binary" do
+      assert :string.to_graphemes("") == []
+    end
+
+    test "charlist input" do
+      assert :string.to_graphemes(~c"ab") == [97, 98]
+    end
+
+    test "improper chardata (list with a binary tail)" do
+      assert :string.to_graphemes([104, 101 | "llo"]) == [104, 101, 108, 108, 111]
+    end
+
+    test "raises ArgumentError for invalid character data" do
+      assert_error ArgumentError, "argument error: <<255>>", fn ->
+        :string.to_graphemes(<<255>>)
       end
     end
   end

@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
+  import Hologram.Commons.TestUtils, only: [wrap_term: 1]
 
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Router
@@ -38,7 +39,7 @@ defmodule HologramFeatureTests.Helpers do
                  message.(expected_module, expected_msg, result["message"])
         else
           assert result["message"] =~ expected_msg,
-                 message.(expected_module, expected_msg, result["message"])
+                 message.(expected_module, wrap_term(expected_msg), result["message"])
         end
       end)
   end
@@ -546,7 +547,7 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   defp do_execute_query_once(%{driver: driver} = parent, query) do
-    with {:ok, query} <- Query.validate(query),
+    with {:ok, %Query{} = query} <- Query.validate(query),
          compiled_query <- Query.compile(query),
          {:ok, elements} <- driver.find_elements(parent, compiled_query),
          {:ok, elements} <- filter_by_visibility(query, elements),

@@ -11,6 +11,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module1
   alias Hologram.Test.Fixtures.ExJsConsistency.Erlang.Module2
 
+  # :erlang.andalso/2 and :erlang.orelse/2 are short-circuit operators rather than
+  # exported functions, so calling them by MFA trips the Elixir 1.20 undefined-function
+  # check even though they resolve at runtime.
+  @compile {:no_warn_undefined, [{:erlang, :andalso, 2}, {:erlang, :orelse, 2}]}
+
   @moduletag :consistency
 
   describe "*/2" do
@@ -1268,7 +1273,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "doesn't evaluate the second argument if the first argument is false" do
-      assert :erlang.andalso(false, apply(:impossible, [])) == false
+      assert :erlang.andalso(false, apply(wrap_term(:impossible), [])) == false
     end
 
     test "raises ArgumentError if the first argument is not a boolean" do
@@ -1373,7 +1378,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         "you attempted to apply a function named :fun_0 on 123. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module"
 
       assert_error ArgumentError, expected_msg, fn ->
-        :erlang.apply(123, :fun_0, [])
+        123
+        |> wrap_term()
+        |> :erlang.apply(:fun_0, [])
       end
     end
 
@@ -3467,27 +3474,31 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
 
-    test "raises ArgumentError if the first argument is a float" do
+    test "raises ArithmeticError if the first argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5.5, 2)", fn ->
-        assert :erlang.div(5.5, 2)
+        assert 5.5
+               |> wrap_term()
+               |> :erlang.div(2)
       end
     end
 
-    test "raises ArgumentError if the second argument is a float" do
+    test "raises ArithmeticError if the second argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, 2.5)", fn ->
-        assert :erlang.div(5, 2.5)
+        assert :erlang.div(5, wrap_term(2.5))
       end
     end
 
-    test "raises ArgumentError if the first argument is not a number" do
+    test "raises ArithmeticError if the first argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(:abc, 2)", fn ->
-        assert :erlang.div(:abc, 2)
+        assert :abc
+               |> wrap_term()
+               |> :erlang.div(2)
       end
     end
 
-    test "raises ArgumentError if the second argument is not a number" do
+    test "raises ArithmeticError if the second argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, :abc)", fn ->
-        assert :erlang.div(5, :abc)
+        assert :erlang.div(5, wrap_term(:abc))
       end
     end
   end
@@ -4637,7 +4648,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_error BadMapError, "expected a map, got: :abc", {:erlang, :is_map_key, [:x, :abc]}
+      assert_error BadMapError, build_bad_map_error_msg(:abc), {:erlang, :is_map_key, [:x, :abc]}
     end
   end
 
@@ -5462,7 +5473,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_error BadMapError, "expected a map, got: 1", {:erlang, :map_get, [:a, 1]}
+      assert_error BadMapError, build_bad_map_error_msg(1), {:erlang, :map_get, [:a, 1]}
     end
 
     test "raises KeyError if the map doesn't contain the given key" do
@@ -5477,7 +5488,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises BadMapError if the argument is not a map" do
       assert_error BadMapError,
-                   "expected a map, got: :abc",
+                   build_bad_map_error_msg(:abc),
                    {:erlang, :map_size, [:abc]}
     end
   end
@@ -5576,7 +5587,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "doesn't evaluate the second argument if the first argument is true" do
-      assert :erlang.orelse(true, apply(:impossible, [])) == true
+      assert :erlang.orelse(true, apply(wrap_term(:impossible), [])) == true
     end
 
     test "raises ArgumentError if the first argument is not a boolean" do
@@ -5666,25 +5677,29 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArithmeticError if the first argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5.5, 2)", fn ->
-        assert :erlang.rem(5.5, 2)
+        assert 5.5
+               |> wrap_term()
+               |> :erlang.rem(2)
       end
     end
 
     test "raises ArithmeticError if the second argument is a float" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, 2.5)", fn ->
-        assert :erlang.rem(5, 2.5)
+        assert :erlang.rem(5, wrap_term(2.5))
       end
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(:abc, 2)", fn ->
-        assert :erlang.rem(:abc, 2)
+        assert :abc
+               |> wrap_term()
+               |> :erlang.rem(2)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, :abc)", fn ->
-        assert :erlang.rem(5, :abc)
+        assert :erlang.rem(5, wrap_term(:abc))
       end
     end
   end

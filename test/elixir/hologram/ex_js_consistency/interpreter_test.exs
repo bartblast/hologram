@@ -24,10 +24,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   describe "call anonymous function" do
     # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with no args" do
-      fun = fn
-        1 -> :expr_1
-        2 -> :expr_2
-      end
+      fun =
+        wrap_term(fn
+          1 -> :expr_1
+          2 -> :expr_2
+        end)
 
       expected_msg =
         ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with no args"/1> with arity 1 called with no arguments'
@@ -37,10 +38,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
 
     # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with a single arg" do
-      fun = fn
-        1, 2 -> :expr_1
-        3, 4 -> :expr_2
-      end
+      fun =
+        wrap_term(fn
+          1, 2 -> :expr_1
+          3, 4 -> :expr_2
+        end)
 
       expected_msg =
         ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with a single arg"/1> with arity 2 called with 1 argument \(9\)'
@@ -50,10 +52,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
 
     # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with multiple args" do
-      fun = fn
-        1 -> :expr_1
-        2 -> :expr_2
-      end
+      fun =
+        wrap_term(fn
+          1 -> :expr_1
+          2 -> :expr_2
+        end)
 
       expected_msg =
         ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with multiple args"/1> with arity 1 called with 2 arguments \(9, 8\)'

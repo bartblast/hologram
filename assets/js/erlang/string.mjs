@@ -95,6 +95,81 @@ const Erlang_String = {
   // End find/3
   // Deps: [:unicode.characters_to_binary/1]
 
+  // Start jaro_similarity/2
+  "jaro_similarity/2": (string1, string2) => {
+    // Like :string.jaro_similarity/2, the comparison is done by grapheme cluster.
+    // Each grapheme is reduced to a comparable key (a single codepoint, or the
+    // joined codepoints of a multi-codepoint cluster).
+    const toGraphemeKeys = (str) =>
+      Erlang_String["to_graphemes/1"](str).data.map((grapheme) =>
+        Type.isInteger(grapheme)
+          ? "c" + grapheme.value.toString()
+          : "g" + grapheme.data.map((codepoint) => codepoint.value).join(","),
+      );
+
+    const graphemes1 = toGraphemeKeys(string1);
+    const graphemes2 = toGraphemeKeys(string2);
+    const len1 = graphemes1.length;
+    const len2 = graphemes2.length;
+
+    if (len1 === 0 && len2 === 0) {
+      return Type.float(1.0);
+    }
+
+    if (len1 === 0 || len2 === 0) {
+      return Type.float(0.0);
+    }
+
+    const matchWindow = Math.max(Math.floor(Math.max(len1, len2) / 2) - 1, 0);
+    const matches1 = new Array(len1).fill(false);
+    const matches2 = new Array(len2).fill(false);
+    let matchCount = 0;
+
+    for (let i = 0; i < len1; i++) {
+      const start = Math.max(0, i - matchWindow);
+      const end = Math.min(i + matchWindow + 1, len2);
+
+      for (let j = start; j < end; j++) {
+        if (!matches2[j] && graphemes1[i] === graphemes2[j]) {
+          matches1[i] = true;
+          matches2[j] = true;
+          matchCount++;
+
+          break;
+        }
+      }
+    }
+
+    if (matchCount === 0) {
+      return Type.float(0.0);
+    }
+
+    let transpositions = 0;
+    let k = 0;
+
+    for (let i = 0; i < len1; i++) {
+      if (matches1[i]) {
+        while (!matches2[k]) k++;
+
+        if (graphemes1[i] !== graphemes2[k]) {
+          transpositions++;
+        }
+
+        k++;
+      }
+    }
+
+    const similarity =
+      (matchCount / len1 +
+        matchCount / len2 +
+        (matchCount - transpositions / 2) / matchCount) /
+      3;
+
+    return Type.float(similarity);
+  },
+  // End jaro_similarity/2
+  // Deps: [:string.to_graphemes/1]
+
   // Start join/2
   "join/2": function (list, separator) {
     if (!Type.isList(list)) {
@@ -503,8 +578,7 @@ const Erlang_String = {
         (codepoint >= 4304 && codepoint <= 4346) ||
         (codepoint >= 8072 && codepoint <= 8079) ||
         (codepoint >= 8088 && codepoint <= 8095) ||
-        (codepoint >= 8104 && codepoint <= 8111) ||
-        (codepoint >= 68976 && codepoint <= 68997)
+        (codepoint >= 8104 && codepoint <= 8111)
       ) {
         return [codepoint];
       } else if (Object.hasOwn(MAPPING, codepoint)) {
@@ -582,6 +656,56 @@ const Erlang_String = {
   },
   // End titlecase/1
   // Deps: [:unicode_util.cp/1]
+
+  // Start to_graphemes/1
+  "to_graphemes/1": (string) => {
+    const graphemes = [];
+    let current = string;
+
+    while (true) {
+      const result = Erlang_Unicode_Util["gc/1"](current);
+
+      // An empty list signals the end of the input.
+      if (Type.isList(result) && result.data.length === 0) {
+        break;
+      }
+
+      // gc/1 returns {:error, rest} for invalid character data.
+      if (Type.isTuple(result) && result.data.length === 2) {
+        const [tag, rest] = result.data;
+
+        if (Type.isAtom(tag) && tag.value === "error") {
+          Interpreter.raiseArgumentError(
+            `argument error: ${Interpreter.inspect(rest)}`,
+          );
+        }
+      }
+
+      // gc/1 returns [grapheme_cluster | rest].
+      graphemes.push(result.data[0]);
+
+      if (Type.isImproperList(result)) {
+        // gc/1 may return a multi-element improper tail, e.g. [grapheme | [rest | tail]];
+        // reconstruct it rather than dropping everything past the second element.
+        current =
+          result.data.length === 2
+            ? result.data[1]
+            : Type.improperList(result.data.slice(1));
+
+        if (Type.isBitstring(current) && Bitstring.isEmpty(current)) {
+          break;
+        }
+      } else if (result.data.length > 1) {
+        current = Type.list(result.data.slice(1));
+      } else {
+        break;
+      }
+    }
+
+    return Type.list(graphemes);
+  },
+  // End to_graphemes/1
+  // Deps: [:unicode_util.gc/1]
 };
 
 export default Erlang_String;

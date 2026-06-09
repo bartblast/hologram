@@ -109,7 +109,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
     test "raises a MatchError when a bare clause fails to match" do
       a = wrap_term(:ok)
 
-      assert_error MatchError, "no match of right hand side value: :ok", fn ->
+      assert_error MatchError, build_match_error_msg(:ok), fn ->
         with :error = a do
           :body
         end
@@ -175,7 +175,7 @@ defmodule Hologram.ExJsConsistency.WithTest do
     test "raises WithClauseError when no else clause matches" do
       a = wrap_term(:ok)
 
-      assert_error WithClauseError, "no with clause matching: :ok", fn ->
+      assert_error WithClauseError, build_with_clause_error_msg(:ok), fn ->
         with :error <- a do
           :body
         else

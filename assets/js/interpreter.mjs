@@ -41,14 +41,26 @@ export default class Interpreter {
     }
   }
 
+  // Keep this message in sync with build_argument_error_msg in Hologram.Commons.TestUtils.
   static buildArgumentErrorMsg(argumentIndex, message) {
     const ordinal = Utils.ordinal(argumentIndex);
 
     return `errors were found at the given arguments:\n\n  * ${ordinal} argument: ${message}\n`;
   }
 
+  // Keep this message in sync with build_bad_function_error_msg in Hologram.Commons.TestUtils.
   static buildBadFunctionErrorMsg(term) {
     return "expected a function, got: " + $.inspect(term);
+  }
+
+  // Keep this message in sync with build_bad_map_error_msg in Hologram.Commons.TestUtils.
+  static buildBadMapErrorMsg(arg) {
+    return "expected a map, got:\n\n    " + Interpreter.inspect(arg) + "\n";
+  }
+
+  // Keep this message in sync with build_case_clause_error_msg in Hologram.Commons.TestUtils.
+  static buildCaseClauseErrorMsg(arg) {
+    return "no case clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
   }
 
   static buildContext(data = {}) {
@@ -66,11 +78,13 @@ export default class Interpreter {
     return context;
   }
 
+  // Keep this message in sync with build_erlang_error_msg in Hologram.Commons.TestUtils.
   static buildErlangErrorMsg(message) {
     return `Erlang error: ${message}`;
   }
 
   // TODO: include attempted function clauses info
+  // Keep this message in sync with build_function_clause_error_msg in Hologram.Commons.TestUtils.
   static buildFunctionClauseErrorMsg(funName, args = null) {
     let argsInfo = "";
 
@@ -85,6 +99,7 @@ export default class Interpreter {
     return `no function clause matching in ${funName}${argsInfo}`;
   }
 
+  // Keep this message in sync with build_key_error_msg in Hologram.Commons.TestUtils.
   static buildKeyErrorMsg(key, map) {
     const opts = Type.keywordList([
       [
@@ -93,22 +108,19 @@ export default class Interpreter {
       ],
     ]);
 
-    return `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(map, opts)}`;
+    return `key ${Interpreter.inspect(key)} not found in:\n\n    ${Interpreter.inspect(map, opts)}\n`;
   }
 
+  // Keep this message in sync with build_match_error_msg in Hologram.Commons.TestUtils.
   static buildMatchErrorMsg(right) {
-    return "no match of right hand side value: " + Interpreter.inspect(right);
-  }
-
-  static buildProtocolUndefinedErrorMsg(protocol, term) {
     return (
-      `protocol ${protocol} not implemented for type ` +
-      `${term.type.charAt(0).toUpperCase() + term.type.slice(1)}\n\n` +
-      "Got value:\n\n" +
-      `    ${$.inspect(term)}`
+      "no match of right hand side value:\n\n    " +
+      Interpreter.inspect(right) +
+      "\n"
     );
   }
 
+  // Hologram-specific, no server-side equivalent.
   static buildTooBigOutputErrorMsg(mfa) {
     return (
       `${mfa} can't be transpiled automatically to JavaScript, because its output is too big.\n` +
@@ -116,6 +128,7 @@ export default class Interpreter {
     );
   }
 
+  // Keep this message in sync with build_undefined_function_error_msg in Hologram.Commons.TestUtils.
   static buildUndefinedFunctionErrorMsg(
     module,
     functionName,
@@ -129,6 +142,11 @@ export default class Interpreter {
     }
 
     return `function ${moduleName}.${functionName}/${arity} is undefined (module ${moduleName} is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)`;
+  }
+
+  // Keep this message in sync with build_with_clause_error_msg in Hologram.Commons.TestUtils.
+  static buildWithClauseErrorMsg(arg) {
+    return "no with clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
   }
 
   // callAnonymousFunction() has no unit tests in interpreter_test.mjs, only:
@@ -857,15 +875,14 @@ export default class Interpreter {
   }
 
   static raiseBadMapError(arg) {
-    const message = "expected a map, got: " + Interpreter.inspect(arg);
-
-    Interpreter.raiseError("BadMapError", message);
+    Interpreter.raiseError("BadMapError", Interpreter.buildBadMapErrorMsg(arg));
   }
 
   static raiseCaseClauseError(arg) {
-    const message = "no case clause matching: " + Interpreter.inspect(arg);
-
-    Interpreter.raiseError("CaseClauseError", message);
+    Interpreter.raiseError(
+      "CaseClauseError",
+      Interpreter.buildCaseClauseErrorMsg(arg),
+    );
   }
 
   static raiseCompileError(message) {
@@ -894,25 +911,15 @@ export default class Interpreter {
     Interpreter.raiseError("MatchError", message);
   }
 
-  // TODO: make the client-side error message consistent with the server-side error message
-  static raiseProtocolUndefinedError(protocol, term) {
-    const message =
-      `protocol ${protocol} not implemented for type ` +
-      `${term.type.charAt(0).toUpperCase() + term.type.slice(1)}\n\n` +
-      "Got value:\n\n" +
-      `    ${Interpreter.inspect(term)}`;
-
-    $.raiseError("Protocol.UndefinedError", message);
-  }
-
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
   }
 
   static raiseWithClauseError(arg) {
-    const message = "no with clause matching: " + Interpreter.inspect(arg);
-
-    Interpreter.raiseError("WithClauseError", message);
+    Interpreter.raiseError(
+      "WithClauseError",
+      Interpreter.buildWithClauseErrorMsg(arg),
+    );
   }
 
   static registerJsBindings(bindingsMap) {

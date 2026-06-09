@@ -19,6 +19,10 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Template.Renderer
   alias Hologram.Template.Renderer.Env
 
+  # See Hologram.Compiler.IR: `%Context{}` defaults read as concrete MapSets and won't unify
+  # with the opaque `MapSet.t()` in the specs these helpers delegate to / pass into.
+  @dialyzer :no_opaque
+
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate clean_dir(file_path), to: FileUtils, as: :recreate_dir
   defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
@@ -65,7 +69,9 @@ defmodule Hologram.Test.Helpers do
       if is_regex(wrap_term(unquote(expected_msg))) do
         assert error_msg =~ unquote(expected_msg)
       else
-        assert error_msg == unquote(expected_msg)
+        # wrap_term/1 keeps the Elixir 1.20+ type checker from flagging a distinct-type
+        # comparison here when expected_msg is a regex literal (this branch is dead in that case).
+        assert error_msg == wrap_term(unquote(expected_msg))
       end
     end
   end
@@ -76,22 +82,6 @@ defmodule Hologram.Test.Helpers do
   @spec build_component_struct() :: Component.t()
   def build_component_struct do
     %Component{}
-  end
-
-  @doc """
-  Builds an error message for ErlangError.
-  """
-  @spec build_erlang_error_msg(String.t()) :: String.t()
-  def build_erlang_error_msg(blame) do
-    "Erlang error: #{blame}"
-  end
-
-  @doc """
-  Builds an error message for KeyError.
-  """
-  @spec build_key_error_msg(any, map) :: String.t()
-  def build_key_error_msg(key, map) do
-    "key #{inspect(key)} not found in: #{inspect(map, custom_options: [sort_maps: true])}"
   end
 
   @doc """

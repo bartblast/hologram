@@ -27,7 +27,7 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
       <button $click="single_expression_else_body"> Single-expression else body </button>
       <button $click="multiple_expression_else_body"> Multiple-expression else body </button>
       <button $click={:versioned_x_var_handling, expr: false}> Versioned x var handling </button>
-      <button $click="vars_scoping_in_if_body"> Vars scoping in if body </button>
+      <button $click={:vars_scoping_in_if_body, expr: true}> Vars scoping in if body </button>
       <button $click={:vars_scoping_in_else_body, expr: false}> Vars scoping in else body </button>
       <button $click={:error_in_condition, flag: true}> Error in condition </button>
       <button $click="error_in_if_body"> Error in if body </button>
@@ -119,13 +119,14 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
     put_state(component, :result, result)
   end
 
-  def action(:vars_scoping_in_if_body, _params, component) do
+  def action(:vars_scoping_in_if_body, params, component) do
     z = 3
 
     result =
       if (
            x = 1
            y = 2
+           params.expr
          ) do
         x = x + 10
         {x, y, z}
@@ -153,7 +154,13 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
   end
 
   def action(:error_in_condition, params, _component) do
-    if maybe_raise_error(params.flag) do
+    # The trailing params.expr keeps the condition dynamic so the Elixir 1.20 type checker
+    # doesn't flag it as constant. It is never reached at runtime, because maybe_raise_error/1
+    # raises first (the feature test always sets flag to true).
+    if (
+         maybe_raise_error(params.flag)
+         params.expr
+       ) do
       :a
     end
   end
@@ -177,10 +184,6 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
   end
 
   defp maybe_raise_error(flag) do
-    if flag do
-      raise RuntimeError, "my message"
-    else
-      123
-    end
+    if flag, do: raise(RuntimeError, "my message")
   end
 end

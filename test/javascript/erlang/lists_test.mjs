@@ -296,7 +296,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => all(fun, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -538,7 +538,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(fun, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -1290,7 +1290,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => foldl(fun, acc, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -2156,7 +2156,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keysort(Type.integer(1), Type.atom("a")),
         "CaseClauseError",
-        "no case clause matching: :a",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("a")),
       );
     });
 
@@ -2168,7 +2168,9 @@ describe("Erlang_Lists", () => {
             Type.improperList([Type.integer(1), Type.integer(2)]),
           ),
         "CaseClauseError",
-        "no case clause matching: [1 | 2]",
+        Interpreter.buildCaseClauseErrorMsg(
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ),
       );
     });
 
@@ -2710,7 +2712,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => map(fun, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc",
+        Interpreter.buildCaseClauseErrorMsg(Type.atom("abc")),
       );
     });
 
@@ -3873,6 +3875,99 @@ describe("Erlang_Lists", () => {
         () => sort(fun, improperList),
         "FunctionClauseError",
         expectedMessage,
+      );
+    });
+  });
+
+  describe("suffix/2", () => {
+    const suffix = Erlang_Lists["suffix/2"];
+
+    it("the first one-element list is a suffix of the second list", () => {
+      const result = suffix(Type.list([integer3]), list3);
+
+      assertBoxedTrue(result);
+    });
+
+    it("the first multiple-element list is a suffix of the second list", () => {
+      const result = suffix(Type.list([integer2, integer3]), list3);
+
+      assertBoxedTrue(result);
+    });
+
+    it("the lists are the same", () => {
+      const result = suffix(list2, list2);
+
+      assertBoxedTrue(result);
+    });
+
+    it("both lists contain the same single element", () => {
+      const result = suffix(list1, list1);
+
+      assertBoxedTrue(result);
+    });
+
+    it("both lists are empty", () => {
+      const result = suffix(Type.list(), Type.list());
+
+      assertBoxedTrue(result);
+    });
+
+    it("the first list is empty", () => {
+      const result = suffix(Type.list(), list2);
+
+      assertBoxedTrue(result);
+    });
+
+    it("the first list is longer than the second list", () => {
+      const result = suffix(list2, list1);
+
+      assertBoxedFalse(result);
+    });
+
+    it("the first list is a prefix but not a suffix of the second list", () => {
+      const result = suffix(list2, list3);
+
+      assertBoxedFalse(result);
+    });
+
+    it("the first list has an element that differs from the corresponding element in the second list", () => {
+      const result = suffix(
+        Type.list([integer1, integer3]),
+        Type.list([integer2, integer3]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("raises ArgumentError if the first argument is not a list", () => {
+      assertBoxedError(
+        () => suffix(atomA, list2),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a list", () => {
+      assertBoxedError(
+        () => suffix(list2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is an improper list", () => {
+      assertBoxedError(
+        () => suffix(improperList, list3),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is an improper list", () => {
+      assertBoxedError(
+        () => suffix(list2, improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
   });

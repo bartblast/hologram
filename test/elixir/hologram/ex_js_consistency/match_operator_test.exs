@@ -25,14 +25,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # :abc = :xyz
     test "left atom != right atom" do
-      assert_error MatchError, "no match of right hand side value: :xyz", fn ->
+      assert_error MatchError, build_match_error_msg(:xyz), fn ->
         wrap_match_operator(:abc, :xyz)
       end
     end
 
     # :abc = 2
     test "left atom != right non-atom" do
-      assert_error MatchError, "no match of right hand side value: 2", fn ->
+      assert_error MatchError, build_match_error_msg(2), fn ->
         wrap_match_operator(:abc, 2)
       end
     end
@@ -47,14 +47,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # <<>> = <<1::1, 0::1>>
     test "left empty bitstring != right non-empty bitstring" do
-      assert_error MatchError, "no match of right hand side value: <<2::size(2)>>", fn ->
-        <<>> = <<1::1, 0::1>>
+      assert_error MatchError, build_match_error_msg(<<2::size(2)>>), fn ->
+        <<>> = wrap_term(<<1::1, 0::1>>)
       end
     end
 
     # <<>> = :abc
     test "left empty bitstring != right non-bitstring" do
-      assert_error MatchError, "no match of right hand side value: :abc", fn ->
+      assert_error MatchError, build_match_error_msg(:abc), fn ->
         <<>> = wrap_term(:abc)
       end
     end
@@ -65,13 +65,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "left literal single-segment bitstring != right literal single-segment bitstring" do
-      assert_error MatchError, "no match of right hand side value: <<2>>", fn ->
+      assert_error MatchError, build_match_error_msg(<<2>>), fn ->
         <<1::integer>> = <<2::integer>>
       end
     end
 
     test "left literal single-segment bitstring != right non-bitstring" do
-      assert_error MatchError, "no match of right hand side value: :abc", fn ->
+      assert_error MatchError, build_match_error_msg(:abc), fn ->
         <<1::integer>> = wrap_term(:abc)
       end
     end
@@ -119,22 +119,22 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # <<3, y::integer>> = <<1, 2>>
     test "first segment in left multi-segment bitstring doesn't match" do
-      assert_error MatchError, "no match of right hand side value: <<1, 2>>", fn ->
+      assert_error MatchError, build_match_error_msg(<<1, 2>>), fn ->
         <<3, _y::integer>> = <<1, 2>>
       end
     end
 
     # <<1, 2::size(7)>> = <<1, 2>>
     test "last segment in left multi-segment bitstring doesn't match, because there are too few bits" do
-      assert_error MatchError, "no match of right hand side value: <<1, 2>>", fn ->
-        <<1, 2::size(7)>> = <<1, 2>>
+      assert_error MatchError, build_match_error_msg(<<1, 2>>), fn ->
+        <<1, 2::size(7)>> = wrap_term(<<1, 2>>)
       end
     end
 
     # <<1, 2::size(9)>> = <<1, 2>>
     test "last segment in left multi-segment bitstring doesn't match, because there are too many bits" do
-      assert_error MatchError, "no match of right hand side value: <<1, 2>>", fn ->
-        <<1, 2::size(9)>> = <<1, 2>>
+      assert_error MatchError, build_match_error_msg(<<1, 2>>), fn ->
+        <<1, 2::size(9)>> = wrap_term(<<1, 2>>)
       end
     end
 
@@ -238,21 +238,21 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "last binary segment with size larger than remaining bits fails" do
-      assert_error MatchError, ~s'no match of right hand side value: "hello"', fn ->
+      assert_error MatchError, build_match_error_msg("hello"), fn ->
         <<prefix::size(8), rest::binary-size(40)>> = "hello"
         {prefix, rest}
       end
     end
 
     test "last bitstring segment with size larger than remaining bits fails" do
-      assert_error MatchError, ~s'no match of right hand side value: "hello"', fn ->
+      assert_error MatchError, build_match_error_msg("hello"), fn ->
         <<prefix::size(8), rest::bitstring-size(40)>> = "hello"
         {prefix, rest}
       end
     end
 
     test "last integer segment without size uses normal size calculation and fails due to leftover bits" do
-      assert_error MatchError, ~s'no match of right hand side value: "hello"', fn ->
+      assert_error MatchError, build_match_error_msg("hello"), fn ->
         <<prefix::size(8), rest::integer>> = "hello"
         {prefix, rest}
       end
@@ -292,7 +292,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = wrap_term(16)
 
-      result = <<value::float-size(size)-signed>> = <<123.45::size(size)>>
+      result = <<value::float-size(^size)-signed>> = <<123.45::size(size)>>
 
       assert result == <<123.45::size(size)>>
       assert value == 123.4375
@@ -303,8 +303,8 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       size = wrap_term(8)
 
       # 170 == 0b10101010
-      assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
-        <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      assert_error MatchError, build_match_error_msg(<<170>>), fn ->
+        <<_value::float-size(^size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       end
     end
 
@@ -359,7 +359,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = wrap_term(16)
 
-      result = <<value::float-size(size)-unsigned>> = <<123.45::size(size)>>
+      result = <<value::float-size(^size)-unsigned>> = <<123.45::size(size)>>
 
       assert result == <<123.45::size(size)>>
       assert value == 123.4375
@@ -370,8 +370,9 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       size = wrap_term(8)
 
       # 170 == 0b10101010
-      assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
-        <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      assert_error MatchError, build_match_error_msg(<<170>>), fn ->
+        <<_value::float-size(^size)-unsigned>> =
+          <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       end
     end
 
@@ -424,25 +425,25 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
 
   #   test "raises match error if right is not a list" do
-  #     assert_raise MatchError, "no match of right hand side value: 123", fn ->
+  #     assert_raise MatchError, build_match_error_msg(123), fn ->
   #       [_h | _t] = wrap_term(123)
   #     end
   #   end
 
   #   test "raises match error if right is an empty list" do
-  #     assert_raise MatchError, "no match of right hand side value: []", fn ->
+  #     assert_raise MatchError, build_match_error_msg([]), fn ->
   #       [_h | _t] = wrap_term([])
   #     end
   #   end
 
   #   test "raises match error if head doesn't match" do
-  #     assert_raise MatchError, "no match of right hand side value: [1, 2, 3]", fn ->
+  #     assert_raise MatchError, build_match_error_msg([1, 2, 3]), fn ->
   #       [4 | [2, 3]] = wrap_term([1, 2, 3])
   #     end
   #   end
 
   #   test "raises match error if tail doesn't match" do
-  #     assert_raise MatchError, "no match of right hand side value: [1, 2, 3]", fn ->
+  #     assert_raise MatchError, build_match_error_msg([1, 2, 3]), fn ->
   #       [1 | [4, 3]] = wrap_term([1, 2, 3])
   #     end
   #   end
@@ -456,13 +457,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
 
   #   test "left float != right float" do
-  #     assert_raise MatchError, "no match of right hand side value: 3.0", fn ->
+  #     assert_raise MatchError, build_match_error_msg(3.0), fn ->
   #       2.0 = wrap_term(3.0)
   #     end
   #   end
 
   #   test "left float != right non-float" do
-  #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+  #     assert_raise MatchError, build_match_error_msg(:abc), fn ->
   #       2.0 = wrap_term(:abc)
   #     end
   #   end
@@ -476,13 +477,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
 
   #   test "left integer != right integer" do
-  #     assert_raise MatchError, "no match of right hand side value: 3", fn ->
+  #     assert_raise MatchError, build_match_error_msg(3), fn ->
   #       2 = wrap_term(3)
   #     end
   #   end
 
   #   test "left integer != right non-integer" do
-  #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+  #     assert_raise MatchError, build_match_error_msg(:abc), fn ->
   #       2 = wrap_term(:abc)
   #     end
   #   end
@@ -496,13 +497,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
 
   #   test "left list != right list" do
-  #     assert_raise MatchError, "no match of right hand side value: [1, 3]", fn ->
+  #     assert_raise MatchError, build_match_error_msg([1, 3]), fn ->
   #       [1, 2] = wrap_term([1, 3])
   #     end
   #   end
 
   #   test "left list != right non-list" do
-  #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+  #     assert_raise MatchError, build_match_error_msg(:abc), fn ->
   #       [1, 2] = wrap_term(:abc)
   #     end
   #   end
@@ -532,21 +533,21 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     #  %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
     test "right map is missing some some keys from the left map" do
-      assert_error MatchError, "no match of right hand side value: %{y: 2, x: 1}", fn ->
+      assert_error MatchError, build_match_error_msg(%{y: 2, x: 1}), fn ->
         %{x: 1, y: 2, z: 3} = wrap_term(%{x: 1, y: 2})
       end
     end
 
     # %{x: 1, y: 2} = %{x: 1, y: 3}
     test "some values in the left map don't match values in the right map" do
-      assert_error MatchError, "no match of right hand side value: %{y: 3, x: 1}", fn ->
+      assert_error MatchError, build_match_error_msg(%{y: 3, x: 1}), fn ->
         %{x: 1, y: 2} = %{x: 1, y: 3}
       end
     end
 
     # %{x: 1, y: 2} = :abc
     test "left map != right non-map" do
-      assert_error MatchError, "no match of right hand side value: :abc", fn ->
+      assert_error MatchError, build_match_error_msg(:abc), fn ->
         %{x: 1, y: 2} = wrap_term(:abc)
       end
     end
@@ -562,7 +563,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # %{x: 1, y: 2} = %{}
     test "left is a non-empty map, right is an empty map" do
-      assert_error MatchError, "no match of right hand side value: %{}", fn ->
+      assert_error MatchError, build_match_error_msg(%{}), fn ->
         %{x: 1, y: 2} = wrap_term(%{})
       end
     end
@@ -621,7 +622,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "x = 2 = 3" do
-      assert_error MatchError, "no match of right hand side value: 3", fn ->
+      assert_error MatchError, build_match_error_msg(3), fn ->
         _x = 2 = wrap_term(3)
       end
     end
@@ -634,7 +635,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "2 = x = 3" do
-      assert_error MatchError, "no match of right hand side value: 3", fn ->
+      assert_error MatchError, build_match_error_msg(3), fn ->
         2 = _x = wrap_term(3)
       end
     end
@@ -648,14 +649,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "2 = 2 = x, (x = 3)" do
-      assert_error MatchError, "no match of right hand side value: 3", fn ->
+      assert_error MatchError, build_match_error_msg(3), fn ->
         x = 3
         2 = 2 = wrap_term(x)
       end
     end
 
     test "1 = 2 = x, (x = 2)" do
-      assert_error MatchError, "no match of right hand side value: 2", fn ->
+      assert_error MatchError, build_match_error_msg(2), fn ->
         # Code.eval_string/2 used here, because this code wouldn't compile in some Elixir/OTP versions.
         Code.eval_string("1 = 2 = x", x: 2)
       end
@@ -676,20 +677,20 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "[1 = 1] = [1 = 2]" do
-      assert_error MatchError, "no match of right hand side value: 2", fn ->
+      assert_error MatchError, build_match_error_msg(2), fn ->
         [1 = 1] = [1 = wrap_term(2)]
       end
     end
 
     test "[1 = 1] = [2 = 1]" do
-      assert_error MatchError, "no match of right hand side value: 1", fn ->
+      assert_error MatchError, build_match_error_msg(1), fn ->
         [1 = 1] = [2 = wrap_term(1)]
       end
     end
 
     # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "[1 = 2] = [1 = 1]" do
-      assert_error MatchError, "no match of right hand side value: [1]", fn ->
+      assert_error MatchError, build_match_error_msg([1]), fn ->
         x = wrap_term(2)
         [1 = ^x] = [1 = 1]
       end
@@ -697,7 +698,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "[2 = 1] = [1 = 1]" do
-      assert_error MatchError, "no match of right hand side value: [1]", fn ->
+      assert_error MatchError, build_match_error_msg([1]), fn ->
         x = wrap_term(2)
         [^x = 1] = [1 = 1]
       end
@@ -931,13 +932,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   #   end
 
   #   test "left tuple != right tuple" do
-  #     assert_raise MatchError, "no match of right hand side value: {1, 3}", fn ->
+  #     assert_raise MatchError, build_match_error_msg({1, 3}), fn ->
   #       {1, 2} = wrap_term({1, 3})
   #     end
   #   end
 
   #   test "left tuple != right non-tuple" do
-  #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
+  #     assert_raise MatchError, build_match_error_msg(:abc), fn ->
   #       {1, 2} = wrap_term(:abc)
   #     end
   #   end
@@ -970,7 +971,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # [x, x] = [1, 2]
     test "multiple variables with the same name being matched to the different values" do
-      assert_error MatchError, "no match of right hand side value: [1, 2]", fn ->
+      assert_error MatchError, build_match_error_msg([1, 2]), fn ->
         [x, x] = wrap_term([1, 2])
       end
     end

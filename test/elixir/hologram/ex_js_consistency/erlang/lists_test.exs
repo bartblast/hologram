@@ -54,7 +54,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the second argument is not a list" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.all(fn elem -> elem > 1 end, :abc)
       end
     end
@@ -118,7 +118,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the second argument is not a list" do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.any(&(&1 > 2), :abc)
       end
     end
@@ -453,7 +453,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the third argument is not a list", %{fun: fun} do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.foldl(fun, [], :abc)
       end
     end
@@ -969,13 +969,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises CaseClauseError if the second argument is not a list" do
       assert_error CaseClauseError,
-                   "no case clause matching: :a",
+                   build_case_clause_error_msg(:a),
                    fn -> :lists.keysort(1, :a) end
     end
 
     test "raises CaseClauseError if the second argument is a two-element improper list" do
       assert_error CaseClauseError,
-                   "no case clause matching: [1 | 2]",
+                   build_case_clause_error_msg([1 | 2]),
                    fn -> :lists.keysort(1, [1 | 2]) end
     end
 
@@ -1259,7 +1259,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the second argument is not a list", %{fun: fun} do
-      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, build_case_clause_error_msg(:abc), fn ->
         :lists.map(fun, :abc)
       end
     end
@@ -1426,12 +1426,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "is a non-last member of an improper list" do
-      assert :lists.member(2, [1, 2 | 3]) == true
+      assert :lists.member(2, wrap_term([1, 2 | 3])) == true
     end
 
     test "is the last member of an improper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
-        :lists.member(3, [1, 2 | 3])
+        :lists.member(3, wrap_term([1, 2 | 3]))
       end
     end
 
@@ -1441,7 +1441,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "is not a member of an improper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
-        :lists.member(4, [1, 2 | 3])
+        :lists.member(4, wrap_term([1, 2 | 3]))
       end
     end
 
@@ -1453,7 +1453,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a list"),
                    fn ->
-                     :lists.member(2, :abc)
+                     :lists.member(2, wrap_term(:abc))
                    end
     end
   end
@@ -1896,6 +1896,68 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.sort(fun, [1, 2 | 3])
       end
+    end
+  end
+
+  describe "suffix/2" do
+    test "the first one-element list is a suffix of the second list" do
+      assert :lists.suffix([3], [1, 2, 3])
+    end
+
+    test "the first multiple-element list is a suffix of the second list" do
+      assert :lists.suffix([2, 3], [1, 2, 3])
+    end
+
+    test "the lists are the same" do
+      assert :lists.suffix([1, 2], [1, 2])
+    end
+
+    test "both lists contain the same single element" do
+      assert :lists.suffix([1], [1])
+    end
+
+    test "both lists are empty" do
+      assert :lists.suffix([], [])
+    end
+
+    test "the first list is empty" do
+      assert :lists.suffix([], [1, 2])
+    end
+
+    test "the first list is longer than the second list" do
+      refute :lists.suffix([1, 2], [1])
+    end
+
+    test "the first list is a prefix but not a suffix of the second list" do
+      refute :lists.suffix([1, 2], [1, 2, 3])
+    end
+
+    test "the first list has an element that differs from the corresponding element in the second list" do
+      refute :lists.suffix([1, 3], [2, 3])
+    end
+
+    test "raises ArgumentError if the first argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [:a, [1, 2]]}
+    end
+
+    test "raises ArgumentError if the second argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [[1, 2], :a]}
+    end
+
+    test "raises ArgumentError if the first argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [[1, 2 | 3], [1, 2, 3]]}
+    end
+
+    test "raises ArgumentError if the second argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [[1, 2], [1, 2 | 3]]}
     end
   end
 end

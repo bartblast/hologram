@@ -169,10 +169,6 @@ const Erlang_Binary = {
       const startValue = scopeData.data[0].value;
       const lengthValue = scopeData.data[1].value;
 
-      if (startValue < 0n) {
-        raiseInvalidOptions();
-      }
-
       scopeStart = Number(startValue);
       scopeLength = Number(lengthValue);
     });
@@ -470,17 +466,29 @@ const Erlang_Binary = {
     ](options, 3);
 
     // match/3 only supports :scope; reject :global, :trim, and :trim_all
-    // Validate scope start is within subject bounds
-    if (global || trim || trimAll || scopeStart > subject.bytes.length) {
+    if (global || trim || trimAll) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    }
+
+    // Validate scope start is within subject bounds
+    if (scopeStart < 0 || scopeStart > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          3,
+          "specified part is not wholly inside binary",
+        ),
       );
     }
 
     // Validate that if scopeLength is specified, scopeStart + scopeLength >= 0
     if (scopeLength !== null && scopeStart + scopeLength < 0) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        Interpreter.buildArgumentErrorMsg(
+          3,
+          "specified part is not wholly inside binary",
+        ),
       );
     }
 
@@ -490,7 +498,10 @@ const Erlang_Binary = {
     // Validate scope doesn't extend beyond subject
     if (scopeStart + effectiveLength > subject.bytes.length) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        Interpreter.buildArgumentErrorMsg(
+          3,
+          "specified part is not wholly inside binary",
+        ),
       );
     }
 
@@ -599,15 +610,27 @@ const Erlang_Binary = {
       "_parse_search_opts/2"
     ](options, 3);
 
-    if (global || trim || trimAll || scopeStart > subject.bytes.length) {
+    if (global || trim || trimAll) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(3, "invalid options"),
       );
     }
 
+    if (scopeStart < 0 || scopeStart > subject.bytes.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          3,
+          "specified part is not wholly inside binary",
+        ),
+      );
+    }
+
     if (scopeLength !== null && scopeStart + scopeLength < 0) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        Interpreter.buildArgumentErrorMsg(
+          3,
+          "specified part is not wholly inside binary",
+        ),
       );
     }
 
@@ -644,7 +667,10 @@ const Erlang_Binary = {
 
     if (scopeStart + effectiveLength > subject.bytes.length) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+        Interpreter.buildArgumentErrorMsg(
+          3,
+          "specified part is not wholly inside binary",
+        ),
       );
     }
 
@@ -1211,7 +1237,7 @@ const Erlang_Binary = {
     ](options, 3);
 
     // Validate scope start is within subject bounds
-    if (scopeStart > subject.bytes.length) {
+    if (scopeStart < 0 || scopeStart > subject.bytes.length) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(3, "invalid options"),
       );

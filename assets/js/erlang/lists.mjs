@@ -1017,6 +1017,37 @@ const Erlang_Lists = {
   },
   // End sort/2
   // Deps: []
+
+  // Start suffix/2
+  "suffix/2": (list1, list2) => {
+    // The Erlang implementation computes length/1 on both arguments, which
+    // rejects anything that is not a proper list with an "not a list" error.
+    if (!Type.isProperList(list1) || !Type.isProperList(list2)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    const length1 = list1.data.length;
+    const delta = list2.data.length - length1;
+
+    // The first list cannot be a suffix of a shorter second list.
+    if (delta < 0) {
+      return Type.boolean(false);
+    }
+
+    // Compare the first list against the trailing part of the second list
+    // in place, avoiding any intermediate allocation.
+    for (let i = 0; i < length1; i++) {
+      if (!Interpreter.isStrictlyEqual(list1.data[i], list2.data[delta + i])) {
+        return Type.boolean(false);
+      }
+    }
+
+    return Type.boolean(true);
+  },
+  // End suffix/2
+  // Deps: []
 };
 
 export default Erlang_Lists;

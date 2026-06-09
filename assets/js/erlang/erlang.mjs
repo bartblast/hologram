@@ -1645,16 +1645,11 @@ const Erlang = {
 
   // Start div/2
   "div/2": (integer1, integer2) => {
-    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
-      const arg1 = Interpreter.inspect(integer1);
-      const arg2 = Interpreter.inspect(integer2);
-
-      Interpreter.raiseArgumentError(
-        `bad argument in arithmetic expression: div(${arg1}, ${arg2})`,
-      );
-    }
-
-    if (integer2.value === 0n) {
+    if (
+      !Type.isInteger(integer1) ||
+      !Type.isInteger(integer2) ||
+      integer2.value === 0n
+    ) {
       const arg1 = Interpreter.inspect(integer1);
       const arg2 = Interpreter.inspect(integer2);
 

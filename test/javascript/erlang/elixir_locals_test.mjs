@@ -8,6 +8,7 @@ import {
 } from "../support/helpers.mjs";
 
 import Erlang_Elixir_Locals from "../../../assets/js/erlang/elixir_locals.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -48,7 +49,7 @@ describe("Erlang_Elixir_Locals", () => {
       assertBoxedError(
         () => yank(Type.atom("x"), atomB),
         "BadMapError",
-        "expected a map, got: :x",
+        Interpreter.buildBadMapErrorMsg(Type.atom("x")),
       );
     });
   });

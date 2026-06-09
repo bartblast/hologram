@@ -5488,34 +5488,34 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError if the first argument is a float", () => {
+    it("raises ArithmeticError if the first argument is a float", () => {
       assertBoxedError(
         () => testedFun(Type.float(5.5), Type.integer(2)),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(5.5, 2)",
       );
     });
 
-    it("raises ArgumentError if the second argument is a float", () => {
+    it("raises ArithmeticError if the second argument is a float", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.float(2.5)),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(5, 2.5)",
       );
     });
 
-    it("raises ArgumentError if the first argument is not a number", () => {
+    it("raises ArithmeticError if the first argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(2)),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(:abc, 2)",
       );
     });
 
-    it("raises ArgumentError if the second argument is not a number", () => {
+    it("raises ArithmeticError if the second argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.integer(5), Type.atom("abc")),
-        "ArgumentError",
+        "ArithmeticError",
         "bad argument in arithmetic expression: div(5, :abc)",
       );
     });
@@ -7753,7 +7753,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => is_map_key(atomA, atomAbc),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(atomAbc),
       );
     });
   });
@@ -9692,7 +9692,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_get(Type.atom("a"), Type.integer(1)),
         "BadMapError",
-        "expected a map, got: 1",
+        Interpreter.buildBadMapErrorMsg(Type.integer(1)),
       );
     });
 
@@ -9724,7 +9724,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => map_size(Type.atom("abc")),
         "BadMapError",
-        "expected a map, got: :abc",
+        Interpreter.buildBadMapErrorMsg(Type.atom("abc")),
       );
     });
   });

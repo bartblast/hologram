@@ -85,7 +85,7 @@ defmodule HologramFeatureTests.ControlFlow.WithTest do
       session: session
     } do
       assert_js_error session,
-                      "(MatchError) no match of right hand side value: :ok",
+                      "(MatchError) no match of right hand side value:\n\n    :ok",
                       fn ->
                         session
                         |> visit(WithPage)
@@ -131,7 +131,7 @@ defmodule HologramFeatureTests.ControlFlow.WithTest do
       session: session
     } do
       assert_js_error session,
-                      "(WithClauseError) no with clause matching: :ok",
+                      "(WithClauseError) no with clause matching:\n\n    :ok",
                       fn ->
                         session
                         |> visit(WithPage)

@@ -19,7 +19,7 @@ const Erlang_Sets = {
         Interpreter.buildFunctionClauseErrorMsg(":proplists.get_value/3", [
           Type.atom("version"),
           opts,
-          Type.integer(1),
+          Type.integer(2),
         ]),
       );
     }

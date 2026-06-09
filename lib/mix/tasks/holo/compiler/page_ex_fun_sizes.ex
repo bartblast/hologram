@@ -20,6 +20,10 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  # See Hologram.Compiler.IR: a `%Context{}` default MapSet reads as concrete and won't unify
+  # with the opaque `MapSet.t()` in the spec.
+  @dialyzer {:no_opaque, {:calculate_encoded_fun_sizes, 2}}
+
   @requirements ["app.config"]
 
   @doc false
