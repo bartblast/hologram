@@ -5586,9 +5586,13 @@ describe("Renderer", () => {
         disconnect() {}
       };
 
-      const resolved = Renderer.resolveResizeBindings();
+      let resolved;
 
-      globalThis.ResizeObserver = originalResizeObserver;
+      try {
+        resolved = Renderer.resolveResizeBindings();
+      } finally {
+        globalThis.ResizeObserver = originalResizeObserver;
+      }
 
       assert.equal(resolved.length, 1);
       assert.equal(resolved[0].target, element);
