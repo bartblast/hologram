@@ -270,6 +270,7 @@ export default class Renderer {
     const modifiersDom = attrDom.data[2];
     const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
     const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
+    const stopPropagation = $.#stopPropagationFromModifiers(modifiersDom);
     const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
 
     return (event) => {
@@ -287,6 +288,7 @@ export default class Renderer {
         attrDom.data[1],
         defaultTarget,
         allowDefault,
+        stopPropagation,
       );
 
       if (dispatch === null) {
@@ -1276,6 +1278,18 @@ export default class Renderer {
       slots,
       defaultTarget,
       parentTagName,
+    );
+  }
+
+  // Returns true when the modifiers map carries a stop_propagation modifier, which stops the
+  // event from bubbling past the bound element.
+  static #stopPropagationFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return false;
+    }
+
+    return Type.isTrue(
+      Erlang_Maps["is_key/2"](Type.atom("stop_propagation"), modifiersDom),
     );
   }
 
