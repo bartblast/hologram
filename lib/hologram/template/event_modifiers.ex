@@ -114,10 +114,12 @@ defmodule Hologram.Template.EventModifiers do
   """
   @spec parse(String.t(), list(String.t())) :: modifiers
   def parse(base_name, segments) do
-    segments
-    |> Enum.map(&{&1, parse_segment(base_name, &1)})
-    |> validate_modifier_counts()
-    |> validate_key_filter_combos()
+    pairs = Enum.map(segments, &{&1, parse_segment(base_name, &1)})
+
+    validate_modifier_counts(pairs)
+    validate_key_filter_combos(pairs)
+
+    pairs
     |> Enum.map(fn {_segment, modifier} -> modifier end)
     |> aggregate()
   end
@@ -317,8 +319,6 @@ defmodule Hologram.Template.EventModifiers do
           Map.put(seen, combo, segment)
       end
     end)
-
-    pairs
   end
 
   # Every modifier type except key filters is single-valued, so a duplicate is always an authoring
@@ -338,7 +338,5 @@ defmodule Hologram.Template.EventModifiers do
       raise TemplateSyntaxError,
         message: "an event binding may not combine debounce and throttle modifiers"
     end
-
-    pairs
   end
 end
