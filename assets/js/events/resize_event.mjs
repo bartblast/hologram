@@ -7,9 +7,12 @@ export default class ResizeEvent {
   static isDefaultAllowed = true;
 
   static buildOperationParam(event) {
-    // An element resize arrives as a ResizeObserverEntry (identified by borderBoxSize) and reports
-    // the entry's box sizes. A window resize arrives as the DOM resize event (its target is the
-    // window) and reports the window's size properties. Each mirrors its own native API.
+    // The payload carries only the data the event itself provides. An element resize arrives as a
+    // ResizeObserverEntry (identified by borderBoxSize), which snapshots the element's box sizes at
+    // resize time, so those are forwarded. A window resize arrives as the DOM resize event, which
+    // carries no size data of its own - the window's size properties are live globals, not event
+    // data (and some, like outerWidth, may not even be updated yet when the event fires) - so its
+    // payload is empty.
     if (event.borderBoxSize) {
       // A box property is an array (one entry per CSS fragment); observed elements are
       // single-fragment, so the first entry is taken. devicePixelContentBoxSize is absent on
@@ -26,18 +29,7 @@ export default class ResizeEvent {
       ]);
     }
 
-    const win = event.target;
-    const docEl = win.document.documentElement;
-
-    return Type.map([
-      [Type.atom("client_height"), Type.float(docEl.clientHeight)],
-      [Type.atom("client_width"), Type.float(docEl.clientWidth)],
-      [Type.atom("device_pixel_ratio"), Type.float(win.devicePixelRatio)],
-      [Type.atom("inner_height"), Type.float(win.innerHeight)],
-      [Type.atom("inner_width"), Type.float(win.innerWidth)],
-      [Type.atom("outer_height"), Type.float(win.outerHeight)],
-      [Type.atom("outer_width"), Type.float(win.outerWidth)],
-    ]);
+    return Type.map();
   }
 
   static isEventIgnored(_event) {

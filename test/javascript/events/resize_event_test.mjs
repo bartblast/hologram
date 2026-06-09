@@ -79,32 +79,13 @@ describe("ResizeEvent", () => {
       );
     });
 
-    it("builds a window payload from the window's size properties", () => {
-      const event = {
-        target: {
-          devicePixelRatio: 2,
-          document: {documentElement: {clientHeight: 760, clientWidth: 1009}},
-          innerHeight: 768,
-          innerWidth: 1024,
-          outerHeight: 900,
-          outerWidth: 1280,
-        },
-      };
+    it("builds an empty payload for a window resize", () => {
+      // The DOM resize event carries no size data of its own.
+      const event = {target: window};
 
       const result = ResizeEvent.buildOperationParam(event);
 
-      assert.deepStrictEqual(
-        result,
-        Type.map([
-          [Type.atom("client_height"), Type.float(760)],
-          [Type.atom("client_width"), Type.float(1009)],
-          [Type.atom("device_pixel_ratio"), Type.float(2)],
-          [Type.atom("inner_height"), Type.float(768)],
-          [Type.atom("inner_width"), Type.float(1024)],
-          [Type.atom("outer_height"), Type.float(900)],
-          [Type.atom("outer_width"), Type.float(1280)],
-        ]),
-      );
+      assert.deepStrictEqual(result, Type.map());
     });
   });
 
