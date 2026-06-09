@@ -1898,4 +1898,66 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
   end
+
+  describe "suffix/2" do
+    test "the first one-element list is a suffix of the second list" do
+      assert :lists.suffix([3], [1, 2, 3])
+    end
+
+    test "the first multiple-element list is a suffix of the second list" do
+      assert :lists.suffix([2, 3], [1, 2, 3])
+    end
+
+    test "the lists are the same" do
+      assert :lists.suffix([1, 2], [1, 2])
+    end
+
+    test "both lists contain the same single element" do
+      assert :lists.suffix([1], [1])
+    end
+
+    test "both lists are empty" do
+      assert :lists.suffix([], [])
+    end
+
+    test "the first list is empty" do
+      assert :lists.suffix([], [1, 2])
+    end
+
+    test "the first list is longer than the second list" do
+      refute :lists.suffix([1, 2], [1])
+    end
+
+    test "the first list is a prefix but not a suffix of the second list" do
+      refute :lists.suffix([1, 2], [1, 2, 3])
+    end
+
+    test "the first list has an element that differs from the corresponding element in the second list" do
+      refute :lists.suffix([1, 3], [2, 3])
+    end
+
+    test "raises ArgumentError if the first argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [:a, [1, 2]]}
+    end
+
+    test "raises ArgumentError if the second argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [[1, 2], :a]}
+    end
+
+    test "raises ArgumentError if the first argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [[1, 2 | 3], [1, 2, 3]]}
+    end
+
+    test "raises ArgumentError if the second argument is an improper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:lists, :suffix, [[1, 2], [1, 2 | 3]]}
+    end
+  end
 end
