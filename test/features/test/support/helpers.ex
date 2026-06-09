@@ -399,6 +399,23 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
+  @doc """
+  Reads the text content of the element matching `css_selector` and evaluates it as an Elixir term.
+
+  Intended for elements that render a value via `inspect/1`, so the test can compare the recorded
+  value field by field rather than against a formatted string.
+  """
+  def term_at(session, css_selector) do
+    script = "return document.querySelector('#{css_selector}').textContent;"
+
+    {term, _bindings} =
+      session
+      |> script_result(script)
+      |> Code.eval_string()
+
+    term
+  end
+
   def visit(session, path_or_url) when is_binary(path_or_url) do
     Browser.visit(session, path_or_url)
   end
