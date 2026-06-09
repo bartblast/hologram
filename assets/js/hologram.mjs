@@ -220,10 +220,10 @@ export default class Hologram {
 
   // Processes a UI event and returns a dispatch function that runs the resulting action or
   // command, or null when the event is ignored. The edge concerns that must happen during the
-  // event itself - the ignored-event check, preventDefault, and reading the event payload (the
-  // browser nulls currentTarget once dispatch returns) - run synchronously here. Callers invoke
-  // the returned dispatch immediately, or hand it to the debouncer so that only the dispatch is
-  // deferred while preventDefault still takes effect on every event.
+  // event itself - the ignored-event check, preventDefault, stopPropagation, and reading the
+  // event payload (the browser nulls currentTarget once dispatch returns) - run synchronously
+  // here. Callers invoke the returned dispatch immediately, or hand it to the debouncer so that
+  // only the dispatch is deferred while preventDefault still takes effect on every event.
   // Deps: [:maps.get/3]
   static handleUiEvent(
     event,
@@ -231,6 +231,7 @@ export default class Hologram {
     operationSpecDom,
     defaultTarget,
     allowDefault = false,
+    stopPropagation = false,
   ) {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
@@ -242,6 +243,13 @@ export default class Hologram {
     // framework's preventDefault so the browser's native default proceeds.
     if (!eventImpl.isDefaultAllowed && !allowDefault) {
       event.preventDefault();
+    }
+
+    // stopPropagation is the binding's stop_propagation modifier: it stops the event from
+    // bubbling past the bound element, so ancestor and document/window listeners do not fire.
+    // Optional call: a resize binding's ResizeObserverEntry has no stopPropagation method.
+    if (stopPropagation) {
+      event.stopPropagation?.();
     }
 
     const eventParam = eventImpl.buildOperationParam(event);

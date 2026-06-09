@@ -757,6 +757,119 @@ describe("Hologram", () => {
       sinon.assert.notCalled(preventDefault);
       sinon.assert.calledOnce(executeActionStub);
     });
+
+    it("does not stop propagation by default", () => {
+      const stopPropagation = sinon.spy();
+
+      const submitEvent = {
+        target: document.createElement("form"),
+        preventDefault: () => null,
+        stopPropagation,
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        submitEvent,
+        "submit",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      dispatch();
+
+      sinon.assert.notCalled(stopPropagation);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("stops propagation when stopPropagation is set", () => {
+      // The binding's stop_propagation modifier stops the event from bubbling past the bound
+      // element while the action still dispatches.
+
+      const stopPropagation = sinon.spy();
+
+      const submitEvent = {
+        target: document.createElement("form"),
+        preventDefault: () => null,
+        stopPropagation,
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        submitEvent,
+        "submit",
+        actionSpecDom,
+        defaultTarget,
+        false,
+        true,
+      );
+
+      dispatch();
+
+      sinon.assert.calledOnce(stopPropagation);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("does not stop propagation when the event is ignored", () => {
+      // ClickEvent ignores a Ctrl+click, so the event edge work doesn't run for it.
+
+      const stopPropagation = sinon.spy();
+
+      const ignoredEvent = {
+        clientX: 10,
+        clientY: 20,
+        movementX: 5,
+        movementY: 15,
+        offsetX: 30,
+        offsetY: 40,
+        pageX: 1,
+        pageY: 2,
+        pointerType: "mouse",
+        screenX: 100,
+        screenY: 200,
+        ctrlKey: true,
+        preventDefault: () => null,
+        stopPropagation,
+      };
+
+      Hologram.handleUiEvent(
+        ignoredEvent,
+        eventType,
+        actionSpecDom,
+        defaultTarget,
+        false,
+        true,
+      );
+
+      sinon.assert.notCalled(stopPropagation);
+    });
+
+    it("tolerates an event payload without a stopPropagation method", () => {
+      // A resize binding's ResizeObserverEntry is not a DOM event and has no stopPropagation
+      // method, so the call is skipped instead of crashing.
+
+      const keyboardEvent = {
+        altKey: false,
+        code: "Enter",
+        ctrlKey: false,
+        key: "Enter",
+        metaKey: false,
+        repeat: false,
+        shiftKey: false,
+        preventDefault: () => null,
+        target: {id: "dummy_node"},
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        keyboardEvent,
+        "keydown",
+        actionSpecDom,
+        defaultTarget,
+        false,
+        true,
+      );
+
+      dispatch();
+
+      sinon.assert.calledOnce(executeActionStub);
+    });
   });
 
   describe("handlePrefetchPageSuccess()", () => {
