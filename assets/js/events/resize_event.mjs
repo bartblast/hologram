@@ -16,7 +16,13 @@ export default class ResizeEvent {
     if (event.borderBoxSize) {
       // A box property is an array (one entry per CSS fragment); observed elements are
       // single-fragment, so the first entry is taken. devicePixelContentBoxSize is absent on
-      // browsers that do not support it, in which case its key is nil.
+      // browsers that do not support it, in which case its value is nil. It is part of the Resize
+      // Observer spec, but no Safari version implements it - WebKit computes device-pixel sizes
+      // only after the paint cycle, while resize observations are delivered before it.
+      // TODO: once Safari ships devicePixelContentBoxSize
+      // (https://bugs.webkit.org/show_bug.cgi?id=219005) and unsupported versions phase out,
+      // remove the nil fallback and update the docs that explain the Safari gap (the website
+      // Events page, llms-full.txt, usage-rules.md).
       const devicePixel = event.devicePixelContentBoxSize;
 
       return Type.map([
