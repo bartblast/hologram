@@ -1276,7 +1276,19 @@ Hologram calls `preventDefault` on interaction events by default, so a bound eve
 <a href="/files/report.pdf" download $click.allow_default="track_download">Download</a>
 ```
 
-Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters, `.debounce`, and `.throttle`.
+Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters, `stop_propagation`, `.debounce`, and `.throttle`.
+
+#### Stopping Event Propagation
+
+DOM events bubble: an event on a nested element also fires the bindings on its ancestors. When a bound element sits inside another bound element - a delete button inside a card that opens on click - both actions dispatch. Append `stop_propagation` to the inner binding to stop the event at the bound element: its action still dispatches, and ancestor bindings no longer fire.
+
+```holo
+<div $click="open_card">
+  <button $click.stop_propagation="delete_card">Delete</button>
+</div>
+```
+
+Hologram never stops propagation on its own - the modifier is the per-binding opt-in. Note that document-level features rely on bubbling: `$click_outside` bindings and `<window>` / `<document>` bindings only see events that bubble all the way up, so an event stopped by `stop_propagation` never reaches them - clicking such an element inside a dismissible popover will not dismiss it. Sometimes that is exactly the point, but keep it in mind when combining the two. The modifier composes with key filters, `allow_default`, `.debounce`, and `.throttle` - on keyboard events, propagation stops only for keys the filter matches.
 
 #### Event Flow
 

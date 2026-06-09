@@ -1668,6 +1668,123 @@ describe("Renderer", () => {
           });
         });
 
+        describe("stop propagation", () => {
+          const buildNode = (modifiers) =>
+            Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("button"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$click"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  modifiers,
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+          it("passes stopPropagation true when the modifier is present", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(
+                Type.map([[Type.atom("stop_propagation"), Type.boolean(true)]]),
+              ),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(() => null);
+
+            vdom.data.on.click("dummyEvent");
+
+            assert.isTrue(stub.getCall(0).args[5]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("passes stopPropagation false when the modifier is absent", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(Type.map()),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(() => null);
+
+            vdom.data.on.click("dummyEvent");
+
+            assert.isFalse(stub.getCall(0).args[5]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("composes with a key filter and allow_default", () => {
+            // <input $key_down.enter.allow_default.stop_propagation="my_action" />
+            const modifiers = Type.map([
+              [Type.atom("allow_default"), Type.boolean(true)],
+              [
+                Type.atom("key"),
+                Type.list([Type.list([Type.bitstring("enter")])]),
+              ],
+              [Type.atom("stop_propagation"), Type.boolean(true)],
+            ]);
+
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$key_down"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  modifiers,
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake(() => null);
+
+            // The key filter gates - a non-matching key never reaches handleUiEvent.
+            vdom.data.on.keydown({key: "Escape", currentTarget: {}});
+            sinon.assert.notCalled(stub);
+
+            // A matching key reaches handleUiEvent synchronously with both flags set.
+            vdom.data.on.keydown({key: "Enter", currentTarget: {}});
+            sinon.assert.calledOnce(stub);
+            assert.isTrue(stub.getCall(0).args[4]);
+            assert.isTrue(stub.getCall(0).args[5]);
+
+            Hologram.handleUiEvent.restore();
+          });
+        });
+
         describe("throttle", () => {
           let clock;
 
@@ -5561,6 +5678,7 @@ describe("Renderer", () => {
         "resize",
         actionSpecDom,
         defaultTarget,
+        false,
         false,
       );
 
