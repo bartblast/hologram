@@ -91,6 +91,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module173
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module174
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module175
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module176
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
@@ -2801,6 +2802,38 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module47)
+    end
+
+    test "qualifiers keep generators and filters in source order (AST from source code)" do
+      ast = ast("for x <- [1, 2], my_filter(x), y <- [3, 4], do: x * y")
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{match: %IR.Variable{name: :x}},
+                 %IR.ComprehensionFilter{
+                   expression: %IR.LocalFunctionCall{
+                     function: :my_filter,
+                     args: [%IR.Variable{name: :x}]
+                   }
+                 },
+                 %IR.Clause{match: %IR.Variable{name: :y}}
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "qualifiers keep generators and filters in source order (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{match: %IR.Variable{name: :x}},
+                 %IR.ComprehensionFilter{
+                   expression: %IR.LocalFunctionCall{
+                     function: :my_filter,
+                     args: [%IR.Variable{name: :x}]
+                   }
+                 },
+                 %IR.Clause{match: %IR.Variable{name: :y}}
+               ]
+             } = transform_module_and_fetch_expr(Module176)
     end
 
     test "default collectable (AST from source code)" do
