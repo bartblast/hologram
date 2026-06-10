@@ -415,4 +415,252 @@ describe("Operation", () => {
       assert.isFalse(Operation.isAction(command));
     });
   });
+
+  describe("isDisabled()", () => {
+    it("shorthand syntax, nil name, no params", () => {
+      // Example: $click={nil}
+      // Spec DOM: [expression: {nil}]
+      // which is equivalent to [{:expression, {nil}}]
+      const specDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.nil()])],
+      ]);
+
+      assert.isTrue(Operation.isDisabled(specDom));
+    });
+
+    it("shorthand syntax, nil name, with params", () => {
+      // Example: $click={nil, a: 1, b: 2}
+      // Spec DOM: [expression: {nil, a: 1, b: 2}]
+      // which is equivalent to [{:expression, {nil, [{:a, 1}, {:b, 2}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.nil(),
+            Type.keywordList([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+            ]),
+          ]),
+        ],
+      ]);
+
+      assert.isTrue(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, nil action", () => {
+      // Example: $click={action: nil}
+      // Spec DOM: [expression: {[action: nil]}]
+      // which is equivalent to [{:expression, {[{:action, nil}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([Type.keywordList([[Type.atom("action"), Type.nil()]])]),
+        ],
+      ]);
+
+      assert.isTrue(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, nil action, with params", () => {
+      // Example: $click={action: nil, params: %{a: 1, b: 2}}
+      // Spec DOM: [expression: {[action: nil, params: %{a: 1, b: 2}]}]
+      // which is equivalent to [{:expression, {[{:action, nil}, {:params, %{a: 1, b: 2}}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([
+              [Type.atom("action"), Type.nil()],
+              [
+                Type.atom("params"),
+                Type.map([
+                  [Type.atom("a"), Type.integer(1)],
+                  [Type.atom("b"), Type.integer(2)],
+                ]),
+              ],
+            ]),
+          ]),
+        ],
+      ]);
+
+      assert.isTrue(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, nil command", () => {
+      // Example: $click={command: nil}
+      // Spec DOM: [expression: {[command: nil]}]
+      // which is equivalent to [{:expression, {[{:command, nil}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([Type.keywordList([[Type.atom("command"), Type.nil()]])]),
+        ],
+      ]);
+
+      assert.isTrue(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, nil command, with params", () => {
+      // Example: $click={command: nil, params: %{a: 1, b: 2}}
+      // Spec DOM: [expression: {[command: nil, params: %{a: 1, b: 2}]}]
+      // which is equivalent to [{:expression, {[{:command, nil}, {:params, %{a: 1, b: 2}}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([
+              [Type.atom("command"), Type.nil()],
+              [
+                Type.atom("params"),
+                Type.map([
+                  [Type.atom("a"), Type.integer(1)],
+                  [Type.atom("b"), Type.integer(2)],
+                ]),
+              ],
+            ]),
+          ]),
+        ],
+      ]);
+
+      assert.isTrue(Operation.isDisabled(specDom));
+    });
+
+    it("shorthand syntax, non-nil name", () => {
+      // Example: $click={:my_action}
+      // Spec DOM: [expression: {:my_action}]
+      // which is equivalent to [{:expression, {:my_action}}]
+      const specDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.atom("my_action")])],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+
+    it("shorthand syntax, non-nil name, with params", () => {
+      // Example: $click={:my_action, a: 1, b: 2}
+      // Spec DOM: [expression: {:my_action, a: 1, b: 2}]
+      // which is equivalent to [{:expression, {:my_action, [{:a, 1}, {:b, 2}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.atom("my_action"),
+            Type.keywordList([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+            ]),
+          ]),
+        ],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, non-nil action", () => {
+      // Example: $click={action: :my_action}
+      // Spec DOM: [expression: {[action: :my_action]}]
+      // which is equivalent to [{:expression, {[{:action, :my_action}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([[Type.atom("action"), Type.atom("my_action")]]),
+          ]),
+        ],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, non-nil action, with params", () => {
+      // Example: $click={action: :my_action, params: %{a: 1, b: 2}}
+      // Spec DOM: [expression: {[action: :my_action, params: %{a: 1, b: 2}]}]
+      // which is equivalent to [{:expression, {[{:action, :my_action}, {:params, %{a: 1, b: 2}}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([
+              [Type.atom("action"), Type.atom("my_action")],
+              [
+                Type.atom("params"),
+                Type.map([
+                  [Type.atom("a"), Type.integer(1)],
+                  [Type.atom("b"), Type.integer(2)],
+                ]),
+              ],
+            ]),
+          ]),
+        ],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, non-nil command", () => {
+      // Example: $click={command: :my_command}
+      // Spec DOM: [expression: {[command: :my_command]}]
+      // which is equivalent to [{:expression, {[{:command, :my_command}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([[Type.atom("command"), Type.atom("my_command")]]),
+          ]),
+        ],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+
+    it("longhand syntax, non-nil command, with params", () => {
+      // Example: $click={command: :my_command, params: %{a: 1, b: 2}}
+      // Spec DOM: [expression: {[command: :my_command, params: %{a: 1, b: 2}]}]
+      // which is equivalent to [{:expression, {[{:command, :my_command}, {:params, %{a: 1, b: 2}}]}}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([
+              [Type.atom("command"), Type.atom("my_command")],
+              [
+                Type.atom("params"),
+                Type.map([
+                  [Type.atom("a"), Type.integer(1)],
+                  [Type.atom("b"), Type.integer(2)],
+                ]),
+              ],
+            ]),
+          ]),
+        ],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+
+    it("text syntax", () => {
+      // Example: $click="my_action"
+      // Spec DOM: [text: "my_action"]
+      // which is equivalent to [{:text, "my_action"}]
+      const specDom = Type.keywordList([
+        [Type.atom("text"), Type.bitstring("my_action")],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+
+    it("multi-chunk syntax", () => {
+      // Example: $click="aaa{123}bbb"
+      // Spec DOM: [text: "aaa", expression: {123}, text: "bbb"]
+      // which is equivalent to [{:text, "aaa"}, {:expression, {123}}, {:text, "bbb"}]
+      const specDom = Type.keywordList([
+        [Type.atom("text"), Type.bitstring("aaa")],
+        [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+        [Type.atom("text"), Type.bitstring("bbb")],
+      ]);
+
+      assert.isFalse(Operation.isDisabled(specDom));
+    });
+  });
 });
