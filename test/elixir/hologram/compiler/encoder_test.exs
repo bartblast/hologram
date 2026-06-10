@@ -1155,6 +1155,128 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir, %Context{async?: true}) ==
                "(await Interpreter.asyncComprehension([{type: \"generator\", match: Type.variablePattern(\"x\"), guards: [], body: async (context) => Type.list([Type.integer(1n), Type.integer(2n)])}], Type.list([]), false, async (context) => context.vars.x, context))"
     end
+
+    test "sync with reducer" do
+      # for x <- [1, 2], reduce: 0 do
+      #   acc when acc < 9 -> acc + x
+      #   acc -> acc
+      # end
+      #
+      # for x <- [1, 2], reduce: 0 do
+      #   acc when :erlang.<(acc, 9) -> :erlang.+(acc, x)
+      #   acc -> acc
+      # end
+
+      ir = %IR.Comprehension{
+        qualifiers: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.ListType{
+              data: [
+                %IR.IntegerType{value: 1},
+                %IR.IntegerType{value: 2}
+              ]
+            }
+          }
+        ],
+        collectable: %IR.ListType{data: []},
+        unique: %IR.AtomType{value: false},
+        mapper: nil,
+        reducer: %{
+          initial_value: %IR.IntegerType{value: 0},
+          clauses: [
+            %IR.Clause{
+              match: %IR.Variable{name: :acc},
+              guards: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: :erlang},
+                  function: :<,
+                  args: [
+                    %IR.Variable{name: :acc},
+                    %IR.IntegerType{value: 9}
+                  ]
+                }
+              ],
+              body: %IR.Block{
+                expressions: [
+                  %IR.RemoteFunctionCall{
+                    module: %IR.AtomType{value: :erlang},
+                    function: :+,
+                    args: [
+                      %IR.Variable{name: :acc},
+                      %IR.Variable{name: :x}
+                    ]
+                  }
+                ]
+              }
+            },
+            %IR.Clause{
+              match: %IR.Variable{name: :acc},
+              guards: [],
+              body: %IR.Block{
+                expressions: [%IR.Variable{name: :acc}]
+              }
+            }
+          ]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               "Interpreter.comprehensionReduce([{type: \"generator\", match: Type.variablePattern(\"x\"), guards: [], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}], Type.integer(0n), [{match: Type.variablePattern(\"acc\"), guards: [(context) => Erlang[\"</2\"](context.vars.acc, Type.integer(9n))], body: (context) => {\nreturn Erlang[\"+/2\"](context.vars.acc, context.vars.x);\n}}, {match: Type.variablePattern(\"acc\"), guards: [], body: (context) => {\nreturn context.vars.acc;\n}}], context)"
+    end
+
+    test "async with reducer" do
+      # for x <- [1, 2], reduce: 0 do
+      #   acc -> acc + x
+      # end
+      #
+      # for x <- [1, 2], reduce: 0 do
+      #   acc -> :erlang.+(acc, x)
+      # end
+
+      ir = %IR.Comprehension{
+        qualifiers: [
+          %IR.Clause{
+            match: %IR.Variable{name: :x},
+            guards: [],
+            body: %IR.ListType{
+              data: [
+                %IR.IntegerType{value: 1},
+                %IR.IntegerType{value: 2}
+              ]
+            }
+          }
+        ],
+        collectable: %IR.ListType{data: []},
+        unique: %IR.AtomType{value: false},
+        mapper: nil,
+        reducer: %{
+          initial_value: %IR.IntegerType{value: 0},
+          clauses: [
+            %IR.Clause{
+              match: %IR.Variable{name: :acc},
+              guards: [],
+              body: %IR.Block{
+                expressions: [
+                  %IR.RemoteFunctionCall{
+                    module: %IR.AtomType{value: :erlang},
+                    function: :+,
+                    args: [
+                      %IR.Variable{name: :acc},
+                      %IR.Variable{name: :x}
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "(await Interpreter.asyncComprehensionReduce([{type: \"generator\", match: Type.variablePattern(\"x\"), guards: [], body: async (context) => Type.list([Type.integer(1n), Type.integer(2n)])}], Type.integer(0n), [{match: Type.variablePattern(\"acc\"), guards: [], body: async (context) => {\nreturn Erlang[\"+/2\"](context.vars.acc, context.vars.x);\n}}], context))"
+    end
   end
 
   test "comprehension generator" do

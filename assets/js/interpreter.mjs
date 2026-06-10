@@ -291,7 +291,10 @@ export default class Interpreter {
   // Deps: [Enum.into/2, Enum.to_list/1]
   static comprehension(qualifiers, collectable, unique, mapper, context) {
     let items = [];
-    Interpreter.#walkComprehension(qualifiers, 0, context, mapper, items);
+
+    Interpreter.#walkComprehension(qualifiers, 0, context, (leafContext) =>
+      items.push(mapper(leafContext)),
+    );
 
     if (unique) {
       items = uniqWith(items, Interpreter.isStrictlyEqual);
@@ -310,12 +313,12 @@ export default class Interpreter {
     context,
   ) {
     let items = [];
+
     await Interpreter.#asyncWalkComprehension(
       qualifiers,
       0,
       context,
-      mapper,
-      items,
+      async (leafContext) => items.push(await mapper(leafContext)),
     );
 
     if (unique) {
@@ -323,6 +326,50 @@ export default class Interpreter {
     }
 
     return Elixir_Enum["into/2"](Type.list(items), collectable);
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncComprehensionReduce().
+  // Deps: [Enum.to_list/1]
+  static comprehensionReduce(qualifiers, initialValue, clauses, context) {
+    let acc = initialValue;
+
+    Interpreter.#walkComprehension(qualifiers, 0, context, (leafContext) => {
+      acc = Interpreter.#evaluateMatchingClause(
+        acc,
+        clauses,
+        leafContext,
+        Interpreter.raiseCaseClauseError,
+      );
+    });
+
+    return acc;
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update comprehensionReduce().
+  // Deps: [Enum.to_list/1]
+  static async asyncComprehensionReduce(
+    qualifiers,
+    initialValue,
+    clauses,
+    context,
+  ) {
+    let acc = initialValue;
+
+    await Interpreter.#asyncWalkComprehension(
+      qualifiers,
+      0,
+      context,
+      async (leafContext) => {
+        acc = await Interpreter.#asyncEvaluateMatchingClause(
+          acc,
+          clauses,
+          leafContext,
+          Interpreter.raiseCaseClauseError,
+        );
+      },
+    );
+
+    return acc;
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncCond().
@@ -1745,9 +1792,9 @@ export default class Interpreter {
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #asyncWalkComprehension().
   // Deps: [Enum.to_list/1]
-  static #walkComprehension(qualifiers, index, context, mapper, items) {
+  static #walkComprehension(qualifiers, index, context, onLeaf) {
     if (index === qualifiers.length) {
-      items.push(mapper(context));
+      onLeaf(context);
       return;
     }
 
@@ -1755,13 +1802,7 @@ export default class Interpreter {
 
     if (qualifier.type === "filter") {
       if (Type.isTruthy(qualifier.filter(context))) {
-        Interpreter.#walkComprehension(
-          qualifiers,
-          index + 1,
-          context,
-          mapper,
-          items,
-        );
+        Interpreter.#walkComprehension(qualifiers, index + 1, context, onLeaf);
       }
 
       return;
@@ -1786,23 +1827,16 @@ export default class Interpreter {
         qualifiers,
         index + 1,
         contextClone,
-        mapper,
-        items,
+        onLeaf,
       );
     }
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #walkComprehension().
   // Deps: [Enum.to_list/1]
-  static async #asyncWalkComprehension(
-    qualifiers,
-    index,
-    context,
-    mapper,
-    items,
-  ) {
+  static async #asyncWalkComprehension(qualifiers, index, context, onLeaf) {
     if (index === qualifiers.length) {
-      items.push(await mapper(context));
+      await onLeaf(context);
       return;
     }
 
@@ -1814,8 +1848,7 @@ export default class Interpreter {
           qualifiers,
           index + 1,
           context,
-          mapper,
-          items,
+          onLeaf,
         );
       }
 
@@ -1841,8 +1874,7 @@ export default class Interpreter {
         qualifiers,
         index + 1,
         contextClone,
-        mapper,
-        items,
+        onLeaf,
       );
     }
   }

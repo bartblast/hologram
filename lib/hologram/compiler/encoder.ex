@@ -236,7 +236,7 @@ defmodule Hologram.Compiler.Encoder do
     |> encode_as_object()
   end
 
-  def encode_ir(%IR.Comprehension{} = comprehension, context) do
+  def encode_ir(%IR.Comprehension{reducer: nil} = comprehension, context) do
     qualifiers =
       encode_as_array(comprehension.qualifiers, context, &encode_comprehension_qualifier/2)
 
@@ -248,6 +248,20 @@ defmodule Hologram.Compiler.Encoder do
       "(await Interpreter.asyncComprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context))"
     else
       "Interpreter.comprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context)"
+    end
+  end
+
+  def encode_ir(%IR.Comprehension{} = comprehension, context) do
+    qualifiers =
+      encode_as_array(comprehension.qualifiers, context, &encode_comprehension_qualifier/2)
+
+    initial_value = encode_ir(comprehension.reducer.initial_value, context)
+    clauses = encode_as_array(comprehension.reducer.clauses, context)
+
+    if context.async? do
+      "(await Interpreter.asyncComprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context))"
+    else
+      "Interpreter.comprehensionReduce(#{qualifiers}, #{initial_value}, #{clauses}, context)"
     end
   end
 
