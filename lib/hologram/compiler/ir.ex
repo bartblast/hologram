@@ -137,7 +137,12 @@ defmodule Hologram.Compiler.IR do
     defstruct [:qualifiers, :collectable, :unique, :mapper, :reducer]
 
     @type t :: %__MODULE__{
-            qualifiers: list(IR.Clause.t() | IR.ComprehensionFilter.t()),
+            qualifiers:
+              list(
+                IR.Clause.t()
+                | IR.ComprehensionBitstringGenerator.t()
+                | IR.ComprehensionFilter.t()
+              ),
             collectable: IR.t(),
             unique: %IR.AtomType{value: boolean},
             mapper: IR.Block.t() | nil,
@@ -148,6 +153,14 @@ defmodule Hologram.Compiler.IR do
               }
               | nil
           }
+  end
+
+  defmodule ComprehensionBitstringGenerator do
+    @moduledoc false
+
+    defstruct [:match, :body]
+
+    @type t :: %__MODULE__{match: IR.BitstringType.t(), body: IR.t()}
   end
 
   defmodule ComprehensionFilter do
