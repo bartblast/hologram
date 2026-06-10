@@ -8,180 +8,180 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module10
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module100
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module101
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module102
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module103
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module104
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module105
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module106
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module107
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module108
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module109
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module110
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module111
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module112
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module113
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module114
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module115
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module116
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module117
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module118
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module119
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module120
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module121
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module122
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module123
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module124
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module125
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module126
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module127
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module128
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module129
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module130
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module131
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module132
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module133
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module134
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module135
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module136
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module137
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module138
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module139
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module140
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module141
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module142
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module143
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module144
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module145
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module146
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module147
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module148
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module149
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module150
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module151
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module152
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module153
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module154
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module155
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module157
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module158
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module159
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module160
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module161
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module162
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module163
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module164
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module165
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module166
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module167
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module168
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module169
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module170
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module171
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module172
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module173
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module174
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module175
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module176
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module19
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module20
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module21
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module22
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module23
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module24
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module25
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module26
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module27
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module28
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module29
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module30
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module31
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module32
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module33
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module34
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module35
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module36
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module37
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module38
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module39
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module40
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module41
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module42
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module43
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module44
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module45
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module46
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module47
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module48
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module49
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module50
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module51
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module52
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module53
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module54
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module55
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module56
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module57
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module58
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module59
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module60
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module61
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module62
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module63
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module64
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module65
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module66
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module67
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module68
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module69
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module70
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module71
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module72
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module73
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module74
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module75
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module76
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module77
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module78
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module79
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module80
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module81
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module82
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module83
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module84
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module85
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module86
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module87
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module88
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module89
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module90
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module91
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module92
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module93
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module94
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module95
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module96
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module97
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module98
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module99
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module10
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module100
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module101
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module102
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module103
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module104
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module105
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module106
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module107
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module108
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module109
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module11
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module110
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module111
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module112
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module113
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module114
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module115
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module116
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module117
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module118
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module119
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module12
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module120
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module121
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module122
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module123
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module124
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module125
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module126
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module127
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module128
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module129
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module13
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module130
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module131
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module132
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module133
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module134
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module135
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module136
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module137
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module138
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module139
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module14
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module140
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module141
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module142
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module143
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module144
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module145
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module146
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module147
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module148
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module149
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module15
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module150
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module151
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module152
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module153
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module154
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module155
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module157
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module158
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module159
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module16
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module160
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module161
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module162
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module163
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module164
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module165
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module166
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module167
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module168
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module169
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module17
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module170
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module171
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module172
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module173
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module174
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module175
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module176
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module18
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module19
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module20
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module21
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module22
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module23
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module24
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module25
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module26
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module27
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module28
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module29
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module3
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module30
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module31
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module32
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module33
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module34
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module35
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module36
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module37
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module38
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module39
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module4
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module40
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module41
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module42
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module43
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module44
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module45
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module46
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module47
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module48
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module49
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module5
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module50
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module51
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module52
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module53
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module54
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module55
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module56
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module57
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module58
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module59
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module6
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module60
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module61
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module62
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module63
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module64
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module65
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module66
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module67
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module68
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module69
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module7
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module70
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module71
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module72
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module73
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module74
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module75
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module76
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module77
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module78
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module79
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module8
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module80
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module81
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module82
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module83
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module84
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module85
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module86
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module87
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module88
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module89
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module9
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module90
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module91
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module92
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module93
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module94
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module95
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module96
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module97
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module98
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module99
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -1961,7 +1961,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   describe "partially applied remote function" do
     test "AST from source code" do
-      ast = ast("&Hologram.Test.Fixtures.Compiler.Tranformer.Module32.my_fun(&1, 2, [3, &2])")
+      ast = ast("&Hologram.Test.Fixtures.Compiler.Transformer.Module32.my_fun(&1, 2, [3, &2])")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
@@ -4261,7 +4261,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "empty body (AST from source code)" do
       ast =
         ast("""
-        defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module90 do
+        defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module90 do
         end
         """)
 
@@ -4281,7 +4281,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "single expression body (AST from source code)" do
       ast =
         ast("""
-        defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module91 do
+        defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module91 do
           def my_fun, do: :ok
         end
         """)
@@ -4306,7 +4306,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "multiple expressions body (AST from source code)" do
       ast =
         ast("""
-        defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module92 do
+        defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module92 do
           def my_fun_1, do: :ok
           
           def my_fun_2, do: :ok
@@ -4654,7 +4654,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "struct" do
-    @ast ast("%Hologram.Test.Fixtures.Compiler.Tranformer.Module105{a: 1, b: 2}")
+    @ast ast("%Hologram.Test.Fixtures.Compiler.Transformer.Module105{a: 1, b: 2}")
 
     test "without cons operator, not in pattern (AST from source code)" do
       context = %Context{pattern?: false}
@@ -4791,7 +4791,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # test "without cons operator, not in pattern, with match placeholder instead of module"
 
     test "with cons operator, not in pattern (AST from source code)" do
-      ast = ast("%Hologram.Test.Fixtures.Compiler.Tranformer.Module109{x | a: 1, b: 2}")
+      ast = ast("%Hologram.Test.Fixtures.Compiler.Transformer.Module109{x | a: 1, b: 2}")
 
       context = %Context{pattern?: false}
 

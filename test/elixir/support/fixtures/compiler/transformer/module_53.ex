@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module53 do
+defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module53 do
   def test do
     for x <- [1, 2], reduce: {1, 9} do
       {1, a} -> my_reducer_1(a, x)

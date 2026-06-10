@@ -1,7 +1,7 @@
 defmodule Hologram.Compiler.ASTTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.AST
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module1
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module1
 
   test "for_code/1" do
     assert for_code("1 + 2") == {:+, [line: 1], [1, 2]}
@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.ASTTest do
       assert {:defmodule, [context: Elixir, import: Kernel],
               [
                 {:__aliases__, [alias: false],
-                 [:Hologram, :Test, :Fixtures, :Compiler, :Tranformer, :Module1]},
+                 [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module1]},
                 _body
               ]} = for_module(Module1)
     end
@@ -23,7 +23,7 @@ defmodule Hologram.Compiler.ASTTest do
       assert {:defmodule, [context: Elixir, import: Kernel],
               [
                 {:__aliases__, [alias: false],
-                 [:Hologram, :Test, :Fixtures, :Compiler, :Tranformer, :Module1]},
+                 [:Hologram, :Test, :Fixtures, :Compiler, :Transformer, :Module1]},
                 _body
               ]} = for_module(Module1, beam_path)
     end

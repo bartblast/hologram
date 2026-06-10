@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module139 do
+defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module139 do
   def test do
     1
   catch

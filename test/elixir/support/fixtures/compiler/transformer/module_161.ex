@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 # credo:disable-for-this-file Credo.Check.Refactor.WithClauses
-defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module161 do
+defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module161 do
   def test do
     with a = 1 do
       a

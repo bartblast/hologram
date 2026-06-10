@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module46 do
+defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module46 do
   def test do
     for x <- [1, 2], my_filter(x), do: x * x
   end

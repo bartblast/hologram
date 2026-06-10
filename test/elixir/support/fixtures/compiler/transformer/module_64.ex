@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module64 do
+defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module64 do
   @dialyzer {:no_improper_lists, test: 0}
 
   def test do

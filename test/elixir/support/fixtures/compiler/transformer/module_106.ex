@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module106 do
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module106
+defmodule Hologram.Test.Fixtures.Compiler.Transformer.Module106 do
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module106
 
   defstruct [:a, :b]
 
