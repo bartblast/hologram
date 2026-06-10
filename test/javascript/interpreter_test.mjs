@@ -240,6 +240,92 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, expected);
     });
+
+    it("generators can use variables bound by an earlier generator", async () => {
+      // for x <- [1, 2], y <- [x, x + 10], do: {x, y}
+
+      const generator1 = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const generator2 = {
+        type: "generator",
+        match: Type.variablePattern("y"),
+        guards: [],
+        body: async (context) =>
+          Type.list([
+            context.vars.x,
+            Erlang["+/2"](context.vars.x, Type.integer(10)),
+          ]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator1, generator2],
+        Type.list(),
+        false,
+        async (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
+      );
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(1)]),
+        Type.tuple([Type.integer(1), Type.integer(11)]),
+        Type.tuple([Type.integer(2), Type.integer(2)]),
+        Type.tuple([Type.integer(2), Type.integer(12)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("filters placed between generators prune the branch before the next generator runs", async () => {
+      // for x <- [[1, 2], :nope, [3]], is_list(x), y <- x, do: y
+      //
+      // The filter must reject :nope before `y <- x` is evaluated,
+      // otherwise iterating the :nope atom as an enumerable would fail.
+
+      const generator1 = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) =>
+          Type.list([
+            Type.list([Type.integer(1), Type.integer(2)]),
+            Type.atom("nope"),
+            Type.list([Type.integer(3)]),
+          ]),
+      };
+
+      const filter = {
+        type: "filter",
+        filter: async (context) => Erlang["is_list/1"](context.vars.x),
+      };
+
+      const generator2 = {
+        type: "generator",
+        match: Type.variablePattern("y"),
+        guards: [],
+        body: async (context) => context.vars.x,
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator1, filter, generator2],
+        Type.list(),
+        false,
+        async (context) => context.vars.y,
+        context,
+      );
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("asyncCond()", () => {
@@ -1007,6 +1093,45 @@ describe("Interpreter", () => {
         assert.deepStrictEqual(result, expected);
       });
 
+      it("can use variables bound by an earlier generator", () => {
+        // for x <- [1, 2], y <- [x, x + 10], do: {x, y}
+
+        const generator1 = {
+          type: "generator",
+          match: Type.variablePattern("x"),
+          guards: [],
+          body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+        };
+
+        const generator2 = {
+          type: "generator",
+          match: Type.variablePattern("y"),
+          guards: [],
+          body: (context) =>
+            Type.list([
+              context.vars.x,
+              Erlang["+/2"](context.vars.x, Type.integer(10)),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator1, generator2],
+          Type.list(),
+          false,
+          (context) => Type.tuple([context.vars.x, context.vars.y]),
+          context,
+        );
+
+        const expected = Type.list([
+          Type.tuple([Type.integer(1), Type.integer(1)]),
+          Type.tuple([Type.integer(1), Type.integer(11)]),
+          Type.tuple([Type.integer(2), Type.integer(2)]),
+          Type.tuple([Type.integer(2), Type.integer(12)]),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
       it("ignores enumerable items that don't match the pattern", () => {
         // for {11, x} <- [1, {11, 2}, 3, {11, 4}],
         //     {12, y} <- [5, {12, 6}, 7, {12, 8}],
@@ -1420,6 +1545,53 @@ describe("Interpreter", () => {
         );
 
         const expected = Type.list([Type.integer(1), Type.integer(3)]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("placed between generators prunes the branch before the next generator runs", () => {
+        // for x <- [[1, 2], :nope, [3]], is_list(x), y <- x, do: y
+        //
+        // The filter must reject :nope before `y <- x` is evaluated,
+        // otherwise iterating the :nope atom as an enumerable would fail.
+
+        const generator1 = {
+          type: "generator",
+          match: Type.variablePattern("x"),
+          guards: [],
+          body: (_context) =>
+            Type.list([
+              Type.list([Type.integer(1), Type.integer(2)]),
+              Type.atom("nope"),
+              Type.list([Type.integer(3)]),
+            ]),
+        };
+
+        const filter = {
+          type: "filter",
+          filter: (context) => Erlang["is_list/1"](context.vars.x),
+        };
+
+        const generator2 = {
+          type: "generator",
+          match: Type.variablePattern("y"),
+          guards: [],
+          body: (context) => context.vars.x,
+        };
+
+        const result = Interpreter.comprehension(
+          [generator1, filter, generator2],
+          Type.list(),
+          false,
+          (context) => context.vars.y,
+          context,
+        );
+
+        const expected = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
 
         assert.deepStrictEqual(result, expected);
       });
