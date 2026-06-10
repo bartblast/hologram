@@ -148,6 +148,7 @@ describe("Interpreter", () => {
 
     it("returns a Promise", () => {
       const generator = {
+        type: "generator",
         match: Type.variablePattern("x"),
         guards: [],
         body: async (_context) => Type.list([Type.integer(1)]),
@@ -155,7 +156,6 @@ describe("Interpreter", () => {
 
       const result = Interpreter.asyncComprehension(
         [generator],
-        [],
         Type.list(),
         false,
         async (context) => context.vars.x,
@@ -167,6 +167,7 @@ describe("Interpreter", () => {
 
     it("awaits generator body", async () => {
       const generator = {
+        type: "generator",
         match: Type.variablePattern("x"),
         guards: [],
         body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
@@ -174,7 +175,6 @@ describe("Interpreter", () => {
 
       const result = await Interpreter.asyncComprehension(
         [generator],
-        [],
         Type.list(),
         false,
         async (context) => context.vars.x,
@@ -188,20 +188,23 @@ describe("Interpreter", () => {
 
     it("awaits filters", async () => {
       const generator = {
+        type: "generator",
         match: Type.variablePattern("x"),
         guards: [],
         body: async (_context) =>
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
       };
 
-      const filter = async (context) => {
-        // keep only values > 1
-        return Erlang[">/2"](context.vars.x, Type.integer(1));
+      const filter = {
+        type: "filter",
+        filter: async (context) => {
+          // keep only values > 1
+          return Erlang[">/2"](context.vars.x, Type.integer(1));
+        },
       };
 
       const result = await Interpreter.asyncComprehension(
-        [generator],
-        [filter],
+        [generator, filter],
         Type.list(),
         false,
         async (context) => context.vars.x,
@@ -215,6 +218,7 @@ describe("Interpreter", () => {
 
     it("awaits mapper", async () => {
       const generator = {
+        type: "generator",
         match: Type.variablePattern("x"),
         guards: [],
         body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
@@ -222,7 +226,6 @@ describe("Interpreter", () => {
 
       const result = await Interpreter.asyncComprehension(
         [generator],
-        [],
         Type.list(),
         false,
         async (context) => {
@@ -973,12 +976,14 @@ describe("Interpreter", () => {
         // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
         };
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [],
           body: (_context) => Type.list([Type.integer(3), Type.integer(4)]),
@@ -986,7 +991,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.map(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1017,6 +1021,7 @@ describe("Interpreter", () => {
           ]);
 
         const generator1 = {
+          type: "generator",
           match: Type.tuple([Type.integer(11), Type.variablePattern("x")]),
           guards: [],
           body: enumerable1,
@@ -1031,6 +1036,7 @@ describe("Interpreter", () => {
           ]);
 
         const generator2 = {
+          type: "generator",
           match: Type.tuple([Type.integer(12), Type.variablePattern("y")]),
           guards: [],
           body: enumerable2,
@@ -1038,7 +1044,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1062,6 +1067,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(1), Type.integer(2)]);
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: enumerable1,
@@ -1071,6 +1077,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(3), Type.integer(4)]);
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [],
           body: enumerable2,
@@ -1082,7 +1089,6 @@ describe("Interpreter", () => {
 
         Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.map(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1113,6 +1119,7 @@ describe("Interpreter", () => {
           Erlang["/=/2"](context.vars.x, Type.integer(2));
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [guard1a],
           body: enumerable1,
@@ -1125,6 +1132,7 @@ describe("Interpreter", () => {
           Erlang["/=/2"](context.vars.y, Type.integer(4));
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [guard2a],
           body: enumerable2,
@@ -1132,7 +1140,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1172,6 +1179,7 @@ describe("Interpreter", () => {
           Erlang["==/2"](context.vars.x, Type.integer(4));
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [guard1a, guard1b],
           body: enumerable1,
@@ -1191,6 +1199,7 @@ describe("Interpreter", () => {
           Erlang["==/2"](context.vars.y, Type.integer(7));
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [guard2a, guard2b],
           body: enumerable2,
@@ -1198,7 +1207,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1225,6 +1233,7 @@ describe("Interpreter", () => {
           Erlang["/=/2"](context.vars.x, context.vars.b);
 
         const generator = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [guard],
           body: enumerable,
@@ -1232,7 +1241,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator],
-          [],
           Type.list(),
           false,
           (context) => context.vars.x,
@@ -1251,6 +1259,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(1), Type.integer(2)]);
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: enumerable1,
@@ -1263,6 +1272,7 @@ describe("Interpreter", () => {
           Erlang["/=/2"](context.vars.x, Type.integer(1));
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [guard2],
           body: enumerable2,
@@ -1270,7 +1280,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1293,6 +1302,7 @@ describe("Interpreter", () => {
           Interpreter.raiseArgumentError("my message");
 
         const generator = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [guard],
           body: enumerable,
@@ -1302,7 +1312,6 @@ describe("Interpreter", () => {
           () =>
             Interpreter.comprehension(
               [generator],
-              [],
               Type.list(),
               false,
               (context) => context.vars.x,
@@ -1332,6 +1341,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: enumerable1,
@@ -1341,27 +1351,32 @@ describe("Interpreter", () => {
           Type.list([Type.integer(4), Type.integer(5), Type.integer(6)]);
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [],
           body: enumerable2,
         };
 
-        const filters = [
-          (context) =>
+        const filter1 = {
+          type: "filter",
+          filter: (context) =>
             Erlang["</2"](
               Erlang["+/2"](context.vars.x, context.vars.y),
               Type.integer(8),
             ),
-          (context) =>
+        };
+
+        const filter2 = {
+          type: "filter",
+          filter: (context) =>
             Erlang[">/2"](
               Erlang["-/2"](context.vars.y, context.vars.x),
               Type.integer(2),
             ),
-        ];
+        };
 
         const result = Interpreter.comprehension(
-          [generator1, generator2],
-          filters,
+          [generator1, generator2, filter1, filter2],
           Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1385,17 +1400,19 @@ describe("Interpreter", () => {
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
         const generator = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: enumerable,
         };
 
-        const filter = (context) =>
-          Erlang["/=/2"](context.vars.x, context.vars.b);
+        const filter = {
+          type: "filter",
+          filter: (context) => Erlang["/=/2"](context.vars.x, context.vars.b),
+        };
 
         const result = Interpreter.comprehension(
-          [generator],
-          [filter],
+          [generator, filter],
           Type.list(),
           false,
           (context) => context.vars.x,
@@ -1416,6 +1433,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(1), Type.integer(2), Type.integer(1)]);
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: enumerable1,
@@ -1425,6 +1443,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(3), Type.integer(4), Type.integer(3)]);
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [],
           body: enumerable2,
@@ -1432,7 +1451,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.list(),
           true,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
@@ -1458,6 +1476,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(1), Type.integer(2)]);
 
         const generator = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: enumerable,
@@ -1465,7 +1484,6 @@ describe("Interpreter", () => {
 
         const result = Interpreter.comprehension(
           [generator],
-          [],
           Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.b]),
@@ -1487,6 +1505,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(1), Type.integer(2)]);
 
         const generator1 = {
+          type: "generator",
           match: Type.variablePattern("x"),
           guards: [],
           body: enumerable1,
@@ -1496,6 +1515,7 @@ describe("Interpreter", () => {
           Type.list([Type.integer(3), Type.integer(4)]);
 
         const generator2 = {
+          type: "generator",
           match: Type.variablePattern("y"),
           guards: [],
           body: enumerable2,
@@ -1507,7 +1527,6 @@ describe("Interpreter", () => {
 
         Interpreter.comprehension(
           [generator1, generator2],
-          [],
           Type.map(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
