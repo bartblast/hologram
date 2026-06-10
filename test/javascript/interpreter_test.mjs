@@ -283,8 +283,8 @@ describe("Interpreter", () => {
     it("filters placed between generators prune the branch before the next generator runs", async () => {
       // for x <- [[1, 2], :nope, [3]], is_list(x), y <- x, do: y
       //
-      // The filter must reject :nope before `y <- x` is evaluated,
-      // otherwise iterating the :nope atom as an enumerable would fail.
+      // The filter must reject :nope before `y <- x` is evaluated -
+      // the generator body throws if it is called for the pruned branch.
 
       const generator1 = {
         type: "generator",
@@ -307,7 +307,15 @@ describe("Interpreter", () => {
         type: "generator",
         match: Type.variablePattern("y"),
         guards: [],
-        body: async (context) => context.vars.x,
+        body: async (context) => {
+          if (!Type.isList(context.vars.x)) {
+            throw new Error(
+              "the generator body was evaluated for a filtered-out branch",
+            );
+          }
+
+          return context.vars.x;
+        },
       };
 
       const result = await Interpreter.asyncComprehension(
@@ -1552,8 +1560,8 @@ describe("Interpreter", () => {
       it("placed between generators prunes the branch before the next generator runs", () => {
         // for x <- [[1, 2], :nope, [3]], is_list(x), y <- x, do: y
         //
-        // The filter must reject :nope before `y <- x` is evaluated,
-        // otherwise iterating the :nope atom as an enumerable would fail.
+        // The filter must reject :nope before `y <- x` is evaluated -
+        // the generator body throws if it is called for the pruned branch.
 
         const generator1 = {
           type: "generator",
@@ -1576,7 +1584,15 @@ describe("Interpreter", () => {
           type: "generator",
           match: Type.variablePattern("y"),
           guards: [],
-          body: (context) => context.vars.x,
+          body: (context) => {
+            if (!Type.isList(context.vars.x)) {
+              throw new Error(
+                "the generator body was evaluated for a filtered-out branch",
+              );
+            }
+
+            return context.vars.x;
+          },
         };
 
         const result = Interpreter.comprehension(
