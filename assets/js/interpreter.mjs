@@ -1808,6 +1808,54 @@ export default class Interpreter {
       return;
     }
 
+    if (qualifier.type === "bitstring_generator") {
+      const source = qualifier.body(context);
+
+      if (!Type.isBitstring(source)) {
+        Interpreter.raiseErlangError(
+          Interpreter.buildErlangErrorMsg(
+            `{:bad_generator, ${Interpreter.inspect(source)}}`,
+          ),
+        );
+      }
+
+      // Appending a rest segment makes the exact-match bitstring pattern machinery
+      // match only the prefix. The $ character is illegal in Elixir identifiers,
+      // so the $rest name can't collide with user variables.
+      const restSegment = Type.bitstringSegment(Type.variablePattern("$rest"), {
+        type: "bitstring",
+      });
+
+      const prefixPattern = Type.bitstringPattern([
+        ...qualifier.match.segments,
+        restSegment,
+      ]);
+
+      let remaining = source;
+
+      while (true) {
+        const contextClone = Interpreter.cloneContext(context);
+
+        if (!Interpreter.isMatched(prefixPattern, remaining, contextClone)) {
+          break;
+        }
+
+        remaining = contextClone.vars.__matched__["$rest"];
+        delete contextClone.vars.__matched__["$rest"];
+
+        Interpreter.updateVarsToMatchedValues(contextClone);
+
+        Interpreter.#walkComprehension(
+          qualifiers,
+          index + 1,
+          contextClone,
+          onLeaf,
+        );
+      }
+
+      return;
+    }
+
     const list = Elixir_Enum["to_list/1"](qualifier.body(context)).data;
 
     for (const item of list) {
