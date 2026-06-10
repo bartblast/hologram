@@ -1142,6 +1142,18 @@ To trigger a command, use the `command:` key instead of `action:` (note that del
 <button $click={command: :my_command, params: %{key: value}}>Click me</button>
 ```
 
+##### Disabling a Binding
+
+An event binding that resolves to no operation is disabled: nothing is dispatched, and the browser's native behavior is left untouched (no `preventDefault`, no `stopPropagation`). This makes bindings conditional - compute the operation from state and return `nil` to switch the binding off:
+
+```holo
+<button $click={if @editable do :save end}>Save</button>
+```
+
+The rule covers every expression form: a `nil` whole value like `$click={nil}`, a `nil` shorthand name slot like `$click={nil, x: 1}`, and a `nil` longhand `action:` / `command:` key like `$click={action: nil}`. The value is read at event time from the current render, so a re-render can enable or disable the binding at any point.
+
+Note that `{if @editable, do: :save}` is invalid inside template braces (they are tuple braces, so Elixir requires parentheses or a `do...end` block for the ambiguous call) - use the `do...end` form shown above.
+
 #### Event Targets
 
 By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:

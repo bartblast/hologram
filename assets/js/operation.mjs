@@ -44,6 +44,37 @@ export default class Operation {
     );
   }
 
+  // An event binding is disabled when its operation name resolves to nil: the whole value
+  // (e.g. $click={nil}), the shorthand name slot (e.g. $click={nil, a: 1}), or the longhand
+  // action/command key (e.g. $click={action: nil}). The longhand branch mirrors the name
+  // resolution in #constructFromExpressionLonghandSyntaxSpec, so this predicate and dispatch
+  // can never disagree on which key names the operation.
+  static isDisabled(specDom) {
+    if (Operation.#isExpressionShorthandSyntax(specDom)) {
+      return Type.isNil(specDom.data[0].data[1].data[0]);
+    }
+
+    if (Operation.#isExpressionLonghandSyntax(specDom)) {
+      const specKeywordList = specDom.data[0].data[1].data[0];
+
+      const actionName = Interpreter.accessKeywordListElement(
+        specKeywordList,
+        Type.atom("action"),
+      );
+
+      const name = actionName
+        ? actionName
+        : Interpreter.accessKeywordListElement(
+            specKeywordList,
+            Type.atom("command"),
+          );
+
+      return name === null || Type.isNil(name);
+    }
+
+    return false;
+  }
+
   // Deps: [:maps.from_list/1, :maps.put/3]
   #buildParamsMap(paramsKeywordList) {
     this.params = Erlang_Maps["put/3"](

@@ -78,6 +78,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Longhand (actions or commands): `$click={action: :my_action, target: "cid", params: %{key: value}}`.
 - Trigger commands with longhand: `$click={command: :my_command, params: %{key: value}}`.
 - Delays (actions only): `$click={action: :my_action, delay: 1000}`.
+- A binding that resolves to no operation is disabled: nothing dispatches and the browser's native default proceeds (no `preventDefault`, no `stopPropagation`). Covers a `nil` whole value (`$click={nil}`), a `nil` shorthand name slot (`$click={nil, x: 1}`), and a `nil` longhand `action:`/`command:` key (`$click={action: nil}`). The value is read at event time, so a re-render can enable or disable the binding: `$click={if @editable do :save end}`.
+- Conditionals inside template braces need the `do...end` form: `{if @editable, do: :save}` fails the build (template braces are tuple braces, making the call ambiguous), `{if @editable do :save end}` works.
 - Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
 - Event data is available in `params.event` inside the action/command handler.
 - `$change` on an input fires on every keystroke (text inputs) or on selection change (checkboxes, radios, selects). On a form element, it fires on field blur.

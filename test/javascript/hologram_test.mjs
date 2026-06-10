@@ -327,6 +327,11 @@ describe("Hologram", () => {
       [Type.atom("text"), Type.bitstring("my_action")],
     ]);
 
+    // Example: $click={nil}
+    const disabledSpecDom = Type.keywordList([
+      [Type.atom("expression"), Type.tuple([Type.nil()])],
+    ]);
+
     const defaultTarget = cid1;
     const eventType = "click";
 
@@ -869,6 +874,64 @@ describe("Hologram", () => {
       dispatch();
 
       sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("returns null for a disabled binding", () => {
+      const result = Hologram.handleUiEvent(
+        notIgnoredEvent,
+        eventType,
+        disabledSpecDom,
+        defaultTarget,
+      );
+
+      assert.isNull(result);
+
+      sinon.assert.notCalled(clientSendCommandStub);
+      sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
+      sinon.assert.notCalled(executePrefetchPageActionStub);
+      sinon.assert.notCalled(scheduleActionStub);
+    });
+
+    it("does not prevent default for a disabled binding", () => {
+      // SubmitEvent.isDefaultAllowed is false, so an enabled binding would prevent the default.
+
+      const preventDefault = sinon.spy();
+
+      const submitEvent = {
+        target: document.createElement("form"),
+        preventDefault,
+      };
+
+      Hologram.handleUiEvent(
+        submitEvent,
+        "submit",
+        disabledSpecDom,
+        defaultTarget,
+      );
+
+      sinon.assert.notCalled(preventDefault);
+    });
+
+    it("does not stop propagation for a disabled binding when stopPropagation is set", () => {
+      const stopPropagation = sinon.spy();
+
+      const submitEvent = {
+        target: document.createElement("form"),
+        preventDefault: () => null,
+        stopPropagation,
+      };
+
+      Hologram.handleUiEvent(
+        submitEvent,
+        "submit",
+        disabledSpecDom,
+        defaultTarget,
+        false,
+        true,
+      );
+
+      sinon.assert.notCalled(stopPropagation);
     });
   });
 
