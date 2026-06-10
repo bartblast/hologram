@@ -289,50 +289,9 @@ export default class Interpreter {
 
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncComprehension().
   // Deps: [Enum.into/2, Enum.to_list/1]
-  static comprehension(
-    generators,
-    filters,
-    collectable,
-    unique,
-    mapper,
-    context,
-  ) {
-    const generatorsCount = generators.length;
-
-    const sets = generators.map(
-      (generator) => Elixir_Enum["to_list/1"](generator.body(context)).data,
-    );
-
-    let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
-      const contextClone = Interpreter.cloneContext(context);
-
-      for (let i = 0; i < generatorsCount; ++i) {
-        if (
-          Interpreter.isMatched(
-            generators[i].match,
-            combination[i],
-            contextClone,
-          )
-        ) {
-          Interpreter.updateVarsToMatchedValues(contextClone);
-
-          if (Interpreter.#evaluateGuards(generators[i].guards, contextClone)) {
-            continue;
-          }
-        }
-
-        return acc;
-      }
-
-      for (const filter of filters) {
-        if (Type.isFalsy(filter(contextClone))) {
-          return acc;
-        }
-      }
-
-      acc.push(mapper(contextClone));
-      return acc;
-    }, []);
+  static comprehension(qualifiers, collectable, unique, mapper, context) {
+    let items = [];
+    Interpreter.#walkComprehension(qualifiers, 0, context, mapper, items);
 
     if (unique) {
       items = uniqWith(items, Interpreter.isStrictlyEqual);
@@ -344,60 +303,20 @@ export default class Interpreter {
   // SYNC/ASYNC PAIR: When modifying this function, also update comprehension().
   // Deps: [Enum.into/2, Enum.to_list/1]
   static async asyncComprehension(
-    generators,
-    filters,
+    qualifiers,
     collectable,
     unique,
     mapper,
     context,
   ) {
-    const generatorsCount = generators.length;
-    const sets = [];
-
-    for (const generator of generators) {
-      sets.push(Elixir_Enum["to_list/1"](await generator.body(context)).data);
-    }
-
     let items = [];
-
-    for (const combination of Utils.cartesianProduct(sets)) {
-      const contextClone = Interpreter.cloneContext(context);
-      let skip = false;
-
-      for (let i = 0; i < generatorsCount; ++i) {
-        if (
-          Interpreter.isMatched(
-            generators[i].match,
-            combination[i],
-            contextClone,
-          )
-        ) {
-          Interpreter.updateVarsToMatchedValues(contextClone);
-
-          if (Interpreter.#evaluateGuards(generators[i].guards, contextClone)) {
-            continue;
-          }
-        }
-
-        skip = true;
-        break;
-      }
-
-      if (skip) continue;
-
-      let filtered = false;
-
-      for (const filter of filters) {
-        if (Type.isFalsy(await filter(contextClone))) {
-          filtered = true;
-          break;
-        }
-      }
-
-      if (filtered) continue;
-
-      items.push(await mapper(contextClone));
-    }
+    await Interpreter.#asyncWalkComprehension(
+      qualifiers,
+      0,
+      context,
+      mapper,
+      items,
+    );
 
     if (unique) {
       items = uniqWith(items, Interpreter.isStrictlyEqual);
@@ -1822,6 +1741,110 @@ export default class Interpreter {
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
     );
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #asyncWalkComprehension().
+  // Deps: [Enum.to_list/1]
+  static #walkComprehension(qualifiers, index, context, mapper, items) {
+    if (index === qualifiers.length) {
+      items.push(mapper(context));
+      return;
+    }
+
+    const qualifier = qualifiers[index];
+
+    if (qualifier.type === "filter") {
+      if (Type.isTruthy(qualifier.filter(context))) {
+        Interpreter.#walkComprehension(
+          qualifiers,
+          index + 1,
+          context,
+          mapper,
+          items,
+        );
+      }
+
+      return;
+    }
+
+    const list = Elixir_Enum["to_list/1"](qualifier.body(context)).data;
+
+    for (const item of list) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (!Interpreter.isMatched(qualifier.match, item, contextClone)) {
+        continue;
+      }
+
+      Interpreter.updateVarsToMatchedValues(contextClone);
+
+      if (!Interpreter.#evaluateGuards(qualifier.guards, contextClone)) {
+        continue;
+      }
+
+      Interpreter.#walkComprehension(
+        qualifiers,
+        index + 1,
+        contextClone,
+        mapper,
+        items,
+      );
+    }
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #walkComprehension().
+  // Deps: [Enum.to_list/1]
+  static async #asyncWalkComprehension(
+    qualifiers,
+    index,
+    context,
+    mapper,
+    items,
+  ) {
+    if (index === qualifiers.length) {
+      items.push(await mapper(context));
+      return;
+    }
+
+    const qualifier = qualifiers[index];
+
+    if (qualifier.type === "filter") {
+      if (Type.isTruthy(await qualifier.filter(context))) {
+        await Interpreter.#asyncWalkComprehension(
+          qualifiers,
+          index + 1,
+          context,
+          mapper,
+          items,
+        );
+      }
+
+      return;
+    }
+
+    const list = Elixir_Enum["to_list/1"](await qualifier.body(context)).data;
+
+    for (const item of list) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (!Interpreter.isMatched(qualifier.match, item, contextClone)) {
+        continue;
+      }
+
+      Interpreter.updateVarsToMatchedValues(contextClone);
+
+      if (!Interpreter.#evaluateGuards(qualifier.guards, contextClone)) {
+        continue;
+      }
+
+      await Interpreter.#asyncWalkComprehension(
+        qualifiers,
+        index + 1,
+        contextClone,
+        mapper,
+        items,
+      );
+    }
   }
 
   // SYNC/ASYNC PAIR: When modifying this function, also update #asyncWithElse().
