@@ -3444,7 +3444,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Guards:** Guards in all contexts (done)
 
-**Comprehensions:** Bitstring Generator (todo), Enumerable Generator (done), Filter (done), :into Option (done), :reduce Option (todo), :uniq Option (done)
+**Comprehensions:** Bitstring Generator (todo), Enumerable Generator (done), Filter (done), :into Option (done), :reduce Option (done), :uniq Option (done)
 
 **Other:** Behaviours (done), Bitwise Module Operators (todo), Error Handling (todo), Processes (deferred), Protocols (done), Regular Expressions (todo)
 
