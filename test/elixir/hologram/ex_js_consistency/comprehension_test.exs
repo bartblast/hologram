@@ -66,29 +66,29 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
 
     test "returns the initial value when the generator is empty" do
       result =
-        for x <- [], reduce: 0 do
+        for x <- [], reduce: 100 do
           acc -> acc + x
         end
 
-      assert result == 0
+      assert result == 100
     end
 
     test "returns the initial value when filters reject all items" do
       result =
-        for x <- [1, 2], x > 10, reduce: 0 do
+        for x <- [1, 2], x > 10, reduce: 200 do
           acc -> acc + x
         end
 
-      assert result == 0
+      assert result == 200
     end
 
     test "filters limit which items update the accumulator" do
       result =
-        for x <- [1, 2, 3, 4], rem(x, 2) == 0, reduce: 0 do
+        for x <- [1, 2, 3, 4], rem(x, 2) == 0, reduce: 300 do
           acc -> acc + x
         end
 
-      assert result == 6
+      assert result == 306
     end
 
     test "dispatches to the clause matching the accumulator" do

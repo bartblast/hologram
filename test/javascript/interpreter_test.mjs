@@ -1971,7 +1971,7 @@ describe("Interpreter", () => {
     });
 
     it("returns the initial value when the generator is empty", () => {
-      // for x <- [], reduce: 0 do
+      // for x <- [], reduce: 100 do
       //   acc -> acc + x
       // end
 
@@ -1990,16 +1990,16 @@ describe("Interpreter", () => {
 
       const result = Interpreter.comprehensionReduce(
         [generator],
-        Type.integer(0),
+        Type.integer(100),
         [clause],
         context,
       );
 
-      assert.deepStrictEqual(result, Type.integer(0));
+      assert.deepStrictEqual(result, Type.integer(100));
     });
 
     it("returns the initial value when filters reject all items", () => {
-      // for x <- [1, 2], x > 10, reduce: 0 do
+      // for x <- [1, 2], x > 10, reduce: 200 do
       //   acc -> acc + x
       // end
 
@@ -2023,16 +2023,16 @@ describe("Interpreter", () => {
 
       const result = Interpreter.comprehensionReduce(
         [generator, filter],
-        Type.integer(0),
+        Type.integer(200),
         [clause],
         context,
       );
 
-      assert.deepStrictEqual(result, Type.integer(0));
+      assert.deepStrictEqual(result, Type.integer(200));
     });
 
     it("filters limit which items update the accumulator", () => {
-      // for x <- [1, 2, 3, 4], rem(x, 2) == 0, reduce: 0 do
+      // for x <- [1, 2, 3, 4], rem(x, 2) == 0, reduce: 300 do
       //   acc -> acc + x
       // end
 
@@ -2066,12 +2066,12 @@ describe("Interpreter", () => {
 
       const result = Interpreter.comprehensionReduce(
         [generator, filter],
-        Type.integer(0),
+        Type.integer(300),
         [clause],
         context,
       );
 
-      assert.deepStrictEqual(result, Type.integer(6));
+      assert.deepStrictEqual(result, Type.integer(306));
     });
 
     it("dispatches to the clause matching the accumulator", () => {
