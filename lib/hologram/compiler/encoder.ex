@@ -231,27 +231,23 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.Clause{} = clause, context) do
-    match = encode_ir(clause.match, %{context | pattern?: true})
-
-    # Guards are never async — Elixir guards are restricted to a safe subset of functions.
-    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
-
-    body = encode_closure(clause.body, context)
-
-    "{match: #{match}, guards: #{guards}, body: #{body}}"
+    clause
+    |> encode_clause_properties(context)
+    |> encode_as_object()
   end
 
   def encode_ir(%IR.Comprehension{} = comprehension, context) do
-    generators = encode_as_array(comprehension.generators, context)
-    filters = encode_as_array(comprehension.filters, context)
+    qualifiers =
+      encode_as_array(comprehension.qualifiers, context, &encode_comprehension_qualifier/2)
+
     collectable = encode_ir(comprehension.collectable, context)
     unique = comprehension.unique.value
     mapper = encode_closure(comprehension.mapper, context)
 
     if context.async? do
-      "(await Interpreter.asyncComprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context))"
+      "(await Interpreter.asyncComprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context))"
     else
-      "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context)"
+      "Interpreter.comprehension(#{qualifiers}, #{collectable}, #{unique}, #{mapper}, context)"
     end
   end
 
@@ -556,6 +552,12 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("[", "]")
   end
 
+  defp encode_as_object(properties) do
+    properties
+    |> Enum.map_join(", ", fn {name, value} -> "#{name}: #{value}" end)
+    |> StringUtils.wrap("{", "}")
+  end
+
   defp encode_as_string(value, wrap)
 
   defp encode_as_string(nil, false) do
@@ -651,6 +653,17 @@ defmodule Hologram.Compiler.Encoder do
     "\n#{expr_js};"
   end
 
+  defp encode_clause_properties(%IR.Clause{} = clause, context) do
+    match = encode_ir(clause.match, %{context | pattern?: true})
+
+    # Guards are never async — Elixir guards are restricted to a safe subset of functions.
+    guards = encode_as_array(clause.guards, %{context | async?: false}, &encode_closure/2)
+
+    body = encode_closure(clause.body, context)
+
+    [match: match, guards: guards, body: body]
+  end
+
   defp encode_closure(ir, context)
 
   defp encode_closure(nil, _context), do: "null"
@@ -669,6 +682,16 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_closure(ir, context) do
     "(context) => #{encode_ir(ir, context)}"
+  end
+
+  defp encode_comprehension_qualifier(%IR.Clause{} = clause, context) do
+    type_js = encode_as_string("generator", true)
+    encode_as_object([type: type_js] ++ encode_clause_properties(clause, context))
+  end
+
+  defp encode_comprehension_qualifier(%IR.ComprehensionFilter{expression: expr}, context) do
+    type_js = encode_as_string("filter", true)
+    encode_as_object(type: type_js, filter: encode_closure(expr, context))
   end
 
   defp encode_dynamic_named_function_call(module, function, args, context) do
