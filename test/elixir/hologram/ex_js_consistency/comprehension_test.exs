@@ -28,16 +28,16 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
   # - mapper: can access variables from comprehension outer scope
   # - mapper: uses Enum.into/2 to insert the comprehension result into a collectable
 
-  describe "dependent generators" do
-    test "a later generator can use a variable bound by an earlier generator" do
+  describe "generator" do
+    test "can use variables bound by an earlier generator" do
       result = for x <- [1, 2], y <- [x, x + 10], do: {x, y}
 
       assert result == [{1, 1}, {1, 11}, {2, 2}, {2, 12}]
     end
   end
 
-  describe "position-sensitive filters" do
-    test "a filter between generators prunes the branch before the next generator runs" do
+  describe "filters" do
+    test "placed between generators prunes the branch before the next generator runs" do
       result = for x <- [[1, 2], :nope, [3]], is_list(x), y <- x, do: y
 
       assert result == [1, 2, 3]
