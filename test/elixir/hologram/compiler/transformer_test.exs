@@ -2490,13 +2490,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "single generator (AST from source code)" do
       assert %IR.Comprehension{
-               generators: [%IR.Clause{match: %IR.Variable{name: :x}}]
+               qualifiers: [%IR.Clause{match: %IR.Variable{name: :x}}]
              } = @result_from_source_code
     end
 
     test "single generator (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [%IR.Clause{match: %IR.Variable{name: :x}}]
+               qualifiers: [%IR.Clause{match: %IR.Variable{name: :x}}]
              } = @result_from_beam_file
     end
 
@@ -2504,7 +2504,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast("for x <- [1, 2], y <- [3, 4], do: x * y")
 
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{match: %IR.Variable{name: :x}},
                  %IR.Clause{match: %IR.Variable{name: :y}}
                ]
@@ -2513,7 +2513,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "multiple generators (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{match: %IR.Variable{name: :x}},
                  %IR.Clause{match: %IR.Variable{name: :y}}
                ]
@@ -2522,7 +2522,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "generator enumerable (AST from source code)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    body: %IR.ListType{
                      data: [
@@ -2537,7 +2537,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "generator enumerable (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    body: %IR.ListType{
                      data: [
@@ -2552,7 +2552,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "single variable in generator match (AST from source code)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    match: %IR.Variable{name: :x}
                  }
@@ -2562,7 +2562,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "single variable in generator match (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    match: %IR.Variable{name: :x}
                  }
@@ -2574,7 +2574,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast("for {x, y} <- [{1, 2}, {3, 4}], do: x * y")
 
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    match: %IR.TupleType{
                      data: [
@@ -2589,7 +2589,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "multiple variables in generator match (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    match: %IR.TupleType{
                      data: [
@@ -2606,7 +2606,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast("for x when is_integer(x) <- [1, 2], do: x * x")
 
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    guards: [
                      %IR.LocalFunctionCall{
@@ -2621,7 +2621,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "generator with single guard (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -2639,7 +2639,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast("for x when is_integer(x) when x > 1 <- [1, 2], do: x * x")
 
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    guards: [
                      %IR.LocalFunctionCall{
@@ -2658,7 +2658,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "generator with 2 guards (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -2681,7 +2681,7 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast("for x when is_integer(x) when x > 1 when x < 9 <- [1, 2], do: x * x")
 
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    guards: [
                      %IR.LocalFunctionCall{
@@ -2704,7 +2704,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "generator with 3 guards (AST from BEAM file)" do
       assert %IR.Comprehension{
-               generators: [
+               qualifiers: [
                  %IR.Clause{
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -2729,18 +2729,19 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "no filters (AST from source code)" do
-      assert %IR.Comprehension{filters: []} = @result_from_source_code
+      assert %IR.Comprehension{qualifiers: [%IR.Clause{}]} = @result_from_source_code
     end
 
     test "no filters (AST from BEAM file)" do
-      assert %IR.Comprehension{filters: []} = @result_from_beam_file
+      assert %IR.Comprehension{qualifiers: [%IR.Clause{}]} = @result_from_beam_file
     end
 
     test "single filter (AST from source code)" do
       ast = ast("for x <- [1, 2], my_filter(x), do: x * x")
 
       assert %IR.Comprehension{
-               filters: [
+               qualifiers: [
+                 %IR.Clause{},
                  %IR.ComprehensionFilter{
                    expression: %IR.LocalFunctionCall{
                      function: :my_filter,
@@ -2753,7 +2754,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "single filter (AST from BEAM file)" do
       assert %IR.Comprehension{
-               filters: [
+               qualifiers: [
+                 %IR.Clause{},
                  %IR.ComprehensionFilter{
                    expression: %IR.LocalFunctionCall{
                      function: :my_filter,
@@ -2768,7 +2770,8 @@ defmodule Hologram.Compiler.TransformerTest do
       ast = ast("for x <- [1, 2], my_filter_1(x), my_filter_2(x), do: x * x")
 
       assert %IR.Comprehension{
-               filters: [
+               qualifiers: [
+                 %IR.Clause{},
                  %IR.ComprehensionFilter{
                    expression: %IR.LocalFunctionCall{
                      function: :my_filter_1,
@@ -2787,7 +2790,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "multiple filters (AST from BEAM file)" do
       assert %IR.Comprehension{
-               filters: [
+               qualifiers: [
+                 %IR.Clause{},
                  %IR.ComprehensionFilter{
                    expression: %IR.LocalFunctionCall{
                      function: :my_filter_1,

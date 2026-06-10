@@ -251,10 +251,6 @@ defmodule Hologram.Compiler.Encoder do
     end
   end
 
-  def encode_ir(%IR.ComprehensionFilter{expression: expr}, context) do
-    encode_closure(expr, context)
-  end
-
   def encode_ir(%IR.Cond{clauses: clauses_ir}, context) do
     clauses_js = encode_as_array(clauses_ir, context)
 

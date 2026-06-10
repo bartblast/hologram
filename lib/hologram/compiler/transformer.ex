@@ -193,8 +193,6 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:for, _meta, parts}, context) when is_list(parts) do
     initial_acc = %{
       qualifiers: [],
-      generators: [],
-      filters: [],
       collectable: %IR.ListType{data: []},
       unique: %IR.AtomType{value: false},
       mapper: nil,
@@ -203,8 +201,6 @@ defmodule Hologram.Compiler.Transformer do
 
     %{
       qualifiers: qualifiers,
-      generators: generators,
-      filters: filters,
       collectable: collectable,
       unique: unique,
       mapper: mapper,
@@ -218,8 +214,6 @@ defmodule Hologram.Compiler.Transformer do
 
     %IR.Comprehension{
       qualifiers: Enum.reverse(qualifiers),
-      generators: Enum.reverse(generators),
-      filters: Enum.reverse(filters),
       collectable: collectable,
       unique: unique,
       mapper: mapper,
@@ -730,7 +724,7 @@ defmodule Hologram.Compiler.Transformer do
 
   defp transform_comprehension_part({:<-, _meta, _args} = ast, acc, context) do
     clause = transform(ast, context)
-    %{acc | qualifiers: [clause | acc.qualifiers], generators: [clause | acc.generators]}
+    %{acc | qualifiers: [clause | acc.qualifiers]}
   end
 
   defp transform_comprehension_part(opts, acc, context) when is_list(opts) do
@@ -739,7 +733,7 @@ defmodule Hologram.Compiler.Transformer do
 
   defp transform_comprehension_part(filter, acc, context) do
     filter = %IR.ComprehensionFilter{expression: transform(filter, context)}
-    %{acc | qualifiers: [filter | acc.qualifiers], filters: [filter | acc.filters]}
+    %{acc | qualifiers: [filter | acc.qualifiers]}
   end
 
   defp transform_comprehension_opt(
