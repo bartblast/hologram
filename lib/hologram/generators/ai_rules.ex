@@ -10,7 +10,7 @@ defmodule Hologram.Generators.AIRules do
   Syncs an AI rules file (e.g. AGENTS.md, CLAUDE.md) with Hologram rules wrapped in markers.
 
   Options:
-    * `:source_path` - path to the rules source file (defaults to deps/hologram/usage-rules.md)
+    * `:source_path` - path to the rules source file (defaults to the Hologram dependency's usage-rules.md)
     * `:target_dir` - target directory (defaults to current working directory)
   """
   @spec sync(String.t(), keyword()) :: :ok
@@ -51,7 +51,7 @@ defmodule Hologram.Generators.AIRules do
   end
 
   defp default_source_path do
-    Path.join(Reflection.root_dir(), "deps/hologram/usage-rules.md")
+    Path.join(Reflection.hologram_dep_dir(), "usage-rules.md")
   end
 
   defp print(output) do

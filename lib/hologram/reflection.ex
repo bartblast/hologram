@@ -78,6 +78,18 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the absolute path of the Hologram dependency directory.
+
+  Resolved via `Mix.Project.deps_path/0`, which yields the umbrella's shared
+  `deps/` directory when called inside a child app, and `<project>/deps` for a
+  single-app project.
+  """
+  @spec hologram_dep_dir() :: String.t()
+  def hologram_dep_dir do
+    Path.join(Mix.Project.deps_path(), "hologram")
+  end
+
+  @doc """
   Returns the call graph dump file name.
   """
   @spec call_graph_dump_file_name() :: String.t()
@@ -530,6 +542,19 @@ defmodule Hologram.Reflection do
   @spec root_priv_dir() :: String.t()
   def root_priv_dir do
     Path.join([root_dir(), "priv", "hologram"])
+  end
+
+  @doc """
+  Returns the absolute path of the workspace root.
+
+  In an umbrella project this is the umbrella's root directory (the parent of
+  `apps/`); in a single-app project it is the project root. Useful for finding
+  files that conventionally live at the top of the workspace (assets,
+  `node_modules`).
+  """
+  @spec workspace_root_dir() :: String.t()
+  def workspace_root_dir do
+    Mix.Project.deps_path() |> Path.dirname()
   end
 
   @doc """

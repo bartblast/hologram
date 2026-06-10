@@ -476,6 +476,14 @@ defmodule Hologram.ReflectionTest do
     assert root_priv_dir() == File.cwd!() <> "/priv/hologram"
   end
 
+  test "hologram_dep_dir/0" do
+    assert hologram_dep_dir() == Path.join(Mix.Project.deps_path(), "hologram")
+  end
+
+  test "workspace_root_dir/0" do
+    assert workspace_root_dir() == Path.dirname(Mix.Project.deps_path())
+  end
+
   test "source_path/1" do
     assert source_path(__MODULE__) == __ENV__.file
   end
