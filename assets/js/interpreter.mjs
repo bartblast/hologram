@@ -328,6 +328,22 @@ export default class Interpreter {
     return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
+  // Deps: [Enum.to_list/1]
+  static comprehensionReduce(qualifiers, initialValue, clauses, context) {
+    let acc = initialValue;
+
+    Interpreter.#walkComprehension(qualifiers, 0, context, (leafContext) => {
+      acc = Interpreter.#evaluateMatchingClause(
+        acc,
+        clauses,
+        leafContext,
+        Interpreter.raiseCaseClauseError,
+      );
+    });
+
+    return acc;
+  }
+
   // SYNC/ASYNC PAIR: When modifying this function, also update asyncCond().
   // cond() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/cond_test.exs
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated

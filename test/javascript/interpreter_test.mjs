@@ -1735,6 +1735,344 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("comprehensionReduce()", () => {
+    let context, prevToListFun;
+
+    beforeEach(() => {
+      context = contextFixture({
+        vars: {a: Type.integer(1), b: Type.integer(2)},
+      });
+
+      prevToListFun = globalThis.Elixir_Enum["to_list/1"];
+
+      globalThis.Elixir_Enum["to_list/1"] = (enumerable) => {
+        return enumerable;
+      };
+    });
+
+    afterEach(() => {
+      globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
+    });
+
+    it("accumulates over a single generator", () => {
+      // for x <- [1, 2, 3], reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) =>
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) => Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("accumulates over multiple generators", () => {
+      // for x <- [1, 2], y <- [10, 20], reduce: 0 do
+      //   acc -> acc + x * y
+      // end
+
+      const generator1 = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const generator2 = {
+        type: "generator",
+        match: Type.variablePattern("y"),
+        guards: [],
+        body: (_context) => Type.list([Type.integer(10), Type.integer(20)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) =>
+          Erlang["+/2"](
+            context.vars.acc,
+            Erlang["*/2"](context.vars.x, context.vars.y),
+          ),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator1, generator2],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(90));
+    });
+
+    it("returns the initial value when the generator is empty", () => {
+      // for x <- [], reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) => Type.list(),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) => Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns the initial value when filters reject all items", () => {
+      // for x <- [1, 2], x > 10, reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const filter = {
+        type: "filter",
+        filter: (context) => Erlang[">/2"](context.vars.x, Type.integer(10)),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) => Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator, filter],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("filters limit which items update the accumulator", () => {
+      // for x <- [1, 2, 3, 4], rem(x, 2) == 0, reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) =>
+          Type.list([
+            Type.integer(1),
+            Type.integer(2),
+            Type.integer(3),
+            Type.integer(4),
+          ]),
+      };
+
+      const filter = {
+        type: "filter",
+        filter: (context) =>
+          Erlang["==/2"](
+            Erlang["rem/2"](context.vars.x, Type.integer(2)),
+            Type.integer(0),
+          ),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) => Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator, filter],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("dispatches to the clause matching the accumulator", () => {
+      // for x <- [1, 2, 3], reduce: 0 do
+      //   0 -> x
+      //   acc -> acc * 10 + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) =>
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const clause1 = {
+        match: Type.integer(0),
+        guards: [],
+        body: (context) => context.vars.x,
+      };
+
+      const clause2 = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) =>
+          Erlang["+/2"](
+            Erlang["*/2"](context.vars.acc, Type.integer(10)),
+            context.vars.x,
+          ),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause1, clause2],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(123));
+    });
+
+    it("dispatches to the clause whose guards pass", () => {
+      // for x <- [1, 2, 3], reduce: 0 do
+      //   acc when acc <= 1 -> acc + x
+      //   acc -> acc + x * 10
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) =>
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const clause1 = {
+        match: Type.variablePattern("acc"),
+        guards: [
+          (context) => Erlang["=</2"](context.vars.acc, Type.integer(1)),
+        ],
+        body: (context) => Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const clause2 = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) =>
+          Erlang["+/2"](
+            context.vars.acc,
+            Erlang["*/2"](context.vars.x, Type.integer(10)),
+          ),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause1, clause2],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(33));
+    });
+
+    it("reducer clauses can access variables from comprehension outer scope", () => {
+      // a = 1
+      // for x <- [10, 20], reduce: 0 do
+      //   acc -> acc + x + a
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) => Type.list([Type.integer(10), Type.integer(20)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) =>
+          Erlang["+/2"](
+            Erlang["+/2"](context.vars.acc, context.vars.x),
+            context.vars.a,
+          ),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(32));
+    });
+
+    it("raises CaseClauseError when no clause matches the accumulator", () => {
+      // for x <- [1], reduce: 0 do
+      //   :nomatch -> x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: (_context) => Type.list([Type.integer(1)]),
+      };
+
+      const clause = {
+        match: Type.atom("nomatch"),
+        guards: [],
+        body: (context) => context.vars.x,
+      };
+
+      assertBoxedError(
+        () =>
+          Interpreter.comprehensionReduce(
+            [generator],
+            Type.integer(0),
+            [clause],
+            context,
+          ),
+        "CaseClauseError",
+        Interpreter.buildCaseClauseErrorMsg(Type.integer(0)),
+      );
+    });
+  });
+
   describe("consOperator()", () => {
     it("constructs a proper list when the tail param is a proper non-empty list", () => {
       const head = Type.integer(1);
