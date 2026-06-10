@@ -336,6 +336,154 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("asyncComprehensionReduce()", () => {
+    let context, prevToListFun;
+
+    beforeEach(() => {
+      context = contextFixture({
+        vars: {a: Type.integer(1), b: Type.integer(2)},
+      });
+
+      prevToListFun = globalThis.Elixir_Enum["to_list/1"];
+
+      globalThis.Elixir_Enum["to_list/1"] = (enumerable) => {
+        return enumerable;
+      };
+    });
+
+    afterEach(() => {
+      globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
+    });
+
+    it("returns a Promise", () => {
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: async (context) =>
+          Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = Interpreter.asyncComprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.instanceOf(result, Promise);
+    });
+
+    it("awaits generator body", async () => {
+      // for x <- [1, 2, 3], reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) =>
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: async (context) =>
+          Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = await Interpreter.asyncComprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("awaits filters", async () => {
+      // for x <- [1, 2, 3], x > 1, reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) =>
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const filter = {
+        type: "filter",
+        filter: async (context) => {
+          // keep only values > 1
+          return Erlang[">/2"](context.vars.x, Type.integer(1));
+        },
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: async (context) =>
+          Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = await Interpreter.asyncComprehensionReduce(
+        [generator, filter],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("awaits reducer clause body", async () => {
+      // for x <- [1, 2], reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "generator",
+        match: Type.variablePattern("x"),
+        guards: [],
+        body: async (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: async (context) => {
+          return new Promise((resolve) =>
+            setTimeout(
+              () => resolve(Erlang["+/2"](context.vars.acc, context.vars.x)),
+              1,
+            ),
+          );
+        },
+      };
+
+      const result = await Interpreter.asyncComprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+  });
+
   describe("asyncCond()", () => {
     it("returns a Promise", () => {
       const clauses = [

@@ -328,6 +328,7 @@ export default class Interpreter {
     return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
+  // SYNC/ASYNC PAIR: When modifying this function, also update asyncComprehensionReduce().
   // Deps: [Enum.to_list/1]
   static comprehensionReduce(qualifiers, initialValue, clauses, context) {
     let acc = initialValue;
@@ -340,6 +341,33 @@ export default class Interpreter {
         Interpreter.raiseCaseClauseError,
       );
     });
+
+    return acc;
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update comprehensionReduce().
+  // Deps: [Enum.to_list/1]
+  static async asyncComprehensionReduce(
+    qualifiers,
+    initialValue,
+    clauses,
+    context,
+  ) {
+    let acc = initialValue;
+
+    await Interpreter.#asyncWalkComprehension(
+      qualifiers,
+      0,
+      context,
+      async (leafContext) => {
+        acc = await Interpreter.#asyncEvaluateMatchingClause(
+          acc,
+          clauses,
+          leafContext,
+          Interpreter.raiseCaseClauseError,
+        );
+      },
+    );
 
     return acc;
   }
