@@ -219,11 +219,12 @@ export default class Hologram {
   }
 
   // Processes a UI event and returns a dispatch function that runs the resulting action or
-  // command, or null when the event is ignored. The edge concerns that must happen during the
-  // event itself - the ignored-event check, preventDefault, stopPropagation, and reading the
-  // event payload (the browser nulls currentTarget once dispatch returns) - run synchronously
-  // here. Callers invoke the returned dispatch immediately, or hand it to the debouncer so that
-  // only the dispatch is deferred while preventDefault still takes effect on every event.
+  // command, or null when the binding is disabled or the event is ignored. The edge concerns
+  // that must happen during the event itself - the disabled-binding check, the ignored-event
+  // check, preventDefault, stopPropagation, and reading the event payload (the browser nulls
+  // currentTarget once dispatch returns) - run synchronously here. Callers invoke the returned
+  // dispatch immediately, or hand it to the debouncer so that only the dispatch is deferred
+  // while preventDefault still takes effect on every event.
   // Deps: [:maps.get/3]
   static handleUiEvent(
     event,
@@ -233,6 +234,12 @@ export default class Hologram {
     allowDefault = false,
     stopPropagation = false,
   ) {
+    // The guard runs before preventDefault and stopPropagation, so a disabled binding leaves
+    // native browser behavior fully untouched.
+    if (Operation.isDisabled(operationSpecDom)) {
+      return null;
+    }
+
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
     if (eventImpl.isEventIgnored(event)) {
