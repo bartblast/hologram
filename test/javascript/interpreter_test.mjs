@@ -186,6 +186,41 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("awaits bitstring generator body", async () => {
+      // for <<x <- <<1, 2, 3>>>>, do: x
+
+      const generator = {
+        type: "bitstring_generator",
+        match: Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {
+            type: "integer",
+          }),
+        ]),
+        body: async (_context) =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+          ]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("awaits filters", async () => {
       const generator = {
         type: "generator",
@@ -391,6 +426,43 @@ describe("Interpreter", () => {
         guards: [],
         body: async (_context) =>
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: async (context) =>
+          Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = await Interpreter.asyncComprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("awaits bitstring generator body", async () => {
+      // for <<x <- <<1, 2, 3>>>>, reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "bitstring_generator",
+        match: Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {
+            type: "integer",
+          }),
+        ]),
+        body: async (_context) =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+          ]),
       };
 
       const clause = {
