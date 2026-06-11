@@ -40,7 +40,7 @@ defmodule Hologram.Reflection do
 
   ## Examples
 
-      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Reflection.beam"  
+      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Reflection.beam"
       iex> beam_defs()
       [
         ...,
@@ -371,13 +371,13 @@ defmodule Hologram.Reflection do
 
       iex> module?(MyModule)
       false
-      
+
       iex> module?(:maps)
       true
 
       iex> module?(:my_module)
       false
-      
+
       iex> module?(123)
       false
   """
@@ -554,7 +554,7 @@ defmodule Hologram.Reflection do
   """
   @spec workspace_root_dir() :: String.t()
   def workspace_root_dir do
-    Mix.Project.deps_path() |> Path.dirname()
+    Path.dirname(Mix.Project.deps_path())
   end
 
   @doc """
@@ -574,7 +574,7 @@ defmodule Hologram.Reflection do
 
       iex> component?(MyComponent)
       true
-      
+
       iex> component?(MyPage)
       true
 

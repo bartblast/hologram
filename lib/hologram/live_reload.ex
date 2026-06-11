@@ -75,7 +75,7 @@ defmodule Hologram.LiveReload do
 
   @doc """
   Reloads the application after a file change by recompiling Elixir code,
-  recompiling Hologram components, reloading Hologram runtime, and 
+  recompiling Hologram components, reloading Hologram runtime, and
   broadcasting reload notifications to connected clients.
 
   If code reloading fails, broadcasts a compilation error instead.
@@ -108,7 +108,7 @@ defmodule Hologram.LiveReload do
     case Mix.Project.apps_paths() do
       nil ->
         root_dir = Reflection.root_dir()
-        compiled_paths = Mix.Project.get().project()[:elixirc_paths]
+        compiled_paths = Mix.Project.get().project()[:elixirc_paths] || ["lib"]
         Enum.map(compiled_paths, &Path.join(root_dir, &1))
 
       apps_paths ->
@@ -117,15 +117,17 @@ defmodule Hologram.LiveReload do
         # the watcher gets absolute paths regardless of cwd at watch time.
         Enum.flat_map(apps_paths, fn {app, app_path} ->
           abs_app_path = Path.expand(app_path)
-
-          compiled_paths =
-            Mix.Project.in_project(app, abs_app_path, fn _module ->
-              Mix.Project.config()[:elixirc_paths] || ["lib"]
-            end)
+          compiled_paths = traverse_path_in_project(app, abs_app_path)
 
           Enum.map(compiled_paths, &Path.join(abs_app_path, &1))
         end)
     end
+  end
+
+  defp traverse_path_in_project(app, abs_app_path) do
+    Mix.Project.in_project(app, abs_app_path, fn _module ->
+      Mix.Project.config()[:elixirc_paths] || ["lib"]
+    end)
   end
 
   @doc """
