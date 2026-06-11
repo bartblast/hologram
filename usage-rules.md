@@ -13,7 +13,6 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Stateless components cannot handle events. You need a `cid` to make a component stateful.
 - The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
 - Not all Elixir standard library functions are available client-side yet. Check the Client Runtime reference for coverage.
-- Comprehensions are fully supported client-side, including the `:into`, `:uniq`, and `:reduce` options - only bitstring generators are not yet supported.
 - Realtime: inside `init/3`/commands use `put_subscription`/`put_broadcast` on the `server` struct (deferred until the handler succeeds). The `Hologram.Realtime.*` functions fire immediately and are only for code outside a handler (background jobs, workers).
 
 ## Architecture
