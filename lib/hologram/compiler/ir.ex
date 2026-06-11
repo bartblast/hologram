@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.IR do
           | IR.Case.t()
           | IR.Clause.t()
           | IR.Comprehension.t()
+          | IR.ComprehensionBitstringGenerator.t()
           | IR.ComprehensionFilter.t()
           | IR.Cond.t()
           | IR.CondClause.t()
