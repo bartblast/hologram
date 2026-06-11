@@ -727,6 +727,25 @@ defmodule Hologram.Compiler.Transformer do
     %{acc | qualifiers: [clause | acc.qualifiers]}
   end
 
+  defp transform_comprehension_part({:<<>>, meta, parts} = ast, acc, context)
+       when is_list(parts) do
+    case List.last(parts) do
+      {:<-, _arrow_meta, [last_segment, source]} ->
+        match_ast = {:<<>>, meta, List.replace_at(parts, -1, last_segment)}
+
+        generator = %IR.ComprehensionBitstringGenerator{
+          match: transform(match_ast, context),
+          body: transform(source, context)
+        }
+
+        %{acc | qualifiers: [generator | acc.qualifiers]}
+
+      _last_segment ->
+        filter = %IR.ComprehensionFilter{expression: transform(ast, context)}
+        %{acc | qualifiers: [filter | acc.qualifiers]}
+    end
+  end
+
   defp transform_comprehension_part(opts, acc, context) when is_list(opts) do
     Enum.reduce(opts, acc, &transform_comprehension_opt(&1, &2, context))
   end

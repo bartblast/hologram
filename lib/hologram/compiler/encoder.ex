@@ -699,6 +699,17 @@ defmodule Hologram.Compiler.Encoder do
     encode_as_object([type: type_js] ++ encode_clause_properties(clause, context))
   end
 
+  defp encode_comprehension_qualifier(
+         %IR.ComprehensionBitstringGenerator{} = generator,
+         context
+       ) do
+    type_js = encode_as_string("bitstring_generator", true)
+    match_js = encode_ir(generator.match, %{context | pattern?: true})
+    body_js = encode_closure(generator.body, context)
+
+    encode_as_object(type: type_js, match: match_js, body: body_js)
+  end
+
   defp encode_comprehension_qualifier(%IR.ComprehensionFilter{expression: expr}, context) do
     type_js = encode_as_string("filter", true)
     encode_as_object(type: type_js, filter: encode_closure(expr, context))

@@ -165,7 +165,7 @@ describe("Interpreter", () => {
       assert.instanceOf(result, Promise);
     });
 
-    it("awaits generator body", async () => {
+    it("awaits enumerable generator body", async () => {
       const generator = {
         type: "generator",
         match: Type.variablePattern("x"),
@@ -182,6 +182,41 @@ describe("Interpreter", () => {
       );
 
       const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("awaits bitstring generator body", async () => {
+      // for <<x <- <<1, 2, 3>>>>, do: x
+
+      const generator = {
+        type: "bitstring_generator",
+        match: Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {
+            type: "integer",
+          }),
+        ]),
+        body: async (_context) =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+          ]),
+      };
+
+      const result = await Interpreter.asyncComprehension(
+        [generator],
+        Type.list(),
+        false,
+        async (context) => context.vars.x,
+        context,
+      );
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -380,7 +415,7 @@ describe("Interpreter", () => {
       assert.instanceOf(result, Promise);
     });
 
-    it("awaits generator body", async () => {
+    it("awaits enumerable generator body", async () => {
       // for x <- [1, 2, 3], reduce: 0 do
       //   acc -> acc + x
       // end
@@ -391,6 +426,43 @@ describe("Interpreter", () => {
         guards: [],
         body: async (_context) =>
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: async (context) =>
+          Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = await Interpreter.asyncComprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("awaits bitstring generator body", async () => {
+      // for <<x <- <<1, 2, 3>>>>, reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "bitstring_generator",
+        match: Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {
+            type: "integer",
+          }),
+        ]),
+        body: async (_context) =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+          ]),
       };
 
       const clause = {
@@ -1213,7 +1285,7 @@ describe("Interpreter", () => {
       globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
     });
 
-    describe("generator", () => {
+    describe("enumerable generator", () => {
       it("generates combinations of enumerables items", () => {
         // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
@@ -1380,6 +1452,398 @@ describe("Interpreter", () => {
         sinon.assert.calledWith(stub, enumerable2(context));
 
         Elixir_Enum["to_list/1"].restore();
+      });
+    });
+
+    describe("bitstring generator", () => {
+      it("iterates in pattern-sized steps", () => {
+        // for <<x <- <<1, 2, 3>>>>, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          false,
+          (context) => context.vars.x,
+          context,
+        );
+
+        const expected = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("binds multiple segments per step", () => {
+        // for <<a::8, b::8 <- <<1, 2, 3, 4>>>>, do: {a, b}
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("a"), {
+              type: "integer",
+              size: Type.integer(8),
+            }),
+            Type.bitstringSegment(Type.variablePattern("b"), {
+              type: "integer",
+              size: Type.integer(8),
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(4), {type: "integer"}),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          false,
+          (context) => Type.tuple([context.vars.a, context.vars.b]),
+          context,
+        );
+
+        const expected = Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2)]),
+          Type.tuple([Type.integer(3), Type.integer(4)]),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("matches segments narrower than a byte", () => {
+        // for <<x::4 <- <<0xAB>>>>, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+              size: Type.integer(4),
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(0xab), {type: "integer"}),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          false,
+          (context) => context.vars.x,
+          context,
+        );
+
+        const expected = Type.list([Type.integer(10), Type.integer(11)]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("generates combinations of bitstring generators", () => {
+        // for <<x <- <<1, 2>>>>, <<y <- <<3, 4>>>>, do: {x, y}
+
+        const generator1 = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            ]),
+        };
+
+        const generator2 = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("y"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(4), {type: "integer"}),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator1, generator2],
+          Type.list(),
+          false,
+          (context) => Type.tuple([context.vars.x, context.vars.y]),
+          context,
+        );
+
+        const expected = Type.list([
+          Type.tuple([Type.integer(1), Type.integer(3)]),
+          Type.tuple([Type.integer(1), Type.integer(4)]),
+          Type.tuple([Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(2), Type.integer(4)]),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("can use variables bound by an earlier generator", () => {
+        // for x <- [<<1, 2>>, <<3>>], <<y <- x>>, do: y
+
+        const generator1 = {
+          type: "generator",
+          match: Type.variablePattern("x"),
+          guards: [],
+          body: (_context) =>
+            Type.list([
+              Type.bitstring([
+                Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+                Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+              ]),
+              Type.bitstring([
+                Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+              ]),
+            ]),
+        };
+
+        const generator2 = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("y"), {
+              type: "integer",
+            }),
+          ]),
+          body: (context) => context.vars.x,
+        };
+
+        const result = Interpreter.comprehension(
+          [generator1, generator2],
+          Type.list(),
+          false,
+          (context) => context.vars.y,
+          context,
+        );
+
+        const expected = Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("stops iterating at the first non-matching prefix", () => {
+        // for <<1::8, x::8 <- <<1, 2, 3, 4>>>>, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(4), {type: "integer"}),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          false,
+          (context) => context.vars.x,
+          context,
+        );
+
+        const expected = Type.list([Type.integer(2)]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("discards leftover bits that don't fill the pattern", () => {
+        // for <<x::8 <- <<1, 2, 3::4>>>>, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+              size: Type.integer(8),
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(3), {
+                type: "integer",
+                size: Type.integer(4),
+              }),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          false,
+          (context) => context.vars.x,
+          context,
+        );
+
+        const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns an empty result for an empty bitstring", () => {
+        // for <<x <- <<>>>>, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) => Type.bitstring([]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          false,
+          (context) => context.vars.x,
+          context,
+        );
+
+        assert.deepStrictEqual(result, Type.list([]));
+      });
+
+      it("composes with filters", () => {
+        // for <<x <- <<1, 2, 3>>>>, rem(x, 2) == 1, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+            ]),
+        };
+
+        const filter = {
+          type: "filter",
+          filter: (context) =>
+            Erlang["==/2"](
+              Erlang["rem/2"](context.vars.x, Type.integer(2)),
+              Type.integer(1),
+            ),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator, filter],
+          Type.list(),
+          false,
+          (context) => context.vars.x,
+          context,
+        );
+
+        const expected = Type.list([Type.integer(1), Type.integer(3)]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("removes duplicate results when the unique flag is set", () => {
+        // for <<x <- <<1, 2, 1>>>>, uniq: true, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) =>
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            ]),
+        };
+
+        const result = Interpreter.comprehension(
+          [generator],
+          Type.list(),
+          true,
+          (context) => context.vars.x,
+          context,
+        );
+
+        const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("raises ErlangError if the source is not a bitstring", () => {
+        // for <<x <- [1, 2]>>, do: x
+
+        const generator = {
+          type: "bitstring_generator",
+          match: Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("x"), {
+              type: "integer",
+            }),
+          ]),
+          body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
+        };
+
+        assertBoxedError(
+          () =>
+            Interpreter.comprehension(
+              [generator],
+              Type.list(),
+              false,
+              (context) => context.vars.x,
+              context,
+            ),
+          "ErlangError",
+          "Erlang error: {:bad_generator, [1, 2]}",
+        );
       });
     });
 
@@ -1902,7 +2366,7 @@ describe("Interpreter", () => {
       globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
     });
 
-    it("accumulates over a single generator", () => {
+    it("accumulates over a single enumerable generator", () => {
       // for x <- [1, 2, 3], reduce: 0 do
       //   acc -> acc + x
       // end
@@ -1931,7 +2395,43 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.integer(6));
     });
 
-    it("accumulates over multiple generators", () => {
+    it("accumulates over a bitstring generator", () => {
+      // for <<x <- <<1, 2, 3>>>>, reduce: 0 do
+      //   acc -> acc + x
+      // end
+
+      const generator = {
+        type: "bitstring_generator",
+        match: Type.bitstringPattern([
+          Type.bitstringSegment(Type.variablePattern("x"), {
+            type: "integer",
+          }),
+        ]),
+        body: (_context) =>
+          Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+          ]),
+      };
+
+      const clause = {
+        match: Type.variablePattern("acc"),
+        guards: [],
+        body: (context) => Erlang["+/2"](context.vars.acc, context.vars.x),
+      };
+
+      const result = Interpreter.comprehensionReduce(
+        [generator],
+        Type.integer(0),
+        [clause],
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(6));
+    });
+
+    it("accumulates over multiple enumerable generators", () => {
       // for x <- [1, 2], y <- [10, 20], reduce: 0 do
       //   acc -> acc + x * y
       // end
@@ -1970,7 +2470,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.integer(90));
     });
 
-    it("returns the initial value when the generator is empty", () => {
+    it("returns the initial value when the enumerable generator is empty", () => {
       // for x <- [], reduce: 100 do
       //   acc -> acc + x
       // end

@@ -92,7 +92,11 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module174
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module175
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module176
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module177
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module178
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module179
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module18
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module180
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module20
@@ -2726,6 +2730,182 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module45)
+    end
+
+    test "single-segment bitstring generator (AST from source code)" do
+      ast = ast("for <<x <- <<1, 2>> >>, do: x")
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.ComprehensionBitstringGenerator{
+                   match: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{
+                         value: %IR.Variable{name: :x},
+                         modifiers: [type: :integer]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "single-segment bitstring generator (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.ComprehensionBitstringGenerator{
+                   match: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{
+                         value: %IR.Variable{name: :x},
+                         modifiers: [type: :integer]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module177)
+    end
+
+    test "multi-segment bitstring generator (AST from source code)" do
+      ast = ast("for <<a::4, b::4 <- <<1, 2>> >>, do: {a, b}")
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.ComprehensionBitstringGenerator{
+                   match: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{
+                         value: %IR.Variable{name: :a},
+                         modifiers: [type: :integer, size: %IR.IntegerType{value: 4}]
+                       },
+                       %IR.BitstringSegment{
+                         value: %IR.Variable{name: :b},
+                         modifiers: [type: :integer, size: %IR.IntegerType{value: 4}]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "multi-segment bitstring generator (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.ComprehensionBitstringGenerator{
+                   match: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{
+                         value: %IR.Variable{name: :a},
+                         modifiers: [size: %IR.IntegerType{value: 4}, type: :integer]
+                       },
+                       %IR.BitstringSegment{
+                         value: %IR.Variable{name: :b},
+                         modifiers: [size: %IR.IntegerType{value: 4}, type: :integer]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module178)
+    end
+
+    test "bitstring generator source (AST from source code)" do
+      ast = ast("for <<x <- <<1, 2>> >>, do: x")
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.ComprehensionBitstringGenerator{
+                   body: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 1}},
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 2}}
+                     ]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "bitstring generator source (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.ComprehensionBitstringGenerator{
+                   body: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 1}},
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 2}}
+                     ]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module177)
+    end
+
+    test "bitstring generator keeps source order with other qualifiers (AST from source code)" do
+      ast = ast("for x <- [1, 2], x > 1, <<y <- <<3, 4>> >>, do: x * y")
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{match: %IR.Variable{name: :x}},
+                 %IR.ComprehensionFilter{},
+                 %IR.ComprehensionBitstringGenerator{
+                   match: %IR.BitstringType{
+                     segments: [%IR.BitstringSegment{value: %IR.Variable{name: :y}}]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "bitstring generator keeps source order with other qualifiers (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{match: %IR.Variable{name: :x}},
+                 %IR.ComprehensionFilter{},
+                 %IR.ComprehensionBitstringGenerator{
+                   match: %IR.BitstringType{
+                     segments: [%IR.BitstringSegment{value: %IR.Variable{name: :y}}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module179)
+    end
+
+    test "bitstring without generator arrow is a filter (AST from source code)" do
+      ast = ast("for x <- [1, 2], <<3, 4>>, do: x")
+
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{},
+                 %IR.ComprehensionFilter{
+                   expression: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 3}},
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 4}}
+                     ]
+                   }
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
+
+    test "bitstring without generator arrow is a filter (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               qualifiers: [
+                 %IR.Clause{},
+                 %IR.ComprehensionFilter{
+                   expression: %IR.BitstringType{
+                     segments: [
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 3}},
+                       %IR.BitstringSegment{value: %IR.IntegerType{value: 4}}
+                     ]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module180)
     end
 
     test "no filters (AST from source code)" do

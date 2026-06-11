@@ -7,9 +7,40 @@ defmodule Hologram.Compiler.EncoderTest do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
-  defdelegate encode_ir(ir, context \\ %Context{}), to: Hologram.Compiler.Encoder
+  # for <<x <- <<1, 2>>>>, do: x
+  @bitstring_generator_comprehension_ir %IR.Comprehension{
+    qualifiers: [
+      %IR.ComprehensionBitstringGenerator{
+        match: %IR.BitstringType{
+          segments: [
+            %IR.BitstringSegment{
+              value: %IR.Variable{name: :x},
+              modifiers: [type: :integer]
+            }
+          ]
+        },
+        body: %IR.BitstringType{
+          segments: [
+            %IR.BitstringSegment{
+              value: %IR.IntegerType{value: 1},
+              modifiers: [type: :integer]
+            },
+            %IR.BitstringSegment{
+              value: %IR.IntegerType{value: 2},
+              modifiers: [type: :integer]
+            }
+          ]
+        }
+      }
+    ],
+    collectable: %IR.ListType{data: []},
+    unique: %IR.AtomType{value: false},
+    mapper: %IR.Variable{name: :x}
+  }
 
   @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
+
+  defdelegate encode_ir(ir, context \\ %Context{}), to: Hologram.Compiler.Encoder
 
   describe "anonymous function call" do
     setup do
@@ -1154,6 +1185,16 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) ==
                "(await Interpreter.asyncComprehension([{type: \"generator\", match: Type.variablePattern(\"x\"), guards: [], body: async (context) => Type.list([Type.integer(1n), Type.integer(2n)])}], Type.list([]), false, async (context) => context.vars.x, context))"
+    end
+
+    test "sync with bitstring generator" do
+      assert encode_ir(@bitstring_generator_comprehension_ir) ==
+               "Interpreter.comprehension([{type: \"bitstring_generator\", match: Type.bitstringPattern([Type.bitstringSegment(Type.variablePattern(\"x\"), {type: \"integer\"})]), body: (context) => Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: \"integer\"}), Type.bitstringSegment(Type.integer(2n), {type: \"integer\"})])}], Type.list([]), false, (context) => context.vars.x, context)"
+    end
+
+    test "async with bitstring generator" do
+      assert encode_ir(@bitstring_generator_comprehension_ir, %Context{async?: true}) ==
+               "(await Interpreter.asyncComprehension([{type: \"bitstring_generator\", match: Type.bitstringPattern([Type.bitstringSegment(Type.variablePattern(\"x\"), {type: \"integer\"})]), body: async (context) => Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: \"integer\"}), Type.bitstringSegment(Type.integer(2n), {type: \"integer\"})])}], Type.list([]), false, async (context) => context.vars.x, context))"
     end
 
     test "sync with reducer" do
