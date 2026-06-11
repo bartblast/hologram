@@ -7,8 +7,8 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
   Always update all three together.
 
   The mirroring is not complete yet - this file covers only the dependent-generator,
-  position-sensitive-filter, and reducer tests. See the TODO below for the remaining
-  JavaScript tests that still need Elixir mirrors.
+  position-sensitive-filter, bitstring generator, and reducer tests. See the TODO below
+  for the remaining JavaScript tests that still need Elixir mirrors.
   """
   use Hologram.Test.BasicCase, async: true
 
@@ -37,6 +37,74 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
     end
   end
 
+  describe "bitstring generator" do
+    test "iterates in pattern-sized steps" do
+      result = for <<(x <- <<1, 2, 3>>)>>, do: x
+
+      assert result == [1, 2, 3]
+    end
+
+    test "binds multiple segments per step" do
+      result = for <<a::8, (b::8 <- <<1, 2, 3, 4>>)>>, do: {a, b}
+
+      assert result == [{1, 2}, {3, 4}]
+    end
+
+    test "matches segments narrower than a byte" do
+      result = for <<(x::4 <- <<0xAB>>)>>, do: x
+
+      assert result == [10, 11]
+    end
+
+    test "generates combinations of bitstring generators" do
+      result = for <<(x <- <<1, 2>>)>>, <<(y <- <<3, 4>>)>>, do: {x, y}
+
+      assert result == [{1, 3}, {1, 4}, {2, 3}, {2, 4}]
+    end
+
+    test "can use variables bound by an earlier generator" do
+      result = for x <- [<<1, 2>>, <<3>>], <<y <- x>>, do: y
+
+      assert result == [1, 2, 3]
+    end
+
+    test "stops iterating at the first non-matching prefix" do
+      result = for <<1::8, (x::8 <- <<1, 2, 3, 4>>)>>, do: x
+
+      assert result == [2]
+    end
+
+    test "discards leftover bits that don't fill the pattern" do
+      result = for <<(x::8 <- <<1, 2, 3::4>>)>>, do: x
+
+      assert result == [1, 2]
+    end
+
+    test "returns an empty result for an empty bitstring" do
+      result = for <<(x <- <<>>)>>, do: x
+
+      assert result == []
+    end
+
+    test "composes with filters" do
+      result = for <<(x <- <<1, 2, 3>>)>>, rem(x, 2) == 1, do: x
+
+      assert result == [1, 3]
+    end
+
+    test "removes duplicate results when the unique flag is set" do
+      result = for <<(x <- <<1, 2, 1>>)>>, uniq: true, do: x
+
+      assert result == [1, 2]
+    end
+
+    test "raises ErlangError if the source is not a bitstring" do
+      assert_error ErlangError, "Erlang error: {:bad_generator, [1, 2]}", fn ->
+        for <<x <- wrap_term([1, 2])>>, do: x
+      end
+    end
+  end
+
   describe "filters" do
     test "placed between generators prunes the branch before the next generator runs" do
       result = for x <- [[1, 2], :nope, [3]], is_list(x), y <- x, do: y
@@ -49,6 +117,15 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
     test "accumulates over a single generator" do
       result =
         for x <- [1, 2, 3], reduce: 0 do
+          acc -> acc + x
+        end
+
+      assert result == 6
+    end
+
+    test "accumulates over a bitstring generator" do
+      result =
+        for <<(x <- <<1, 2, 3>>)>>, reduce: 0 do
           acc -> acc + x
         end
 
