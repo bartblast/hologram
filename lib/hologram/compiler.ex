@@ -303,11 +303,18 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
-    project_node_modules_path = Path.join([Reflection.root_dir(), "assets", "node_modules"])
+    # Include both the workspace root (umbrella root or single-app root) and
+    # the current project root (umbrella child app or single-app root) so that
+    # whichever layout the user has, NODE_PATH points at their node_modules.
+    # Non-existent directories on NODE_PATH are silently ignored by Node.
+    project_node_modules_paths =
+      [Reflection.workspace_root_dir(), Reflection.root_dir()]
+      |> Enum.uniq()
+      |> Enum.map(&Path.join([&1, "assets", "node_modules"]))
 
     node_path =
       Enum.join(
-        [opts[:node_modules_path], project_node_modules_path],
+        [opts[:node_modules_path] | project_node_modules_paths],
         PathUtils.env_path_separator()
       )
 

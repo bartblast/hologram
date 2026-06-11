@@ -50,8 +50,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp build_default_opts do
-    root_dir = Reflection.root_dir()
-    assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
+    assets_dir = Path.join(Reflection.hologram_dep_dir(), "assets")
     build_dir = Reflection.build_dir()
     node_modules_path = Path.join(assets_dir, "node_modules")
 
@@ -61,7 +60,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       js_dir: Path.join(assets_dir, "js"),
       node_modules_path: node_modules_path,
-      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
+      static_dir: Path.join([Reflection.root_dir(), "priv", "static", "hologram"]),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
   end

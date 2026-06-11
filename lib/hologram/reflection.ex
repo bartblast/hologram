@@ -40,7 +40,7 @@ defmodule Hologram.Reflection do
 
   ## Examples
 
-      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Reflection.beam"  
+      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Reflection.beam"
       iex> beam_defs()
       [
         ...,
@@ -75,6 +75,18 @@ defmodule Hologram.Reflection do
     :hologram
     |> :code.priv_dir()
     |> to_string()
+  end
+
+  @doc """
+  Returns the absolute path of the Hologram dependency directory.
+
+  Resolved via `Mix.Project.deps_path/0`, which yields the umbrella's shared
+  `deps/` directory when called inside a child app, and `<project>/deps` for a
+  single-app project.
+  """
+  @spec hologram_dep_dir() :: String.t()
+  def hologram_dep_dir do
+    Path.join(Mix.Project.deps_path(), "hologram")
   end
 
   @doc """
@@ -359,13 +371,13 @@ defmodule Hologram.Reflection do
 
       iex> module?(MyModule)
       false
-      
+
       iex> module?(:maps)
       true
 
       iex> module?(:my_module)
       false
-      
+
       iex> module?(123)
       false
   """
@@ -533,6 +545,19 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the absolute path of the workspace root.
+
+  In an umbrella project this is the umbrella's root directory (the parent of
+  `apps/`); in a single-app project it is the project root. Useful for finding
+  files that conventionally live at the top of the workspace (assets,
+  `node_modules`).
+  """
+  @spec workspace_root_dir() :: String.t()
+  def workspace_root_dir do
+    Path.dirname(Mix.Project.deps_path())
+  end
+
+  @doc """
   Returns the file path of the given module's source code.
   """
   @spec source_path(module()) :: String.t()
@@ -549,7 +574,7 @@ defmodule Hologram.Reflection do
 
       iex> component?(MyComponent)
       true
-      
+
       iex> component?(MyPage)
       true
 
