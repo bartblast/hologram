@@ -10,12 +10,18 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
   # Always update all three together.
   #
   # The mirroring is not complete yet - this file covers only the dependent-generator,
-  # position-sensitive-filter, and reducer tests.
+  # position-sensitive-filter, bitstring generator, and reducer tests.
 
   # TODO: mirror the remaining behavioral tests from the comprehension() section
   # of test/javascript/interpreter_test.mjs:
   # - enumerable generator: generates combinations of enumerables items
   # - enumerable generator: ignores enumerable items that don't match the pattern
+  # - bitstring generator: matches segments narrower than a byte
+  # - bitstring generator: generates combinations of bitstring generators
+  # - bitstring generator: can use variables bound by an earlier generator
+  # - bitstring generator: returns an empty result for an empty bitstring
+  # - bitstring generator: removes duplicate results when the unique flag is set
+  # - bitstring generator: raises ErlangError if the source is not a bitstring
   # - guards: single guard
   # - guards: multiple guards
   # - guards: can access variables from comprehension outer scope
@@ -36,6 +42,43 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
     end
   end
 
+  describe "bitstring generator" do
+    feature "iterates in pattern-sized steps", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Basic bitstring generator"))
+      |> assert_text(css("#result"), "[5, 6, 7]")
+    end
+
+    feature "binds multiple segments per step", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Bitstring generator with multi-segment pattern"))
+      |> assert_text(css("#result"), "[{1, 2}, {3, 4}]")
+    end
+
+    feature "stops iterating at the first non-matching prefix", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Bitstring generator with prefix mismatch"))
+      |> assert_text(css("#result"), "[2]")
+    end
+
+    feature "discards leftover bits that don't fill the pattern", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Bitstring generator with leftover bits"))
+      |> assert_text(css("#result"), "[1, 2]")
+    end
+
+    feature "composes with filters", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Bitstring generator with filter"))
+      |> assert_text(css("#result"), "[1, 3]")
+    end
+  end
+
   describe "filters" do
     feature "placed between generators prunes the branch before the next generator runs", %{
       session: session
@@ -53,6 +96,13 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
       |> visit(ComprehensionPage)
       |> click(button("Reducer with single generator"))
       |> assert_text(css("#result"), "6")
+    end
+
+    feature "accumulates over a bitstring generator", %{session: session} do
+      session
+      |> visit(ComprehensionPage)
+      |> click(button("Reducer with bitstring generator"))
+      |> assert_text(css("#result"), "9")
     end
 
     feature "accumulates over multiple enumerable generators", %{session: session} do

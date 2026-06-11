@@ -15,9 +15,15 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
   def template do
     ~HOLO"""
     <p>
+      <button $click="basic_bitstring_generator"> Basic bitstring generator </button>
+      <button $click="bitstring_generator_with_filter"> Bitstring generator with filter </button>
+      <button $click="bitstring_generator_with_leftover_bits"> Bitstring generator with leftover bits </button>
+      <button $click="bitstring_generator_with_multi_segment_pattern"> Bitstring generator with multi-segment pattern </button>
+      <button $click="bitstring_generator_with_prefix_mismatch"> Bitstring generator with prefix mismatch </button>
       <button $click="dependent_generator"> Dependent generator </button>
       <button $click="guarding_filter"> Guarding filter </button>
       <button $click="reducer_with_all_rejecting_filter"> Reducer with all-rejecting filter </button>
+      <button $click="reducer_with_bitstring_generator"> Reducer with bitstring generator </button>
       <button $click="reducer_with_clause_dispatch"> Reducer with clause dispatch </button>
       <button $click="reducer_with_empty_generator"> Reducer with empty generator </button>
       <button $click="reducer_with_guard_dispatch"> Reducer with guard dispatch </button>
@@ -31,6 +37,36 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
+  end
+
+  def action(:basic_bitstring_generator, _params, component) do
+    result = for <<(x <- <<5, 6, 7>>)>>, do: x
+
+    put_state(component, :result, result)
+  end
+
+  def action(:bitstring_generator_with_filter, _params, component) do
+    result = for <<(x <- <<1, 2, 3>>)>>, rem(x, 2) == 1, do: x
+
+    put_state(component, :result, result)
+  end
+
+  def action(:bitstring_generator_with_leftover_bits, _params, component) do
+    result = for <<(x::8 <- <<1, 2, 3::4>>)>>, do: x
+
+    put_state(component, :result, result)
+  end
+
+  def action(:bitstring_generator_with_multi_segment_pattern, _params, component) do
+    result = for <<a::8, (b::8 <- <<1, 2, 3, 4>>)>>, do: {a, b}
+
+    put_state(component, :result, result)
+  end
+
+  def action(:bitstring_generator_with_prefix_mismatch, _params, component) do
+    result = for <<1::8, (x::8 <- <<1, 2, 3, 4>>)>>, do: x
+
+    put_state(component, :result, result)
   end
 
   def action(:dependent_generator, _params, component) do
@@ -48,6 +84,15 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionPage do
   def action(:reducer_with_all_rejecting_filter, _params, component) do
     result =
       for x <- [1, 2], x > 10, reduce: 200 do
+        acc -> acc + x
+      end
+
+    put_state(component, :result, result)
+  end
+
+  def action(:reducer_with_bitstring_generator, _params, component) do
+    result =
+      for <<(x <- <<2, 3, 4>>)>>, reduce: 0 do
         acc -> acc + x
       end
 
