@@ -14,8 +14,8 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
 
   # TODO: mirror the remaining behavioral tests from the comprehension() section
   # of test/javascript/interpreter_test.mjs:
-  # - generator: generates combinations of enumerables items
-  # - generator: ignores enumerable items that don't match the pattern
+  # - enumerable generator: generates combinations of enumerables items
+  # - enumerable generator: ignores enumerable items that don't match the pattern
   # - guards: single guard
   # - guards: multiple guards
   # - guards: can access variables from comprehension outer scope
@@ -27,7 +27,7 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
   # - mapper: can access variables from comprehension outer scope
   # - mapper: uses Enum.into/2 to insert the comprehension result into a collectable
 
-  describe "generator" do
+  describe "enumerable generator" do
     feature "can use variables bound by an earlier generator", %{session: session} do
       session
       |> visit(ComprehensionPage)
@@ -48,21 +48,23 @@ defmodule HologramFeatureTests.ControlFlow.ComprehensionTest do
   end
 
   describe "reducer" do
-    feature "accumulates over a single generator", %{session: session} do
+    feature "accumulates over a single enumerable generator", %{session: session} do
       session
       |> visit(ComprehensionPage)
       |> click(button("Reducer with single generator"))
       |> assert_text(css("#result"), "6")
     end
 
-    feature "accumulates over multiple generators", %{session: session} do
+    feature "accumulates over multiple enumerable generators", %{session: session} do
       session
       |> visit(ComprehensionPage)
       |> click(button("Reducer with multiple generators"))
       |> assert_text(css("#result"), "90")
     end
 
-    feature "returns the initial value when the generator is empty", %{session: session} do
+    feature "returns the initial value when the enumerable generator is empty", %{
+      session: session
+    } do
       session
       |> visit(ComprehensionPage)
       |> click(button("Reducer with empty generator"))

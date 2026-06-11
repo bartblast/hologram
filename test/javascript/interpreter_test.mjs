@@ -165,7 +165,7 @@ describe("Interpreter", () => {
       assert.instanceOf(result, Promise);
     });
 
-    it("awaits generator body", async () => {
+    it("awaits enumerable generator body", async () => {
       const generator = {
         type: "generator",
         match: Type.variablePattern("x"),
@@ -415,7 +415,7 @@ describe("Interpreter", () => {
       assert.instanceOf(result, Promise);
     });
 
-    it("awaits generator body", async () => {
+    it("awaits enumerable generator body", async () => {
       // for x <- [1, 2, 3], reduce: 0 do
       //   acc -> acc + x
       // end
@@ -1285,7 +1285,7 @@ describe("Interpreter", () => {
       globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
     });
 
-    describe("generator", () => {
+    describe("enumerable generator", () => {
       it("generates combinations of enumerables items", () => {
         // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
@@ -2366,7 +2366,7 @@ describe("Interpreter", () => {
       globalThis.Elixir_Enum["to_list/1"] = prevToListFun;
     });
 
-    it("accumulates over a single generator", () => {
+    it("accumulates over a single enumerable generator", () => {
       // for x <- [1, 2, 3], reduce: 0 do
       //   acc -> acc + x
       // end
@@ -2431,7 +2431,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.integer(6));
     });
 
-    it("accumulates over multiple generators", () => {
+    it("accumulates over multiple enumerable generators", () => {
       // for x <- [1, 2], y <- [10, 20], reduce: 0 do
       //   acc -> acc + x * y
       // end
@@ -2470,7 +2470,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.integer(90));
     });
 
-    it("returns the initial value when the generator is empty", () => {
+    it("returns the initial value when the enumerable generator is empty", () => {
       // for x <- [], reduce: 100 do
       //   acc -> acc + x
       // end

@@ -16,8 +16,8 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
 
   # TODO: mirror the remaining behavioral tests from the comprehension() section
   # of test/javascript/interpreter_test.mjs:
-  # - generator: generates combinations of enumerables items
-  # - generator: ignores enumerable items that don't match the pattern
+  # - enumerable generator: generates combinations of enumerables items
+  # - enumerable generator: ignores enumerable items that don't match the pattern
   # - guards: single guard
   # - guards: multiple guards
   # - guards: can access variables from comprehension outer scope
@@ -29,7 +29,7 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
   # - mapper: can access variables from comprehension outer scope
   # - mapper: uses Enum.into/2 to insert the comprehension result into a collectable
 
-  describe "generator" do
+  describe "enumerable generator" do
     test "can use variables bound by an earlier generator" do
       result = for x <- [1, 2], y <- [x, x + 10], do: {x, y}
 
@@ -114,7 +114,7 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
   end
 
   describe "reducer" do
-    test "accumulates over a single generator" do
+    test "accumulates over a single enumerable generator" do
       result =
         for x <- [1, 2, 3], reduce: 0 do
           acc -> acc + x
@@ -132,7 +132,7 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
       assert result == 6
     end
 
-    test "accumulates over multiple generators" do
+    test "accumulates over multiple enumerable generators" do
       result =
         for x <- [1, 2], y <- [10, 20], reduce: 0 do
           acc -> acc + x * y
@@ -141,7 +141,7 @@ defmodule Hologram.ExJsConsistency.ComprehensionTest do
       assert result == 90
     end
 
-    test "returns the initial value when the generator is empty" do
+    test "returns the initial value when the enumerable generator is empty" do
       result =
         for x <- [], reduce: 100 do
           acc -> acc + x
