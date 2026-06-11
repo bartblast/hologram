@@ -312,10 +312,11 @@ defmodule Hologram.Compiler do
       |> Enum.uniq()
       |> Enum.map(&Path.join([&1, "assets", "node_modules"]))
 
-    node_path = Enum.join(
-      [opts[:node_modules_path] | project_node_modules_paths],
-      PathUtils.env_path_separator()
-    )
+    node_path =
+      Enum.join(
+        [opts[:node_modules_path] | project_node_modules_paths],
+        PathUtils.env_path_separator()
+      )
 
     esbuild_opts = [
       env: [{"NODE_PATH", node_path}],
