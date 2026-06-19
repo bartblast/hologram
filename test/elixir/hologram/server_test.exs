@@ -787,6 +787,28 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "put_response_body/2" do
+    test "accepts a binary response body" do
+      result = put_response_body(%Server{}, "Too Many Requests")
+
+      assert result.response_body == "Too Many Requests"
+    end
+
+    test "accepts an iolist response body" do
+      result = put_response_body(%Server{}, ["Too ", "Many ", "Requests"])
+
+      assert result.response_body == ["Too ", "Many ", "Requests"]
+    end
+
+    test "raises ArgumentError when the response body is not iodata" do
+      assert_error ArgumentError,
+                   "Response body must be iodata (a binary or an iolist), but received %{error: \"nope\"}",
+                   fn ->
+                     put_response_body(%Server{}, %{error: "nope"})
+                   end
+    end
+  end
+
   describe "put_response_header/3" do
     test "adds a response header" do
       result = put_response_header(%Server{}, "cache-control", "no-store")

@@ -13,6 +13,7 @@ defmodule Hologram.Server do
             cookies: %{},
             instance_id: nil,
             next_action: nil,
+            response_body: nil,
             response_headers: %{},
             session: %{},
             session_id: nil,
@@ -29,6 +30,7 @@ defmodule Hologram.Server do
           cookies: %{String.t() => any()},
           instance_id: String.t() | nil,
           next_action: Action.t() | nil,
+          response_body: iodata() | nil,
           response_headers: %{String.t() => String.t()},
           session: %{atom => any},
           session_id: identity_id | nil,
@@ -410,6 +412,31 @@ defmodule Hologram.Server do
   def put_redirect(_server, page_module, _params) do
     raise ArgumentError,
           "Redirect params are only supported with a page module, but received #{inspect(page_module)}"
+  end
+
+  @doc """
+  Sets a custom response body to be sent to the client.
+
+  The body is iodata (a binary or an iolist). Combine with `put_status/2` to build a
+  custom response (the status is what marks the response as terminal and skips the
+  handler).
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `body` - The response body (iodata)
+  """
+  @spec put_response_body(t(), iodata()) :: t()
+  def put_response_body(server, body)
+
+  def put_response_body(server, body) when is_binary(body) or is_list(body) do
+    %{server | response_body: body}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_response_body(_server, body) do
+    raise ArgumentError,
+          "Response body must be iodata (a binary or an iolist), but received #{inspect(body)}"
   end
 
   @doc """
