@@ -1,7 +1,8 @@
 defmodule Hologram.Runtime.Connection do
   @moduledoc false
 
-  # TODO: legacy WebSocket transport (app transport is POST + SSE), retire rather than move when splitting up Hologram.Runtime
+  # TODO: legacy WebSocket transport (app transport is POST + SSE), retire rather than
+  # move when splitting up Hologram.Runtime
 
   @behaviour WebSock
 
