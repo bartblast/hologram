@@ -7,6 +7,8 @@ defmodule Hologram.ServerTest do
   alias Hologram.Runtime.Cookie
   alias Hologram.Server
   alias Hologram.Server.Metadata
+  alias Hologram.Test.Fixtures.Router.Helpers.Module1
+  alias Hologram.Test.Fixtures.Router.Helpers.Module2
 
   describe "delete_cookie/2" do
     test "removes an existing cookie from the server struct" do
@@ -659,6 +661,61 @@ defmodule Hologram.ServerTest do
 
       assert result.cookies == %{"my_cookie" => "abc123"}
       assert result.__meta__.cookie_ops["my_cookie"] == expected_cookie
+    end
+  end
+
+  describe "put_redirect/2 & put_redirect/3" do
+    test "redirects to a URL string" do
+      result = put_redirect(%Server{}, "https://example.com/next")
+
+      assert result.status == 302
+      assert result.response_headers == %{"location" => "https://example.com/next"}
+    end
+
+    test "redirects to a page module" do
+      result = put_redirect(%Server{}, Module1)
+
+      assert result.status == 302
+
+      assert result.response_headers == %{
+               "location" => "/hologram-test-fixtures-router-helpers-module1"
+             }
+    end
+
+    test "redirects to a page module with params" do
+      result = put_redirect(%Server{}, Module2, param_1: :foo, param_2: 42)
+
+      assert result.status == 302
+
+      assert result.response_headers == %{
+               "location" => "/hologram-test-fixtures-router-helpers-module2/foo/42"
+             }
+    end
+
+    test "supports other status codes by following with put_status/2" do
+      result =
+        %Server{}
+        |> put_redirect("https://example.com/next")
+        |> put_status(301)
+
+      assert result.status == 301
+      assert result.response_headers == %{"location" => "https://example.com/next"}
+    end
+
+    test "raises ArgumentError when the target is neither a URL string nor a page module" do
+      assert_error ArgumentError,
+                   "Redirect target must be a URL string or a page module, but received 123",
+                   fn ->
+                     put_redirect(%Server{}, 123)
+                   end
+    end
+
+    test "raises ArgumentError when params are given with a URL string" do
+      assert_error ArgumentError,
+                   "Redirect params are only supported with a page module, but received \"https://example.com\"",
+                   fn ->
+                     put_redirect(%Server{}, "https://example.com", foo: 1)
+                   end
     end
   end
 

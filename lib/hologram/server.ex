@@ -1,5 +1,6 @@
 defmodule Hologram.Server do
   alias Hologram.Component.Action
+  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
@@ -300,6 +301,58 @@ defmodule Hologram.Server do
     Cookie keys must be strings according to web standards.
     Try converting your key to a string: "#{key}".\
     """
+  end
+
+  @doc """
+  Sets a temporary (302) redirect to the given target, marking the response as terminal.
+
+  The target is either a URL string, used as-is, or a page module, resolved to its path.
+  For a page with params, use `put_redirect/3`. For a different status code, follow with
+  `put_status/2`.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `target` - A URL string or a page module
+  """
+  @spec put_redirect(t(), String.t() | module()) :: t()
+  def put_redirect(server, url) when is_binary(url) do
+    server
+    |> put_status(302)
+    |> put_response_header("location", url)
+  end
+
+  def put_redirect(server, page_module) when is_atom(page_module) do
+    put_redirect(server, RouterHelpers.page_path(page_module))
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_redirect(_server, target) do
+    raise ArgumentError,
+          "Redirect target must be a URL string or a page module, but received #{inspect(target)}"
+  end
+
+  @doc """
+  Sets a temporary (302) redirect to the given page module with params, marking the
+  response as terminal.
+
+  For a different status code, follow with `put_status/2`.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `page_module` - The target page module
+    * `params` - Page params (keyword list or map)
+  """
+  @spec put_redirect(t(), module(), keyword() | map()) :: t()
+  def put_redirect(server, page_module, params) when is_atom(page_module) do
+    put_redirect(server, RouterHelpers.page_path(page_module, params))
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_redirect(_server, page_module, _params) do
+    raise ArgumentError,
+          "Redirect params are only supported with a page module, but received #{inspect(page_module)}"
   end
 
   @doc """
