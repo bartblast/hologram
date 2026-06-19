@@ -429,6 +429,36 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "get_response_header/2 & get_response_header/3" do
+    test "returns the value of a set response header" do
+      server = %Server{response_headers: %{"cache-control" => "no-store"}}
+
+      assert get_response_header(server, "cache-control") == "no-store"
+    end
+
+    test "downcases the name when reading" do
+      server = %Server{response_headers: %{"cache-control" => "no-store"}}
+
+      assert get_response_header(server, "Cache-Control") == "no-store"
+    end
+
+    test "returns nil when the header is not set" do
+      assert get_response_header(%Server{}, "cache-control") == nil
+    end
+
+    test "returns the given default when the header is not set" do
+      assert get_response_header(%Server{}, "cache-control", "default") == "default"
+    end
+
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name must be a string, but received 123",
+                   fn ->
+                     get_response_header(%Server{}, 123)
+                   end
+    end
+  end
+
   describe "get_session_ops/1" do
     test "returns session operations recorded in the server struct's metadata" do
       server = %Server{session: %{"existing_session_entry" => "value"}}

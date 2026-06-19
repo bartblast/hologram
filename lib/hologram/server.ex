@@ -226,6 +226,30 @@ defmodule Hologram.Server do
   end
 
   @doc """
+  Retrieves a response header value by name from the server struct.
+
+  The header name is downcased to match how headers are stored. Returns the value
+  associated with the name, or the default if the header is not set.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `name` - The header name (string)
+    * `default` - The value to return if the header is not set (default: `nil`)
+  """
+  @spec get_response_header(t(), String.t(), any()) :: any()
+  def get_response_header(server, name, default \\ nil)
+
+  def get_response_header(server, name, default) when is_binary(name) do
+    Map.get(server.response_headers, String.downcase(name), default)
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def get_response_header(_server, name, _default) do
+    raise ArgumentError, "Response header name must be a string, but received #{inspect(name)}"
+  end
+
+  @doc """
   Retrieves the session operations recorded in the server struct's metadata.
   """
   @spec get_session_ops(t()) :: %{String.t() => Session.op()}
