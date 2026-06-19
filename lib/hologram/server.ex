@@ -13,6 +13,7 @@ defmodule Hologram.Server do
             cookies: %{},
             instance_id: nil,
             next_action: nil,
+            request_headers: %{},
             response_body: nil,
             response_headers: %{},
             session: %{},
@@ -30,6 +31,7 @@ defmodule Hologram.Server do
           cookies: %{String.t() => any()},
           instance_id: String.t() | nil,
           next_action: Action.t() | nil,
+          request_headers: %{String.t() => String.t()},
           response_body: iodata() | nil,
           response_headers: %{String.t() => String.t()},
           session: %{atom => any},
@@ -228,16 +230,40 @@ defmodule Hologram.Server do
   end
 
   @doc """
-  Retrieves a response header value by name from the server struct.
+  Retrieves a request header value by name from the server struct.
 
-  The header name is downcased to match how headers are stored. Returns the value
-  associated with the name, or the default if the header is not set.
+  The header name is downcased to match how request headers are stored. Returns the
+  value associated with the name, or the default if the header is not present.
 
   ## Parameters
 
     * `server` - The server struct
     * `name` - The header name (string)
-    * `default` - The value to return if the header is not set (default: `nil`)
+    * `default` - The value to return if the header is not present (default: `nil`)
+  """
+  @spec get_request_header(t(), String.t(), any()) :: any()
+  def get_request_header(server, name, default \\ nil)
+
+  def get_request_header(server, name, default) when is_binary(name) do
+    Map.get(server.request_headers, String.downcase(name), default)
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def get_request_header(_server, name, _default) do
+    raise ArgumentError, "Request header name must be a string, but received #{inspect(name)}"
+  end
+
+  @doc """
+  Retrieves a response header value by name from the server struct.
+
+  The header name is downcased to match how response headers are stored. Returns the
+  value associated with the name, or the default if the header is not present.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `name` - The header name (string)
+    * `default` - The value to return if the header is not present (default: `nil`)
   """
   @spec get_response_header(t(), String.t(), any()) :: any()
   def get_response_header(server, name, default \\ nil)

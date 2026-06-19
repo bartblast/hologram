@@ -429,24 +429,54 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "get_request_header/2 & get_request_header/3" do
+    test "returns the value of a present header" do
+      server = %Server{request_headers: %{"accept-language" => "en-US"}}
+
+      assert get_request_header(server, "accept-language") == "en-US"
+    end
+
+    test "downcases the lookup name" do
+      server = %Server{request_headers: %{"accept-language" => "en-US"}}
+
+      assert get_request_header(server, "Accept-Language") == "en-US"
+    end
+
+    test "returns nil when the header is not present" do
+      assert get_request_header(%Server{}, "accept-language") == nil
+    end
+
+    test "returns the given default when the header is not present" do
+      assert get_request_header(%Server{}, "accept-language", "default") == "default"
+    end
+
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Request header name must be a string, but received 123",
+                   fn ->
+                     get_request_header(%Server{}, 123)
+                   end
+    end
+  end
+
   describe "get_response_header/2 & get_response_header/3" do
-    test "returns the value of a set response header" do
+    test "returns the value of a present header" do
       server = %Server{response_headers: %{"cache-control" => "no-store"}}
 
       assert get_response_header(server, "cache-control") == "no-store"
     end
 
-    test "downcases the name when reading" do
+    test "downcases the lookup name" do
       server = %Server{response_headers: %{"cache-control" => "no-store"}}
 
       assert get_response_header(server, "Cache-Control") == "no-store"
     end
 
-    test "returns nil when the header is not set" do
+    test "returns nil when the header is not present" do
       assert get_response_header(%Server{}, "cache-control") == nil
     end
 
-    test "returns the given default when the header is not set" do
+    test "returns the given default when the header is not present" do
       assert get_response_header(%Server{}, "cache-control", "default") == "default"
     end
 
