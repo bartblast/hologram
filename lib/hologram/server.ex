@@ -12,6 +12,7 @@ defmodule Hologram.Server do
             cookies: %{},
             instance_id: nil,
             next_action: nil,
+            response_headers: %{},
             session: %{},
             session_id: nil,
             status: nil,
@@ -27,6 +28,7 @@ defmodule Hologram.Server do
           cookies: %{String.t() => any()},
           instance_id: String.t() | nil,
           next_action: Action.t() | nil,
+          response_headers: %{String.t() => String.t()},
           session: %{atom => any},
           session_id: identity_id | nil,
           status: pos_integer() | nil,
@@ -75,6 +77,30 @@ defmodule Hologram.Server do
   end
 
   def delete_cookie(server, _key), do: server
+
+  @doc """
+  Removes a response header from the server struct so it will not be sent.
+
+  The header name is downcased to match how headers are stored. Removing a header
+  that is not present is a no-op.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `name` - The header name (string)
+  """
+  @spec delete_response_header(t(), String.t()) :: t()
+  def delete_response_header(server, name)
+
+  def delete_response_header(server, name) when is_binary(name) do
+    new_response_headers = Map.delete(server.response_headers, String.downcase(name))
+    %{server | response_headers: new_response_headers}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def delete_response_header(_server, name) do
+    raise ArgumentError, "Response header name must be a string, but received #{inspect(name)}"
+  end
 
   @doc """
   Removes a session entry from the server struct and marks it for deletion in the client's browser.
@@ -274,6 +300,32 @@ defmodule Hologram.Server do
     Cookie keys must be strings according to web standards.
     Try converting your key to a string: "#{key}".\
     """
+  end
+
+  @doc """
+  Sets a response header to be sent to the client, replacing any existing value for the name.
+
+  The header name is downcased, so names are case-insensitive and a later put
+  overwrites an earlier one regardless of case.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `name` - The header name (string)
+    * `value` - The header value (string)
+  """
+  @spec put_response_header(t(), String.t(), String.t()) :: t()
+  def put_response_header(server, name, value)
+
+  def put_response_header(server, name, value) when is_binary(name) and is_binary(value) do
+    new_response_headers = Map.put(server.response_headers, String.downcase(name), value)
+    %{server | response_headers: new_response_headers}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_response_header(_server, name, value) do
+    raise ArgumentError,
+          "Response header name and value must be strings, but received #{inspect(name)} and #{inspect(value)}"
   end
 
   @doc """

@@ -94,6 +94,37 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "delete_response_header/2" do
+    test "removes an existing response header" do
+      server = %Server{response_headers: %{"cache-control" => "no-store", "x-custom" => "1"}}
+      result = delete_response_header(server, "x-custom")
+
+      assert result.response_headers == %{"cache-control" => "no-store"}
+    end
+
+    test "downcases the name before removing" do
+      server = %Server{response_headers: %{"x-custom" => "1"}}
+      result = delete_response_header(server, "X-Custom")
+
+      assert result.response_headers == %{}
+    end
+
+    test "handles removing a nonexistent header as no-op" do
+      server = %Server{response_headers: %{"x-custom" => "1"}}
+      result = delete_response_header(server, "nonexistent")
+
+      assert result == server
+    end
+
+    test "raises ArgumentError when name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name must be a string, but received 123",
+                   fn ->
+                     delete_response_header(%Server{}, 123)
+                   end
+    end
+  end
+
   describe "delete_session/2" do
     test "removes an existing session entry from the server struct using atom key" do
       server = %Server{session: %{"theme" => "dark", "user_id" => 123}}
@@ -628,6 +659,35 @@ defmodule Hologram.ServerTest do
 
       assert result.cookies == %{"my_cookie" => "abc123"}
       assert result.__meta__.cookie_ops["my_cookie"] == expected_cookie
+    end
+  end
+
+  describe "put_response_header/3" do
+    test "adds a response header" do
+      result = put_response_header(%Server{}, "cache-control", "no-store")
+
+      assert result.response_headers == %{"cache-control" => "no-store"}
+    end
+
+    test "downcases the header name" do
+      result = put_response_header(%Server{}, "Cache-Control", "no-store")
+
+      assert result.response_headers == %{"cache-control" => "no-store"}
+    end
+
+    test "overwrites an existing header regardless of case" do
+      server = %Server{response_headers: %{"cache-control" => "no-store"}}
+      result = put_response_header(server, "Cache-Control", "max-age=60")
+
+      assert result.response_headers == %{"cache-control" => "max-age=60"}
+    end
+
+    test "raises ArgumentError when name or value is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received \"x-custom\" and 123",
+                   fn ->
+                     put_response_header(%Server{}, "x-custom", 123)
+                   end
     end
   end
 
