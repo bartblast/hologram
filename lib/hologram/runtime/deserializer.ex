@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.Deserializer do
   @moduledoc false
 
+  # TODO: consider moving to Hologram.Transport (transport/adapter layer) when splitting up Hologram.Runtime
+
   alias Hologram.Commons.BitstringUtils
   alias Hologram.Commons.IntegerUtils
 
