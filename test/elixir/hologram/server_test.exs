@@ -10,6 +10,44 @@ defmodule Hologram.ServerTest do
   alias Hologram.Test.Fixtures.Router.Helpers.Module1
   alias Hologram.Test.Fixtures.Router.Helpers.Module2
 
+  describe "append_response_header/3" do
+    test "appends a value to an existing response header" do
+      server = %Server{response_headers: %{"vary" => "Accept"}}
+      result = append_response_header(server, "vary", "Accept-Encoding")
+
+      assert result.response_headers == %{"vary" => "Accept, Accept-Encoding"}
+    end
+
+    test "sets the header when it is not present" do
+      result = append_response_header(%Server{}, "vary", "Accept")
+
+      assert result.response_headers == %{"vary" => "Accept"}
+    end
+
+    test "downcases the header name" do
+      server = %Server{response_headers: %{"vary" => "Accept"}}
+      result = append_response_header(server, "Vary", "Accept-Encoding")
+
+      assert result.response_headers == %{"vary" => "Accept, Accept-Encoding"}
+    end
+
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received 123 and \"Accept\"",
+                   fn ->
+                     append_response_header(%Server{}, 123, "Accept")
+                   end
+    end
+
+    test "raises ArgumentError when the value is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received \"vary\" and 123",
+                   fn ->
+                     append_response_header(%Server{}, "vary", 123)
+                   end
+    end
+  end
+
   describe "delete_cookie/2" do
     test "removes an existing cookie from the server struct" do
       server = %Server{cookies: %{"theme" => "dark", "user_id" => 123}}
@@ -739,7 +777,15 @@ defmodule Hologram.ServerTest do
       assert result.response_headers == %{"cache-control" => "max-age=60"}
     end
 
-    test "raises ArgumentError when name or value is not a string" do
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received 123 and \"no-store\"",
+                   fn ->
+                     put_response_header(%Server{}, 123, "no-store")
+                   end
+    end
+
+    test "raises ArgumentError when the value is not a string" do
       assert_error ArgumentError,
                    "Response header name and value must be strings, but received \"x-custom\" and 123",
                    fn ->

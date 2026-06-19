@@ -39,6 +39,39 @@ defmodule Hologram.Server do
         }
 
   @doc """
+  Appends a value to a response header, keeping any existing value.
+
+  The header name is downcased. If the header already has a value, the new value is
+  appended after a comma. Use `put_response_header/3` to replace instead of append.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `name` - The header name (string)
+    * `value` - The header value to append (string)
+  """
+  @spec append_response_header(t(), String.t(), String.t()) :: t()
+  def append_response_header(server, name, value)
+
+  def append_response_header(server, name, value) when is_binary(name) and is_binary(value) do
+    key = String.downcase(name)
+
+    new_value =
+      case Map.fetch(server.response_headers, key) do
+        {:ok, existing} -> existing <> ", " <> value
+        :error -> value
+      end
+
+    %{server | response_headers: Map.put(server.response_headers, key, new_value)}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def append_response_header(_server, name, value) do
+    raise ArgumentError,
+          "Response header name and value must be strings, but received #{inspect(name)} and #{inspect(value)}"
+  end
+
+  @doc """
   Removes a cookie from the server struct and marks it for deletion in the client's browser.
 
   If the cookie exists, it is removed from the server struct's cookies data and a delete 
