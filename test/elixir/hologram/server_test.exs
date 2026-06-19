@@ -720,4 +720,48 @@ defmodule Hologram.ServerTest do
                    end
     end
   end
+
+  describe "put_status/2" do
+    test "sets an integer status code" do
+      result = put_status(%Server{}, 404)
+
+      assert result.status == 404
+    end
+
+    test "resolves an atom alias to its numeric code" do
+      result = put_status(%Server{}, :not_found)
+
+      assert result.status == 404
+    end
+
+    test "overwrites an existing status" do
+      result = put_status(%Server{status: 200}, 403)
+
+      assert result.status == 403
+    end
+
+    test "raises ArgumentError for an unknown atom alias" do
+      assert_error ArgumentError,
+                   "Unknown status alias: :bogus",
+                   fn ->
+                     put_status(%Server{}, :bogus)
+                   end
+    end
+
+    test "raises ArgumentError for an out-of-range status code" do
+      assert_error ArgumentError,
+                   "Response status must be an HTTP status code (100..599) or a status atom alias, but received 4040",
+                   fn ->
+                     put_status(%Server{}, 4040)
+                   end
+    end
+
+    test "raises ArgumentError when status is not an integer or an atom" do
+      assert_error ArgumentError,
+                   "Response status must be an HTTP status code (100..599) or a status atom alias, but received \"404\"",
+                   fn ->
+                     put_status(%Server{}, "404")
+                   end
+    end
+  end
 end

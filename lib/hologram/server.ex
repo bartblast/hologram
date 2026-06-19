@@ -5,6 +5,7 @@ defmodule Hologram.Server do
   alias Hologram.Runtime.Session
   alias Hologram.Server.Broadcast
   alias Hologram.Server.Metadata
+  alias Hologram.Server.Status
 
   defstruct broadcasts: [],
             cid: nil,
@@ -13,6 +14,7 @@ defmodule Hologram.Server do
             next_action: nil,
             session: %{},
             session_id: nil,
+            status: nil,
             subscriptions: [],
             user_id: nil,
             __meta__: %Metadata{}
@@ -27,6 +29,7 @@ defmodule Hologram.Server do
           next_action: Action.t() | nil,
           session: %{atom => any},
           session_id: identity_id | nil,
+          status: pos_integer() | nil,
           subscriptions: [tuple],
           user_id: identity_id | nil,
           __meta__: Metadata.t()
@@ -303,5 +306,44 @@ defmodule Hologram.Server do
   # TODO: reconsider if this argument validation is needed once Elixir has static typing
   def put_session(_server, key, _value) do
     raise ArgumentError, "Session key must be an atom or a string, but received #{inspect(key)}"
+  end
+
+  @doc """
+  Sets the response status, marking the response as terminal so the handler is skipped.
+
+  Accepts an integer status code in the `100..599` range (e.g. `403`) or an atom
+  alias (e.g. `:forbidden`), which is resolved to its numeric code. Raises for an
+  unknown alias or an out-of-range code.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `status` - The response status (integer code or atom alias)
+
+  ## Examples
+
+      iex> server = %Hologram.Server{}
+      iex> put_status(server, 404)
+      %Hologram.Server{status: 404}
+
+      iex> server = %Hologram.Server{}
+      iex> put_status(server, :not_found)
+      %Hologram.Server{status: 404}
+  """
+  @spec put_status(t(), pos_integer() | atom()) :: t()
+  def put_status(server, status)
+
+  def put_status(server, status) when is_integer(status) and status in 100..599 do
+    %{server | status: status}
+  end
+
+  def put_status(server, status) when is_atom(status) do
+    %{server | status: Status.code(status)}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_status(_server, status) do
+    raise ArgumentError,
+          "Response status must be an HTTP status code (100..599) or a status atom alias, but received #{inspect(status)}"
   end
 end
