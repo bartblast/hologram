@@ -59,6 +59,7 @@ defmodule Hologram.Server do
 
   def append_response_header(server, name, value) when is_binary(name) and is_binary(value) do
     key = String.downcase(name)
+    ensure_not_cookie_header!(key)
 
     new_value =
       case Map.fetch(server.response_headers, key) do
@@ -131,7 +132,10 @@ defmodule Hologram.Server do
   def delete_response_header(server, name)
 
   def delete_response_header(server, name) when is_binary(name) do
-    new_response_headers = Map.delete(server.response_headers, String.downcase(name))
+    key = String.downcase(name)
+    ensure_not_cookie_header!(key)
+
+    new_response_headers = Map.delete(server.response_headers, key)
     %{server | response_headers: new_response_headers}
   end
 
@@ -245,7 +249,10 @@ defmodule Hologram.Server do
   def get_request_header(server, name, default \\ nil)
 
   def get_request_header(server, name, default) when is_binary(name) do
-    Map.get(server.request_headers, String.downcase(name), default)
+    key = String.downcase(name)
+    ensure_not_cookie_header!(key)
+
+    Map.get(server.request_headers, key, default)
   end
 
   # TODO: reconsider if this argument validation is needed once Elixir has static typing
@@ -269,7 +276,10 @@ defmodule Hologram.Server do
   def get_response_header(server, name, default \\ nil)
 
   def get_response_header(server, name, default) when is_binary(name) do
-    Map.get(server.response_headers, String.downcase(name), default)
+    key = String.downcase(name)
+    ensure_not_cookie_header!(key)
+
+    Map.get(server.response_headers, key, default)
   end
 
   # TODO: reconsider if this argument validation is needed once Elixir has static typing
@@ -481,7 +491,10 @@ defmodule Hologram.Server do
   def put_response_header(server, name, value)
 
   def put_response_header(server, name, value) when is_binary(name) and is_binary(value) do
-    new_response_headers = Map.put(server.response_headers, String.downcase(name), value)
+    key = String.downcase(name)
+    ensure_not_cookie_header!(key)
+
+    new_response_headers = Map.put(server.response_headers, key, value)
     %{server | response_headers: new_response_headers}
   end
 
@@ -561,4 +574,11 @@ defmodule Hologram.Server do
     raise ArgumentError,
           "Response status must be an HTTP status code (100..599) or a status atom alias, but received #{inspect(status)}"
   end
+
+  defp ensure_not_cookie_header!(name) when name in ["cookie", "set-cookie"] do
+    raise ArgumentError,
+          "#{name} is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers"
+  end
+
+  defp ensure_not_cookie_header!(_name), do: :ok
 end

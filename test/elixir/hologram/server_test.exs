@@ -46,6 +46,14 @@ defmodule Hologram.ServerTest do
                      append_response_header(%Server{}, "vary", 123)
                    end
     end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     append_response_header(%Server{}, "set-cookie", "id=1")
+                   end
+    end
   end
 
   describe "delete_cookie/2" do
@@ -161,6 +169,14 @@ defmodule Hologram.ServerTest do
                    "Response header name must be a string, but received 123",
                    fn ->
                      delete_response_header(%Server{}, 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     delete_response_header(%Server{}, "set-cookie")
                    end
     end
   end
@@ -457,6 +473,14 @@ defmodule Hologram.ServerTest do
                      get_request_header(%Server{}, 123)
                    end
     end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     get_request_header(%Server{}, "cookie")
+                   end
+    end
   end
 
   describe "get_response_header/2 & get_response_header/3" do
@@ -485,6 +509,14 @@ defmodule Hologram.ServerTest do
                    "Response header name must be a string, but received 123",
                    fn ->
                      get_response_header(%Server{}, 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     get_response_header(%Server{}, "set-cookie")
                    end
     end
   end
@@ -872,6 +904,14 @@ defmodule Hologram.ServerTest do
                    "Response header name and value must be strings, but received \"x-custom\" and 123",
                    fn ->
                      put_response_header(%Server{}, "x-custom", 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     put_response_header(%Server{}, "set-cookie", "id=1")
                    end
     end
   end
