@@ -1,6 +1,12 @@
 defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
   @moduledoc """
   Prints paths from runtime entry MFAs to the given destination MFA.
+
+  ## Examples
+
+      $ mix holo.compiler.runtime_to_mfa_paths "{MyModule, :my_fun, 2}"
+
+  Where `{MyModule, :my_fun, 2}` is the destination MFA.
   """
 
   use Mix.Task
