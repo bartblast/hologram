@@ -14,11 +14,14 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPathsTest do
         assert Task.run([page_module_arg, dest_mfa_arg]) == :ok
       end)
 
-    assert output == """
+    expected =
+      normalize_newlines("""
 
-           {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0} -> {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module3, :fun_3c, 0}
-           [{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :fun_1a, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module2, :fun_2b, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module3, :fun_3c, 0}]
+      {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0} -> {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module3, :fun_3c, 0}
+      [{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :fun_1a, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module2, :fun_2b, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module3, :fun_3c, 0}]
 
-           """
+      """)
+
+    assert output == expected
   end
 end
