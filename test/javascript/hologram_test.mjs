@@ -1238,6 +1238,8 @@ describe("Hologram", () => {
 
   describe("render()", () => {
     afterEach(() => {
+      document.body.innerHTML = "";
+      ComponentRegistry.clear();
       Renderer.listenerBindings = [];
       sinon.restore();
     });
@@ -1259,6 +1261,94 @@ describe("Hologram", () => {
       Hologram.render();
 
       sinon.assert.calledOnceWithExactly(reconcileStub, bindings);
+    });
+
+    it("executes and clears focus effects after patching", () => {
+      document.body.innerHTML = '<button id="focus-target"></button>';
+      const element = document.getElementById("focus-target");
+      const focusSpy = sinon.spy(element, "focus");
+
+      const effect = Type.map([
+        [Type.atom("type"), Type.atom("focus")],
+        [Type.atom("element_id"), Type.bitstring("focus-target")],
+      ]);
+
+      ComponentRegistry.entries = Type.map([
+        [
+          cid1,
+          Type.map([
+            [Type.atom("module"), Type.alias("MyModule")],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({domEffects: Type.list([effect])}),
+            ],
+          ]),
+        ],
+      ]);
+
+      sinon.stub(Renderer, "renderPage").callsFake(() => {
+        Renderer.listenerBindings = [];
+        return {sel: "html", data: {}, children: []};
+      });
+
+      sinon.stub(Vdom, "patchVirtualDocument");
+      sinon.stub(EventListenerRegistry, "reconcile");
+
+      Hologram.render();
+
+      sinon.assert.calledOnce(focusSpy);
+
+      const struct = ComponentRegistry.getComponentStruct(cid1);
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("dom_effects"), struct),
+        Type.list(),
+      );
+    });
+
+    it("executes text selection effects after patching", () => {
+      document.body.innerHTML = '<textarea id="editor"></textarea>';
+      const element = document.getElementById("editor");
+      const focusSpy = sinon.spy(element, "focus");
+      const setSelectionRangeSpy = sinon.spy(element, "setSelectionRange");
+
+      const effect = Type.map([
+        [Type.atom("type"), Type.atom("text_selection")],
+        [Type.atom("element_id"), Type.bitstring("editor")],
+        [Type.atom("selection_start"), Type.integer(1)],
+        [Type.atom("selection_end"), Type.integer(3)],
+        [Type.atom("selection_direction"), Type.bitstring("backward")],
+      ]);
+
+      ComponentRegistry.entries = Type.map([
+        [
+          cid1,
+          Type.map([
+            [Type.atom("module"), Type.alias("MyModule")],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({domEffects: Type.list([effect])}),
+            ],
+          ]),
+        ],
+      ]);
+
+      sinon.stub(Renderer, "renderPage").callsFake(() => {
+        Renderer.listenerBindings = [];
+        return {sel: "html", data: {}, children: []};
+      });
+
+      sinon.stub(Vdom, "patchVirtualDocument");
+      sinon.stub(EventListenerRegistry, "reconcile");
+
+      Hologram.render();
+
+      sinon.assert.calledOnce(focusSpy);
+      sinon.assert.calledOnceWithExactly(
+        setSelectionRangeSpy,
+        1,
+        3,
+        "backward",
+      );
     });
   });
 

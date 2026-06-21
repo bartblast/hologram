@@ -355,6 +355,7 @@ describe("Type", () => {
         Type.componentStruct(),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [Type.atom("dom_effects"), Type.list()],
           [Type.atom("emitted_context"), Type.map()],
           [Type.atom("next_action"), Type.nil()],
           [Type.atom("next_command"), Type.nil()],
@@ -365,6 +366,10 @@ describe("Type", () => {
     });
 
     it("custom values", () => {
+      const domEffects = Type.list([
+        Type.map([[Type.atom("type"), Type.atom("focus")]]),
+      ]);
+
       const emittedContext = Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("b"), Type.integer(2)],
@@ -388,6 +393,7 @@ describe("Type", () => {
       ]);
 
       const result = Type.componentStruct({
+        domEffects,
         emittedContext,
         nextAction,
         nextCommand,
@@ -399,6 +405,7 @@ describe("Type", () => {
         result,
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [Type.atom("dom_effects"), domEffects],
           [Type.atom("emitted_context"), emittedContext],
           [Type.atom("next_action"), nextAction],
           [Type.atom("next_command"), nextCommand],
@@ -1705,6 +1712,7 @@ describe("Type", () => {
         Type.componentStruct(),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [Type.atom("dom_effects"), Type.list()],
           [Type.atom("emitted_context"), Type.map()],
           [Type.atom("next_action"), Type.nil()],
           [Type.atom("next_command"), Type.nil()],

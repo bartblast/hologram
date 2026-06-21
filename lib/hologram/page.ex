@@ -47,10 +47,14 @@ defmodule Hologram.Page do
             put_command: 2,
             put_command: 3,
             put_context: 3,
+            put_dom_selection: 2,
+            put_focus: 2,
             put_page: 2,
             put_page: 3,
             put_state: 2,
             put_state: 3,
+            put_text_selection: 4,
+            put_text_selection: 5,
             put_subscription: 2
           ]
 

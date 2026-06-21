@@ -7,6 +7,7 @@ import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
+import DomSelection from "./dom_selection.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
 import GlobalRegistry from "./global_registry.mjs";
@@ -27,6 +28,7 @@ import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
 
 // Events
+import BeforeInputEvent from "./events/before_input_event.mjs";
 import ChangeEvent from "./events/change_event.mjs";
 import ClickEvent from "./events/click_event.mjs";
 import ClickOutsideEvent from "./events/click_outside_event.mjs";
@@ -38,6 +40,7 @@ import PointerEvent from "./events/pointer_event.mjs";
 import ResizeEvent from "./events/resize_event.mjs";
 import ScrollEvent from "./events/scroll_event.mjs";
 import SelectEvent from "./events/select_event.mjs";
+import SelectionChangeEvent from "./events/selection_change_event.mjs";
 import SubmitEvent from "./events/submit_event.mjs";
 import TransitionEvent from "./events/transition_event.mjs";
 
@@ -379,6 +382,8 @@ export default class Hologram {
       ...Renderer.resolveResizeBindings(),
     ]);
 
+    Hologram.#executeDomEffects();
+
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
   }
 
@@ -671,6 +676,111 @@ export default class Hologram {
     }
   }
 
+  static #executeDomEffect(effect) {
+    const type = Hologram.#getDomEffectValue(effect, "type");
+
+    if (Type.isNil(type)) {
+      return;
+    }
+
+    switch (type.value) {
+      case "focus":
+        Hologram.#executeFocusEffect(effect);
+        return;
+
+      case "text_selection":
+        Hologram.#executeTextSelectionEffect(effect);
+        return;
+
+      case "dom_selection":
+        Hologram.#executeDomSelectionEffect(effect);
+    }
+  }
+
+  static #executeDomEffects() {
+    for (const [cid, entry] of Object.values(ComponentRegistry.entries.data)) {
+      const componentStruct = Erlang_Maps["get/2"](Type.atom("struct"), entry);
+
+      const effects = Erlang_Maps["get/3"](
+        Type.atom("dom_effects"),
+        componentStruct,
+        Type.list(),
+      );
+
+      if (!Type.isList(effects) || effects.data.length === 0) {
+        continue;
+      }
+
+      effects.data.forEach((effect) => Hologram.#executeDomEffect(effect));
+      ComponentRegistry.clearDomEffects(cid);
+    }
+  }
+
+  static #executeDomSelectionEffect(effect) {
+    const rootId = Hologram.#getDomEffectBitstring(effect, "root");
+    const root = rootId === null ? null : document.getElementById(rootId);
+
+    if (root === null) {
+      return;
+    }
+
+    DomSelection.restoreDomSelection(root, {
+      anchorPath: Hologram.#getDomEffectIntegerList(effect, "anchor_path"),
+      anchorOffset: Hologram.#getDomEffectInteger(effect, "anchor_offset"),
+      focusPath: Hologram.#getDomEffectIntegerList(effect, "focus_path"),
+      focusOffset: Hologram.#getDomEffectInteger(effect, "focus_offset"),
+    });
+  }
+
+  static #executeFocusEffect(effect) {
+    const elementId = Hologram.#getDomEffectBitstring(effect, "element_id");
+    const element =
+      elementId === null ? null : document.getElementById(elementId);
+
+    element?.focus?.();
+  }
+
+  static #executeTextSelectionEffect(effect) {
+    const elementId = Hologram.#getDomEffectBitstring(effect, "element_id");
+    const element =
+      elementId === null ? null : document.getElementById(elementId);
+
+    if (element === null || typeof element.setSelectionRange !== "function") {
+      return;
+    }
+
+    element.focus?.();
+    element.setSelectionRange(
+      Hologram.#getDomEffectInteger(effect, "selection_start"),
+      Hologram.#getDomEffectInteger(effect, "selection_end"),
+      Hologram.#getDomEffectBitstring(effect, "selection_direction") || "none",
+    );
+  }
+
+  static #getDomEffectBitstring(effect, key) {
+    const value = Hologram.#getDomEffectValue(effect, key);
+
+    return Type.isNil(value) ? null : Bitstring.toText(value);
+  }
+
+  static #getDomEffectInteger(effect, key) {
+    const value = Hologram.#getDomEffectValue(effect, key);
+
+    return Type.isNil(value) ? 0 : Number(value.value);
+  }
+
+  static #getDomEffectIntegerList(effect, key) {
+    const value = Hologram.#getDomEffectValue(effect, key, Type.list());
+
+    return Type.isList(value)
+      ? value.data.map((item) => Number(item.value))
+      : [];
+  }
+
+  static #getDomEffectValue(effect, key, defaultValue = Type.nil()) {
+    return Erlang_Maps["get/3"](Type.atom(key), effect, defaultValue);
+  }
+
   // Deps: [:maps.get/2]
   static #getActionName(action) {
     return Erlang_Maps["get/2"](Type.atom("name"), action).value;
@@ -678,6 +788,9 @@ export default class Hologram {
 
   static #getEventImplementation(eventType) {
     switch (eventType) {
+      case "beforeinput":
+        return BeforeInputEvent;
+
       case "blur":
       case "focus":
         return FocusEvent;
@@ -715,6 +828,9 @@ export default class Hologram {
 
       case "select":
         return SelectEvent;
+
+      case "selectionchange":
+        return SelectionChangeEvent;
 
       case "submit":
         return SubmitEvent;

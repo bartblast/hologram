@@ -4,6 +4,20 @@ defmodule Hologram.Runtime.DeserializerTest do
 
   @delimiter delimiter()
 
+  test "atoms_whitelist/0 includes rich text event payload atoms" do
+    assert :selection_start in atoms_whitelist()
+    assert :selection_end in atoms_whitelist()
+    assert :selection_direction in atoms_whitelist()
+    assert :input_type in atoms_whitelist()
+    assert :is_composing in atoms_whitelist()
+    assert :selection in atoms_whitelist()
+    assert :anchor_path in atoms_whitelist()
+    assert :anchor_offset in atoms_whitelist()
+    assert :focus_path in atoms_whitelist()
+    assert :focus_offset in atoms_whitelist()
+    assert :direction in atoms_whitelist()
+  end
+
   describe "version 3" do
     test "top-level data, raw JSON" do
       assert deserialize(~s'[3,"axyz"]') == :xyz

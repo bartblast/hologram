@@ -9,6 +9,24 @@ defmodule Hologram.Runtime.Deserializer do
     # change event, select event
     :value,
 
+    # select event, before input event
+    :selection_start,
+    :selection_end,
+    :selection_direction,
+
+    # before input event
+    :data,
+    :input_type,
+    :is_composing,
+
+    # before input event, selection change event
+    :anchor_offset,
+    :anchor_path,
+    :direction,
+    :focus_offset,
+    :focus_path,
+    :selection,
+
     # client-side ERTS node name
     :hologram_client,
 

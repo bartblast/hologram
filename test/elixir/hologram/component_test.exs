@@ -465,6 +465,37 @@ defmodule Hologram.ComponentTest do
            }
   end
 
+  test "put_dom_selection/2" do
+    component = %Component{dom_effects: [%{type: :focus, element_id: "title"}]}
+
+    assert put_dom_selection(component,
+             root: "description-editor",
+             anchor_path: [0, 1],
+             anchor_offset: 4,
+             focus_path: [0, 1],
+             focus_offset: 9
+           ) == %Component{
+             dom_effects: [
+               %{type: :focus, element_id: "title"},
+               %{
+                 type: :dom_selection,
+                 root: "description-editor",
+                 anchor_path: [0, 1],
+                 anchor_offset: 4,
+                 focus_path: [0, 1],
+                 focus_offset: 9,
+                 direction: "none"
+               }
+             ]
+           }
+  end
+
+  test "put_focus/2" do
+    assert put_focus(%Component{}, "title") == %Component{
+             dom_effects: [%{type: :focus, element_id: "title"}]
+           }
+  end
+
   test "put_page/2" do
     assert put_page(%Component{}, MyPage) == %Component{next_page: MyPage}
   end
@@ -516,6 +547,34 @@ defmodule Hologram.ComponentTest do
 
       assert result == %Component{state: %{a: 1, b: %Module5{x: 2, y: 4}}}
     end
+  end
+
+  test "put_text_selection/5" do
+    assert put_text_selection(%Component{}, "title", 1, 3, "backward") == %Component{
+             dom_effects: [
+               %{
+                 type: :text_selection,
+                 element_id: "title",
+                 selection_start: 1,
+                 selection_end: 3,
+                 selection_direction: "backward"
+               }
+             ]
+           }
+  end
+
+  test "put_text_selection/4 defaults direction to none" do
+    assert put_text_selection(%Component{}, "title", 1, 3) == %Component{
+             dom_effects: [
+               %{
+                 type: :text_selection,
+                 element_id: "title",
+                 selection_start: 1,
+                 selection_end: 3,
+                 selection_direction: "none"
+               }
+             ]
+           }
   end
 
   describe "put_subscription/2" do

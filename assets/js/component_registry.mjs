@@ -9,6 +9,16 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = Type.map();
   }
 
+  // Optimized (mutates dom_effects field in-place)
+  static clearDomEffects(cid) {
+    const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];
+    const componentStruct = entry.data["atom(struct)"][1];
+    componentStruct.data["atom(dom_effects)"] = [
+      Type.atom("dom_effects"),
+      Type.list(),
+    ];
+  }
+
   // Optimized (mutates next_action field in-place)
   static clearNextAction(cid) {
     const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];

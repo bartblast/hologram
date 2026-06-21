@@ -1156,6 +1156,53 @@ describe("Renderer", () => {
             Hologram.handleUiEvent.restore();
           });
 
+          it("normalizes $before_input event to beforeinput", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$before_input"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            assert.deepStrictEqual(Object.keys(vdom.data.on), ["beforeinput"]);
+
+            const stub = sinon
+              .stub(Hologram, "handleUiEvent")
+              .callsFake((..._args) => null);
+
+            vdom.data.on.beforeinput("dummyEvent");
+
+            sinon.assert.calledWith(
+              stub,
+              "dummyEvent",
+              "beforeinput",
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+              ]),
+              defaultTarget,
+            );
+
+            Hologram.handleUiEvent.restore();
+          });
+
           it("maps $change event to $input event for input element without type attribute", () => {
             const node = Type.tuple([
               Type.atom("element"),
@@ -5608,6 +5655,81 @@ describe("Renderer", () => {
         event,
         "click_outside",
         innerSpecDom,
+        defaultTarget,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+  });
+
+  describe("selection_change binding", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    const selectionChangeElement = (specDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([Type.tuple([Type.bitstring("$selection_change"), specDom])]),
+        Type.list(),
+      ]);
+
+    beforeEach(() => {
+      Renderer.listenerBindings = [];
+    });
+
+    it("attaches no per-element listener and collects a document-level selectionchange binding", () => {
+      const vdom = Renderer.renderDom(
+        selectionChangeElement(actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(vdom.data.on, {});
+
+      assert.equal(Renderer.listenerBindings.length, 1);
+      assert.equal(Renderer.listenerBindings[0].target, document);
+      assert.equal(Renderer.listenerBindings[0].key, "bubble:selectionchange");
+    });
+
+    it("dispatches with the bound element as event target/currentTarget", () => {
+      const vdom = Renderer.renderDom(
+        selectionChangeElement(actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      vdom.elm = {id: "root"};
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      const sourceEvent = {
+        preventDefault: sinon.spy(),
+        stopPropagation: sinon.spy(),
+      };
+
+      Renderer.listenerBindings[0].handler(sourceEvent);
+
+      sinon.assert.calledOnce(stub);
+
+      const scopedEvent = stub.getCall(0).args[0];
+      assert.equal(scopedEvent.target, vdom.elm);
+      assert.equal(scopedEvent.currentTarget, vdom.elm);
+
+      sinon.assert.calledWith(
+        stub,
+        scopedEvent,
+        "selectionchange",
+        actionSpecDom,
         defaultTarget,
       );
 

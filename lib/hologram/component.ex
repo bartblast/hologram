@@ -7,7 +7,12 @@ defmodule Hologram.Component do
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
-  defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
+  defstruct dom_effects: [],
+            emitted_context: %{},
+            next_action: nil,
+            next_command: nil,
+            next_page: nil,
+            state: %{}
 
   defmodule Action do
     defstruct delay: 0, name: nil, params: %{}, target: nil
@@ -27,6 +32,7 @@ defmodule Hologram.Component do
   end
 
   @type t :: %__MODULE__{
+          dom_effects: [map],
           emitted_context: %{atom => any} | %{{module, atom} => any},
           next_action: Action.t() | nil,
           next_command: Command.t() | nil,
@@ -81,10 +87,14 @@ defmodule Hologram.Component do
             put_command: 2,
             put_command: 3,
             put_context: 3,
+            put_dom_selection: 2,
+            put_focus: 2,
             put_page: 2,
             put_page: 3,
             put_state: 2,
             put_state: 3,
+            put_text_selection: 4,
+            put_text_selection: 5,
             put_subscription: 2
           ]
 
@@ -355,6 +365,36 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Queues a post-render DOM selection effect for a contenteditable root.
+
+  The selection node positions are stable child-index paths from the root element to the
+  selected text or element node. The effect is executed by the client after the next DOM patch
+  and is then cleared.
+  """
+  @spec put_dom_selection(Component.t(), keyword | map) :: Component.t()
+  def put_dom_selection(%Component{} = component, opts) do
+    opts = Map.new(opts)
+
+    append_dom_effect(component, %{
+      type: :dom_selection,
+      root: opts[:root],
+      anchor_path: opts[:anchor_path],
+      anchor_offset: opts[:anchor_offset],
+      focus_path: opts[:focus_path],
+      focus_offset: opts[:focus_offset],
+      direction: opts[:direction] || "none"
+    })
+  end
+
+  @doc """
+  Queues a post-render focus effect for the DOM element with the given ID.
+  """
+  @spec put_focus(Component.t(), String.t()) :: Component.t()
+  def put_focus(%Component{} = component, element_id) do
+    append_dom_effect(component, %{type: :focus, element_id: element_id})
+  end
+
+  @doc """
   Puts the given page module to the component's next_page field.
   The client will navigate to this page asynchronously after the current action finished executing.
   """
@@ -402,6 +442,29 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Queues a post-render text selection effect for an input or textarea element.
+  """
+  @spec put_text_selection(
+          Component.t(),
+          String.t(),
+          non_neg_integer,
+          non_neg_integer,
+          String.t()
+        ) ::
+          Component.t()
+  def put_text_selection(component, element_id, start, finish, direction \\ "none")
+
+  def put_text_selection(%Component{} = component, element_id, start, finish, direction) do
+    append_dom_effect(component, %{
+      type: :text_selection,
+      element_id: element_id,
+      selection_start: start,
+      selection_end: finish,
+      selection_direction: direction
+    })
+  end
+
+  @doc """
   Subscribes the current handler's component to `channel`.
 
   The subscription is scoped to the component whose handler is running - the
@@ -444,6 +507,10 @@ defmodule Hologram.Component do
     quote do
       Module.register_attribute(__MODULE__, :__props__, accumulate: true)
     end
+  end
+
+  defp append_dom_effect(%Component{dom_effects: dom_effects} = component, effect) do
+    %{component | dom_effects: dom_effects ++ [effect]}
   end
 
   defp append_broadcast(server, channel, action_name, params, except \\ []) do

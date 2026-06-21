@@ -229,6 +229,13 @@ export default class Renderer {
       return null;
     }
 
+    // selectionchange is fired on document, not on the contenteditable element. A
+    // $selection_change binding on an element is collected as a scoped document listener in
+    // #renderElement, and the event implementation ignores selections outside that element.
+    if (originalEventName === "selection_change") {
+      return null;
+    }
+
     // resize on a real element is delivered by a ResizeObserver, not a DOM event, so it is collected
     // as an observer binding in #renderElement. Returning null keeps it out of the element's "on"
     // map, where the browser would never fire it. A <window> binding (tagName null) keeps flowing
@@ -266,6 +273,7 @@ export default class Renderer {
     effectiveDomEventName,
     defaultTarget,
     getThrottleTarget = (event) => event.currentTarget,
+    transformEvent = (event) => event,
   ) {
     const modifiersDom = attrDom.data[2];
     const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
@@ -282,8 +290,14 @@ export default class Renderer {
       // payload now, while the event is live, then returns the dispatch (or null when ignored).
       // Only the dispatch is debounced - deferring preventDefault would let the browser's native
       // default fire before it could be blocked.
+      const operationEvent = transformEvent(event);
+
+      if (operationEvent === null) {
+        return;
+      }
+
       const dispatch = Hologram.handleUiEvent(
-        event,
+        operationEvent,
         effectiveDomEventName,
         attrDom.data[1],
         defaultTarget,
@@ -298,7 +312,7 @@ export default class Renderer {
       // The throttle target is read synchronously here - a DOM event nulls its currentTarget after
       // dispatch. Debounce and throttle are mutually exclusive (enforced at compile time), so at
       // most one applies.
-      const throttleTarget = getThrottleTarget(event);
+      const throttleTarget = getThrottleTarget(operationEvent);
 
       if (debounceMs !== null) {
         Debouncer.run(throttleTarget, slotKey, debounceMs, dispatch);
@@ -437,6 +451,44 @@ export default class Renderer {
       );
 
       $.resizeBindings.push({vnode: elementVnode, handler});
+    });
+  }
+
+  // Records each $selection_change attribute as a document-level selectionchange binding scoped
+  // to the rendered element. Browsers fire selectionchange on document, so a per-element listener
+  // would not see caret moves inside a contenteditable root. The transformed event presents the
+  // bound element as target/currentTarget, allowing SelectionChangeEvent to build paths relative
+  // to that root and ignore selections outside it.
+  static #collectSelectionChangeBindings(
+    attrsDom,
+    elementVnode,
+    defaultTarget,
+  ) {
+    attrsDom.data.forEach((attrDom, attrIndex) => {
+      if (Bitstring.toText(attrDom.data[0]) !== "$selection_change") {
+        return;
+      }
+
+      const handler = $.#buildEventHandler(
+        attrDom,
+        attrIndex,
+        "selectionchange",
+        defaultTarget,
+        (event) => event.currentTarget,
+        (event) => ({
+          target: elementVnode.elm,
+          currentTarget: elementVnode.elm,
+          preventDefault: () => event.preventDefault?.(),
+          stopPropagation: () => event.stopPropagation?.(),
+        }),
+      );
+
+      const {key, attach} = EventListeners.domEvent(
+        document,
+        "selectionchange",
+      );
+
+      $.listenerBindings.push({target: document, key, attach, handler});
     });
   }
 
@@ -1085,6 +1137,12 @@ export default class Renderer {
     );
 
     Renderer.#collectResizeBindings(attrsDom, elementVnode, defaultTarget);
+
+    Renderer.#collectSelectionChangeBindings(
+      attrsDom,
+      elementVnode,
+      defaultTarget,
+    );
 
     return elementVnode;
   }

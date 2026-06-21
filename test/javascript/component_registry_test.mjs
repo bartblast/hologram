@@ -102,6 +102,32 @@ describe("ComponentRegistry", () => {
     assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
   });
 
+  describe("clearDomEffects()", () => {
+    it("clears dom_effects from the component struct in the registry", () => {
+      const effects = Type.list([
+        Type.map([[Type.atom("type"), Type.atom("focus")]]),
+      ]);
+
+      const struct = Type.componentStruct({domEffects: effects});
+
+      const entry = Type.map([
+        [Type.atom("module"), Type.alias("MyModule")],
+        [Type.atom("struct"), struct],
+      ]);
+
+      ComponentRegistry.entries = Type.map([[cid3, entry]]);
+
+      ComponentRegistry.clearDomEffects(cid3);
+
+      const updatedStruct = ComponentRegistry.getComponentStruct(cid3);
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("dom_effects"), updatedStruct),
+        Type.list(),
+      );
+    });
+  });
+
   describe("clearNextAction()", () => {
     it("clears next_action from the component struct in the registry", () => {
       const action = Type.actionStruct({
