@@ -37,6 +37,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module35
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module36
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module38
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -905,56 +906,61 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
 
-    test "includes reflection MFAs reachable from server inits of components used by the page", %{
+    test "excludes MFAs reachable only from server inits of components used by the page", %{
       page_module_22_mfas: result
     } do
-      assert {Module24, :__changeset__, 0} in result
-      assert {Module24, :__schema__, 1} in result
-      assert {Module24, :__schema__, 2} in result
+      refute {Module24, :__changeset__, 0} in result
+      refute {Module24, :__schema__, 1} in result
+      refute {Module24, :__schema__, 2} in result
 
-      assert {Module25, :__struct__, 0} in result
-      assert {Module25, :__struct__, 1} in result
+      refute {Module25, :__struct__, 0} in result
+      refute {Module25, :__struct__, 1} in result
 
-      assert {Module27, :__changeset__, 0} in result
-      assert {Module27, :__schema__, 1} in result
-      assert {Module27, :__schema__, 2} in result
+      refute {Module27, :__changeset__, 0} in result
+      refute {Module27, :__schema__, 1} in result
+      refute {Module27, :__schema__, 2} in result
 
-      assert {Module28, :__struct__, 0} in result
-      assert {Module28, :__struct__, 1} in result
+      refute {Module28, :__struct__, 0} in result
+      refute {Module28, :__struct__, 1} in result
 
-      assert {Module30, :__changeset__, 0} in result
-      assert {Module30, :__schema__, 1} in result
-      assert {Module30, :__schema__, 2} in result
+      refute {Module30, :__changeset__, 0} in result
+      refute {Module30, :__schema__, 1} in result
+      refute {Module30, :__schema__, 2} in result
 
-      assert {Module31, :__struct__, 0} in result
-      assert {Module31, :__struct__, 1} in result
+      refute {Module31, :__struct__, 0} in result
+      refute {Module31, :__struct__, 1} in result
 
-      assert {Module32, :__changeset__, 0} in result
-      assert {Module32, :__schema__, 1} in result
-      assert {Module32, :__schema__, 2} in result
+      refute {Module32, :__changeset__, 0} in result
+      refute {Module32, :__schema__, 1} in result
+      refute {Module32, :__schema__, 2} in result
 
-      assert {Module33, :__struct__, 0} in result
-      assert {Module33, :__struct__, 1} in result
+      refute {Module33, :__struct__, 0} in result
+      refute {Module33, :__struct__, 1} in result
 
-      assert {Module35, :__changeset__, 0} in result
-      assert {Module35, :__schema__, 1} in result
-      assert {Module35, :__schema__, 2} in result
+      refute {Module35, :__changeset__, 0} in result
+      refute {Module35, :__schema__, 1} in result
+      refute {Module35, :__schema__, 2} in result
 
-      assert {Module36, :__struct__, 0} in result
-      assert {Module36, :__struct__, 1} in result
+      refute {Module36, :__struct__, 0} in result
+      refute {Module36, :__struct__, 1} in result
 
-      assert {Module37, :__struct__, 0} in result
-      assert {Module37, :__struct__, 1} in result
+      refute {Module37, :__struct__, 0} in result
+      refute {Module37, :__struct__, 1} in result
     end
 
-    test "removes duplicate reflection MFAs reachable from server inits of components used by the page",
-         %{page_module_22_mfas: result} do
-      assert Enum.count(result, &(&1 == {Module32, :__changeset__, 0})) == 1
-      assert Enum.count(result, &(&1 == {Module32, :__schema__, 1})) == 1
-      assert Enum.count(result, &(&1 == {Module32, :__schema__, 2})) == 1
+    test "includes Ecto schema reflection MFAs for schema modules reachable from client code", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> list_page_mfas(Module38)
 
-      assert Enum.count(result, &(&1 == {Module37, :__struct__, 0})) == 1
-      assert Enum.count(result, &(&1 == {Module37, :__struct__, 1})) == 1
+      assert {Module21, :__changeset__, 0} in result
+      assert {Module21, :__schema__, 1} in result
+      assert {Module21, :__schema__, 2} in result
     end
 
     test "results are deduped", %{page_module_22_mfas: result} do

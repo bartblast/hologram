@@ -637,12 +637,11 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_page_mfas(t, module) :: [mfa]
   def list_page_mfas(call_graph, page_module) do
     entry_mfas = list_page_entry_mfas(page_module)
-    graph = get_graph(call_graph)
 
-    graph
+    call_graph
+    |> get_graph()
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
-    |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -995,48 +994,8 @@ defmodule Hologram.Compiler.CallGraph do
     add_edges(call_graph, edges)
   end
 
-  # Adds reflection MFAs, i.e.:
-  # * __changeset__/0
-  # * __schema__/1
-  # * __schema__/2
-  # * __struct__/0
-  # * __struct__/1
-  # that are reachable from server inits (init/3) of the components used by the page.
-  defp add_reflection_mfas_reachable_from_server_inits(page_mfas, page_module, graph) do
-    templatables = [page_module | extract_uniq_components(page_mfas)]
-
-    added_mfas =
-      Enum.reduce(templatables, [], fn templetable, acc ->
-        acc ++ list_reflection_mfas_reachable_from_server_init(templetable, graph)
-      end)
-
-    page_mfas ++ added_mfas
-  end
-
-  defp extract_uniq_components(mfas) do
-    mfas
-    |> Enum.map(fn {module, _function, _arity} -> module end)
-    |> Enum.uniq()
-    |> Enum.filter(&Reflection.component?/1)
-  end
-
   defp incoming_edges(%{pid: pid}, vertex) do
     Agent.get(pid, &Digraph.incoming_edges(&1, vertex), :infinity)
-  end
-
-  defp list_reflection_mfas_reachable_from_server_init(templetable, graph) do
-    graph
-    |> Digraph.reachable([{templetable, :init, 3}])
-    |> Enum.filter(fn mfa ->
-      case mfa do
-        {_module, :__changeset__, 0} -> true
-        {_module, :__schema__, 1} -> true
-        {_module, :__schema__, 2} -> true
-        {_module, :__struct__, 0} -> true
-        {_module, :__struct__, 1} -> true
-        _falback -> false
-      end
-    end)
   end
 
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
