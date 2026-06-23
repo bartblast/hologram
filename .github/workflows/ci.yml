@@ -101,7 +101,7 @@ jobs:
 
       # Step: Checkout the code.
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Step: Setup Node.js.
       - name: Set up Node.js
@@ -287,7 +287,7 @@ jobs:
 
       # Step: Checkout the code.
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # Step: Setup Node.js.
       - name: Set up Node.js
