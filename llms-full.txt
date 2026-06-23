@@ -1314,7 +1314,7 @@ DOM events bubble: an event on a nested element also fires the bindings on its a
 </div>
 ```
 
-Hologram never stops propagation on its own - the modifier is the per-binding opt-in. Note that document-level features rely on bubbling: `$click_outside` bindings and `<window>` / `<document>` bindings only see events that bubble all the way up, so an event stopped by `stop_propagation` never reaches them - clicking such an element inside a dismissible popover will not dismiss it. Sometimes that is exactly the point, but keep it in mind when combining the two. The modifier composes with key filters, `allow_default`, `debounce`, and `throttle` - on keyboard events, propagation stops only for keys the filter matches.
+Hologram never stops propagation on its own - the modifier is the per-binding opt-in. Note that document-level features rely on bubbling: `$click_outside` bindings and `<window>` / `<document>` bindings only see events that bubble all the way up, so an event stopped by `stop_propagation` never reaches them - clicking such an element inside a dismissible popover will not dismiss it. Sometimes that is exactly the point, but keep it in mind when combining the two. The modifier composes with key filters, `allow_default`, `prevent_default`, `debounce`, and `throttle` - on keyboard events, propagation stops only for keys the filter matches.
 
 #### Event Flow
 
