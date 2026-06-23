@@ -3,7 +3,12 @@
 import PointerEvent from "./pointer_event.mjs";
 
 export default class ClickEvent {
-  static isDefaultAllowed = false;
+  // Allow the browser's native default. A click lands mostly on buttons and other elements with no
+  // native action (preventing is a no-op), or on elements whose native action you want - following
+  // a link, toggling a checkbox, expanding a <details>, opening a file picker. Only the Link
+  // component needs the default suppressed for client-side navigation, and it opts in with
+  // prevent_default.
+  static isDefaultAllowed = true;
 
   static buildOperationParam(event) {
     return PointerEvent.buildOperationParam(event);
