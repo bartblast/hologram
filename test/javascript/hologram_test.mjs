@@ -884,23 +884,44 @@ describe("Hologram", () => {
       // A resize binding's ResizeObserverEntry is not a DOM event and has no stopPropagation
       // method, so the call is skipped instead of crashing.
 
-      const keyboardEvent = {
-        altKey: false,
-        code: "Enter",
-        ctrlKey: false,
-        key: "Enter",
-        metaKey: false,
-        repeat: false,
-        shiftKey: false,
-        preventDefault: () => null,
-        target: {id: "dummy_node"},
+      const resizeObserverEntry = {
+        target: {},
+        borderBoxSize: [{blockSize: 10, inlineSize: 20}],
+        contentBoxSize: [{blockSize: 8, inlineSize: 18}],
+        devicePixelContentBoxSize: [{blockSize: 20, inlineSize: 40}],
       };
 
       const dispatch = Hologram.handleUiEvent(
-        keyboardEvent,
-        "keydown",
+        resizeObserverEntry,
+        "resize",
         actionSpecDom,
         defaultTarget,
+        false,
+        true,
+      );
+
+      dispatch();
+
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("tolerates an event payload without a preventDefault method", () => {
+      // A resize binding's ResizeObserverEntry is not a DOM event and has no preventDefault
+      // method, so a forced preventDefault is skipped instead of crashing.
+
+      const resizeObserverEntry = {
+        target: {},
+        borderBoxSize: [{blockSize: 10, inlineSize: 20}],
+        contentBoxSize: [{blockSize: 8, inlineSize: 18}],
+        devicePixelContentBoxSize: [{blockSize: 20, inlineSize: 40}],
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        resizeObserverEntry,
+        "resize",
+        actionSpecDom,
+        defaultTarget,
+        false,
         false,
         true,
       );

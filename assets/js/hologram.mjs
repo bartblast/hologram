@@ -250,14 +250,16 @@ export default class Hologram {
     // allowDefault is the binding's allow_default modifier: it opts this binding out of the
     // framework's preventDefault so the browser's native default proceeds. forcePreventDefault is
     // the binding's prevent_default modifier: it forces preventDefault even on events that allow
-    // the default by design (above all keyboard events).
+    // the default by design (above all keyboard events). Optional call: some event payloads are
+    // not DOM events and have no preventDefault method, e.g. a resize binding's ResizeObserverEntry.
     if (forcePreventDefault || (!eventImpl.isDefaultAllowed && !allowDefault)) {
-      event.preventDefault();
+      event.preventDefault?.();
     }
 
     // stopPropagation is the binding's stop_propagation modifier: it stops the event from
     // bubbling past the bound element, so ancestor and document/window listeners do not fire.
-    // Optional call: a resize binding's ResizeObserverEntry has no stopPropagation method.
+    // Optional call: some event payloads are not DOM events and have no stopPropagation method,
+    // e.g. a resize binding's ResizeObserverEntry.
     if (stopPropagation) {
       event.stopPropagation?.();
     }
