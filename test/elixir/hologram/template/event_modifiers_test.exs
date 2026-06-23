@@ -197,6 +197,22 @@ defmodule Hologram.Template.EventModifiersTest do
     end
   end
 
+  describe "parse/2 prevent_default modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$click", ["prevent_default"]) == %{prevent_default: true}
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["prevent_default"]) == %{prevent_default: true}
+    end
+
+    test "raises for more than one prevent_default modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one prevent_default modifier",
+                   fn -> parse("$click", ["prevent_default", "prevent_default"]) end
+    end
+  end
+
   describe "parse/2 stop_propagation modifier" do
     test "on a non-keyboard event" do
       assert parse("$click", ["stop_propagation"]) == %{stop_propagation: true}
@@ -277,6 +293,11 @@ defmodule Hologram.Template.EventModifiersTest do
                %{debounce: 200, key: [["enter"]]}
     end
 
+    test "prevent_default composes with another modifier" do
+      assert parse("$key_down", ["prevent_default", "enter"]) ==
+               %{key: [["enter"]], prevent_default: true}
+    end
+
     test "stop_propagation composes with another modifier" do
       assert parse("$click", ["stop_propagation", "allow_default"]) ==
                %{allow_default: true, stop_propagation: true}
@@ -291,6 +312,12 @@ defmodule Hologram.Template.EventModifiersTest do
       assert_raise TemplateSyntaxError,
                    "an event binding may not combine debounce and throttle modifiers",
                    fn -> parse("$change", ["debounce(300)", "throttle(100)"]) end
+    end
+
+    test "rejects allow_default and prevent_default together" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may not combine allow_default and prevent_default modifiers",
+                   fn -> parse("$click", ["allow_default", "prevent_default"]) end
     end
   end
 end
