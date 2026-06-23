@@ -4,7 +4,8 @@ import SubmitEvent from "./submit_event.mjs";
 import Type from "../type.mjs";
 
 export default class ChangeEvent {
-  static isDefaultAllowed = false;
+  // The DOM change event is not cancelable, so preventDefault would be a no-op.
+  static isDefaultAllowed = true;
 
   static buildOperationParam(event) {
     const target = event.target;

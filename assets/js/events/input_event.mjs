@@ -3,7 +3,8 @@
 import Type from "../type.mjs";
 
 export default class InputEvent {
-  static isDefaultAllowed = false;
+  // The DOM input event is not cancelable, so preventDefault would be a no-op.
+  static isDefaultAllowed = true;
 
   static buildOperationParam(event) {
     return Type.map([[Type.atom("value"), Type.bitstring(event.target.value)]]);

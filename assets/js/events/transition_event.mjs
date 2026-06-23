@@ -3,7 +3,8 @@
 import Type from "../type.mjs";
 
 export default class TransitionEvent {
-  static isDefaultAllowed = false;
+  // The DOM transition events are not cancelable, so preventDefault would be a no-op.
+  static isDefaultAllowed = true;
 
   // TODO: add fields specific to TransitionEvent
   static buildOperationParam(_event) {
