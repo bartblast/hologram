@@ -5795,6 +5795,7 @@ describe("Renderer", () => {
         defaultTarget,
         false,
         false,
+        false,
       );
 
       Hologram.handleUiEvent.restore();
