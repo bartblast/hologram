@@ -15,7 +15,7 @@ defmodule Hologram.UI.Link do
       rel={@rel}
       style={@style}
       $pointerdown={:__prefetch_page__, to: @to}
-      $click={:__load_prefetched_page__, to: @to}
+      $click.prevent_default={:__load_prefetched_page__, to: @to}
     ><slot /></a>
     """
   end
