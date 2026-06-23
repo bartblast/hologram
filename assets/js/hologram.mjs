@@ -233,6 +233,7 @@ export default class Hologram {
     defaultTarget,
     allowDefault = false,
     stopPropagation = false,
+    forcePreventDefault = false,
   ) {
     // The guard runs before preventDefault and stopPropagation, so a disabled binding leaves
     // native browser behavior fully untouched.
@@ -247,8 +248,10 @@ export default class Hologram {
     }
 
     // allowDefault is the binding's allow_default modifier: it opts this binding out of the
-    // framework's preventDefault so the browser's native default proceeds.
-    if (!eventImpl.isDefaultAllowed && !allowDefault) {
+    // framework's preventDefault so the browser's native default proceeds. forcePreventDefault is
+    // the binding's prevent_default modifier: it forces preventDefault even on events that allow
+    // the default by design (above all keyboard events).
+    if (forcePreventDefault || (!eventImpl.isDefaultAllowed && !allowDefault)) {
       event.preventDefault();
     }
 

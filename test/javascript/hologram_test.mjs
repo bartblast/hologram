@@ -763,6 +763,40 @@ describe("Hologram", () => {
       sinon.assert.calledOnce(executeActionStub);
     });
 
+    it("prevents the default when forcePreventDefault is set", () => {
+      // The binding's prevent_default modifier forces the framework preventDefault, even for an
+      // isDefaultAllowed: true event like keydown.
+
+      const preventDefault = sinon.spy();
+
+      const keyboardEvent = {
+        altKey: false,
+        code: "Enter",
+        ctrlKey: false,
+        key: "Enter",
+        metaKey: false,
+        repeat: false,
+        shiftKey: false,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        keyboardEvent,
+        "keydown",
+        actionSpecDom,
+        defaultTarget,
+        false,
+        false,
+        true,
+      );
+
+      dispatch();
+
+      sinon.assert.calledOnce(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
     it("does not stop propagation by default", () => {
       const stopPropagation = sinon.spy();
 
