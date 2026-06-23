@@ -3,7 +3,8 @@
 import Type from "../type.mjs";
 
 export default class SelectEvent {
-  static isDefaultAllowed = false;
+  // The DOM select event is not cancelable, so preventDefault would be a no-op.
+  static isDefaultAllowed = true;
 
   static buildOperationParam(event) {
     const value = event.target.value.substring(

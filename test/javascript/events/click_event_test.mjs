@@ -59,11 +59,25 @@ describe("ClickEvent", () => {
     });
 
     it("no special keys are pressed, auxiliary button is pressed", () => {
+      // The click event fires only for the primary button (others fire auxclick, which Hologram
+      // does not bind), so the button value is not a reason to ignore the event.
       const event = {
         ctrlKey: false,
         metaKey: false,
         shiftKey: false,
         button: 1,
+      };
+
+      assert.isFalse(ClickEvent.isEventIgnored(event));
+    });
+
+    it("alt key is pressed, main button is pressed", () => {
+      const event = {
+        altKey: true,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        button: 0,
       };
 
       assert.isTrue(ClickEvent.isEventIgnored(event));

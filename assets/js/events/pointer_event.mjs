@@ -4,7 +4,10 @@ import MouseEvent from "../events/mouse_event.mjs";
 import Type from "../type.mjs";
 
 export default class PointerEvent {
-  static isDefaultAllowed = false;
+  // Allow the browser's native default. Preventing it suppresses native pointer behaviour such as
+  // focus and text selection (e.g. clicking to deselect in a contenteditable element), so the
+  // default is left to run; a binding that needs to suppress it opts in with prevent_default.
+  static isDefaultAllowed = true;
 
   // TODO: add more fields specific to PointerEvent
   static buildOperationParam(event) {
