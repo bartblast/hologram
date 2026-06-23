@@ -197,6 +197,22 @@ defmodule Hologram.Template.EventModifiersTest do
     end
   end
 
+  describe "parse/2 prevent_default modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$click", ["prevent_default"]) == %{prevent_default: true}
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["prevent_default"]) == %{prevent_default: true}
+    end
+
+    test "raises for more than one prevent_default modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one prevent_default modifier",
+                   fn -> parse("$click", ["prevent_default", "prevent_default"]) end
+    end
+  end
+
   describe "parse/2 stop_propagation modifier" do
     test "on a non-keyboard event" do
       assert parse("$click", ["stop_propagation"]) == %{stop_propagation: true}
@@ -275,6 +291,11 @@ defmodule Hologram.Template.EventModifiersTest do
     test "a key filter composes with another modifier" do
       assert parse("$key_down", ["enter", "debounce(200)"]) ==
                %{debounce: 200, key: [["enter"]]}
+    end
+
+    test "prevent_default composes with another modifier" do
+      assert parse("$key_down", ["prevent_default", "enter"]) ==
+               %{key: [["enter"]], prevent_default: true}
     end
 
     test "stop_propagation composes with another modifier" do
