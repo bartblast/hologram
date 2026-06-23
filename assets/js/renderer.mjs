@@ -270,6 +270,7 @@ export default class Renderer {
     const modifiersDom = attrDom.data[2];
     const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
     const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
+    const forcePreventDefault = $.#preventDefaultFromModifiers(modifiersDom);
     const stopPropagation = $.#stopPropagationFromModifiers(modifiersDom);
     const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
 
@@ -289,6 +290,7 @@ export default class Renderer {
         defaultTarget,
         allowDefault,
         stopPropagation,
+        forcePreventDefault,
       );
 
       if (dispatch === null) {
@@ -805,6 +807,18 @@ export default class Renderer {
       Erlang["binary_to_atom/1"](propDom.data[0]),
       propDom.data[1],
     ]);
+  }
+
+  // Returns true when the modifiers map carries a prevent_default modifier, which forces the
+  // framework's preventDefault even on events that allow the default by design.
+  static #preventDefaultFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return false;
+    }
+
+    return Type.isTrue(
+      Erlang_Maps["is_key/2"](Type.atom("prevent_default"), modifiersDom),
+    );
   }
 
   // Based on render_attribute/2
