@@ -113,8 +113,8 @@ defmodule Hologram.Template.EventModifiers do
 
   Raises `Hologram.TemplateSyntaxError` for a debounce or throttle value that is not a positive
   integer, a key filter on a non-keyboard event, an empty segment, an unknown key, more than one
-  key in a single filter, a repeated modifier, two key filters that match the same keys, or a
-  binding that combines debounce and throttle.
+  key in a single filter, a repeated modifier, two key filters that match the same keys, a binding
+  that combines debounce and throttle, or a binding that combines allow_default and prevent_default.
   """
   @spec parse(String.t(), list(String.t())) :: modifiers
   def parse(base_name, segments) do
@@ -344,6 +344,11 @@ defmodule Hologram.Template.EventModifiers do
     if Map.has_key?(type_counts, :debounce) and Map.has_key?(type_counts, :throttle) do
       raise TemplateSyntaxError,
         message: "an event binding may not combine debounce and throttle modifiers"
+    end
+
+    if Map.has_key?(type_counts, :allow_default) and Map.has_key?(type_counts, :prevent_default) do
+      raise TemplateSyntaxError,
+        message: "an event binding may not combine allow_default and prevent_default modifiers"
     end
   end
 end

@@ -313,5 +313,11 @@ defmodule Hologram.Template.EventModifiersTest do
                    "an event binding may not combine debounce and throttle modifiers",
                    fn -> parse("$change", ["debounce(300)", "throttle(100)"]) end
     end
+
+    test "rejects allow_default and prevent_default together" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may not combine allow_default and prevent_default modifiers",
+                   fn -> parse("$click", ["allow_default", "prevent_default"]) end
+    end
   end
 end
