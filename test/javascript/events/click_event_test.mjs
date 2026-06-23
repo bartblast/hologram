@@ -71,6 +71,18 @@ describe("ClickEvent", () => {
       assert.isFalse(ClickEvent.isEventIgnored(event));
     });
 
+    it("alt key is pressed, main button is pressed", () => {
+      const event = {
+        altKey: true,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+        button: 0,
+      };
+
+      assert.isTrue(ClickEvent.isEventIgnored(event));
+    });
+
     it("ctrl key is pressed, main button is pressed", () => {
       const event = {ctrlKey: true, metaKey: false, shiftKey: false, button: 0};
       assert.isTrue(ClickEvent.isEventIgnored(event));
