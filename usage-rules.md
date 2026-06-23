@@ -82,6 +82,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Conditionals inside template braces need the `do...end` form: `{if @editable, do: :save}` fails the build (template braces are tuple braces, making the call ambiguous), `{if @editable do :save end}` works.
 - Valid targets: `"page"`, `"layout"`, or a component's cid string. Default is the containing stateful component.
 - Event data is available in `params.event` inside the action/command handler.
+- A `$click` binding does not fire on a modified click (`Alt`, `Ctrl`, `Command`, or `Shift` held) - Hologram leaves the event to the browser so the user's shortcut (e.g. open in a new tab) still works.
 - `$change` on an input fires on every keystroke (text inputs) or on selection change (checkboxes, radios, selects). On a form element, it fires on field blur.
 - Bind global events (not tied to any element, e.g. a global keyboard shortcut) with the `<window>` or `<document>` tag, which attaches to the global `window` or `document`: `<window $key_down.ctrl+k="open_palette" />`. They render nothing and reuse the same `$event` syntax, key filters, and modifiers as element bindings.
 - A `<window>` or `<document>` binding follows the same targeting rules as a regular element and accepts only event bindings (any other attribute fails the build). Its listener lives only while the tag renders, so one behind a conditional listens only while that condition holds.
