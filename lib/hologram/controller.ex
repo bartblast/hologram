@@ -452,6 +452,8 @@ defmodule Hologram.Controller do
   Merges `response_headers` onto the connection and sends `status` with `response_body`
   (an empty body when `response_body` is `nil`).
   """
+  # Body comes from put_response_body/2 (developer-set) - content safety is the caller's.
+  # sobelow_skip ["XSS.SendResp"]
   @spec send_response(Plug.Conn.t(), Server.t()) :: Plug.Conn.t()
   def send_response(conn, server) do
     conn
