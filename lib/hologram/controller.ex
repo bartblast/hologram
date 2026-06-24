@@ -305,38 +305,52 @@ defmodule Hologram.Controller do
         instance_id: renderer_opts[:instance_id]
     }
 
-    {rendered_html, _component_registry, rendered_server_struct} =
-      Renderer.render_page(page_module, params, server_struct, renderer_opts)
+    middleware_server_struct =
+      Middleware.run(server_struct, page_module.middleware(server_struct))
 
-    # Transition subscriptions before flushing broadcasts so a registry failure
-    # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
-    # effectively infallible, so once transition succeeds both side effects land.
-    {sub_receipt_adds, sub_receipt_drops} =
-      transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
+    if middleware_server_struct.status do
+      # Middleware produced a terminal response - skip the render and send it,
+      # still applying the decorations accumulated by the steps that ran.
+      conn
+      |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
+      |> maybe_persist_user_id(server_struct, middleware_server_struct)
+      |> send_response(middleware_server_struct)
+      |> Plug.Conn.halt()
+    else
+      {rendered_html, _component_registry, rendered_server_struct} =
+        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
-    Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
+      # Transition subscriptions before flushing broadcasts so a registry failure
+      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
+      # effectively infallible, so once transition succeeds both side effects land.
+      {sub_receipt_adds, sub_receipt_drops} =
+        transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
-    # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
-    # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
-    # this Realtime-domain computation lives in the controller; substituting
-    # back into HTML here keeps the renderer Realtime-agnostic.
-    self_echoes =
-      Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
+      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
 
-    flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
+      # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
+      # this Realtime-domain computation lives in the controller; substituting
+      # back into HTML here keeps the renderer Realtime-agnostic.
+      self_echoes =
+        Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
 
-    final_html =
-      rendered_html
-      |> Renderer.interpolate_self_echoes_js(self_echoes)
-      |> Renderer.interpolate_sub_receipt_adds_js(sub_receipt_adds)
-      |> Renderer.interpolate_sub_receipt_drops_js(sub_receipt_drops)
+      flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
 
-    conn
-    |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-    |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-    |> maybe_persist_user_id(server_struct, flushed_server_struct)
-    |> Controller.html(final_html)
-    |> Plug.Conn.halt()
+      final_html =
+        rendered_html
+        |> Renderer.interpolate_self_echoes_js(self_echoes)
+        |> Renderer.interpolate_sub_receipt_adds_js(sub_receipt_adds)
+        |> Renderer.interpolate_sub_receipt_drops_js(sub_receipt_drops)
+
+      conn
+      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
+      |> maybe_persist_user_id(server_struct, flushed_server_struct)
+      |> Controller.html(final_html)
+      |> Plug.Conn.halt()
+    end
   end
 
   @doc """

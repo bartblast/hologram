@@ -33,6 +33,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module22
   alias Hologram.Test.Fixtures.Controller.Module23
   alias Hologram.Test.Fixtures.Controller.Module24
+  alias Hologram.Test.Fixtures.Controller.Module25
+  alias Hologram.Test.Fixtures.Controller.Module26
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
@@ -1667,8 +1669,23 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module20, :dummy_module_20_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module22, :dummy_module_22_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module26, :dummy_module_26_digest)
 
       :ok
+    end
+
+    test "skips the render and sends the terminal response when page middleware terminates" do
+      conn = render_page_with_instance(Module25, "test-instance-id")
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+    end
+
+    test "runs middleware before the render and passes the enriched server" do
+      conn = render_page_with_instance(Module26, "test-instance-id")
+
+      assert String.contains?(conn.resp_body, "marker=injected_by_middleware")
     end
 
     test "drives SubscriptionRegistry.transition with the page's accumulated subscriptions" do
