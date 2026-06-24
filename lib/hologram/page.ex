@@ -94,7 +94,7 @@ defmodule Hologram.Page do
             put_stash: 3,
             put_status: 2,
             put_user_id: 2,
-            url: 1
+            request_url: 1
           ]
 
         import Hologram.Template, only: [sigil_HOLO: 2]

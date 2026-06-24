@@ -724,8 +724,8 @@ defmodule Hologram.Server do
   The scheme's default port (80 for `:http`, 443 for `:https`) is omitted, and the
   query string is appended only when present.
   """
-  @spec url(t()) :: String.t()
-  def url(server) do
+  @spec request_url(t()) :: String.t()
+  def request_url(server) do
     port = url_port(server.scheme, server.port)
     query = url_query(server.raw_query)
 

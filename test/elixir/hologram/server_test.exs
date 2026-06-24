@@ -1210,7 +1210,7 @@ defmodule Hologram.ServerTest do
     end
   end
 
-  describe "url/1" do
+  describe "request_url/1" do
     test "assembles the full URL from the request fields" do
       server = %Server{
         scheme: :https,
@@ -1220,19 +1220,19 @@ defmodule Hologram.ServerTest do
         raw_query: "page=2&sort=desc"
       }
 
-      assert url(server) == "https://example.com:8443/admin/users?page=2&sort=desc"
+      assert request_url(server) == "https://example.com:8443/admin/users?page=2&sort=desc"
     end
 
     test "omits the default port for http" do
       server = %Server{scheme: :http, host: "example.com", port: 80, path: "/"}
 
-      assert url(server) == "http://example.com/"
+      assert request_url(server) == "http://example.com/"
     end
 
     test "omits the default port for https" do
       server = %Server{scheme: :https, host: "example.com", port: 443, path: "/"}
 
-      assert url(server) == "https://example.com/"
+      assert request_url(server) == "https://example.com/"
     end
 
     test "omits the query string when empty" do
@@ -1244,7 +1244,7 @@ defmodule Hologram.ServerTest do
         raw_query: ""
       }
 
-      assert url(server) == "https://example.com/about"
+      assert request_url(server) == "https://example.com/about"
     end
 
     test "omits the query string when nil" do
@@ -1256,7 +1256,7 @@ defmodule Hologram.ServerTest do
         raw_query: nil
       }
 
-      assert url(server) == "https://example.com/about"
+      assert request_url(server) == "https://example.com/about"
     end
   end
 end
