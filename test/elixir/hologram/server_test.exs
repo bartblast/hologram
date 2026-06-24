@@ -276,6 +276,30 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "delete_stash/2" do
+    test "removes a key from the stash" do
+      server = %Server{stash: %{current_user: 123, locale: "en"}}
+      result = delete_stash(server, :current_user)
+
+      assert result.stash == %{locale: "en"}
+    end
+
+    test "handles deleting a missing key as a no-op" do
+      server = %Server{stash: %{locale: "en"}}
+      result = delete_stash(server, :current_user)
+
+      assert result.stash == %{locale: "en"}
+    end
+
+    test "raises ArgumentError when the key is not an atom" do
+      assert_error ArgumentError,
+                   "Stash key must be an atom, but received \"current_user\"",
+                   fn ->
+                     delete_stash(%Server{}, "current_user")
+                   end
+    end
+  end
+
   describe "delete_user_id/1" do
     test "clears the user identity" do
       result = delete_user_id(%Server{user_id: 123})
@@ -659,6 +683,30 @@ defmodule Hologram.ServerTest do
       result = get_session(server, :user_id, 987)
 
       assert result == 123
+    end
+  end
+
+  describe "get_stash/2 & get_stash/3" do
+    test "returns the value for an existing key" do
+      server = %Server{stash: %{current_user: 123}}
+
+      assert get_stash(server, :current_user) == 123
+    end
+
+    test "returns nil for a missing key" do
+      assert get_stash(%Server{}, :current_user) == nil
+    end
+
+    test "returns the default for a missing key" do
+      assert get_stash(%Server{}, :current_user, :guest) == :guest
+    end
+
+    test "raises ArgumentError when the key is not an atom" do
+      assert_error ArgumentError,
+                   "Stash key must be an atom, but received \"current_user\"",
+                   fn ->
+                     get_stash(%Server{}, "current_user")
+                   end
     end
   end
 
@@ -1057,6 +1105,29 @@ defmodule Hologram.ServerTest do
                    "Session key must be an atom or a string, but received 123",
                    fn ->
                      put_session(%Server{}, 123, "value")
+                   end
+    end
+  end
+
+  describe "put_stash/3" do
+    test "stores a value under an atom key" do
+      result = put_stash(%Server{}, :current_user, 123)
+
+      assert result.stash == %{current_user: 123}
+    end
+
+    test "overwrites an existing key" do
+      server = %Server{stash: %{current_user: 123}}
+      result = put_stash(server, :current_user, 456)
+
+      assert result.stash == %{current_user: 456}
+    end
+
+    test "raises ArgumentError when the key is not an atom" do
+      assert_error ArgumentError,
+                   "Stash key must be an atom, but received \"current_user\"",
+                   fn ->
+                     put_stash(%Server{}, "current_user", 123)
                    end
     end
   end

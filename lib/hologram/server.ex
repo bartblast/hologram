@@ -26,6 +26,7 @@ defmodule Hologram.Server do
             scheme: nil,
             session: %{},
             session_id: nil,
+            stash: %{},
             status: nil,
             subscriptions: [],
             user_id: nil,
@@ -52,6 +53,7 @@ defmodule Hologram.Server do
           scheme: :http | :https | nil,
           session: %{atom => any},
           session_id: identity_id | nil,
+          stash: %{atom() => any()},
           status: pos_integer() | nil,
           subscriptions: [tuple],
           user_id: identity_id | nil,
@@ -191,6 +193,28 @@ defmodule Hologram.Server do
   end
 
   def delete_session(server, _key), do: server
+
+  @doc """
+  Removes a key from the request-scoped stash.
+
+  Removing a key that is not present is a no-op.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The stash key (atom)
+  """
+  @spec delete_stash(t(), atom()) :: t()
+  def delete_stash(server, key)
+
+  def delete_stash(server, key) when is_atom(key) do
+    %{server | stash: Map.delete(server.stash, key)}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def delete_stash(_server, key) do
+    raise ArgumentError, "Stash key must be an atom, but received #{inspect(key)}"
+  end
 
   @doc """
   Clears the authenticated user identity on the server struct.
@@ -363,6 +387,29 @@ defmodule Hologram.Server do
 
   def get_session(server, key, default) do
     Map.get(server.session, key, default)
+  end
+
+  @doc """
+  Retrieves a value from the request-scoped stash by key.
+
+  Returns the value associated with the key, or the default if the key is not present.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The stash key (atom)
+    * `default` - The value to return if the key is not present (default: `nil`)
+  """
+  @spec get_stash(t(), atom(), any()) :: any()
+  def get_stash(server, key, default \\ nil)
+
+  def get_stash(server, key, default) when is_atom(key) do
+    Map.get(server.stash, key, default)
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def get_stash(_server, key, _default) do
+    raise ArgumentError, "Stash key must be an atom, but received #{inspect(key)}"
   end
 
   @doc """
@@ -579,6 +626,30 @@ defmodule Hologram.Server do
   # TODO: reconsider if this argument validation is needed once Elixir has static typing
   def put_session(_server, key, _value) do
     raise ArgumentError, "Session key must be an atom or a string, but received #{inspect(key)}"
+  end
+
+  @doc """
+  Stores a value in the request-scoped stash under an atom key.
+
+  The stash is ephemeral, in-memory request state for passing data between middleware
+  steps and into the handler. It is never persisted or sent to the client.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The stash key (atom)
+    * `value` - The value to store
+  """
+  @spec put_stash(t(), atom(), any()) :: t()
+  def put_stash(server, key, value)
+
+  def put_stash(server, key, value) when is_atom(key) do
+    %{server | stash: Map.put(server.stash, key, value)}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_stash(_server, key, _value) do
+    raise ArgumentError, "Stash key must be an atom, but received #{inspect(key)}"
   end
 
   @doc """
