@@ -1177,16 +1177,36 @@ defmodule Hologram.ServerTest do
   end
 
   describe "put_user_id/2" do
-    test "sets the user identity" do
+    test "sets a string identity" do
+      result = put_user_id(%Server{}, "user-123")
+
+      assert result.user_id == "user-123"
+    end
+
+    test "sets an integer identity" do
       result = put_user_id(%Server{}, 123)
 
       assert result.user_id == 123
+    end
+
+    test "sets an atom identity" do
+      result = put_user_id(%Server{}, :admin)
+
+      assert result.user_id == :admin
     end
 
     test "overwrites an existing user identity" do
       result = put_user_id(%Server{user_id: 123}, 456)
 
       assert result.user_id == 456
+    end
+
+    test "raises ArgumentError when the identity is not a string, integer, or atom" do
+      assert_error ArgumentError,
+                   "User ID must be a string, integer, or atom, but received %{}",
+                   fn ->
+                     put_user_id(%Server{}, %{})
+                   end
     end
   end
 

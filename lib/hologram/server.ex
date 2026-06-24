@@ -705,8 +705,17 @@ defmodule Hologram.Server do
     * `user_id` - The user identity (a string, integer, or atom)
   """
   @spec put_user_id(t(), identity_id()) :: t()
-  def put_user_id(server, user_id) do
+  def put_user_id(server, user_id)
+
+  def put_user_id(server, user_id)
+      when is_binary(user_id) or is_integer(user_id) or is_atom(user_id) do
     %{server | user_id: user_id}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_user_id(_server, user_id) do
+    raise ArgumentError,
+          "User ID must be a string, integer, or atom, but received #{inspect(user_id)}"
   end
 
   @doc """
