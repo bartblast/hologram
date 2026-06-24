@@ -11,11 +11,19 @@ defmodule Hologram.Server do
   defstruct broadcasts: [],
             cid: nil,
             cookies: %{},
+            host: nil,
             instance_id: nil,
+            ip: nil,
+            method: nil,
             next_action: nil,
+            path: nil,
+            port: nil,
+            query: %{},
+            raw_query: nil,
             request_headers: %{},
             response_body: nil,
             response_headers: %{},
+            scheme: nil,
             session: %{},
             session_id: nil,
             status: nil,
@@ -29,11 +37,19 @@ defmodule Hologram.Server do
           broadcasts: [Broadcast.t()],
           cid: String.t() | nil,
           cookies: %{String.t() => any()},
+          host: String.t() | nil,
           instance_id: String.t() | nil,
+          ip: String.t() | nil,
+          method: atom() | nil,
           next_action: Action.t() | nil,
+          path: String.t() | nil,
+          port: :inet.port_number() | nil,
+          query: %{String.t() => String.t()},
+          raw_query: String.t() | nil,
           request_headers: %{String.t() => String.t()},
           response_body: iodata() | nil,
           response_headers: %{String.t() => String.t()},
+          scheme: :http | :https | nil,
           session: %{atom => any},
           session_id: identity_id | nil,
           status: pos_integer() | nil,
@@ -179,6 +195,11 @@ defmodule Hologram.Server do
   @doc """
   Creates a new Hologram.Server struct from a Plug.Conn struct.
 
+  Populates the request fields (`method`, `scheme`, `host`, `port`, `path`, `query`,
+  `raw_query`, `ip`, `request_headers`) and the identity fields. The `cookie` request
+  header is dropped from `request_headers` since cookies are exposed via the cookie
+  functions, and a request header sent multiple times is comma-joined.
+
   Excludes "hologram_session" cookie. Populates `session_id` and `user_id`
   from the Phoenix session (each `nil` when the underlying entry is absent),
   and strips those Hologram-managed keys from the `session` map so it
@@ -188,6 +209,15 @@ defmodule Hologram.Server do
   def from(%Plug.Conn{} = conn) do
     %__MODULE__{
       cookies: PlugConnUtils.extract_cookies(conn),
+      host: conn.host,
+      ip: build_request_ip(conn.remote_ip),
+      method: build_request_method(conn.method),
+      path: conn.request_path,
+      port: conn.port,
+      query: URI.decode_query(conn.query_string),
+      raw_query: conn.query_string,
+      request_headers: build_request_headers(conn.req_headers),
+      scheme: conn.scheme,
       session: Session.get_session(conn),
       session_id: Session.get_session_id(conn),
       user_id: Session.get_user_id(conn)
@@ -573,6 +603,26 @@ defmodule Hologram.Server do
   def put_status(_server, status) do
     raise ArgumentError,
           "Response status must be an HTTP status code (100..599) or a status atom alias, but received #{inspect(status)}"
+  end
+
+  defp build_request_headers(req_headers) do
+    req_headers
+    |> Enum.reject(fn {name, _value} -> name == "cookie" end)
+    |> Enum.reduce(%{}, fn {name, value}, acc ->
+      Map.update(acc, name, value, &(&1 <> ", " <> value))
+    end)
+  end
+
+  defp build_request_ip(ip) do
+    ip
+    |> :inet.ntoa()
+    |> List.to_string()
+  end
+
+  defp build_request_method(method) do
+    method
+    |> String.downcase()
+    |> String.to_existing_atom()
   end
 
   defp ensure_not_cookie_header!(name) when name in ["cookie", "set-cookie"] do

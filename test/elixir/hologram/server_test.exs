@@ -286,7 +286,7 @@ defmodule Hologram.ServerTest do
       [conn: conn]
     end
 
-    test "creates Server struct from Plug.Conn struct", %{conn: initial_conn} do
+    test "populates cookies from the conn", %{conn: initial_conn} do
       conn =
         initial_conn
         |> Map.put(:cookies, %{"theme" => "dark", "username" => "abc123"})
@@ -294,10 +294,7 @@ defmodule Hologram.ServerTest do
 
       result = from(conn)
 
-      assert result == %Server{
-               cookies: %{"theme" => "dark", "username" => "abc123"},
-               session: %{"role" => "admin", "user_id" => 123}
-             }
+      assert result.cookies == %{"theme" => "dark", "username" => "abc123"}
     end
 
     test "excludes hologram_session cookie from server cookies", %{conn: initial_conn} do
@@ -372,6 +369,56 @@ defmodule Hologram.ServerTest do
         |> Map.put(:req_cookies, %{})
 
       assert from(conn).session == %{"role" => "admin"}
+    end
+
+    test "populates request fields from the conn" do
+      conn =
+        :post
+        |> Plug.Test.conn("/admin/users?page=2&sort=desc")
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      result = from(conn)
+
+      assert result.host == "www.example.com"
+      assert result.ip == "127.0.0.1"
+      assert result.method == :post
+      assert result.path == "/admin/users"
+      assert result.port == 80
+      assert result.query == %{"page" => "2", "sort" => "desc"}
+      assert result.raw_query == "page=2&sort=desc"
+      assert result.scheme == :http
+    end
+
+    test "comma-joins a multi-value request header" do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+        |> Map.put(:req_headers, [
+          {"accept", "text/html"},
+          {"accept", "application/json"}
+        ])
+
+      assert from(conn).request_headers == %{"accept" => "text/html, application/json"}
+    end
+
+    test "drops the cookie request header" do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+        |> Map.put(:req_headers, [
+          {"cookie", "theme=dark"},
+          {"user-agent", "test-agent"}
+        ])
+
+      assert from(conn).request_headers == %{"user-agent" => "test-agent"}
     end
   end
 
