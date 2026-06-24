@@ -599,7 +599,9 @@ defmodule Hologram.Server do
   @doc """
   Adds a session entry.
 
-  Atom keys are automatically converted to string.
+  Session keys are stored as strings (atom keys are converted to strings). In embedded mode
+  the session is backed by the Phoenix session store, which uses string keys, and recovering
+  atom keys would require an unsafe string-to-atom conversion.
 
   ## Parameters
 
