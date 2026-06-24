@@ -276,6 +276,14 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "delete_user_id/1" do
+    test "clears the user identity" do
+      result = delete_user_id(%Server{user_id: 123})
+
+      assert result.user_id == nil
+    end
+  end
+
   describe "from/1" do
     setup do
       conn =
@@ -1094,6 +1102,20 @@ defmodule Hologram.ServerTest do
                    fn ->
                      put_status(%Server{}, "404")
                    end
+    end
+  end
+
+  describe "put_user_id/2" do
+    test "sets the user identity" do
+      result = put_user_id(%Server{}, 123)
+
+      assert result.user_id == 123
+    end
+
+    test "overwrites an existing user identity" do
+      result = put_user_id(%Server{user_id: 123}, 456)
+
+      assert result.user_id == 456
     end
   end
 

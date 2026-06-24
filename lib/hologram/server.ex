@@ -193,6 +193,21 @@ defmodule Hologram.Server do
   def delete_session(server, _key), do: server
 
   @doc """
+  Clears the authenticated user identity on the server struct.
+
+  Sets `user_id` to `nil`. The change is persisted to the session (removing the
+  identity) when the server struct is applied.
+
+  ## Parameters
+
+    * `server` - The server struct
+  """
+  @spec delete_user_id(t()) :: t()
+  def delete_user_id(server) do
+    %{server | user_id: nil}
+  end
+
+  @doc """
   Creates a new Hologram.Server struct from a Plug.Conn struct.
 
   Populates the request fields (`method`, `scheme`, `host`, `port`, `path`, `query`,
@@ -603,6 +618,22 @@ defmodule Hologram.Server do
   def put_status(_server, status) do
     raise ArgumentError,
           "Response status must be an HTTP status code (100..599) or a status atom alias, but received #{inspect(status)}"
+  end
+
+  @doc """
+  Sets the authenticated user identity on the server struct.
+
+  The change is persisted to the session when the server struct is applied. Use
+  `delete_user_id/1` to clear the identity.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `user_id` - The user identity (a string, integer, or atom)
+  """
+  @spec put_user_id(t(), identity_id()) :: t()
+  def put_user_id(server, user_id) do
+    %{server | user_id: user_id}
   end
 
   @doc """
