@@ -418,6 +418,19 @@ defmodule Hologram.Controller do
     )
   end
 
+  @doc """
+  Sends the terminal response built from the server struct's response fields.
+
+  Merges `response_headers` onto the connection and sends `status` with `response_body`
+  (an empty body when `response_body` is `nil`).
+  """
+  @spec send_response(Plug.Conn.t(), Server.t()) :: Plug.Conn.t()
+  def send_response(conn, server) do
+    conn
+    |> Plug.Conn.merge_resp_headers(Map.to_list(server.response_headers))
+    |> Plug.Conn.send_resp(server.status, server.response_body || "")
+  end
+
   @doc false
   @spec verify_and_refresh_receipts([String.t()], String.t(), term | nil, term | nil) ::
           {[{{any, String.t()}, term | nil}], [{any, String.t(), String.t()}]}

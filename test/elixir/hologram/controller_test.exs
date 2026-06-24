@@ -17,6 +17,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
+  alias Hologram.Server
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module11
@@ -2231,6 +2232,38 @@ defmodule Hologram.ControllerTest do
       |> handle_subsequent_page_request(Module4)
 
       assert_receive {:unsub, :room_a}
+    end
+  end
+
+  describe "send_response/2" do
+    setup do
+      [conn: Plug.Test.conn(:get, "/")]
+    end
+
+    test "sends the status and body", %{conn: conn} do
+      server = %Server{status: 201, response_body: "created"}
+      result = send_response(conn, server)
+
+      assert result.status == 201
+      assert result.resp_body == "created"
+      assert result.state == :sent
+    end
+
+    test "sends an empty body when the response body is nil", %{conn: conn} do
+      server = %Server{status: 204}
+      result = send_response(conn, server)
+
+      assert result.status == 204
+      assert result.resp_body == ""
+    end
+
+    test "merges response headers onto existing ones", %{conn: conn} do
+      conn = Plug.Conn.put_resp_header(conn, "x-existing", "kept")
+      server = %Server{status: 200, response_headers: %{"x-custom" => "1"}}
+      result = send_response(conn, server)
+
+      assert Plug.Conn.get_resp_header(result, "x-existing") == ["kept"]
+      assert Plug.Conn.get_resp_header(result, "x-custom") == ["1"]
     end
   end
 
