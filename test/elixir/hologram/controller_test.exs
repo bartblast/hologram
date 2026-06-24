@@ -31,6 +31,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module20
   alias Hologram.Test.Fixtures.Controller.Module21
   alias Hologram.Test.Fixtures.Controller.Module22
+  alias Hologram.Test.Fixtures.Controller.Module23
+  alias Hologram.Test.Fixtures.Controller.Module24
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
@@ -557,6 +559,34 @@ defmodule Hologram.ControllerTest do
                "subReceiptAdds" => "Type.list([])",
                "subReceiptDrops" => "Type.list([])"
              }
+    end
+
+    test "skips the command and sends the terminal response when middleware terminates" do
+      conn =
+        execute_command_request(%{
+          module: Module23,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+    end
+
+    test "runs middleware before the command and passes the enriched server" do
+      conn =
+        execute_command_request(%{
+          module: Module24,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["action"] =~ "injected_by_middleware"
     end
 
     test "establishes a Hologram session ID when absent" do
