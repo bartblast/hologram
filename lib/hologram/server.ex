@@ -719,6 +719,18 @@ defmodule Hologram.Server do
   end
 
   @doc """
+  Returns the request's referrer URL, or `nil` when absent.
+
+  Reads the `Referer` request header. The HTTP spec famously misspelled "referrer" as
+  "Referer", and the header has carried the typo ever since - so this helper takes the
+  correct spelling and reads the misspelled header under the hood.
+  """
+  @spec referrer(t()) :: String.t() | nil
+  def referrer(server) do
+    get_request_header(server, "referer")
+  end
+
+  @doc """
   Returns the full request URL, assembled from the request fields.
 
   The scheme's default port (80 for `:http`, 443 for `:https`) is omitted, and the

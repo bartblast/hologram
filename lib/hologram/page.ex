@@ -94,6 +94,7 @@ defmodule Hologram.Page do
             put_stash: 3,
             put_status: 2,
             put_user_id: 2,
+            referrer: 1,
             request_url: 1
           ]
 

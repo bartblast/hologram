@@ -1210,6 +1210,18 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "referrer/1" do
+    test "returns the value of the referer header" do
+      server = %Server{request_headers: %{"referer" => "https://example.com/from"}}
+
+      assert referrer(server) == "https://example.com/from"
+    end
+
+    test "returns nil when the referer header is absent" do
+      assert referrer(%Server{}) == nil
+    end
+  end
+
   describe "request_url/1" do
     test "assembles the full URL from the request fields" do
       server = %Server{
