@@ -1003,6 +1003,47 @@ describe("Renderer", () => {
             assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
           });
 
+          it("maps drag/drop event names to native DOM event names", () => {
+            const eventNames = [
+              ["$drag", "drag"],
+              ["$drag_end", "dragend"],
+              ["$drag_enter", "dragenter"],
+              ["$drag_leave", "dragleave"],
+              ["$drag_over", "dragover"],
+              ["$drag_start", "dragstart"],
+              ["$drop", "drop"],
+            ];
+
+            eventNames.forEach(([hologramEventName, domEventName]) => {
+              const node = Type.tuple([
+                Type.atom("element"),
+                Type.bitstring("div"),
+                Type.list([
+                  Type.tuple([
+                    Type.bitstring(hologramEventName),
+                    Type.list([
+                      Type.tuple([
+                        Type.atom("text"),
+                        Type.bitstring("my_action"),
+                      ]),
+                    ]),
+                  ]),
+                ]),
+                Type.list(),
+              ]);
+
+              const vdom = Renderer.renderDom(
+                node,
+                context,
+                slots,
+                defaultTarget,
+                null,
+              );
+
+              assert.deepStrictEqual(Object.keys(vdom.data.on), [domEventName]);
+            });
+          });
+
           it("maps $change event to $input event for text input element", () => {
             const node = Type.tuple([
               Type.atom("element"),

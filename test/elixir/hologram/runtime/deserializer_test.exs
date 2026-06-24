@@ -4,6 +4,18 @@ defmodule Hologram.Runtime.DeserializerTest do
 
   @delimiter delimiter()
 
+  test "atoms_whitelist/0 includes drag event payload atoms" do
+    assert :button in atoms_whitelist()
+    assert :buttons in atoms_whitelist()
+    assert :data_transfer in atoms_whitelist()
+    assert :drop_effect in atoms_whitelist()
+    assert :effect_allowed in atoms_whitelist()
+    assert :items in atoms_whitelist()
+    assert :kind in atoms_whitelist()
+    assert :type in atoms_whitelist()
+    assert :types in atoms_whitelist()
+  end
+
   describe "version 3" do
     test "top-level data, raw JSON" do
       assert deserialize(~s'[3,"axyz"]') == :xyz

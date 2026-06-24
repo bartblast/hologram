@@ -797,6 +797,48 @@ describe("Hologram", () => {
       sinon.assert.calledOnce(executeActionStub);
     });
 
+    it("allows the default for dragstart events", () => {
+      const preventDefault = sinon.spy();
+
+      const dragStartEvent = {
+        ...notIgnoredEvent,
+        preventDefault,
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        dragStartEvent,
+        "dragstart",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      dispatch();
+
+      sinon.assert.notCalled(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("prevents default for dragover events", () => {
+      const preventDefault = sinon.spy();
+
+      const dragOverEvent = {
+        ...notIgnoredEvent,
+        preventDefault,
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        dragOverEvent,
+        "dragover",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      dispatch();
+
+      sinon.assert.calledOnce(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
     it("does not stop propagation by default", () => {
       const stopPropagation = sinon.spy();
 

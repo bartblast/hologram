@@ -12,8 +12,10 @@ defmodule Hologram.Runtime.Deserializer do
     # client-side ERTS node name
     :hologram_client,
 
-    # keyboard event
+    # keyboard event, drag event
     :alt_key,
+    :button,
+    :buttons,
     :code,
     :ctrl_key,
     :key,
@@ -39,7 +41,16 @@ defmodule Hologram.Runtime.Deserializer do
     :mouse,
     :pen,
     :touch,
-    :pointer_type
+    :pointer_type,
+
+    # drag event
+    :data_transfer,
+    :drop_effect,
+    :effect_allowed,
+    :items,
+    :kind,
+    :type,
+    :types
   ]
 
   # Can't use control characters in 0x00-0x1F (0-31) range
