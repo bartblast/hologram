@@ -605,6 +605,20 @@ defmodule Hologram.Server do
           "Response status must be an HTTP status code (100..599) or a status atom alias, but received #{inspect(status)}"
   end
 
+  @doc """
+  Returns the full request URL, assembled from the request fields.
+
+  The scheme's default port (80 for `:http`, 443 for `:https`) is omitted, and the
+  query string is appended only when present.
+  """
+  @spec url(t()) :: String.t()
+  def url(server) do
+    port = url_port(server.scheme, server.port)
+    query = url_query(server.raw_query)
+
+    "#{server.scheme}://#{server.host}#{port}#{server.path}#{query}"
+  end
+
   defp build_request_headers(req_headers) do
     req_headers
     |> Enum.reject(fn {name, _value} -> name == "cookie" end)
@@ -631,4 +645,14 @@ defmodule Hologram.Server do
   end
 
   defp ensure_not_cookie_header!(_name), do: :ok
+
+  defp url_port(:http, 80), do: ""
+
+  defp url_port(:https, 443), do: ""
+
+  defp url_port(_scheme, port), do: ":#{port}"
+
+  defp url_query(query) when query in [nil, ""], do: ""
+
+  defp url_query(query), do: "?#{query}"
 end
