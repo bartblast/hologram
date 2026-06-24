@@ -6,6 +6,7 @@ defmodule Hologram.Page do
   alias Hologram.Page
   alias Hologram.Reflection
   alias Hologram.Server
+  alias Hologram.Server.Middleware
 
   @doc """
   Handles a client-side action, typically triggered by a user interaction.
@@ -22,6 +23,14 @@ defmodule Hologram.Page do
   """
   @callback init(%{atom => any}, Component.t(), Server.t()) ::
               {Component.t(), Server.t()} | Component.t() | Server.t()
+
+  @doc """
+  Returns the middleware for this page - server-side steps run before rendering and before commands.
+
+  Returns either the (possibly transformed) server struct, or a list of step captures that are folded
+  over the server.
+  """
+  @callback middleware(Server.t()) :: Server.t() | [Middleware.step()]
 
   @doc """
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
@@ -59,15 +68,33 @@ defmodule Hologram.Page do
 
         import Hologram.Server,
           only: [
+            append_response_header: 3,
             delete_cookie: 2,
+            delete_response_header: 2,
             delete_session: 2,
+            delete_stash: 2,
+            delete_user_id: 1,
             get_cookie: 2,
             get_cookie: 3,
+            get_request_header: 2,
+            get_request_header: 3,
+            get_response_header: 2,
+            get_response_header: 3,
             get_session: 2,
             get_session: 3,
+            get_stash: 2,
+            get_stash: 3,
             put_cookie: 3,
             put_cookie: 4,
-            put_session: 3
+            put_redirect: 2,
+            put_redirect: 3,
+            put_response_body: 2,
+            put_response_header: 3,
+            put_session: 3,
+            put_stash: 3,
+            put_status: 2,
+            put_user_id: 2,
+            url: 1
           ]
 
         import Hologram.Template, only: [sigil_HOLO: 2]
@@ -97,7 +124,10 @@ defmodule Hologram.Page do
         @impl Page
         def init(_params, component, server), do: {component, server}
 
-        defoverridable init: 3
+        @impl Page
+        def middleware(server), do: server
+
+        defoverridable init: 3, middleware: 1
       end,
       Component.maybe_register_colocated_template_markup(template_path),
       Page.register_params_accumulator()
