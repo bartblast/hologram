@@ -133,13 +133,15 @@ describe("DragEvent", () => {
       .stub(MouseEvent, "isEventIgnored")
       .callsFake(() => null);
 
-    DragEvent.isEventIgnored("dummy_event");
+    try {
+      DragEvent.isEventIgnored("dummy_event");
 
-    sinon.assert.calledOnceWithExactly(
-      mouseEventIsEventIgnoredStub,
-      "dummy_event",
-    );
-
-    MouseEvent.isEventIgnored.restore();
+      sinon.assert.calledOnceWithExactly(
+        mouseEventIsEventIgnoredStub,
+        "dummy_event",
+      );
+    } finally {
+      MouseEvent.isEventIgnored.restore();
+    }
   });
 });
