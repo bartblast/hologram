@@ -5,7 +5,9 @@ defmodule HologramFeatureTests.Middleware.Page4 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  def middleware(server) do
+  middleware :deny
+
+  def deny(server, _opts) do
     server
     |> put_response_header("content-type", "text/html; charset=utf-8")
     |> put_response_body("access forbidden by middleware")

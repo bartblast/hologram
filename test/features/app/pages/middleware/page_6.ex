@@ -7,11 +7,11 @@ defmodule HologramFeatureTests.Middleware.Page6 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  def middleware(_server) do
-    [
-      &MiddlewareFixture.enrich/1,
-      fn server -> put_stash(server, :inline, "inline step") end
-    ]
+  middleware MiddlewareFixture
+  middleware :inline
+
+  def inline(server, _opts) do
+    put_stash(server, :inline, "inline step")
   end
 
   def init(_params, component, _server) do

@@ -1,8 +1,8 @@
 defmodule HologramFeatureTests.MiddlewareFixture do
-  alias Hologram.Server
+  use Hologram.Middleware
 
-  @spec enrich(Server.t()) :: Server.t()
-  def enrich(server) do
-    Server.put_stash(server, :shared, "shared step ran")
+  @impl Hologram.Middleware
+  def call(server, _opts) do
+    put_stash(server, :shared, "shared step ran")
   end
 end

@@ -5,7 +5,9 @@ defmodule HologramFeatureTests.Middleware.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  def middleware(server) do
+  middleware :enrich
+
+  def enrich(server, _opts) do
     put_stash(server, :marker, "enriched by middleware")
   end
 

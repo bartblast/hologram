@@ -5,7 +5,9 @@ defmodule HologramFeatureTests.Middleware.Page2 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  def middleware(server) do
+  middleware :redirect
+
+  def redirect(server, _opts) do
     put_redirect(server, HologramFeatureTests.Middleware.Page3)
   end
 
