@@ -30,19 +30,19 @@ defmodule HologramFeatureTests.MiddlewareTest do
       |> assert_text("access forbidden by middleware")
     end
 
-    feature "folds a list of steps, including a captured function", %{session: session} do
+    feature "folds a module and a function middleware", %{session: session} do
       session
       |> visit(Page5)
-      |> assert_text("shared step ran / inline step")
+      |> assert_text("shared middleware ran / inline middleware")
     end
   end
 
   describe "command middleware" do
-    feature "folds a list of steps, including a captured function", %{session: session} do
+    feature "folds a module and a function middleware", %{session: session} do
       session
       |> visit(Page6)
       |> click(css("button[id='run_command']"))
-      |> assert_text(css("#result"), "shared step ran / inline step")
+      |> assert_text(css("#result"), "shared middleware ran / inline middleware")
     end
   end
 
@@ -50,13 +50,13 @@ defmodule HologramFeatureTests.MiddlewareTest do
     feature "accumulates base-module middleware ahead of the page's own", %{session: session} do
       session
       |> visit(Page7)
-      |> assert_text("shared step ran / own step")
+      |> assert_text("shared middleware ran / own middleware")
     end
 
-    feature "runs a group middleware attached to a page", %{session: session} do
+    feature "runs a composite middleware attached to a page", %{session: session} do
       session
       |> visit(Page8)
-      |> assert_text("shared step ran / group step")
+      |> assert_text("shared middleware ran / nested middleware")
     end
   end
 end

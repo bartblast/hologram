@@ -12,7 +12,7 @@ defmodule Hologram.Middleware.Builder do
   end
 
   @doc """
-  Attaches a middleware step to the page or component.
+  Attaches a middleware to the page or component.
 
   The target is either a `Hologram.Middleware` module (run as `Mod.call(server, opts)`) or an atom
   naming a public `target(server, opts)` function on the host module. Declarations accumulate in
@@ -25,18 +25,18 @@ defmodule Hologram.Middleware.Builder do
   end
 
   defmacro __before_compile__(env) do
-    entries =
+    middlewares =
       env.module
       |> Module.get_attribute(:__middleware__)
       |> Enum.reverse()
-      |> Enum.map(&compile_entry(env, &1))
+      |> Enum.map(&compile_middleware(env, &1))
 
     quote do
-      def __middleware__, do: unquote(entries)
+      def __middleware__, do: unquote(middlewares)
     end
   end
 
-  defp compile_entry(env, {target, opts}) do
+  defp compile_middleware(env, {target, opts}) do
     capture =
       if module_target?(target) do
         quote do: Function.capture(unquote(target), :call, 2)

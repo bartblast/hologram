@@ -12,7 +12,7 @@ defmodule Hologram.Server.MiddlewareTest do
       assert run(server, []) == server
     end
 
-    test "folds the chain left to right, passing each entry's opts" do
+    test "folds the chain left to right, passing each middleware's opts" do
       append = fn server, value -> Server.append_response_header(server, "vary", value) end
 
       chain = [
@@ -23,7 +23,7 @@ defmodule Hologram.Server.MiddlewareTest do
       assert run(%Server{}, chain).response_headers == %{"vary" => "Accept, Accept-Encoding"}
     end
 
-    test "stops after an entry sets a terminal status" do
+    test "stops after a middleware sets a terminal status" do
       chain = [
         {fn server, _opts -> Server.put_status(server, 403) end, []},
         {fn server, _opts -> Server.put_response_header(server, "x-ran", "yes") end, []}

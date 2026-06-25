@@ -1,16 +1,16 @@
 defmodule HologramFeatureTests.Middleware.Page8 do
   use Hologram.Page
 
-  alias HologramFeatureTests.Middleware.Group
+  alias HologramFeatureTests.Middleware.Composite
 
   route "/middleware/8"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  middleware Group
+  middleware Composite
 
   def init(_params, component, server) do
-    put_state(component, :result, "#{get_stash(server, :shared)} / #{get_stash(server, :group)}")
+    put_state(component, :result, "#{get_stash(server, :shared)} / #{get_stash(server, :nested)}")
   end
 
   def template do

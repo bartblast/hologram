@@ -3,16 +3,16 @@ defmodule Hologram.Server.Middleware do
 
   alias Hologram.Server
 
-  @type entry :: {(Server.t(), term() -> Server.t()), term()}
+  @type middleware :: {(Server.t(), term() -> Server.t()), term()}
 
   @doc """
   Folds a middleware chain over the server struct.
 
-  Each `{capture, opts}` entry is applied left to right as `capture.(server, opts)`, threading the
-  returned server into the next entry. Folding stops as soon as an entry produces a terminal server
-  (a non-nil `status`), leaving the remaining entries unrun.
+  Each `{capture, opts}` middleware is applied left to right as `capture.(server, opts)`, threading the
+  returned server into the next middleware. Folding stops as soon as a middleware produces a terminal
+  server (a non-nil `status`), leaving the remaining middlewares unrun.
   """
-  @spec run(Server.t(), [entry()]) :: Server.t()
+  @spec run(Server.t(), [middleware()]) :: Server.t()
   def run(server, chain)
 
   def run(%Server{status: status} = server, _chain) when status != nil do

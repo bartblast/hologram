@@ -1,6 +1,6 @@
 defmodule Hologram.Middleware do
   @moduledoc """
-  The behaviour and construct for module middleware - reusable, server-side steps that run before
+  The behaviour and construct for module middleware - reusable, server-side logic that runs before
   a page renders and before a command executes.
 
   `use Hologram.Middleware` makes a module a middleware, written one of two ways.
@@ -21,8 +21,8 @@ defmodule Hologram.Middleware do
         end
       end
 
-  A **group** declares a sub-chain with the `middleware` macros and has its `call/2` generated to
-  fold that chain, so the group is itself an ordinary middleware that attaches as a single unit:
+  A **composite** declares a sub-chain with the `middleware` macros and has its `call/2` generated to
+  fold that chain, so the composite is itself an ordinary middleware that attaches as a single unit:
 
       defmodule MyApp.AdminStack do
         use Hologram.Middleware
@@ -65,7 +65,7 @@ defmodule Hologram.Middleware do
 
   @doc false
   defmacro __before_compile__(env) do
-    declared? = match?([_entry | _rest], Module.get_attribute(env.module, :__middleware__))
+    declared? = match?([_middleware | _rest], Module.get_attribute(env.module, :__middleware__))
     defines_call? = Module.defines?(env.module, {:call, 2}, :def)
 
     if declared? and not defines_call? do

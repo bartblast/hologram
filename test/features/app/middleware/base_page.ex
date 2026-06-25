@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.Middleware.BasePage do
 
       layout HologramFeatureTests.Components.DefaultLayout
 
-      middleware HologramFeatureTests.Middleware.SharedStep
+      middleware HologramFeatureTests.Middleware.Shared
     end
   end
 end
