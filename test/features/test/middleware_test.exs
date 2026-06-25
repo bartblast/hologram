@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.MiddlewareTest do
   alias HologramFeatureTests.Middleware.Page1
   alias HologramFeatureTests.Middleware.Page5
   alias HologramFeatureTests.Middleware.Page6
+  alias HologramFeatureTests.Middleware.Page7
+  alias HologramFeatureTests.Middleware.Page8
 
   describe "page middleware" do
     feature "enriches the server struct before rendering", %{session: session} do
@@ -41,6 +43,20 @@ defmodule HologramFeatureTests.MiddlewareTest do
       |> visit(Page6)
       |> click(css("button[id='run_command']"))
       |> assert_text(css("#result"), "shared step ran / inline step")
+    end
+  end
+
+  describe "composition" do
+    feature "accumulates base-module middleware ahead of the page's own", %{session: session} do
+      session
+      |> visit(Page7)
+      |> assert_text("shared step ran / own step")
+    end
+
+    feature "runs a group middleware attached to a page", %{session: session} do
+      session
+      |> visit(Page8)
+      |> assert_text("shared step ran / group step")
     end
   end
 end

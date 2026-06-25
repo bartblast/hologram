@@ -1,13 +1,13 @@
 defmodule HologramFeatureTests.Middleware.Page5 do
   use Hologram.Page
 
-  alias HologramFeatureTests.MiddlewareFixture
+  alias HologramFeatureTests.Middleware.SharedStep
 
   route "/middleware/5"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  middleware MiddlewareFixture
+  middleware SharedStep
   middleware :inline
 
   def inline(server, _opts) do

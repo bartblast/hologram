@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.MiddlewareFixture do
+defmodule HologramFeatureTests.Middleware.SharedStep do
   use Hologram.Middleware
 
   @impl Hologram.Middleware
