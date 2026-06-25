@@ -5,6 +5,7 @@
     Hologram.Component,
     Hologram.JS,
     Hologram.Layout,
+    Hologram.Middleware.Builder,
     Hologram.Page
   ],
   ignore_paths: [~r(^benchmarks/*), ~r(^test/*)],
