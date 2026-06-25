@@ -2,8 +2,6 @@ defmodule HologramFeatureTests.MiddlewareTest do
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.Middleware.Page1
-  alias HologramFeatureTests.Middleware.Page2
-  alias HologramFeatureTests.Middleware.Page4
   alias HologramFeatureTests.Middleware.Page5
   alias HologramFeatureTests.Middleware.Page6
 
@@ -14,15 +12,19 @@ defmodule HologramFeatureTests.MiddlewareTest do
       |> assert_text("enriched by middleware")
     end
 
+    # Visit by explicit path: a redirect mounts a different page, so the page-module
+    # form of visit would wait for this page to mount (it never does) until it times out.
     feature "redirects to another page", %{session: session} do
       session
-      |> visit(Page2)
+      |> visit("/middleware/2")
       |> assert_text("redirect target reached")
     end
 
+    # Visit by explicit path: a terminal deny response mounts no client runtime, so the
+    # page-module form of visit would hang waiting for one until it times out.
     feature "denies the request with a terminal response", %{session: session} do
       session
-      |> visit(Page4)
+      |> visit("/middleware/4")
       |> assert_text("access forbidden by middleware")
     end
 
