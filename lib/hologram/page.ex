@@ -44,30 +44,10 @@ defmodule Hologram.Page do
 
     [
       quote do
-        use Hologram.Server.Helpers
-
-        import Hologram.Component,
-          only: [
-            delete_subscription: 2,
-            put_action: 2,
-            put_action: 3,
-            put_broadcast: 3,
-            put_broadcast: 4,
-            put_broadcast_except: 4,
-            put_broadcast_except: 5,
-            put_command: 2,
-            put_command: 3,
-            put_context: 3,
-            put_page: 2,
-            put_page: 3,
-            put_state: 2,
-            put_state: 3,
-            put_subscription: 2
-          ]
-
+        import Hologram.Component, only: unquote(Hologram.Component.__helper_imports__())
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
-
+        import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
         import Hologram.Template, only: [sigil_HOLO: 2]
 
         alias Hologram.Component

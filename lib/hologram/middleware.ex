@@ -38,9 +38,9 @@ defmodule Hologram.Middleware do
 
   defmacro __using__(_opts) do
     quote do
-      use Hologram.Server.Helpers
-
       @behaviour Hologram.Middleware
+
+      import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
     end
   end
 end
