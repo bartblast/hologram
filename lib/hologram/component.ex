@@ -98,6 +98,8 @@ defmodule Hologram.Component do
 
     [
       quote do
+        @behaviour Component
+
         import Hologram.Component, only: unquote([prop: 2, prop: 3] ++ __helper_imports__())
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
@@ -110,8 +112,6 @@ defmodule Hologram.Component do
         @before_compile Component
 
         @external_resource unquote(template_path)
-
-        @behaviour Component
 
         @doc """
         Returns true to indicate that the callee module is a component module (has "use Hologram.Component" directive).

@@ -44,6 +44,8 @@ defmodule Hologram.Page do
 
     [
       quote do
+        @behaviour Page
+
         import Hologram.Component, only: unquote(Hologram.Component.__helper_imports__())
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
@@ -58,8 +60,6 @@ defmodule Hologram.Page do
         @before_compile Page
 
         @external_resource unquote(template_path)
-
-        @behaviour Page
 
         @doc """
         Returns true to indicate that the callee module is a page module (has "use Hologram.Page" directive).
