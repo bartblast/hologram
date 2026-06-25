@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Controller.Module25 do
   use Hologram.Page
 
@@ -7,8 +8,9 @@ defmodule Hologram.Test.Fixtures.Controller.Module25 do
 
   layout LayoutFixture
 
-  @impl Page
-  def middleware(server) do
+  middleware :deny
+
+  def deny(server, _opts) do
     put_status(server, :forbidden)
   end
 

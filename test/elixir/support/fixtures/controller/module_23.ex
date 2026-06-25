@@ -2,8 +2,9 @@
 defmodule Hologram.Test.Fixtures.Controller.Module23 do
   use Hologram.Component
 
-  @impl Component
-  def middleware(server) do
+  middleware :deny
+
+  def deny(server, _opts) do
     put_status(server, :forbidden)
   end
 

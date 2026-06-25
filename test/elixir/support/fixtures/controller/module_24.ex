@@ -2,8 +2,9 @@
 defmodule Hologram.Test.Fixtures.Controller.Module24 do
   use Hologram.Component
 
-  @impl Component
-  def middleware(server) do
+  middleware :enrich
+
+  def enrich(server, _opts) do
     put_stash(server, :marker, :injected_by_middleware)
   end
 

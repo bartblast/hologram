@@ -190,7 +190,7 @@ defmodule Hologram.Controller do
         subscriptions: target_subscriptions
     }
 
-    middleware_server_struct = Middleware.run(server_struct, module.middleware(server_struct))
+    middleware_server_struct = Middleware.run(server_struct, module.__middleware__())
 
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the command and send it,
@@ -306,7 +306,7 @@ defmodule Hologram.Controller do
     }
 
     middleware_server_struct =
-      Middleware.run(server_struct, page_module.middleware(server_struct))
+      Middleware.run(server_struct, page_module.__middleware__())
 
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the render and send it,

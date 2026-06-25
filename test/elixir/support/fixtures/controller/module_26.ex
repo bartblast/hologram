@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Controller.Module26 do
   use Hologram.Page
 
@@ -7,8 +8,9 @@ defmodule Hologram.Test.Fixtures.Controller.Module26 do
 
   layout LayoutFixture
 
-  @impl Page
-  def middleware(server) do
+  middleware :enrich
+
+  def enrich(server, _opts) do
     put_stash(server, :marker, "injected_by_middleware")
   end
 

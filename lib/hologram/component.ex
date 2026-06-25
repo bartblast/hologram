@@ -6,7 +6,6 @@ defmodule Hologram.Component do
   alias Hologram.Realtime.Channel
   alias Hologram.Server
   alias Hologram.Server.Broadcast
-  alias Hologram.Server.Middleware
 
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
 
@@ -57,14 +56,6 @@ defmodule Hologram.Component do
               {Component.t(), Server.t()} | Component.t() | Server.t()
 
   @doc """
-  Returns the middleware for this component - server-side steps run before its commands.
-
-  Returns either the (possibly transformed) server struct, or a list of step captures that are folded
-  over the server.
-  """
-  @callback middleware(Server.t()) :: Server.t() | [Middleware.step()]
-
-  @doc """
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
   """
   @callback template() :: (map -> list)
@@ -100,6 +91,8 @@ defmodule Hologram.Component do
       quote do
         @behaviour Component
 
+        use Hologram.Middleware.Builder
+
         import Hologram.Component, only: unquote([prop: 2, prop: 3] ++ __helper_imports__())
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
@@ -127,10 +120,7 @@ defmodule Hologram.Component do
         @impl Component
         def init(_props, component, server), do: {component, server}
 
-        @impl Component
-        def middleware(server), do: server
-
-        defoverridable init: 3, middleware: 1
+        defoverridable init: 3
       end,
       maybe_register_colocated_template_markup(template_path),
       register_props_accumulator()

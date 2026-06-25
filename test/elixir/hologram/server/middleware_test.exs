@@ -6,80 +6,40 @@ defmodule Hologram.Server.MiddlewareTest do
   alias Hologram.Server
 
   describe "run/2" do
-    test "returns the given Server struct for an inline result" do
-      result = %Server{response_body: "inline result"}
-
-      assert run(%Server{}, result) == result
-    end
-
-    test "returns the server unchanged for an empty step list" do
+    test "returns the server unchanged for an empty chain" do
       server = %Server{session: %{"locale" => "en"}}
 
       assert run(server, []) == server
     end
 
-    test "folds steps left to right" do
-      steps = [
-        fn server -> Server.append_response_header(server, "vary", "Accept") end,
-        fn server -> Server.append_response_header(server, "vary", "Accept-Encoding") end
+    test "folds the chain left to right, passing each entry's opts" do
+      append = fn server, value -> Server.append_response_header(server, "vary", value) end
+
+      chain = [
+        {append, "Accept"},
+        {append, "Accept-Encoding"}
       ]
 
-      assert run(%Server{}, steps).response_headers == %{"vary" => "Accept, Accept-Encoding"}
+      assert run(%Server{}, chain).response_headers == %{"vary" => "Accept, Accept-Encoding"}
     end
 
-    test "expands a step that returns a list of steps" do
-      bundle = fn _server ->
-        [
-          fn server -> Server.append_response_header(server, "vary", "Accept-Encoding") end,
-          fn server -> Server.append_response_header(server, "vary", "Cookie") end
-        ]
-      end
-
-      steps = [
-        fn server -> Server.append_response_header(server, "vary", "Accept") end,
-        bundle,
-        fn server -> Server.append_response_header(server, "vary", "User-Agent") end
+    test "stops after an entry sets a terminal status" do
+      chain = [
+        {fn server, _opts -> Server.put_status(server, 403) end, []},
+        {fn server, _opts -> Server.put_response_header(server, "x-ran", "yes") end, []}
       ]
 
-      assert run(%Server{}, steps).response_headers == %{
-               "vary" => "Accept, Accept-Encoding, Cookie, User-Agent"
-             }
-    end
-
-    test "stops after a step sets a terminal status" do
-      steps = [
-        fn server -> Server.put_status(server, 403) end,
-        fn server -> Server.put_response_header(server, "x-ran", "yes") end
-      ]
-
-      result = run(%Server{}, steps)
+      result = run(%Server{}, chain)
 
       assert result.status == 403
       assert result.response_headers == %{}
     end
 
-    test "skips all steps when the server is already terminal" do
-      steps = [fn server -> Server.put_response_header(server, "x-ran", "yes") end]
-
-      result = run(%Server{status: 302}, steps)
+    test "skips the whole chain when the server is already terminal" do
+      chain = [{fn server, _opts -> Server.put_response_header(server, "x-ran", "yes") end, []}]
+      result = run(%Server{status: 302}, chain)
 
       assert result.status == 302
-      assert result.response_headers == %{}
-    end
-
-    test "short-circuits within an expanded bundle" do
-      bundle = fn _server ->
-        [
-          fn server -> Server.put_status(server, 401) end,
-          fn server -> Server.put_response_header(server, "x-ran", "yes") end
-        ]
-      end
-
-      steps = [bundle, fn server -> Server.put_response_header(server, "x-ran-too", "yes") end]
-
-      result = run(%Server{}, steps)
-
-      assert result.status == 401
       assert result.response_headers == %{}
     end
   end

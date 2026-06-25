@@ -14,7 +14,6 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module3
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
-  alias Hologram.Test.Fixtures.Component.Module7
 
   @server %Server{cid: "page"}
 
@@ -87,16 +86,6 @@ defmodule Hologram.ComponentTest do
     test "overridden implementation" do
       assert Module2.init(:props_dummy, build_component_struct(), build_server_struct()) ==
                {%Component{state: %{overriden: true}}, %Server{}}
-    end
-  end
-
-  describe "middleware/1" do
-    test "default implementation" do
-      assert Module1.middleware(:server_dummy) == :server_dummy
-    end
-
-    test "overridden implementation" do
-      assert Module7.middleware(build_server_struct()) == %Server{status: 403}
     end
   end
 

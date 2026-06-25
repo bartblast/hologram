@@ -3,35 +3,26 @@ defmodule Hologram.Server.Middleware do
 
   alias Hologram.Server
 
-  @type step :: (Server.t() -> Server.t() | [step()])
+  @type entry :: {(Server.t(), term() -> Server.t()), term()}
 
   @doc """
-  Runs a middleware result against the server struct.
+  Folds a middleware chain over the server struct.
 
-  A `Server` struct is returned as-is (an inline result). A list of step captures is
-  folded left to right over the server: each step receives the current server and
-  returns either an updated server or a nested list of steps, which is expanded in
-  place. Folding stops as soon as a step produces a terminal server (a non-nil
-  `status`), leaving the remaining steps unrun.
+  Each `{capture, opts}` entry is applied left to right as `capture.(server, opts)`, threading the
+  returned server into the next entry. Folding stops as soon as an entry produces a terminal server
+  (a non-nil `status`), leaving the remaining entries unrun.
   """
-  @spec run(Server.t(), Server.t() | [step()]) :: Server.t()
-  def run(server, result)
+  @spec run(Server.t(), [entry()]) :: Server.t()
+  def run(server, chain)
 
-  def run(_server, %Server{} = result), do: result
-
-  def run(server, steps) when is_list(steps) do
-    fold(server, steps)
-  end
-
-  defp fold(server, []), do: server
-
-  defp fold(%Server{status: status} = server, _steps) when status != nil do
+  def run(%Server{status: status} = server, _chain) when status != nil do
     server
   end
 
-  defp fold(server, [step | rest]) do
-    server
-    |> run(step.(server))
-    |> fold(rest)
+  def run(server, []), do: server
+
+  def run(server, [{capture, opts} | rest]) do
+    updated_server = capture.(server, opts)
+    run(updated_server, rest)
   end
 end

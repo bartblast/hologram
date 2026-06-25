@@ -6,7 +6,6 @@ defmodule Hologram.Page do
   alias Hologram.Page
   alias Hologram.Reflection
   alias Hologram.Server
-  alias Hologram.Server.Middleware
 
   @doc """
   Handles a client-side action, typically triggered by a user interaction.
@@ -25,14 +24,6 @@ defmodule Hologram.Page do
               {Component.t(), Server.t()} | Component.t() | Server.t()
 
   @doc """
-  Returns the middleware for this page - server-side steps run before rendering and before commands.
-
-  Returns either the (possibly transformed) server struct, or a list of step captures that are folded
-  over the server.
-  """
-  @callback middleware(Server.t()) :: Server.t() | [Middleware.step()]
-
-  @doc """
   Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
   """
   @callback template() :: (map -> list)
@@ -45,6 +36,8 @@ defmodule Hologram.Page do
     [
       quote do
         @behaviour Page
+
+        use Hologram.Middleware.Builder
 
         import Hologram.Component, only: unquote(Hologram.Component.__helper_imports__())
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
@@ -75,10 +68,7 @@ defmodule Hologram.Page do
         @impl Page
         def init(_params, component, server), do: {component, server}
 
-        @impl Page
-        def middleware(server), do: server
-
-        defoverridable init: 3, middleware: 1
+        defoverridable init: 3
       end,
       Component.maybe_register_colocated_template_markup(template_path),
       Page.register_params_accumulator()

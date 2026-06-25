@@ -12,7 +12,6 @@ defmodule Hologram.PageTest do
   alias Hologram.Test.Fixtures.Page.Module5
   alias Hologram.Test.Fixtures.Page.Module6
   alias Hologram.Test.Fixtures.Page.Module7
-  alias Hologram.Test.Fixtures.Page.Module8
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -131,16 +130,6 @@ defmodule Hologram.PageTest do
     test "overridden" do
       assert Module2.init(:params_dummy, build_component_struct(), build_server_struct()) ==
                {%Component{state: %{overriden: true}}, %Server{}}
-    end
-  end
-
-  describe "middleware/1" do
-    test "default" do
-      assert Module1.middleware(:server_dummy) == :server_dummy
-    end
-
-    test "overridden" do
-      assert Module8.middleware(build_server_struct()) == %Server{status: 403}
     end
   end
 
