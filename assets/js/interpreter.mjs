@@ -134,6 +134,10 @@ export default class Interpreter {
     );
   }
 
+  static buildTryClauseErrorMsg(arg) {
+    return "no try clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
+  }
+
   // Keep this message in sync with build_undefined_function_error_msg in Hologram.Commons.TestUtils.
   static buildUndefinedFunctionErrorMsg(
     module,
@@ -883,6 +887,13 @@ export default class Interpreter {
     Interpreter.raiseError("MatchError", message);
   }
 
+  static raiseTryClauseError(arg) {
+    Interpreter.raiseError(
+      "TryClauseError",
+      Interpreter.buildTryClauseErrorMsg(arg),
+    );
+  }
+
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
   }
@@ -967,9 +978,14 @@ export default class Interpreter {
         return bodyResult;
       }
 
-      // TODO: handle else clauses
-      throw new HologramInterpreterError(
-        '"try" expression else clauses are not yet implemented in Hologram',
+      // The do block succeeded - match its result against the else clauses,
+      // raising TryClauseError if none match. Evaluated outside the inner catch,
+      // so a failure here is not re-caught by this try (but after still runs).
+      return Interpreter.#evaluateMatchingClause(
+        bodyResult,
+        elseClauses,
+        context,
+        Interpreter.raiseTryClauseError,
       );
     } finally {
       // The after block always runs (on success, handled failure, or
@@ -1029,9 +1045,14 @@ export default class Interpreter {
         return bodyResult;
       }
 
-      // TODO: handle else clauses
-      throw new HologramInterpreterError(
-        '"try" expression else clauses are not yet implemented in Hologram',
+      // The do block succeeded - match its result against the else clauses,
+      // raising TryClauseError if none match. Evaluated outside the inner catch,
+      // so a failure here is not re-caught by this try (but after still runs).
+      return await Interpreter.#asyncEvaluateMatchingClause(
+        bodyResult,
+        elseClauses,
+        context,
+        Interpreter.raiseTryClauseError,
       );
     } finally {
       // The after block always runs (on success, handled failure, or

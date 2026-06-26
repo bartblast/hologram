@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedErrorAsync,
   assertBoxedStrictEqual,
   contextFixture,
   defineGlobalErlangAndElixirModules,
@@ -676,6 +677,51 @@ describe("Interpreter", () => {
       assert.equal(caught, boxedError);
       assert.isTrue(afterRan);
     });
+
+    it("matches the do block result against the else clauses", async () => {
+      const body = async (_context) => Type.integer(2);
+
+      const elseClauses = [
+        {
+          match: Type.integer(2),
+          guards: [],
+          body: async (_context) => Type.atom("two"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        [],
+        elseClauses,
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("two"));
+    });
+
+    it("raises TryClauseError when no else clause matches the do block result", async () => {
+      const body = async (_context) => Type.integer(3);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: async (_context) => Type.atom("one"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      await assertBoxedErrorAsync(
+        () => Interpreter.asyncTry(body, [], [], elseClauses, null, context),
+        "TryClauseError",
+        "no try clause matching:\n\n    3\n",
+      );
+    });
   });
 
   describe("asyncWith()", () => {
@@ -900,6 +946,13 @@ describe("Interpreter", () => {
     const expected =
       "{MyModule, :my_fun, 3} can't be transpiled automatically to JavaScript, because its output is too big.\n" +
       "See what to do here: https://www.hologram.page/TODO";
+
+    assert.equal(result, expected);
+  });
+
+  it("buildTryClauseErrorMsg()", () => {
+    const result = Interpreter.buildTryClauseErrorMsg(Type.atom("abc"));
+    const expected = "no try clause matching:\n\n    :abc\n";
 
     assert.equal(result, expected);
   });
@@ -8352,6 +8405,14 @@ describe("Interpreter", () => {
     );
   });
 
+  it("raiseTryClauseError()", () => {
+    assertBoxedError(
+      () => Interpreter.raiseTryClauseError(Type.atom("abc")),
+      "TryClauseError",
+      Interpreter.buildTryClauseErrorMsg(Type.atom("abc")),
+    );
+  });
+
   it("raiseUndefinedFunctionError()", () => {
     assertBoxedError(
       () => Interpreter.raiseUndefinedFunctionError("my_message"),
@@ -8549,6 +8610,74 @@ describe("Interpreter", () => {
       }
 
       assert.equal(caught, nativeError);
+      assert.isTrue(afterRan);
+    });
+
+    it("matches the do block result against the else clauses", () => {
+      const body = (_context) => Type.integer(2);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: (_context) => Type.atom("one"),
+        },
+        {
+          match: Type.integer(2),
+          guards: [],
+          body: (_context) => Type.atom("two"),
+        },
+      ];
+
+      const result = Interpreter.try(body, [], [], elseClauses, null, context);
+
+      assert.deepStrictEqual(result, Type.atom("two"));
+    });
+
+    it("raises TryClauseError when no else clause matches the do block result", () => {
+      const body = (_context) => Type.integer(3);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: (_context) => Type.atom("one"),
+        },
+      ];
+
+      assertBoxedError(
+        () => Interpreter.try(body, [], [], elseClauses, null, context),
+        "TryClauseError",
+        "no try clause matching:\n\n    3\n",
+      );
+    });
+
+    it("runs the after block when an else clause does not match", () => {
+      const body = (_context) => Type.integer(3);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: (_context) => Type.atom("one"),
+        },
+      ];
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], elseClauses, afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
       assert.isTrue(afterRan);
     });
   });
