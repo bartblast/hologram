@@ -41,9 +41,20 @@ describe("HologramBoxedError", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);
 
-      assert.equal(error.propertyIsEnumerable("kind"), false);
-      assert.equal(error.propertyIsEnumerable("value"), false);
-      assert.equal(error.propertyIsEnumerable("struct"), false);
+      assert.equal(
+        Object.getOwnPropertyDescriptor(error, "kind").enumerable,
+        false,
+      );
+
+      assert.equal(
+        Object.getOwnPropertyDescriptor(error, "value").enumerable,
+        false,
+      );
+
+      assert.equal(
+        Object.getOwnPropertyDescriptor(error, "struct").enumerable,
+        false,
+      );
     });
 
     it("can throw and catch", () => {
