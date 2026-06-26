@@ -90,7 +90,7 @@ defmodule Hologram.Server do
       put_stash: 3,
       put_status: 2,
       put_user_id: 2,
-      referrer: 1,
+      referrer_url: 1,
       request_url: 1
     ]
   end
@@ -760,8 +760,8 @@ defmodule Hologram.Server do
   "Referer", and the header has carried the typo ever since - so this helper takes the
   correct spelling and reads the misspelled header under the hood.
   """
-  @spec referrer(t()) :: String.t() | nil
-  def referrer(server) do
+  @spec referrer_url(t()) :: String.t() | nil
+  def referrer_url(server) do
     get_request_header(server, "referer")
   end
 
