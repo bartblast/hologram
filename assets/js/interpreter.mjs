@@ -1028,7 +1028,7 @@ export default class Interpreter {
           return rescued;
         }
 
-        const caught = await Interpreter.#evaluateCatchClauses(
+        const caught = await Interpreter.#asyncEvaluateCatchClauses(
           catchClauses,
           error,
           context,
@@ -1337,13 +1337,26 @@ export default class Interpreter {
     return 0;
   }
 
-  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
+  // SYNC/ASYNC PAIR: When modifying this function, also update #asyncEvaluateCatchClauses().
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
 
       if (Interpreter.#matchCatchClause(clause, error, contextClone)) {
         return clause.body(contextClone);
+      }
+    }
+
+    return NO_MATCH;
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #evaluateCatchClauses().
+  static async #asyncEvaluateCatchClauses(clauses, error, context) {
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.#matchCatchClause(clause, error, contextClone)) {
+        return await clause.body(contextClone);
       }
     }
 
@@ -1774,11 +1787,20 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchCatchClause(_clause, _error, _context) {
-    // TODO: handle catch clauses
-    throw new HologramInterpreterError(
-      '"try" expression catch clauses are not yet implemented in Hologram',
-    );
+  static #matchCatchClause(clause, error, context) {
+    // Match the kind pattern against the error's kind atom and the value pattern
+    // against the error's raw value, in the same context so the bindings are
+    // shared, then evaluate the guards against the committed bindings.
+    if (
+      Interpreter.isMatched(clause.kind, error.kind, context) &&
+      Interpreter.isMatched(clause.value, error.value, context)
+    ) {
+      Interpreter.updateVarsToMatchedValues(context);
+
+      return Interpreter.#evaluateGuards(clause.guards, context);
+    }
+
+    return false;
   }
 
   // Deps: [:erlang.hd/1, :erlang.tl/1]

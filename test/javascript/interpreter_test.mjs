@@ -751,6 +751,36 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, struct);
     });
+
+    it("catches a :throw failure and awaits the catch clause body", async () => {
+      const thrown = Type.atom("thrown_value");
+
+      const body = async (_context) => {
+        throw new HologramBoxedError(thrown, Type.atom("throw"));
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: async (context) => context.vars.v,
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        catchClauses,
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, thrown);
+    });
   });
 
   describe("asyncWith()", () => {
@@ -8840,6 +8870,193 @@ describe("Interpreter", () => {
       }
 
       assert.equal(caught, boxedError);
+    });
+
+    it("catches a :throw failure, binding the thrown value", () => {
+      const thrown = Type.atom("thrown_value");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(thrown, Type.atom("throw"));
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: (context) => context.vars.v,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, thrown);
+    });
+
+    it("catches an :exit failure", () => {
+      const reason = Type.atom("reason");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(reason, Type.atom("exit"));
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("exit"),
+          value: Type.variablePattern("r"),
+          guards: [],
+          body: (context) => context.vars.r,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, reason);
+    });
+
+    it("catches when the clause guard passes", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.integer(5), Type.atom("throw"));
+      };
+
+      const guard = (context) =>
+        Erlang["==/2"](context.vars.n, Type.integer(5));
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("n"),
+          guards: [guard],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, Type.atom("caught"));
+    });
+
+    it("does not catch when the clause guard fails", () => {
+      const boxedError = new HologramBoxedError(
+        Type.integer(5),
+        Type.atom("throw"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const guard = (context) =>
+        Erlang["==/2"](context.vars.n, Type.integer(0));
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("n"),
+          guards: [guard],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], catchClauses, [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("does not catch when the clause kind does not match", () => {
+      const boxedError = new HologramBoxedError(
+        Type.atom("x"),
+        Type.atom("exit"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], catchClauses, [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("does not catch when the value pattern does not match", () => {
+      const boxedError = new HologramBoxedError(
+        Type.atom("actual"),
+        Type.atom("throw"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.atom("expected"),
+          guards: [],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], catchClauses, [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("falls through from rescue to catch for a :throw failure", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.atom("thrown"), Type.atom("throw"));
+      };
+
+      const rescueClauses = [
+        {variable: null, modules: [], body: (_context) => Type.atom("rescued")},
+      ];
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: (context) => context.vars.v,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        catchClauses,
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("thrown"));
     });
   });
 
