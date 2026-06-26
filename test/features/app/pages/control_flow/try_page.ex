@@ -17,18 +17,68 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
   def template do
     ~HOLO"""
     <p>
+      <strong>Controls</strong>
       <button $click="reset"> Reset </button>
     </p>
     <p>
-      <button $click="rescue_unmatched_module"> Rescue unmatched module </button>
-      <button $click="rescue_with_multiple_modules"> Rescue with multiple modules </button>
-      <button $click="rescue_with_single_module"> Rescue with a single module </button>
+      <strong>Rescue clauses</strong>
       <button $click="rescue_without_module"> Rescue without a module </button>
+      <button $click="rescue_with_single_module"> Rescue with a single module </button>
+      <button $click="rescue_with_multiple_modules"> Rescue with multiple modules </button>
+      <button $click="rescue_unmatched_module"> Rescue unmatched module </button>
+    </p>
+    <p>
+      <strong>Catch clauses</strong>
+      <button $click="catch_throw"> Catch throw </button>
+      <button $click="catch_exit"> Catch exit </button>
+      <button $click="catch_error"> Catch error </button>
+      <button $click="catch_unmatched_kind"> Catch unmatched kind </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
+  end
+
+  def action(:catch_error, _params, component) do
+    result =
+      try do
+        raise RuntimeError, "my message"
+      catch
+        :error, reason -> {:caught_error, reason.message}
+      end
+
+    put_state(component, :result, result)
+  end
+
+  def action(:catch_exit, _params, component) do
+    result =
+      try do
+        exit("my reason")
+      catch
+        :exit, reason -> {:caught_exit, reason}
+      end
+
+    put_state(component, :result, result)
+  end
+
+  def action(:catch_throw, _params, component) do
+    result =
+      try do
+        throw("my value")
+      catch
+        value -> {:caught_throw, value}
+      end
+
+    put_state(component, :result, result)
+  end
+
+  def action(:catch_unmatched_kind, _params, _component) do
+    try do
+      raise RuntimeError, "my message"
+    catch
+      :throw, value -> {:caught_throw, value}
+    end
   end
 
   def action(:rescue_unmatched_module, _params, _component) do
