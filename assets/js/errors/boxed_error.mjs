@@ -1,17 +1,25 @@
 "use strict";
 
 import Interpreter from "../interpreter.mjs";
+import Type from "../type.mjs";
 
 export default class HologramBoxedError extends Error {
-  constructor(struct) {
+  constructor(value, kind = Type.atom("error")) {
     super("");
 
     this.name = "HologramBoxedError";
-    this.struct = struct;
+    this.kind = kind;
+    this.value = value;
 
-    const boxedType = Interpreter.getErrorType(this);
-    const boxedMessage = Interpreter.resolveErrorMessage(struct);
+    if (kind.value === "error") {
+      this.struct = value;
 
-    this.message = `(${boxedType}) ${boxedMessage}`;
+      const boxedType = Interpreter.getErrorType(this);
+      const boxedMessage = Interpreter.resolveErrorMessage(value);
+
+      this.message = `(${boxedType}) ${boxedMessage}`;
+    } else {
+      this.message = `(${kind.value}) ${Interpreter.inspect(value)}`;
+    }
   }
 }
