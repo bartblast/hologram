@@ -34,6 +34,18 @@ describe("HologramBoxedError", () => {
       assert.equal(error.message, "(MyType) my message");
     });
 
+    // Extra enumerable own-properties on a thrown Error blank out the message that
+    // the browser's uncaught-error reporting surfaces, so the internal carriers
+    // must stay non-enumerable.
+    it("defines kind, value and struct as non-enumerable", () => {
+      const struct = Type.errorStruct("MyType", "my message");
+      const error = new HologramBoxedError(struct);
+
+      assert.equal(error.propertyIsEnumerable("kind"), false);
+      assert.equal(error.propertyIsEnumerable("value"), false);
+      assert.equal(error.propertyIsEnumerable("struct"), false);
+    });
+
     it("can throw and catch", () => {
       const struct = Type.errorStruct("MyType", "my message");
 
