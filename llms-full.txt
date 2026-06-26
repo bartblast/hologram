@@ -1052,14 +1052,12 @@ Pointer events (like `$click`, `$click_outside`, `$pointer_cancel`, `$pointer_do
 
 ###### Click Event
 
-Click events are ignored in the following cases:
+A `$click` binding fires on a plain click, but not on a modified one - the modifier signals that the user wants the browser's own behavior, such as opening a link in a new tab or window, so Hologram stays out of the way. A click counts as modified when any of these is held:
 
-- When the Ctrl key is pressed
-- When the Command key is pressed
-- When the Shift key is pressed
-- When the middle mouse button is clicked
-
-This behavior prevents interference with browser's built-in functionality like opening links in new tabs, selecting text, or using browser extensions.
+- `⌥ Alt`
+- `⌃ Ctrl`
+- `⌘ Command`
+- `⇧ Shift`
 
 ###### Click-Outside Event
 
@@ -1282,27 +1280,29 @@ In short, debounce fires once after activity stops, while throttle fires repeate
 
 #### Controlling the Native Default
 
-Hologram calls `preventDefault` by default on the events where the browser's native action would otherwise interfere - clicks, form submits, and pointer events among them - so a bound form does not reload the page and a bound link does not navigate. Keyboard events (`$key_down`, `$key_up`), scrolling, and resizing are left alone, so typing, shortcuts, and scrolling always work. Two modifiers override this per binding: `allow_default` lets the native default through where Hologram would prevent it, and `prevent_default` forces `preventDefault` where Hologram would leave it alone.
+Hologram calls `preventDefault` by default only on `$submit` - so a bound form does not reload the page. Every other event is left alone, so clicks, typing, text selection, scrolling, and the rest of the browser's native behavior keep working. Two modifiers override this per binding: `allow_default` lets the native default through where Hologram would prevent it, and `prevent_default` forces `preventDefault` where Hologram would leave it alone.
 
 ##### Allowing the Native Default
 
 Append `allow_default` to a single binding so Hologram does not call `preventDefault` for it - the browser's native default then proceeds, and the action still dispatches.
 
 ```holo
-<a href="/files/report.pdf" download $click.allow_default="track_download">Download</a>
+<form action="https://example.com/subscribe" $submit.allow_default="track_signup">
+  <button>Subscribe</button>
+</form>
 ```
 
-Use it when you want both the native behaviour and an action - for example a download or external link you also want to track. It is meaningful only where Hologram actually prevents a default (in practice `$click`, `$submit`, and cancelable pointer events). It composes with key filters, `stop_propagation`, `debounce`, and `throttle`.
+Use it when you want both the native behavior and an action - for example a form that posts to an external endpoint you also want to track. It is meaningful only where Hologram actually prevents the native default (in practice `$submit`). It composes with key filters, `stop_propagation`, `debounce`, and `throttle`.
 
 ##### Preventing the Native Default
 
-The mirror of `allow_default` is `prevent_default`: append it and Hologram calls `preventDefault` for that binding even on an event it leaves alone by default - above all keyboard events. The classic case is Enter-to-send, where the action should fire without the keystroke also inserting a newline or submitting the surrounding form:
+The mirror of `allow_default` is `prevent_default`: append it and Hologram calls `preventDefault` for that binding. Since `$submit` is the only event prevented by default, `prevent_default` is how you do the same on any other event. The classic case is Enter-to-send on a keyboard binding, where the action should fire without the keystroke also inserting a newline or submitting the surrounding form:
 
 ```holo
 <textarea $key_down.enter.prevent_default="send_message"></textarea>
 ```
 
-It composes with key filters - so only the matched key is prevented - as well as `stop_propagation`, `debounce`, and `throttle`. A binding cannot carry both `allow_default` and `prevent_default`: they are opposite intents, so combining them fails the build.
+It composes with key filters - so only the matched key is prevented - as well as `stop_propagation`, `debounce`, and `throttle`. It only affects cancelable events, so it is a no-op on ones the browser does not let you cancel - among them `$change`, `$input`, `$select`, `$scroll`, `$resize`, `$focus`, `$blur`, `$pointer_cancel`, and the `$transition_*` events. A binding cannot carry both `allow_default` and `prevent_default`: they are opposite intents, so combining them fails the build.
 
 #### Stopping Event Propagation
 
