@@ -2860,6 +2860,68 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) == expected
     end
+
+    test "catch clause / without guards" do
+      # catch
+      #   :throw, value -> :caught
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :throw},
+        value: %IR.Variable{name: :value},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [], body: (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
+
+    test "catch clause / with variable kind" do
+      # catch
+      #   kind, value -> :caught
+      ir = %IR.TryCatchClause{
+        kind: %IR.Variable{name: :kind},
+        value: %IR.Variable{name: :value},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               "{kind: Type.variablePattern(\"kind\"), value: Type.variablePattern(\"value\"), guards: [], body: (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
+
+    test "catch clause / with guards" do
+      # catch
+      #   :throw, value when guard -> :caught
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :throw},
+        value: %IR.Variable{name: :value},
+        guards: [%IR.Variable{name: :guard}],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [(context) => context.vars.guard], body: (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
+
+    test "catch clause / async - guards stay sync, body becomes async" do
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :throw},
+        value: %IR.Variable{name: :value},
+        guards: [%IR.Variable{name: :guard}],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [(context) => context.vars.guard], body: async (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
   end
 
   describe "tuple type" do

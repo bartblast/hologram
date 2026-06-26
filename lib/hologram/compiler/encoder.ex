@@ -451,6 +451,18 @@ defmodule Hologram.Compiler.Encoder do
     end
   end
 
+  def encode_ir(%IR.TryCatchClause{} = ir, context) do
+    kind_js = encode_ir(ir.kind, %{context | pattern?: true})
+    value_js = encode_ir(ir.value, %{context | pattern?: true})
+
+    # Guards are never async - Elixir guards are restricted to a safe subset of functions.
+    guards_js = encode_as_array(ir.guards, %{context | async?: false}, &encode_closure/2)
+
+    body_js = encode_closure(ir.body, context)
+
+    "{kind: #{kind_js}, value: #{value_js}, guards: #{guards_js}, body: #{body_js}}"
+  end
+
   def encode_ir(%IR.TryRescueClause{} = ir, context) do
     variable_js =
       if ir.variable do
