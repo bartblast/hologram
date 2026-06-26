@@ -166,4 +166,35 @@ defmodule Hologram.ExJsConsistency.TryTest do
       end
     end
   end
+
+  describe "variable scoping" do
+    test "do block bindings do not leak" do
+      x = wrap_term(1)
+
+      result =
+        try do
+          x = 2
+          x
+        after
+          nil
+        end
+
+      assert {x, result} == {1, 2}
+    end
+
+    test "clause bindings do not leak" do
+      x = wrap_term(1)
+
+      result =
+        try do
+          raise RuntimeError, "boom"
+        rescue
+          _exception ->
+            x = 2
+            x
+        end
+
+      assert {x, result} == {1, 2}
+    end
+  end
 end

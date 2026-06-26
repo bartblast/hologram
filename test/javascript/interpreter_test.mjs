@@ -8606,6 +8606,42 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(context.vars.a, Type.integer(1));
     });
 
+    it("does not leak rescue clause bindings into the outer context", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.errorStruct("RuntimeError", "boom"));
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [],
+          body: (context) => {
+            Interpreter.matchOperator(
+              Type.integer(3),
+              Type.variablePattern("a"),
+              context,
+            );
+
+            Interpreter.updateVarsToMatchedValues(context);
+
+            return context.vars.a;
+          },
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(3));
+      assert.deepStrictEqual(context.vars.a, Type.integer(1));
+    });
+
     it("runs the after block on success without changing the return value", () => {
       const body = (_context) => Type.atom("ok");
 
