@@ -8914,6 +8914,27 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, reason);
     });
 
+    it("catches an :error failure, binding the exception struct", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("error"),
+          value: Type.variablePattern("e"),
+          guards: [],
+          body: (context) => context.vars.e,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, struct);
+    });
+
     it("catches when the clause guard passes", () => {
       const body = (_context) => {
         throw new HologramBoxedError(Type.integer(5), Type.atom("throw"));
