@@ -443,11 +443,17 @@ defmodule Hologram.Compiler.Encoder do
   def encode_ir(%IR.Try{} = ir, context) do
     body_js = encode_closure(ir.body, context)
     rescue_clauses_js = encode_as_array(ir.rescue_clauses, context)
+    catch_clauses_js = encode_as_array(ir.catch_clauses, context)
+    else_clauses_js = encode_as_array(ir.else_clauses, context)
+    after_block_js = encode_closure(ir.after_block, context)
+
+    args_js =
+      "#{body_js}, #{rescue_clauses_js}, #{catch_clauses_js}, #{else_clauses_js}, #{after_block_js}, context"
 
     if context.async? do
-      "(await Interpreter.asyncTry(#{body_js}, #{rescue_clauses_js}, [], [], null, context))"
+      "(await Interpreter.asyncTry(#{args_js}))"
     else
-      "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, context)"
+      "Interpreter.try(#{args_js})"
     end
   end
 
