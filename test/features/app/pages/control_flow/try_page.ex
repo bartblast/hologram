@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
   @dialyzer {:no_match, action: 3}
@@ -35,9 +36,47 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       <button $click="catch_unmatched_kind"> Catch unmatched kind </button>
     </p>
     <p>
+      <strong>Else clauses</strong>
+      <button $click="else_with_match"> Else with a match </button>
+      <button $click="else_without_match"> Else without a match </button>
+    </p>
+    <p>
+      <strong>After block</strong>
+      <button $click="after_keeps_result"> After keeps result </button>
+      <button $click="after_runs_on_success"> After runs on success </button>
+      <button $click="after_runs_on_failure"> After runs on failure </button>
+    </p>
+    <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
+  end
+
+  def action(:after_keeps_result, _params, component) do
+    result =
+      try do
+        :body_result
+      after
+        :ignored
+      end
+
+    put_state(component, :result, result)
+  end
+
+  def action(:after_runs_on_failure, _params, _component) do
+    try do
+      raise ArgumentError, "boom"
+    after
+      raise RuntimeError, "after ran"
+    end
+  end
+
+  def action(:after_runs_on_success, _params, _component) do
+    try do
+      :ok
+    after
+      raise RuntimeError, "after ran"
+    end
   end
 
   def action(:catch_error, _params, component) do
@@ -78,6 +117,34 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       raise RuntimeError, "my message"
     catch
       :throw, value -> {:caught_throw, value}
+    end
+  end
+
+  def action(:else_with_match, _params, component) do
+    value = wrap_term(2)
+
+    result =
+      try do
+        value
+      else
+        1 -> :else_one
+        2 -> :else_two
+      after
+        nil
+      end
+
+    put_state(component, :result, result)
+  end
+
+  def action(:else_without_match, _params, _component) do
+    value = wrap_term(:no_match)
+
+    try do
+      value
+    else
+      :other -> nil
+    after
+      nil
     end
   end
 

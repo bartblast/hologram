@@ -70,4 +70,55 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
                           end
     end
   end
+
+  describe "else clauses" do
+    feature "matches the do result", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("Else with a match"))
+      |> assert_text(css("#result"), ":else_two")
+    end
+
+    feature "raises TryClauseError when no clause matches", %{session: session} do
+      assert_client_error session,
+                          TryClauseError,
+                          "no try clause matching:\n\n    :no_match\n",
+                          fn ->
+                            session
+                            |> visit(TryPage)
+                            |> click(button("Else without a match"))
+                          end
+    end
+  end
+
+  describe "after block" do
+    feature "keeps the do result", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("After keeps result"))
+      |> assert_text(css("#result"), ":body_result")
+    end
+
+    feature "runs on the success path", %{session: session} do
+      assert_client_error session,
+                          RuntimeError,
+                          "after ran",
+                          fn ->
+                            session
+                            |> visit(TryPage)
+                            |> click(button("After runs on success"))
+                          end
+    end
+
+    feature "runs on the failure path", %{session: session} do
+      assert_client_error session,
+                          RuntimeError,
+                          "after ran",
+                          fn ->
+                            session
+                            |> visit(TryPage)
+                            |> click(button("After runs on failure"))
+                          end
+    end
+  end
 end
