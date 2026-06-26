@@ -5632,6 +5632,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "raise/3" do
+    test "raises with the given kind and reason" do
+      reason = :my_reason
+
+      result =
+        :throw
+        |> :erlang.raise(reason, [])
+        |> catch_throw()
+
+      assert result == reason
+    end
+  end
+
   describe "ref_to_list/1" do
     test "reference for local node" do
       result =

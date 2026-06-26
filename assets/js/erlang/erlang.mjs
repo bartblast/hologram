@@ -2978,6 +2978,14 @@ const Erlang = {
   // End pid_to_list/1
   // Deps: []
 
+  // TODO: support stacktraces; the stacktrace argument is currently accepted and ignored.
+  // Start raise/3
+  "raise/3": (kind, reason, _stacktrace) => {
+    throw new HologramBoxedError(reason, kind);
+  },
+  // End raise/3
+  // Deps: []
+
   // Start ref_to_list/1
   "ref_to_list/1": (reference) => {
     if (!Type.isReference(reference)) {

@@ -10004,6 +10004,26 @@ describe("Erlang", () => {
     });
   });
 
+  describe("raise/3", () => {
+    const raise = Erlang["raise/3"];
+
+    it("raises with the given kind and reason", () => {
+      const reason = Type.atom("my_reason");
+
+      let error;
+
+      try {
+        raise(Type.atom("throw"), reason, Type.list());
+      } catch (e) {
+        error = e;
+      }
+
+      assert.instanceOf(error, HologramBoxedError);
+      assert.deepStrictEqual(error.kind, Type.atom("throw"));
+      assert.deepStrictEqual(error.value, reason);
+    });
+  });
+
   describe("ref_to_list/1", () => {
     const ref_to_list = Erlang["ref_to_list/1"];
 
