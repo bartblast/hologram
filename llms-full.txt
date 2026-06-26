@@ -2041,12 +2041,247 @@ When using Context, keep these best practices in mind:
 - Keep context values as simple as possible - avoid storing complex objects or functions
 - Document the context keys your components expect to receive
 
+### Middleware
+
+Middleware is reusable, server-side logic that runs before a page renders or a command executes. It is a natural home for cross-cutting concerns such as authentication, authorization, request enrichment (locale, theme, tenant, feature flags), rate limiting, or audit logging.
+
+Middleware is server-only. Actions run on the client and cross no trust boundary, so they have no middleware - anything privileged an action needs goes through a command, which middleware gates server-side.
+
+#### Defining Middleware
+
+Middleware lives in one of two places: an **inline function** on the page or component itself, or a **module** you reuse across pages and components. Inline suits one-off logic specific to a single page or component. A module suits anything shared, and is written as a **leaf** (does the work itself) or a **composite** (combines other middleware). The `Server` helpers (`put_status`, `put_redirect`, `put_session`, `put_stash`, and the rest) are available unqualified in all of them.
+
+##### Inline Middleware
+
+The simplest middleware is a function defined right on the page or component, attached by name with `middleware :name`. It receives the `Server` struct and any options it was attached with (`[]` when none), and returns a `Server` struct - the same one, or one it has updated, which threads into the next middleware.
+
+```elixir
+defmodule MyApp.DashboardPage do
+  use Hologram.Page
+
+  route "/dashboard"
+
+  middleware :put_locale
+
+  def put_locale(server, _opts) do
+    put_stash(server, :locale, get_request_header(server, "accept-language"))
+  end
+end
+```
+
+Options passed in the declaration arrive as the second argument:
+
+```elixir
+middleware :put_theme, default: "dark"
+
+def put_theme(server, opts) do
+  put_stash(server, :theme, get_cookie(server, "theme") || opts[:default])
+end
+```
+
+##### Leaf Middleware
+
+A leaf is the reusable form: a module that defines `call/2`, with the same `(server, opts)` signature as an inline function but in its own module so multiple pages can share it.
+
+```elixir
+defmodule MyApp.Middleware.RequireAuth do
+  use Hologram.Middleware
+
+  @impl Hologram.Middleware
+  def call(server, _opts) do
+    require_auth(server, get_session(server, :user_id))
+  end
+
+  defp require_auth(server, nil), do: put_redirect(server, MyApp.LoginPage)
+  defp require_auth(server, _user_id), do: server
+end
+```
+
+##### Composite Middleware
+
+A composite declares a sub-chain with the `middleware` macro instead of defining `call/2` - the framework generates the `call/2` that runs that sub-chain. Because a composite has a `call/2` like any other middleware, it attaches anywhere a leaf can - including inside another composite. A terminal response from any member stops the rest, and that short-circuit carries through nested composites.
+
+```elixir
+defmodule MyApp.Middleware.AdminGate do
+  use Hologram.Middleware
+
+  middleware MyApp.Middleware.RequireAuth
+  middleware MyApp.Middleware.RequireAdmin
+end
+```
+
+#### Attaching Middleware
+
+Attach middleware to a page or component with the `middleware` macro. The target is either a module or an inline `:function` name, and each takes optional keyword options:
+
+- `middleware SomeModule` - runs `SomeModule.call(server, opts)`.
+- `middleware SomeModule, max: 100` - same, with options passed as the second argument.
+- `middleware :some_function` - runs the host module's own inline `some_function(server, opts)`.
+- `middleware :some_function, role: :admin` - same, with options.
+
+Attach as many as you like, mixing inline functions and modules. Declarations run top to bottom, in the order written.
+
+#### Composition
+
+Composition is explicit. Middleware composes two ways: a base module that shares its declarations with every page or component that uses it, and a composite that bundles middleware into a single unit (shown above). Both resolve at compile time into one flat chain, with no runtime registry and nothing injected behind your back, so the full chain stays visible where it is attached - good for review.
+
+A base module whose `__using__` injects `middleware` declarations passes them on to every page or component that uses it - the base can wrap `use Hologram.Page` or `use Hologram.Component`. The child's own declarations accumulate after the inherited ones (parent first, then child), so a shared set plus a child-specific addition is just one more `middleware` line.
+
+```elixir
+defmodule MyApp.AdminPage do
+  defmacro __using__(_opts) do
+    quote do
+      use Hologram.Page
+
+      middleware MyApp.Middleware.RequireAuth
+
+      layout MyApp.AdminLayout
+    end
+  end
+end
+```
+
+```elixir
+defmodule MyApp.SettingsPage do
+  use MyApp.AdminPage
+
+  route "/admin/settings"
+
+  middleware MyApp.Middleware.RequireAdmin
+
+  # ...
+end
+```
+
+App-wide concerns are assembled per page or component - a shared base module or composite plugged into the ones that need it. This avoids the anti-pattern of a global gate wrongly applying to public pages (login, signup) that need no auth. Truly-universal concerns that apply to every request - CSRF protection and telemetry, for example - are handled at the framework level, not via your middleware.
+
+#### Dispatch and Scoping
+
+Where middleware runs depends on where it is attached:
+
+- **Page middleware** runs before the page renders (before its `init/3`) and before any of that page's commands.
+- **Component middleware** runs only before that component's own commands. A component is always rendered as part of a page, never on its own, so there is no separate component render for middleware to gate.
+
+Component middleware lets a distributable component gate its own commands regardless of where it is embedded.
+
+**Security - a page's middleware does not cover its components' commands.** Dispatch is flat. It runs only the target module's middleware, never a tree of them. So when a command targets a component - even one nested deep inside a page you have gated - that component's middleware runs, but the page's and any ancestor component's do not. There is no inheritance up the nesting. To protect a component's commands, attach the gate to the component itself, directly or through a shared composite the page and component both use. Do not rely on the page's gate to cover them.
+
+**Ordering note:** anything that must run even on a rejected request (audit logging especially) goes early in the chain, since a terminal response stops everything after it.
+
+#### The Server Struct
+
+Middleware operates on a `Server` struct - the same struct `init/3` and `command/3` receive. It has three zones:
+
+- **Request** (read-only) - the incoming request, read as struct fields: `method`, `scheme`, `host`, `port`, `path`, `query`, `raw_query`, and `ip`.
+- **Response** - the response being built: its `status`, headers, and body.
+- **Stash** - a request-scoped scratchpad for passing data to later middleware in the chain and on to `init/3` or `command/3`.
+
+Identity, session, and cookies live here too. The functions for reading the request and writing each zone are in the Helper Reference below. Enrichment is a common middleware job - the example here resolves the current user once and stashes it, so everything downstream can read it:
+
+```elixir
+defmodule MyApp.Middleware.LoadCurrentUser do
+  use Hologram.Middleware
+
+  @impl Hologram.Middleware
+  def call(server, _opts) do
+    load_user(server, get_session(server, :user_id))
+  end
+
+  defp load_user(server, nil), do: server
+
+  defp load_user(server, user_id) do
+    put_stash(server, :current_user, Accounts.get_user(user_id))
+  end
+end
+```
+
+#### Terminal Responses
+
+Middleware stops the request by producing a response - that is, by setting a `status` on the server. `put_status` sets that field rather than halting on the spot - the middleware runs to completion, and once it returns with a status set, the rest of the chain and the handler are skipped, and the response is built from the status, headers, and body the chain accumulated. Decorations such as cookies and headers set before the stop still apply, so denying and setting a cookie both land.
+
+There is no separate `halt` - the status is the signal, set as an integer status code or an atom alias. A redirect sets a status, so it is inherently terminal:
+
+- `put_redirect(server, MyApp.LoginPage)` - stops and redirects (302 by default).
+- `put_status(server, 403)` - stops with a Forbidden response.
+- `put_status(server, :not_found)` - stops and renders the app's registered 404 page.
+
+```elixir
+defmodule MyApp.Middleware.RequireAdmin do
+  use Hologram.Middleware
+
+  @impl Hologram.Middleware
+  def call(server, _opts) do
+    check_role(server, get_session(server, :role))
+  end
+
+  defp check_role(server, :admin), do: server
+  defp check_role(server, _role), do: put_status(server, :forbidden)
+end
+```
+
+#### Proxy and Trust Model
+
+The request fields reflect what the client claimed or what an upstream proxy resolved - they are **not** authenticated.
+
+- **`host` is client-supplied and spoofable**, even with no proxy in front. Validate it against an allowlist before using it for a security decision (for example, tenant routing). **Never** build security-sensitive absolute URLs - password-reset links, emails - from `host` or `request_url/1`. Use a configured canonical URL instead.
+- **`ip` / `scheme` resolution is an ingress concern:**
+  - **Embedded mode** (Hologram inside your Phoenix endpoint) - add `RemoteIp` and/or `Plug.RewriteOn` to your endpoint to resolve the real client `ip` / `scheme` behind a proxy. Hologram reads the already-resolved conn and does no resolution of its own. If you do not configure these, `ip` is the proxy's address.
+  - **Standalone mode** - Hologram resolves `ip` / `scheme` / `port` out of the box (trusted-proxy-gated when behind a proxy), while still requiring you to validate `host`.
+
+#### Key Conventions
+
+The three keyed stores differ in key type, by lifetime:
+
+- **Stash** - atom keys. In-memory, request-scoped, never serialized.
+- **Session** - string keys. Atom keys are accepted and converted to strings (in embedded mode the session is backed by the Phoenix session store, which keys by string - recovering atoms would need an unsafe string-to-atom conversion). See Session.
+- **Cookies** - string keys only. See Cookies.
+
+#### Helper Reference
+
+These helpers are imported into pages, components, and `use Hologram.Middleware` modules, so you call them unqualified. The `get_*` readers take an optional final `default`, returned when the value is absent (otherwise `nil`).
+
+##### Reading the Request
+
+- `get_request_header(server, name)` - reads a request header by case-insensitive name.
+- `referrer_url(server)` - the referring URL, or `nil`.
+- `request_url(server)` - the full request URL assembled from the request fields. Client-claimed, so never use it for security-sensitive links (see Proxy and Trust Model).
+
+##### Building the Response
+
+- `append_response_header(server, name, value)` - appends a value to the response header `name`, keeping that header's existing value (comma-separated) instead of replacing it like `put_response_header`.
+- `delete_response_header(server, name)` - removes a response header.
+- `get_response_header(server, name)` - reads a header already set on the response.
+- `put_redirect(server, url_or_page)` - a 302 redirect to either a URL string or a page module.
+- `put_redirect(server, page, params)` - a 302 redirect to a page module with route params.
+- `put_response_body(server, body)` - sets the response body (iodata). Not terminal on its own - pair it with `put_status`.
+- `put_response_header(server, name, value)` - sets a response header (name lower-cased), replacing any existing value. Raises on `cookie` / `set-cookie` - use the cookie helpers for those.
+- `put_status(server, status)` - sets the response status and stops the chain. `status` is an integer like `403` or an atom alias like `:forbidden` or `:not_found`. An unknown alias or out-of-range integer raises.
+
+##### Identity
+
+- `delete_user_id(server)` - clears the authenticated user.
+- `put_user_id(server, user_id)` - records the authenticated user (a string, integer, or atom), persisted to the session.
+
+##### Session and Cookies
+
+Available here too, documented in full in their own sections:
+
+- **Session** - `get_session` / `put_session` / `delete_session`. See Session.
+- **Cookies** - `get_cookie` / `put_cookie` / `delete_cookie`. See Cookies.
+
+##### Stash
+
+- `delete_stash(server, key)` - removes a stashed value.
+- `get_stash(server, key)` - reads a stashed value.
+- `put_stash(server, key, value)` - stashes a value for downstream middleware and handlers.
+
 ### Session
 
-Session in Hologram provides secure storage that persists across page visits within a user's browsing session. Session data is stored in a secure session cookie that ensures data integrity and security. You can work with session data in two main contexts:
+Session in Hologram provides secure storage that persists across page visits within a user's browsing session. Session data is stored in a secure session cookie that ensures data integrity and security. You can work with session data in three main contexts:
 
 - During page or component initialization (`init/3` functions)
 - In page or component commands for dynamic session operations
+- In page or component middleware, which runs before `init/3` and commands
 
 Sessions are ideal for storing user authentication data, temporary state, and sensitive information. The data is automatically secured by the server through the session system. Hologram also provides functions for managing regular Cookies outside of the session system. See the "Session vs Direct Cookie Management" section below for guidance on when to use which approach.
 
@@ -2059,7 +2294,7 @@ Hologram provides the following functions for working with sessions:
 - `put_session(server, key, value)` - writes a session value
 - `delete_session(server, key)` - deletes a session value
 
-**Note:** Session keys must be either atoms or strings. Using other data types as keys will result in an error.
+**Note:** Session keys must be atoms or strings - other types raise. Atom keys are accepted and converted to strings, so `:user_id` and `"user_id"` address the same value. In embedded mode the session is backed by the Phoenix session store, which keys by string, and recovering the original atom would require an unsafe string-to-atom conversion.
 
 #### Reading Session Data
 
@@ -2234,10 +2469,11 @@ Understanding when to use Hologram's session system versus direct cookie managem
 
 ### Cookies
 
-Cookies in Hologram allow you to store and retrieve data that persists across page visits and browser sessions. While cookies are stored in the client browser, they are managed through server-side functions for security reasons. You can work with cookies in two main contexts:
+Cookies in Hologram allow you to store and retrieve data that persists across page visits and browser sessions. While cookies are stored in the client browser, they are managed through server-side functions for security reasons. You can work with cookies in three main contexts:
 
 - During page or component initialization (`init/3` functions)
 - In page or component commands for dynamic cookie operations
+- In page or component middleware, which runs before `init/3` and commands
 
 Hologram provides built-in functions for reading, writing, and deleting cookies, with support for both simple string values and complex Elixir data structures. For most authentication and session-related needs, consider using Hologram's Session abstraction instead.
 
@@ -3424,7 +3660,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Client:** Actions (done), JS Interop (in progress, 40%), Synchronized Form Inputs (done)
 
-**Server:** Commands (done), Cookies (done), Session (done)
+**Server:** Commands (done), Cookies (done), Middleware (done), Session (done)
 
 **Events:** Blur (done), Change (done), Click (done), Click Away (todo), Focus (done), Key Down (done), Key Up (done), Mouse Move (done), Pointer Cancel (done), Pointer Down (done), Pointer Move (done), Pointer Up (done), Resize (todo), Scroll (todo), Select (done), Submit (done), Tap (todo), Touch Cancel (todo), Touch End (todo), Touch Move (todo), Touch Start (todo), Transition Cancel (done), Transition End (done), Transition Run (done), Transition Start (done)
 
@@ -3460,7 +3696,6 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **DOM Events Support** - Complete implementation of remaining DOM events including touch and window events to achieve full coverage.
 - **Essential Stdlib Functions** - Expand support for the most important Elixir standard library functions needed for Phase 1 use cases: state management, data manipulation, dates/times, strings, and collections.
 - **JS Interop** - Create a clean interface for JavaScript interoperability to leverage existing JavaScript libraries.
-- **Middleware** - Add middleware support with a pre-init hook for components and pages, including access to request headers before init.
 - **Regular Expressions** - Transpile Elixir's PCRE-based regexes to JavaScript runtime and support Regex-related functions such as `=~`.
 - **Server-Triggered Actions** - Enable triggering actions from server code outside of commands, such as background jobs (e.g. Oban) or scheduled tasks.
 - **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
