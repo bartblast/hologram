@@ -1706,6 +1706,13 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // Start exit/1
+  "exit/1": (reason) => {
+    throw new HologramBoxedError(reason, Type.atom("exit"));
+  },
+  // End exit/1
+  // Deps: []
+
   // Start float/1
   "float/1": (number) => {
     if (Type.isInteger(number)) {

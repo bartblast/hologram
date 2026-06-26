@@ -5584,6 +5584,26 @@ describe("Erlang", () => {
     assertBoxedError(() => error(reason, args), "MyError", "my message");
   });
 
+  describe("exit/1", () => {
+    const exit = Erlang["exit/1"];
+
+    it("exits with the given reason", () => {
+      const reason = Type.atom("my_reason");
+
+      let error;
+
+      try {
+        exit(reason);
+      } catch (e) {
+        error = e;
+      }
+
+      assert.instanceOf(error, HologramBoxedError);
+      assert.deepStrictEqual(error.kind, Type.atom("exit"));
+      assert.deepStrictEqual(error.value, reason);
+    });
+  });
+
   describe("float/1", () => {
     const float = Erlang["float/1"];
 

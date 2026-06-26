@@ -3533,6 +3533,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "exit/1" do
+    test "exits with the given reason" do
+      reason = :my_reason
+
+      result =
+        reason
+        |> :erlang.exit()
+        |> catch_exit()
+
+      assert result == reason
+    end
+  end
+
   describe "float/1" do
     test "converts integer to float" do
       assert :erlang.float(1) == 1.0
