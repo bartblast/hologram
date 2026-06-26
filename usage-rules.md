@@ -150,6 +150,20 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Context values are available to all descendant components, not siblings or ancestors.
 - Prefer props for data passed to direct children. Use context for deeply nested data sharing.
 
+## Middleware
+
+- Middleware is reusable server-side logic that runs before a page renders (before `init/3`) and before commands execute - for authentication, authorization, request enrichment, rate limiting, audit logging. **Not** Phoenix `Plug` or router pipelines.
+- Modules use `use Hologram.Middleware`. Three forms: an **inline function** on a page/component, a **leaf** module (does the work), or a **composite** module (combines other middleware).
+- Inline: attach with `middleware :name` and define a public `def name(server, opts)` on the same page/component.
+- Leaf: a `use Hologram.Middleware` module that defines `def call(server, opts)`.
+- Composite: a `use Hologram.Middleware` module that declares a sub-chain with `middleware ...` lines and omits `call/2` (generated for you). It attaches anywhere a leaf can, including inside another composite.
+- Attach to a page or component with `middleware SomeModule` or `middleware :some_function`, each with optional keyword opts (`middleware SomeModule, role: :admin`). Declarations run top to bottom.
+- Every middleware receives and returns a `%Server{}` struct - the same one `init/3` and commands use. The `Server` helpers (`put_status`, `put_redirect`, `put_session`, `put_stash`, `get_request_header`, ...) are imported unqualified.
+- Stop the chain by setting a status - `put_status(server, :forbidden)`, `put_status(server, 403)`, or `put_redirect(server, MyApp.LoginPage)`. There is no separate `halt`: a non-nil status is the signal, checked after each middleware returns (it does not abort on the spot).
+- Pass data downstream with `put_stash(server, :key, value)`, read later with `get_stash` in middleware, `init/3`, or commands.
+- Dispatch is flat: page middleware covers the page render and the page's own commands; component middleware covers only that component's commands. A page's middleware does **not** cover its components' commands - attach the gate to the component (or a shared composite) to protect them.
+- Compose without a global registry: a base module's `__using__` can inject `middleware` lines into every page/component that uses it (parent first, then child). There is no forced global middleware list - app-wide concerns are plugged into the pages/components that need them.
+
 ## Session
 
 - Session is server-side secure storage. Use it in `init/3` and commands only.
