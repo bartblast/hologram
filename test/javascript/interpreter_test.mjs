@@ -15,6 +15,7 @@ import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./suppo
 import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -620,6 +621,60 @@ describe("Interpreter", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("delayed"));
+    });
+
+    it("awaits an async after block before resolving", async () => {
+      const body = async (_context) => Type.atom("ok");
+
+      let afterRan = false;
+
+      const afterBlock = async (_context) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        afterRan = true;
+      };
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        [],
+        [],
+        afterBlock,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.isTrue(afterRan);
+    });
+
+    it("runs the after block and re-propagates the error when no clause matches", async () => {
+      const boxedError = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      const body = async (_context) => {
+        throw boxedError;
+      };
+
+      let afterRan = false;
+
+      const afterBlock = async (_context) => {
+        afterRan = true;
+      };
+
+      const context = contextFixture();
+
+      let caught;
+
+      try {
+        await Interpreter.asyncTry(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+      assert.isTrue(afterRan);
     });
   });
 
@@ -8427,6 +8482,74 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, Type.atom("ok"));
       assert.deepStrictEqual(context.vars.a, Type.integer(1));
+    });
+
+    it("runs the after block on success without changing the return value", () => {
+      const body = (_context) => Type.atom("ok");
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+        return Type.atom("after");
+      };
+
+      const result = Interpreter.try(body, [], [], [], afterBlock, context);
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.isTrue(afterRan);
+    });
+
+    it("runs the after block and re-propagates the error when no clause matches", () => {
+      const boxedError = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+      assert.isTrue(afterRan);
+    });
+
+    it("re-propagates a non-HologramBoxedError and still runs the after block", () => {
+      const nativeError = new HologramInterpreterError("native error");
+
+      const body = (_context) => {
+        throw nativeError;
+      };
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, nativeError);
+      assert.isTrue(afterRan);
     });
   });
 

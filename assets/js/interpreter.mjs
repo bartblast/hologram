@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
@@ -8,6 +9,11 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 import uniqWith from "lodash/uniqWith.js";
+
+// Sentinel returned by the rescue/catch clause evaluators when no clause matched.
+// A unique value (not false/null) so that a clause body returning a falsy Elixir
+// term (nil/false) is never mistaken for "no clause matched".
+const NO_MATCH = Symbol("NO_MATCH");
 
 export default class Interpreter {
   // Deps: [:lists.keyfind/3]
@@ -921,38 +927,56 @@ export default class Interpreter {
     afterBlock,
     context,
   ) {
-    let result;
-
     try {
-      const contextClone = Interpreter.cloneContext(context);
-      result = body(contextClone);
-      // TODO: finish
-      // eslint-disable-next-line no-useless-catch
-    } catch (error) {
-      throw error;
+      let bodyResult;
 
-      // TODO: handle errors
-      // eslint-disable-next-line no-unreachable
-      result =
-        Interpreter.#evaluateRescueClauses(rescueClauses, error, context) ||
-        Interpreter.#evaluateCatchClauses(catchClauses, error, context);
-    } finally {
-      // TODO: handle after block
-      if (afterBlock) {
-        // eslint-disable-next-line no-unsafe-finally
-        throw new HologramInterpreterError(
-          '"try" expression after block is not yet implemented in Hologram',
+      try {
+        bodyResult = body(Interpreter.cloneContext(context));
+      } catch (error) {
+        // Only boxed Elixir failures participate in rescue/catch matching;
+        // native JS errors and HologramInterpreterError re-propagate.
+        if (!(error instanceof HologramBoxedError)) {
+          throw error;
+        }
+
+        const rescued = Interpreter.#evaluateRescueClauses(
+          rescueClauses,
+          error,
+          context,
         );
-      }
-    }
 
-    if (elseClauses.length === 0) {
-      return result;
-    } else {
+        if (rescued !== NO_MATCH) {
+          return rescued;
+        }
+
+        const caught = Interpreter.#evaluateCatchClauses(
+          catchClauses,
+          error,
+          context,
+        );
+
+        if (caught !== NO_MATCH) {
+          return caught;
+        }
+
+        // No clause matched - re-propagate the original failure.
+        throw error;
+      }
+
+      if (elseClauses.length === 0) {
+        return bodyResult;
+      }
+
       // TODO: handle else clauses
       throw new HologramInterpreterError(
         '"try" expression else clauses are not yet implemented in Hologram',
       );
+    } finally {
+      // The after block always runs (on success, handled failure, or
+      // re-propagated failure) and never changes the return value.
+      if (afterBlock !== null) {
+        afterBlock(Interpreter.cloneContext(context));
+      }
     }
   }
 
@@ -965,38 +989,57 @@ export default class Interpreter {
     afterBlock,
     context,
   ) {
-    let result;
-
     try {
-      const contextClone = Interpreter.cloneContext(context);
-      result = await body(contextClone);
-      // TODO: finish
-      // eslint-disable-next-line no-useless-catch
-    } catch (error) {
-      throw error;
+      let bodyResult;
 
-      // TODO: handle errors
-      // eslint-disable-next-line no-unreachable
-      result =
-        Interpreter.#evaluateRescueClauses(rescueClauses, error, context) ||
-        Interpreter.#evaluateCatchClauses(catchClauses, error, context);
-    } finally {
-      // TODO: handle after block
-      if (afterBlock) {
-        // eslint-disable-next-line no-unsafe-finally
-        throw new HologramInterpreterError(
-          '"try" expression after block is not yet implemented in Hologram',
+      try {
+        bodyResult = await body(Interpreter.cloneContext(context));
+      } catch (error) {
+        // Only boxed Elixir failures participate in rescue/catch matching;
+        // native JS errors and HologramInterpreterError re-propagate.
+        if (!(error instanceof HologramBoxedError)) {
+          throw error;
+        }
+
+        const rescued = await Interpreter.#evaluateRescueClauses(
+          rescueClauses,
+          error,
+          context,
         );
-      }
-    }
 
-    if (elseClauses.length === 0) {
-      return result;
-    } else {
+        if (rescued !== NO_MATCH) {
+          return rescued;
+        }
+
+        const caught = await Interpreter.#evaluateCatchClauses(
+          catchClauses,
+          error,
+          context,
+        );
+
+        if (caught !== NO_MATCH) {
+          return caught;
+        }
+
+        // No clause matched - re-propagate the original failure.
+        throw error;
+      }
+
+      if (elseClauses.length === 0) {
+        return bodyResult;
+      }
+
       // TODO: handle else clauses
       throw new HologramInterpreterError(
         '"try" expression else clauses are not yet implemented in Hologram',
       );
+    } finally {
+      // The after block always runs (on success, handled failure, or
+      // re-propagated failure) and never changes the return value. Awaiting
+      // settles an async after block before this function resolves.
+      if (afterBlock !== null) {
+        await afterBlock(Interpreter.cloneContext(context));
+      }
     }
   }
 
@@ -1282,7 +1325,7 @@ export default class Interpreter {
       }
     }
 
-    return false;
+    return NO_MATCH;
   }
 
   static #evaluateGuards(guards, context) {
@@ -1354,7 +1397,7 @@ export default class Interpreter {
       }
     }
 
-    return false;
+    return NO_MATCH;
   }
 
   static #handleMatchFail(right, raiseMatchError) {
