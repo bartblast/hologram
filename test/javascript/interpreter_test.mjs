@@ -8674,6 +8674,56 @@ describe("Interpreter", () => {
       assert.isTrue(afterRan);
     });
 
+    it("propagates an error raised by the after block on the success path", () => {
+      const body = (_context) => Type.atom("ok");
+
+      const afterError = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "after ran"),
+      );
+
+      const afterBlock = (_context) => {
+        throw afterError;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, afterError);
+    });
+
+    it("an after-block error replaces the do-block error on the failure path", () => {
+      const bodyError = new HologramBoxedError(
+        Type.errorStruct("ArgumentError", "boom"),
+      );
+
+      const body = (_context) => {
+        throw bodyError;
+      };
+
+      const afterError = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "after ran"),
+      );
+
+      const afterBlock = (_context) => {
+        throw afterError;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, afterError);
+    });
+
     it("matches the do block result against the else clauses", () => {
       const body = (_context) => Type.integer(2);
 

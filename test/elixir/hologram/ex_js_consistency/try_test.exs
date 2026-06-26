@@ -102,6 +102,22 @@ defmodule Hologram.ExJsConsistency.TryTest do
   end
 
   describe "else clauses" do
+    test "matches the do block result against the else clauses" do
+      value = wrap_term(2)
+
+      result =
+        try do
+          value
+        else
+          1 -> :else_one
+          2 -> :else_two
+        after
+          nil
+        end
+
+      assert result == :else_two
+    end
+
     test "raises TryClauseError when no else clause matches" do
       value = wrap_term(:no_match)
 
@@ -113,6 +129,39 @@ defmodule Hologram.ExJsConsistency.TryTest do
           :other -> nil
         after
           nil
+        end
+      end
+    end
+  end
+
+  describe "after block" do
+    test "keeps the do block result" do
+      result =
+        try do
+          :body_result
+        after
+          :ignored
+        end
+
+      assert result == :body_result
+    end
+
+    test "propagates an error raised by the after block on the success path" do
+      assert_error RuntimeError, "after ran", fn ->
+        try do
+          :ok
+        after
+          raise RuntimeError, "after ran"
+        end
+      end
+    end
+
+    test "an after-block error replaces the do-block error on the failure path" do
+      assert_error RuntimeError, "after ran", fn ->
+        try do
+          raise ArgumentError, "boom"
+        after
+          raise RuntimeError, "after ran"
         end
       end
     end
