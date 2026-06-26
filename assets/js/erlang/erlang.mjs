@@ -1706,6 +1706,14 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // TODO: the third argument carries error_info options used for richer error reporting on BEAM; it is currently accepted and ignored.
+  // Start error/3
+  "error/3": (reason, args, _options) => {
+    Erlang["error/2"](reason, args);
+  },
+  // End error/3
+  // Deps: [:erlang.error/2]
+
   // Start exit/1
   "exit/1": (reason) => {
     throw new HologramBoxedError(reason, Type.atom("exit"));

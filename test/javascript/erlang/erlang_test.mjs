@@ -5584,6 +5584,24 @@ describe("Erlang", () => {
     assertBoxedError(() => error(reason, args), "MyError", "my message");
   });
 
+  describe("error/3", () => {
+    const error = Erlang["error/3"];
+
+    // TODO: args and error_info affect the BEAM stacktrace and error reporting,
+    // which the client does not model yet. Assert their effect once it does.
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("MyError", "my message");
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+      const options = Type.list();
+
+      assertBoxedError(
+        () => error(reason, args, options),
+        "MyError",
+        "my message",
+      );
+    });
+  });
+
   describe("exit/1", () => {
     const exit = Erlang["exit/1"];
 
