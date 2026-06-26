@@ -3,14 +3,25 @@ defmodule HologramFeatureTests.ControlFlow.RaisingTest do
 
   alias HologramFeatureTests.ControlFlow.RaisingPage
 
-  feature "raise", %{session: session} do
+  feature "raise with module", %{session: session} do
     assert_client_error session,
                         RuntimeError,
                         "my message",
                         fn ->
                           session
                           |> visit(RaisingPage)
-                          |> click(button("Raise"))
+                          |> click(button("Raise Module"))
+                        end
+  end
+
+  feature "raise with string", %{session: session} do
+    assert_client_error session,
+                        RuntimeError,
+                        "my string",
+                        fn ->
+                          session
+                          |> visit(RaisingPage)
+                          |> click(button("Raise String"))
                         end
   end
 

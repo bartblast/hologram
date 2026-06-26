@@ -9,7 +9,8 @@ defmodule HologramFeatureTests.ControlFlow.RaisingPage do
     ~HOLO"""
     <p>
       <button $click="exit_reason"> Exit </button>
-      <button $click="raise_error"> Raise </button>
+      <button $click="raise_module"> Raise Module </button>
+      <button $click="raise_string"> Raise String </button>
       <button $click="throw_value"> Throw </button>
     </p>
     """
@@ -19,8 +20,12 @@ defmodule HologramFeatureTests.ControlFlow.RaisingPage do
     exit("my reason")
   end
 
-  def action(:raise_error, _params, _component) do
+  def action(:raise_module, _params, _component) do
     raise RuntimeError, "my message"
+  end
+
+  def action(:raise_string, _params, _component) do
+    raise "my string"
   end
 
   def action(:throw_value, _params, _component) do
