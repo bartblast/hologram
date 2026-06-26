@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
 
       $ mix holo.compiler.page_ex_fun_sizes MyPageModule 
 
-  Where `MyPageModule` is the name of the page module you want to analyze (without the `Elixir.` prefix).
+  Where `MyPageModule` is the name of the page module you want to analyze.
   """
 
   use Mix.Task
