@@ -703,7 +703,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.atom("two"));
     });
 
-    it("raises TryClauseError when no else clause matches the do block result", async () => {
+    it("raises TryClauseError when no else clause matches", async () => {
       const body = async (_context) => Type.integer(3);
 
       const elseClauses = [
@@ -8513,6 +8513,8 @@ describe("Interpreter", () => {
     });
   });
 
+  // Tests here that mirror an Elixir consistency test in test/elixir/hologram/ex_js_consistency/try_test.exs
+  // share its exact name; always update both together.
   describe("try()", () => {
     let context;
 
@@ -8634,7 +8636,7 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.atom("two"));
     });
 
-    it("raises TryClauseError when no else clause matches the do block result", () => {
+    it("raises TryClauseError when no else clause matches", () => {
       const body = (_context) => Type.integer(3);
 
       const elseClauses = [

@@ -138,6 +138,15 @@ defmodule Hologram.Commons.TestUtils do
     "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available)"
   end
 
+  # Keep this message in sync with Interpreter.buildTryClauseErrorMsg in assets/js/interpreter.mjs.
+  @doc """
+  Builds an error message for TryClauseError.
+  """
+  @spec build_try_clause_error_msg(any) :: String.t()
+  def build_try_clause_error_msg(term) do
+    build_value_error_msg("no try clause matching", term)
+  end
+
   # Keep this message in sync with Interpreter.buildUndefinedFunctionErrorMsg in assets/js/interpreter.mjs.
   @doc """
   Builds an error message for UndefinedFunctionError.
@@ -179,8 +188,8 @@ defmodule Hologram.Commons.TestUtils do
 
   # The inspected value moved onto its own indented line as of Elixir 1.19; earlier versions
   # keep it inline. The newest (multi-line) form is mirrored inline by
-  # buildBadMapErrorMsg/buildCaseClauseErrorMsg/buildMatchErrorMsg/buildWithClauseErrorMsg in
-  # assets/js/interpreter.mjs.
+  # buildBadMapErrorMsg/buildCaseClauseErrorMsg/buildMatchErrorMsg/buildTryClauseErrorMsg/buildWithClauseErrorMsg
+  # in assets/js/interpreter.mjs.
   defp build_value_error_msg(label, term) do
     value = KernelUtils.inspect(term)
 

@@ -134,6 +134,7 @@ export default class Interpreter {
     );
   }
 
+  // Keep this message in sync with build_try_clause_error_msg in Hologram.Commons.TestUtils.
   static buildTryClauseErrorMsg(arg) {
     return "no try clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
   }
