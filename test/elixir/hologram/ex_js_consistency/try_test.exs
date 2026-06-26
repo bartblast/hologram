@@ -3,6 +3,9 @@ defmodule Hologram.ExJsConsistency.TryTest do
   IMPORTANT!
   Each Elixir consistency test has a related JavaScript test in test/javascript/interpreter_test.mjs (try() / asyncTry() sections).
   Always update both together.
+
+  These scenarios also mirror the try feature tests in test/features/test/control_flow/try_test.exs (page: test/features/app/pages/control_flow/try_page.ex).
+  Keep them in sync.
   """
   use Hologram.Test.BasicCase, async: true
 

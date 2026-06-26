@@ -1,4 +1,8 @@
 defmodule HologramFeatureTests.ControlFlow.TryTest do
+  @moduledoc """
+  These scenarios are confirmed against real Elixir by the consistency tests in test/elixir/hologram/ex_js_consistency/try_test.exs (paired with the JavaScript try() / asyncTry() tests in test/javascript/interpreter_test.mjs).
+  Keep them in sync.
+  """
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.ControlFlow.TryPage
