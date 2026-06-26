@@ -5569,11 +5569,14 @@ describe("Erlang", () => {
     });
   });
 
-  it("error/1", () => {
+  describe("error/1", () => {
     const error = Erlang["error/1"];
-    const reason = Type.errorStruct("MyError", "my message");
 
-    assertBoxedError(() => error(reason), "MyError", "my message");
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("MyError", "my message");
+
+      assertBoxedError(() => error(reason), "MyError", "my message");
+    });
   });
 
   it("error/2", () => {

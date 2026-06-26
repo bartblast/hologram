@@ -3533,6 +3533,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "error/1" do
+    test "raises the given reason" do
+      reason = %RuntimeError{message: "my message"}
+
+      result =
+        reason
+        |> :erlang.error()
+        |> catch_error()
+
+      assert result == reason
+    end
+  end
+
   describe "error/3" do
     # TODO: args and error_info affect the BEAM stacktrace and error reporting,
     # which the client does not model yet. Assert their effect once it does.
