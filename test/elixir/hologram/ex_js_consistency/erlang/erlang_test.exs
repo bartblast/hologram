@@ -5643,6 +5643,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       assert result == reason
     end
+
+    test "returns :badarg when the kind is not a valid exception class" do
+      result = apply(:erlang, :raise, wrap_term([:not_a_kind, :my_reason, []]))
+
+      assert result == :badarg
+    end
   end
 
   describe "ref_to_list/1" do

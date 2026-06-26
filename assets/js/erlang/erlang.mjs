@@ -2981,6 +2981,13 @@ const Erlang = {
   // TODO: support stacktraces; the stacktrace argument is currently accepted and ignored.
   // Start raise/3
   "raise/3": (kind, reason, _stacktrace) => {
+    if (
+      !Type.isAtom(kind) ||
+      !["error", "exit", "throw"].includes(kind.value)
+    ) {
+      return Type.atom("badarg");
+    }
+
     throw new HologramBoxedError(reason, kind);
   },
   // End raise/3

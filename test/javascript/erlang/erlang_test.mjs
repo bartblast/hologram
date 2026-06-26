@@ -10022,6 +10022,16 @@ describe("Erlang", () => {
       assert.deepStrictEqual(error.kind, Type.atom("throw"));
       assert.deepStrictEqual(error.value, reason);
     });
+
+    it("returns :badarg when the kind is not a valid exception class", () => {
+      const result = raise(
+        Type.atom("not_a_kind"),
+        Type.atom("my_reason"),
+        Type.list(),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
   });
 
   describe("ref_to_list/1", () => {
