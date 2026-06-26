@@ -1018,7 +1018,7 @@ export default class Interpreter {
           throw error;
         }
 
-        const rescued = await Interpreter.#evaluateRescueClauses(
+        const rescued = await Interpreter.#asyncEvaluateRescueClauses(
           rescueClauses,
           error,
           context,
@@ -1409,13 +1409,26 @@ export default class Interpreter {
     errorFun(value);
   }
 
-  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
+  // SYNC/ASYNC PAIR: When modifying this function, also update #asyncEvaluateRescueClauses().
   static #evaluateRescueClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
 
       if (Interpreter.#matchRescueClause(clause, error, contextClone)) {
         return clause.body(contextClone);
+      }
+    }
+
+    return NO_MATCH;
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #evaluateRescueClauses().
+  static async #asyncEvaluateRescueClauses(clauses, error, context) {
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.#matchRescueClause(clause, error, contextClone)) {
+        return await clause.body(contextClone);
       }
     }
 
@@ -1827,11 +1840,37 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchRescueClause(_clause, _error, _context) {
-    // TODO: handle rescue clauses
-    throw new HologramInterpreterError(
-      '"try" expression rescue clauses are not yet implemented in Hologram',
-    );
+  // Deps: [:maps.get/2]
+  static #matchRescueClause(clause, error, context) {
+    // rescue only catches :error-kind failures.
+    if (error.kind.value !== "error") {
+      return false;
+    }
+
+    // A bare `rescue e ->` (empty modules) catches any exception; otherwise the
+    // exception struct's module must be one of the listed modules.
+    if (clause.modules.length > 0) {
+      const structModule = Erlang_Maps["get/2"](
+        Type.atom("__struct__"),
+        error.struct,
+      );
+
+      const isModuleMatched = clause.modules.some((module) =>
+        Interpreter.isStrictlyEqual(module, structModule),
+      );
+
+      if (!isModuleMatched) {
+        return false;
+      }
+    }
+
+    // Bind the rescued exception struct to the clause variable, if present.
+    if (clause.variable !== null) {
+      Interpreter.isMatched(clause.variable, error.struct, context);
+      Interpreter.updateVarsToMatchedValues(context);
+    }
+
+    return true;
   }
 
   static #matchVariablePattern(right, left, context, raiseMatchError) {

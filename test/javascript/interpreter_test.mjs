@@ -722,6 +722,35 @@ describe("Interpreter", () => {
         "no try clause matching:\n\n    3\n",
       );
     });
+
+    it("rescues an :error-kind failure and awaits the rescue clause body", async () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = async (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("e"),
+          modules: [],
+          body: async (context) => context.vars.e,
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, struct);
+    });
   });
 
   describe("asyncWith()", () => {
@@ -8681,6 +8710,136 @@ describe("Interpreter", () => {
 
       assert.instanceOf(caught, HologramBoxedError);
       assert.isTrue(afterRan);
+    });
+
+    it("rescues an :error-kind failure with a bare rescue clause", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {variable: null, modules: [], body: (_context) => Type.atom("rescued")},
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("rescued"));
+    });
+
+    it("binds the rescued exception struct to the clause variable", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("e"),
+          modules: [],
+          body: (context) => context.vars.e,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, struct);
+    });
+
+    it("rescues an exception whose module is listed in the rescue clause", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [Type.alias("ArgumentError")],
+          body: (_context) => Type.atom("rescued"),
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("rescued"));
+    });
+
+    it("does not rescue an exception whose module is not listed", () => {
+      const boxedError = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "boom"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [Type.alias("ArgumentError")],
+          body: (_context) => Type.atom("rescued"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, rescueClauses, [], [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("does not rescue a :throw-kind failure", () => {
+      const boxedError = new HologramBoxedError(
+        Type.atom("thrown"),
+        Type.atom("throw"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const rescueClauses = [
+        {variable: null, modules: [], body: (_context) => Type.atom("rescued")},
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, rescueClauses, [], [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
     });
   });
 
