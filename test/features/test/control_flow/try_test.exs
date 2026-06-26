@@ -121,4 +121,20 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
                           end
     end
   end
+
+  describe "variable scoping" do
+    feature "do block bindings do not leak", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("Do block vars do not leak"))
+      |> assert_text(css("#result"), "{1, 2}")
+    end
+
+    feature "clause bindings do not leak", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("Clause vars do not leak"))
+      |> assert_text(css("#result"), "{1, 2}")
+    end
+  end
 end

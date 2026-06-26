@@ -47,6 +47,11 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       <button $click="after_runs_on_failure"> After runs on failure </button>
     </p>
     <p>
+      <strong>Variable scoping</strong>
+      <button $click="do_vars_do_not_leak"> Do block vars do not leak </button>
+      <button $click="clause_vars_do_not_leak"> Clause vars do not leak </button>
+    </p>
+    <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
@@ -118,6 +123,35 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
     catch
       :throw, value -> {:caught_throw, value}
     end
+  end
+
+  def action(:clause_vars_do_not_leak, _params, component) do
+    x = wrap_term(1)
+
+    result =
+      try do
+        raise RuntimeError, "boom"
+      rescue
+        _exception ->
+          x = 2
+          x
+      end
+
+    put_state(component, :result, {x, result})
+  end
+
+  def action(:do_vars_do_not_leak, _params, component) do
+    x = wrap_term(1)
+
+    result =
+      try do
+        x = 2
+        x
+      after
+        nil
+      end
+
+    put_state(component, :result, {x, result})
   end
 
   def action(:else_with_match, _params, component) do
