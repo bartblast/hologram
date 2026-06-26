@@ -5926,6 +5926,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "throw/1" do
+    test "throws the given value" do
+      value = :my_value
+
+      result =
+        value
+        |> :erlang.throw()
+        |> catch_throw()
+
+      assert result == value
+    end
+  end
+
   describe "time_offset/0" do
     test "returns an integer" do
       assert is_integer(:erlang.time_offset())

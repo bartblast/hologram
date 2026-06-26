@@ -17,6 +17,7 @@ import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Os from "../../../assets/js/erlang/os.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
+import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -10444,6 +10445,26 @@ describe("Erlang", () => {
       assert.isTrue(Type.isInteger(result));
       assert.isAtLeast(result.value, beforeUs.value);
       assert.isAtMost(result.value, afterUs.value);
+    });
+  });
+
+  describe("throw/1", () => {
+    const throwFun = Erlang["throw/1"];
+
+    it("throws the given value", () => {
+      const value = Type.atom("my_value");
+
+      let error;
+
+      try {
+        throwFun(value);
+      } catch (e) {
+        error = e;
+      }
+
+      assert.instanceOf(error, HologramBoxedError);
+      assert.deepStrictEqual(error.kind, Type.atom("throw"));
+      assert.deepStrictEqual(error.value, value);
     });
   });
 

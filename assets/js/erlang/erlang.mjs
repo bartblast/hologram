@@ -3137,6 +3137,13 @@ const Erlang = {
   // End system_time/1
   // Deps: [:os.system_time/1]
 
+  // Start throw/1
+  "throw/1": (value) => {
+    throw new HologramBoxedError(value, Type.atom("throw"));
+  },
+  // End throw/1
+  // Deps: []
+
   // Start time_offset/0
   // See: docs/erlang_time_functions_porting_strategy.md
   "time_offset/0": () => {
