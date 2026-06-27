@@ -35,6 +35,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module24
   alias Hologram.Test.Fixtures.Controller.Module25
   alias Hologram.Test.Fixtures.Controller.Module26
+  alias Hologram.Test.Fixtures.Controller.Module27
+  alias Hologram.Test.Fixtures.Controller.Module28
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
@@ -1337,6 +1339,58 @@ defmodule Hologram.ControllerTest do
       refute_receive {:identity_changed, _session_id, _user_id}
     end
 
+    test "broadcasts {:identity_changed, ...} on the pre session's announce topic when middleware changes identity and terminates" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module27,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      :post
+      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+      |> handle_command_request()
+
+      assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when middleware terminates without changing identity" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module23,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      :post
+      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+      |> handle_command_request()
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
     test "persists the changed user_id into the session when the handler changes identity" do
       parsed_json =
         %{
@@ -1863,6 +1917,48 @@ defmodule Hologram.ControllerTest do
           csrf_token: @masked_csrf_token
         )
       end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "broadcasts {:identity_changed, ...} on the pre session's announce topic when page middleware changes identity and terminates" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+      |> Plug.Conn.fetch_cookies()
+      |> handle_page_request(Module28, %{}, [],
+        initial_page?: true,
+        instance_id: "test-instance-id",
+        csrf_token: @masked_csrf_token
+      )
+
+      assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when page middleware terminates without changing identity" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+      |> Plug.Conn.fetch_cookies()
+      |> handle_page_request(Module25, %{}, [],
+        initial_page?: true,
+        instance_id: "test-instance-id",
+        csrf_token: @masked_csrf_token
+      )
 
       refute_receive {:identity_changed, _session_id, _user_id}
     end

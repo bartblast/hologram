@@ -195,6 +195,8 @@ defmodule Hologram.Controller do
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the command and send it,
       # still applying the decorations accumulated by the steps that ran.
+      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
+
       conn
       |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
       |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
@@ -311,6 +313,8 @@ defmodule Hologram.Controller do
     if middleware_server_struct.status do
       # Middleware produced a terminal response - skip the render and send it,
       # still applying the decorations accumulated by the steps that ran.
+      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
+
       conn
       |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
       |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
