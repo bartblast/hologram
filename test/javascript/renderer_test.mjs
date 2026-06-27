@@ -4415,6 +4415,42 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, ["aaabbb"]);
     });
 
+    it("drops nil results rendered by window and document nodes", () => {
+      // aaa<window $key_down="my_action" />bbb<document $key_up="my_action" />
+      const actionSpecDom = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+      ]);
+
+      const nodes = Type.list([
+        Type.tuple([Type.atom("text"), Type.bitstring("aaa")]),
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("window"),
+          Type.list([Type.tuple([Type.bitstring("$key_down"), actionSpecDom])]),
+          Type.list(),
+        ]),
+        Type.tuple([Type.atom("text"), Type.bitstring("bbb")]),
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("document"),
+          Type.list([Type.tuple([Type.bitstring("$key_up"), actionSpecDom])]),
+          Type.list(),
+        ]),
+      ]);
+
+      Renderer.listenerBindings = [];
+
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ["aaabbb"]);
+    });
+
     it("with components having a root node", () => {
       const cid3 = Type.bitstring("component_3");
       const cid7 = Type.bitstring("component_7");
