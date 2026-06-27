@@ -51,7 +51,7 @@ defmodule Hologram.Server do
           response_body: iodata() | nil,
           response_headers: %{String.t() => String.t()},
           scheme: :http | :https | nil,
-          session: %{atom => any},
+          session: %{String.t() => any()},
           session_id: identity_id | nil,
           stash: %{atom() => any()},
           status: pos_integer() | nil,
