@@ -423,6 +423,16 @@ defmodule Hologram.ServerTest do
       assert result.scheme == :http
     end
 
+    test "falls back to :unknown for a non-standard request method" do
+      conn =
+        %{Plug.Test.conn(:get, "/") | method: "PROPFIND"}
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      assert from(conn).method == :unknown
+    end
+
     test "comma-joins a multi-value request header" do
       conn =
         :get

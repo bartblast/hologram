@@ -60,6 +60,20 @@ defmodule Hologram.Server do
           __meta__: Metadata.t()
         }
 
+  # Standard HTTP methods mapped to their atom form. Any other method (WebDAV
+  # verbs, scanner noise) degrades to :unknown rather than raising.
+  @request_methods %{
+    "connect" => :connect,
+    "delete" => :delete,
+    "get" => :get,
+    "head" => :head,
+    "options" => :options,
+    "patch" => :patch,
+    "post" => :post,
+    "put" => :put,
+    "trace" => :trace
+  }
+
   @doc false
   @spec __helper_imports__() :: keyword
   def __helper_imports__ do
@@ -794,9 +808,7 @@ defmodule Hologram.Server do
   end
 
   defp build_request_method(method) do
-    method
-    |> String.downcase()
-    |> String.to_existing_atom()
+    Map.get(@request_methods, String.downcase(method), :unknown)
   end
 
   defp ensure_not_cookie_header!(name) when name in ["cookie", "set-cookie"] do
