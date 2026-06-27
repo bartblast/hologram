@@ -40,4 +40,12 @@ defmodule HologramFeatureTests.Events.WindowTest do
     |> assert_text(css("#shortcut_result"), "1")
     |> assert_text(css("#escape_result"), "1")
   end
+
+  # A <window> tag renders to nil on the client; that nil must be dropped, not
+  # turned into a stray "undefined" text node next to the page content.
+  feature "does not render a stray \"undefined\" text node", %{session: session} do
+    session
+    |> visit(WindowPage)
+    |> refute_has(css("body", text: "undefined"))
+  end
 end
