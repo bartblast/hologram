@@ -762,16 +762,20 @@ defmodule HologramFeatureTests.RealtimeTest do
       wait_for_subscription(tab_b, @channel_1, 2)
 
       # Tab B navigates to a page whose middleware re-authenticates as user 2 and
-      # redirects to the dashboard. The terminal (redirect) path announces the
+      # redirects out of the app, so its connection goes away and tab A is left as
+      # the session's lone connection. The terminal (redirect) path announces the
       # identity change on the shared session topic, moving stationary tab A to
       # user 2 (and dropping its user-1 binding on the way).
       tab_b
       |> visit(Router.Helpers.page_path(Page21))
-      |> assert_text("Dashboard")
+      |> assert_text("External Page")
 
-      # Tab A dropping its user-1 binding confirms it processed the announce and
-      # is now recorded under user 2.
+      # Tab A drops its user-1 binding (tab B's connection is gone too), leaving it
+      # the lone connection. Gate on the identity update landing before granting a
+      # user-2 sub - the SSE drops the old binding before recording the new user,
+      # so the drop alone does not guarantee the identity has flipped yet.
       wait_for_no_subscription(tab_a, @channel_1)
+      wait_for_user_id(tab_a, 2)
 
       # A user-2-scoped grant on a fresh channel reaches tab A only because its
       # identity moved to user 2, and the broadcast is then delivered to it.
