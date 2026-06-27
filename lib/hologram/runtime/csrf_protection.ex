@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.CSRFProtection do
   @moduledoc false
 
+  # TODO: consider moving to Hologram.Transport (transport/adapter layer) when splitting up Hologram.Runtime
+
   @session_key "hologram_csrf_token"
 
   # Use the same constants as Plug.CSRFProtection for compatibility

@@ -35,41 +35,14 @@ defmodule Hologram.Page do
 
     [
       quote do
-        import Hologram.Component,
-          only: [
-            delete_subscription: 2,
-            put_action: 2,
-            put_action: 3,
-            put_broadcast: 3,
-            put_broadcast: 4,
-            put_broadcast_except: 4,
-            put_broadcast_except: 5,
-            put_command: 2,
-            put_command: 3,
-            put_context: 3,
-            put_page: 2,
-            put_page: 3,
-            put_state: 2,
-            put_state: 3,
-            put_subscription: 2
-          ]
+        @behaviour Page
 
+        use Hologram.Middleware.Builder
+
+        import Hologram.Component, only: unquote(Hologram.Component.__helper_imports__())
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
-
-        import Hologram.Server,
-          only: [
-            delete_cookie: 2,
-            delete_session: 2,
-            get_cookie: 2,
-            get_cookie: 3,
-            get_session: 2,
-            get_session: 3,
-            put_cookie: 3,
-            put_cookie: 4,
-            put_session: 3
-          ]
-
+        import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
         import Hologram.Template, only: [sigil_HOLO: 2]
 
         alias Hologram.Component
@@ -80,8 +53,6 @@ defmodule Hologram.Page do
         @before_compile Page
 
         @external_resource unquote(template_path)
-
-        @behaviour Page
 
         @doc """
         Returns true to indicate that the callee module is a page module (has "use Hologram.Page" directive).

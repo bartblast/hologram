@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   use HologramFeatureTests.TestCase, async: false
 
   alias Hologram.Realtime
+  alias Hologram.Router
   alias HologramFeatureTests.Realtime.Page1
   alias HologramFeatureTests.Realtime.Page10
   alias HologramFeatureTests.Realtime.Page11
@@ -15,6 +16,8 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page18
   alias HologramFeatureTests.Realtime.Page19
   alias HologramFeatureTests.Realtime.Page2
+  alias HologramFeatureTests.Realtime.Page20
+  alias HologramFeatureTests.Realtime.Page21
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
   alias HologramFeatureTests.Realtime.Page5
@@ -712,6 +715,76 @@ defmodule HologramFeatureTests.RealtimeTest do
       assert_text(tab_a, css("#received"), "delivered while authed")
       refute_text(tab_b, css("#received"), "blocked after logout")
       assert_text(tab_b, css("#received"), "delivered while authed")
+    end
+
+    @sessions 2
+    feature "logout via terminal middleware drops user-authorized subscriptions across the session",
+            %{sessions: [tab_a, tab_b]} do
+      # Tab A establishes the session logged in as user 1, subscribed to
+      # @channel_1 under that user. Tab B joins the SAME session, so both SSE
+      # connections share the session announce topic.
+      tab_a = visit(tab_a, Page9)
+      tab_b = visit_as_sibling(tab_b, tab_a, Page9)
+
+      # Both tabs must be subscribed before the logout.
+      wait_for_subscription(tab_b, @channel_1, 2)
+
+      Realtime.broadcast_action(@channel_1, :show, message: "delivered while authed")
+      tab_b = assert_text(tab_b, css("#received"), "delivered while authed")
+
+      # Tab A navigates to a page whose middleware logs out (user_id -> nil) and
+      # redirects to the sign-in page. The terminal (redirect) path still
+      # announces the identity change on the shared session topic, so tab B's
+      # still-live connection drops its user-1 binding even though the command
+      # never ran.
+      tab_a
+      |> visit(Router.Helpers.page_path(Page20))
+      |> assert_text("Please sign in")
+
+      wait_for_no_subscription(tab_b, @channel_1)
+
+      # The dropped binding means the post-logout broadcast never reaches tab B,
+      # and tab B did not reload (it still shows its pre-logout value, not "none").
+      Realtime.broadcast_action(@channel_1, :show, message: "blocked after logout")
+
+      refute_text(tab_b, css("#received"), "blocked after logout", wait_time: 1_000)
+      assert_text(tab_b, css("#received"), "delivered while authed")
+    end
+
+    @sessions 2
+    feature "re-auth via terminal middleware moves the session's connections to the new user identity",
+            %{sessions: [tab_a, tab_b]} do
+      # Tab A is the stationary connection under test; both tabs share a session
+      # logged in as user 1, subscribed to @channel_1 under that user.
+      tab_a = visit(tab_a, Page9)
+      tab_b = visit_as_sibling(tab_b, tab_a, Page9)
+
+      wait_for_subscription(tab_b, @channel_1, 2)
+
+      # Tab B navigates to a page whose middleware re-authenticates as user 2 and
+      # redirects out of the app, so its connection goes away and tab A is left as
+      # the session's lone connection. The terminal (redirect) path announces the
+      # identity change on the shared session topic, moving stationary tab A to
+      # user 2 (and dropping its user-1 binding on the way).
+      tab_b
+      |> visit(Router.Helpers.page_path(Page21))
+      |> assert_text("External Page")
+
+      # Tab A drops its user-1 binding (tab B's connection is gone too), leaving it
+      # the lone connection. Gate on the identity update landing before granting a
+      # user-2 sub - the SSE drops the old binding before recording the new user,
+      # so the drop alone does not guarantee the identity has flipped yet.
+      wait_for_no_subscription(tab_a, @channel_1)
+      wait_for_user_id(tab_a, 2)
+
+      # A user-2-scoped grant on a fresh channel reaches tab A only because its
+      # identity moved to user 2, and the broadcast is then delivered to it.
+      Realtime.subscribe({:user, 2}, @channel_2, "page")
+      tab_a = wait_for_subscription(tab_a, @channel_2)
+
+      Realtime.broadcast_action(@channel_2, :show, message: "delivered to user 2")
+
+      assert_text(tab_a, css("#received"), "delivered to user 2")
     end
 
     feature "anonymous subscription survives login and logout", %{session: session} do

@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.Cookie do
   @moduledoc false
 
+  # TODO: consider moving to Hologram.Server (Server-struct concept) when splitting up Hologram.Runtime
+
   alias Hologram.Commons.StringUtils
 
   defstruct value: nil,

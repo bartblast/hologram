@@ -62,47 +62,40 @@ defmodule Hologram.Component do
 
   @optional_callbacks [action: 3, command: 3, init: 2]
 
+  @doc false
+  @spec __helper_imports__() :: keyword
+  def __helper_imports__ do
+    [
+      delete_subscription: 2,
+      put_action: 2,
+      put_action: 3,
+      put_broadcast: 3,
+      put_broadcast: 4,
+      put_broadcast_except: 4,
+      put_broadcast_except: 5,
+      put_command: 2,
+      put_command: 3,
+      put_context: 3,
+      put_page: 2,
+      put_page: 3,
+      put_state: 2,
+      put_state: 3,
+      put_subscription: 2
+    ]
+  end
+
   defmacro __using__(_opts) do
     template_path = colocated_template_path(__CALLER__.file)
 
     [
       quote do
-        import Hologram.Component,
-          only: [
-            delete_subscription: 2,
-            prop: 2,
-            prop: 3,
-            put_action: 2,
-            put_action: 3,
-            put_broadcast: 3,
-            put_broadcast: 4,
-            put_broadcast_except: 4,
-            put_broadcast_except: 5,
-            put_command: 2,
-            put_command: 3,
-            put_context: 3,
-            put_page: 2,
-            put_page: 3,
-            put_state: 2,
-            put_state: 3,
-            put_subscription: 2
-          ]
+        @behaviour Component
 
+        use Hologram.Middleware.Builder
+
+        import Hologram.Component, only: unquote([prop: 2, prop: 3] ++ __helper_imports__())
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
-
-        import Hologram.Server,
-          only: [
-            delete_cookie: 2,
-            delete_session: 2,
-            get_cookie: 2,
-            get_cookie: 3,
-            get_session: 2,
-            get_session: 3,
-            put_cookie: 3,
-            put_cookie: 4,
-            put_session: 3
-          ]
-
+        import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
         import Hologram.Template, only: [sigil_HOLO: 2]
 
         alias Hologram.Component
@@ -112,8 +105,6 @@ defmodule Hologram.Component do
         @before_compile Component
 
         @external_resource unquote(template_path)
-
-        @behaviour Component
 
         @doc """
         Returns true to indicate that the callee module is a component module (has "use Hologram.Component" directive).
