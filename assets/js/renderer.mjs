@@ -782,6 +782,12 @@ export default class Renderer {
 
   static #mergeNeighbouringTextNodes(nodes) {
     return nodes.reduce((acc, node) => {
+      // Drop nil render results (e.g. <window>/<document> tags render to nil), otherwise
+      // Snabbdom renders the boxed nil term as a stray "undefined" text node.
+      if (Type.isNil(node)) {
+        return acc;
+      }
+
       if (
         typeof node === "string" &&
         acc.length > 0 &&
