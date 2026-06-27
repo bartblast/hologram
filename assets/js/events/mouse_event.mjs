@@ -3,7 +3,10 @@
 import Type from "../type.mjs";
 
 export default class MouseEvent {
-  static isDefaultAllowed = false;
+  // Allow the browser's native default. Preventing it suppresses native behaviour such as text
+  // selection, so the default is left to run; a binding that needs to suppress it opts in with
+  // prevent_default.
+  static isDefaultAllowed = true;
 
   static buildOperationParam(event) {
     return Type.map([
