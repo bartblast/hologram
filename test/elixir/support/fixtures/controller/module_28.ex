@@ -17,6 +17,11 @@ defmodule Hologram.Test.Fixtures.Controller.Module28 do
   end
 
   @impl Page
+  def init(_params, _component, _server) do
+    raise "init must not run when middleware produces a terminal response"
+  end
+
+  @impl Page
   def template do
     ~HOLO"Module28"
   end
