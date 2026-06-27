@@ -604,16 +604,13 @@ defmodule Hologram.Server do
     * `body` - The response body (iodata)
   """
   @spec put_response_body(t(), iodata()) :: t()
-  def put_response_body(server, body)
-
-  def put_response_body(server, body) when is_binary(body) or is_list(body) do
-    %{server | response_body: body}
-  end
-
-  # TODO: reconsider if this argument validation is needed once Elixir has static typing
-  def put_response_body(_server, body) do
-    raise ArgumentError,
-          "Response body must be iodata (a binary or an iolist), but received #{inspect(body)}"
+  def put_response_body(server, body) do
+    if iodata?(body) do
+      %{server | response_body: body}
+    else
+      raise ArgumentError,
+            "Response body must be iodata (a binary or an iolist), but received #{inspect(body)}"
+    end
   end
 
   @doc """
@@ -817,6 +814,16 @@ defmodule Hologram.Server do
   end
 
   defp ensure_not_cookie_header!(_name), do: :ok
+
+  # is_list/1 accepts invalid iolists like [999], so validate the contents (not just
+  # the shape) here. iolist_size/1 raises on any non-iodata value (and is O(1) for a
+  # bare binary), failing fast at the API boundary instead of later in send_response/2.
+  defp iodata?(body) do
+    _size = :erlang.iolist_size(body)
+    true
+  rescue
+    ArgumentError -> false
+  end
 
   defp url_port(:http, 80), do: ""
 

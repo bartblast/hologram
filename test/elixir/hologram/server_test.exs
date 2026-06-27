@@ -982,6 +982,14 @@ defmodule Hologram.ServerTest do
                      put_response_body(%Server{}, %{error: "nope"})
                    end
     end
+
+    test "raises ArgumentError when a list is not a valid iolist" do
+      assert_error ArgumentError,
+                   "Response body must be iodata (a binary or an iolist), but received [999]",
+                   fn ->
+                     put_response_body(%Server{}, [999])
+                   end
+    end
   end
 
   describe "put_response_header/3" do
