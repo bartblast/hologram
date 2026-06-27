@@ -290,6 +290,7 @@ defmodule Hologram.Compiler.CallGraph do
     interpreter_class: [
       {Enum, :into, 2},
       {Enum, :to_list, 1},
+      {Exception, :normalize, 2},
       {:erlang, :error, 1},
       {:erlang, :hd, 1},
       {:erlang, :tl, 1},
