@@ -25,6 +25,13 @@ export default class Renderer {
   // render loop drains it after patching to reconcile real listeners on each binding's target.
   static listenerBindings = [];
 
+  // Deferred reach (scroll-edge) intersection-observer bindings collected during the current render,
+  // each a {vnode, edge, handler}. The observer watches the container's edge child, a live DOM node
+  // Snabbdom sets on the vnode only during patch, so the binding is held here until
+  // resolveReachBindings turns it into a registry binding once `.elm` exists. renderPage() resets
+  // this.
+  static reachBindings = [];
+
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
@@ -92,6 +99,7 @@ export default class Renderer {
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
     Renderer.listenerBindings = [];
+    Renderer.reachBindings = [];
     Renderer.resizeBindings = [];
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
@@ -114,6 +122,30 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // Resolves this render's deferred reach bindings into {target, key, attach, handler} registry
+  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The observed
+  // target is the container's first child (top/left) or last child (bottom/right), and it - not the
+  // container - is the registry target: when content load swaps the edge child, the old child's
+  // binding detaches and the new child's attaches, re-pointing the observer at the new edge. A
+  // childless container has no edge to watch, so its binding is dropped this render. Per-edge keys
+  // keep top/left (and bottom/right), which share a child, reconciling independently.
+  static resolveReachBindings() {
+    return $.reachBindings.flatMap(({vnode, edge, handler}) => {
+      const child =
+        edge === "top" || edge === "left"
+          ? vnode.elm.firstElementChild
+          : vnode.elm.lastElementChild;
+
+      if (child === null) {
+        return [];
+      }
+
+      const {key, attach} = EventListeners.intersectionObserver(child, edge);
+
+      return [{target: child, key, attach, handler}];
+    });
   }
 
   // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
@@ -226,6 +258,14 @@ export default class Renderer {
     // so it is collected as a document-level "click" binding in #renderElement. Returning null here
     // keeps it out of the element's "on" map.
     if (originalEventName === "click_outside") {
+      return null;
+    }
+
+    // A scroll-edge reach ($reach_top/bottom/left/right) is delivered by an IntersectionObserver
+    // watching the container's edge child, not a DOM event, so it is collected as an observer
+    // binding in #renderElement. Returning null keeps it out of the element's "on" map, where the
+    // browser would never fire it.
+    if (originalEventName.startsWith("reach_") && tagName !== null) {
       return null;
     }
 
@@ -414,6 +454,36 @@ export default class Renderer {
           handler: binding.handler,
         });
       }
+    });
+  }
+
+  // Records each $reach_<edge> attribute on the element as a deferred intersection-observer binding.
+  // A scroll-edge reach is delivered by an IntersectionObserver watching the container's edge child,
+  // not a DOM event, so it cannot ride the element's "on" map, and the observed child is a live DOM
+  // node Snabbdom sets on the vnode only during patch. So the binding carries the vnode, the edge,
+  // and its handler, and resolveReachBindings turns it into a registry binding once `.elm` exists.
+  // The handler keys its debounce/throttle window on the entry's target (the observed child), as an
+  // IntersectionObserverEntry has no currentTarget. The Hologram event type is "reach_<edge>", which
+  // selects ReachEvent and carries the edge for a handler that branches on it.
+  static #collectReachBindings(attrsDom, elementVnode, defaultTarget) {
+    attrsDom.data.forEach((attrDom, attrIndex) => {
+      const eventName = Bitstring.toText(attrDom.data[0]).substring(1);
+
+      if (!eventName.startsWith("reach_")) {
+        return;
+      }
+
+      const edge = eventName.substring("reach_".length);
+
+      const handler = $.#buildEventHandler(
+        attrDom,
+        attrIndex,
+        eventName,
+        defaultTarget,
+        (event) => event.target,
+      );
+
+      $.reachBindings.push({vnode: elementVnode, edge, handler});
     });
   }
 
@@ -1103,6 +1173,8 @@ export default class Renderer {
       elementVnode,
       defaultTarget,
     );
+
+    Renderer.#collectReachBindings(attrsDom, elementVnode, defaultTarget);
 
     Renderer.#collectResizeBindings(attrsDom, elementVnode, defaultTarget);
 

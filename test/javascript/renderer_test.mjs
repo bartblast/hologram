@@ -5766,6 +5766,138 @@ describe("Renderer", () => {
     });
   });
 
+  describe("reach binding", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    const reachElement = (attrName, specDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([Type.tuple([Type.bitstring(attrName), specDom])]),
+        Type.list(),
+      ]);
+
+    beforeEach(() => {
+      Renderer.listenerBindings = [];
+      Renderer.reachBindings = [];
+    });
+
+    it("adds no per-element listener and collects a deferred binding carrying the vnode and edge", () => {
+      // <div $reach_bottom="my_action"></div>
+      const vdom = Renderer.renderDom(
+        reachElement("$reach_bottom", actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // A reach rides an IntersectionObserver, so nothing is added to the element's "on" map.
+      assert.deepStrictEqual(vdom.data.on, {});
+
+      assert.equal(Renderer.reachBindings.length, 1);
+      assert.equal(Renderer.reachBindings[0].vnode, vdom);
+      assert.equal(Renderer.reachBindings[0].edge, "bottom");
+    });
+
+    it("dispatches the observer entry through the bound element's handler under the edge-typed event", () => {
+      Renderer.renderDom(
+        reachElement("$reach_bottom", actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      const entry = {target: {}, isIntersecting: true};
+
+      Renderer.reachBindings[0].handler(entry);
+
+      sinon.assert.calledOnceWithExactly(
+        stub,
+        entry,
+        "reach_bottom",
+        actionSpecDom,
+        defaultTarget,
+        false,
+        false,
+        false,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+
+    it("resolves into an observer registry binding targeting the edge child", () => {
+      const vdom = Renderer.renderDom(
+        reachElement("$reach_bottom", actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the container and its children here.
+      const lastChild = {};
+      vdom.elm = {firstElementChild: {}, lastElementChild: lastChild};
+
+      const resolved = Renderer.resolveReachBindings();
+
+      assert.equal(resolved.length, 1);
+      assert.equal(resolved[0].target, lastChild);
+      assert.equal(resolved[0].key, "intersection-observer:bottom");
+      assert.equal(resolved[0].handler, Renderer.reachBindings[0].handler);
+      assert.isFunction(resolved[0].attach);
+    });
+
+    it("targets the first child for top/left and the last child for bottom/right", () => {
+      const firstChild = {};
+      const lastChild = {};
+
+      const targetFor = (attrName) => {
+        Renderer.reachBindings = [];
+
+        const vdom = Renderer.renderDom(
+          reachElement(attrName, actionSpecDom),
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+        );
+
+        vdom.elm = {firstElementChild: firstChild, lastElementChild: lastChild};
+
+        return Renderer.resolveReachBindings()[0].target;
+      };
+
+      assert.equal(targetFor("$reach_top"), firstChild);
+      assert.equal(targetFor("$reach_left"), firstChild);
+      assert.equal(targetFor("$reach_bottom"), lastChild);
+      assert.equal(targetFor("$reach_right"), lastChild);
+    });
+
+    it("drops a binding whose container has no edge child", () => {
+      const vdom = Renderer.renderDom(
+        reachElement("$reach_bottom", actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      vdom.elm = {firstElementChild: null, lastElementChild: null};
+
+      assert.deepStrictEqual(Renderer.resolveReachBindings(), []);
+    });
+  });
+
   describe("resize binding", () => {
     const actionSpecDom = Type.list([
       Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
