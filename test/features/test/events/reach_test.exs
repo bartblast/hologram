@@ -10,10 +10,12 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> assert_text(css("#filled_bottom_result"), "1")
     end
 
-    feature "fires when the container is scrolled down to it", %{session: session} do
+    feature "fires within the prefetch distance before the edge is visible", %{session: session} do
+      # The container is 100px tall and its bottom child sits at 980-1000px, so at scrollTop 780
+      # (visible 780-880) the child is below the fold but inside the 200px within() prefetch.
       session
       |> visit(ReachPage)
-      |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 900;")
+      |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 780;")
       |> assert_text(css("#scroll_bottom_result"), "1")
     end
   end
