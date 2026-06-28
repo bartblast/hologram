@@ -178,15 +178,23 @@ function defineElixirEnumModule() {
 function defineElixirExceptionModule() {
   return {
     // Mirrors Exception.normalize(:error, reason): an exception struct passes
-    // through unchanged, while a bare reason is wrapped in an ErlangError struct.
-    "normalize/2": (_kind, reason) =>
-      Type.isStruct(reason)
-        ? reason
-        : Type.struct("ErlangError", [
-            [Type.atom("__exception__"), Type.boolean(true)],
-            [Type.atom("original"), reason],
-            [Type.atom("reason"), Type.nil()],
-          ]),
+    // through unchanged, :badarg becomes an ArgumentError, and any other bare
+    // reason is wrapped in an ErlangError struct.
+    "normalize/2": (_kind, reason) => {
+      if (Type.isStruct(reason)) {
+        return reason;
+      }
+
+      if (Type.isAtom(reason) && reason.value === "badarg") {
+        return Type.errorStruct("ArgumentError", "argument error");
+      }
+
+      return Type.struct("ErlangError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("original"), reason],
+        [Type.atom("reason"), Type.nil()],
+      ]);
+    },
   };
 }
 

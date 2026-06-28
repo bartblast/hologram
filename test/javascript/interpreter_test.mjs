@@ -8342,16 +8342,11 @@ describe("Interpreter", () => {
   });
 
   it("normalizeError()", () => {
-    const reason = Type.atom("badarg");
-    const result = Interpreter.normalizeError(reason);
+    const result = Interpreter.normalizeError(Type.atom("badarg"));
 
     assert.deepStrictEqual(
       result,
-      Type.struct("ErlangError", [
-        [Type.atom("__exception__"), Type.boolean(true)],
-        [Type.atom("original"), reason],
-        [Type.atom("reason"), Type.nil()],
-      ]),
+      Type.errorStruct("ArgumentError", "argument error"),
     );
   });
 
@@ -8917,6 +8912,34 @@ describe("Interpreter", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("rescued"));
+    });
+
+    it("rescues a bare :error reason normalized into an exception struct", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.atom("badarg"));
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("e"),
+          modules: [Type.alias("ArgumentError")],
+          body: (context) => context.vars.e,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.errorStruct("ArgumentError", "argument error"),
+      );
     });
 
     it("does not rescue an exception whose module is not listed", () => {
