@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedErrorAsync,
   assertBoxedStrictEqual,
   contextFixture,
   defineGlobalErlangAndElixirModules,
@@ -15,6 +16,7 @@ import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./suppo
 import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -621,6 +623,164 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, Type.atom("delayed"));
     });
+
+    it("awaits an async after block before resolving", async () => {
+      const body = async (_context) => Type.atom("ok");
+
+      let afterRan = false;
+
+      const afterBlock = async (_context) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        afterRan = true;
+      };
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        [],
+        [],
+        afterBlock,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.isTrue(afterRan);
+    });
+
+    it("runs the after block and re-propagates the error when no clause matches", async () => {
+      const boxedError = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      const body = async (_context) => {
+        throw boxedError;
+      };
+
+      let afterRan = false;
+
+      const afterBlock = async (_context) => {
+        afterRan = true;
+      };
+
+      const context = contextFixture();
+
+      let caught;
+
+      try {
+        await Interpreter.asyncTry(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+      assert.isTrue(afterRan);
+    });
+
+    it("matches the do block result against the else clauses", async () => {
+      const body = async (_context) => Type.integer(2);
+
+      const elseClauses = [
+        {
+          match: Type.integer(2),
+          guards: [],
+          body: async (_context) => Type.atom("two"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        [],
+        elseClauses,
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("two"));
+    });
+
+    it("raises TryClauseError when no else clause matches", async () => {
+      const body = async (_context) => Type.integer(3);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: async (_context) => Type.atom("one"),
+        },
+      ];
+
+      const context = contextFixture();
+
+      await assertBoxedErrorAsync(
+        () => Interpreter.asyncTry(body, [], [], elseClauses, null, context),
+        "TryClauseError",
+        "no try clause matching:\n\n    3\n",
+      );
+    });
+
+    it("rescues an :error-kind failure and awaits the rescue clause body", async () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = async (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("e"),
+          modules: [],
+          body: async (context) => context.vars.e,
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, struct);
+    });
+
+    it("catches a :throw failure and awaits the catch clause body", async () => {
+      const thrown = Type.atom("thrown_value");
+
+      const body = async (_context) => {
+        throw new HologramBoxedError(thrown, Type.atom("throw"));
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: async (context) => context.vars.v,
+        },
+      ];
+
+      const context = contextFixture();
+
+      const result = await Interpreter.asyncTry(
+        body,
+        [],
+        catchClauses,
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, thrown);
+    });
   });
 
   describe("asyncWith()", () => {
@@ -845,6 +1005,13 @@ describe("Interpreter", () => {
     const expected =
       "{MyModule, :my_fun, 3} can't be transpiled automatically to JavaScript, because its output is too big.\n" +
       "See what to do here: https://www.hologram.page/TODO";
+
+    assert.equal(result, expected);
+  });
+
+  it("buildTryClauseErrorMsg()", () => {
+    const result = Interpreter.buildTryClauseErrorMsg(Type.atom("abc"));
+    const expected = "no try clause matching:\n\n    :abc\n";
 
     assert.equal(result, expected);
   });
@@ -8174,6 +8341,15 @@ describe("Interpreter", () => {
     });
   });
 
+  it("normalizeError()", () => {
+    const result = Interpreter.normalizeError(Type.atom("badarg"));
+
+    assert.deepStrictEqual(
+      result,
+      Type.errorStruct("ArgumentError", "argument error"),
+    );
+  });
+
   it("raiseArgumentError()", () => {
     assertBoxedError(
       () => Interpreter.raiseArgumentError("abc"),
@@ -8297,6 +8473,14 @@ describe("Interpreter", () => {
     );
   });
 
+  it("raiseTryClauseError()", () => {
+    assertBoxedError(
+      () => Interpreter.raiseTryClauseError(Type.atom("abc")),
+      "TryClauseError",
+      Interpreter.buildTryClauseErrorMsg(Type.atom("abc")),
+    );
+  });
+
   it("raiseUndefinedFunctionError()", () => {
     assertBoxedError(
       () => Interpreter.raiseUndefinedFunctionError("my_message"),
@@ -8397,6 +8581,8 @@ describe("Interpreter", () => {
     });
   });
 
+  // Tests here that mirror an Elixir consistency test in test/elixir/hologram/ex_js_consistency/try_test.exs
+  // share its exact name; always update both together.
   describe("try()", () => {
     let context;
 
@@ -8427,6 +8613,678 @@ describe("Interpreter", () => {
 
       assert.deepStrictEqual(result, Type.atom("ok"));
       assert.deepStrictEqual(context.vars.a, Type.integer(1));
+    });
+
+    it("does not leak rescue clause bindings into the outer context", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.errorStruct("RuntimeError", "boom"));
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [],
+          body: (context) => {
+            Interpreter.matchOperator(
+              Type.integer(3),
+              Type.variablePattern("a"),
+              context,
+            );
+
+            Interpreter.updateVarsToMatchedValues(context);
+
+            return context.vars.a;
+          },
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.integer(3));
+      assert.deepStrictEqual(context.vars.a, Type.integer(1));
+    });
+
+    it("runs the after block on success without changing the return value", () => {
+      const body = (_context) => Type.atom("ok");
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+        return Type.atom("after");
+      };
+
+      const result = Interpreter.try(body, [], [], [], afterBlock, context);
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.isTrue(afterRan);
+    });
+
+    it("runs the after block and re-propagates the error when no clause matches", () => {
+      const boxedError = new HologramBoxedError(
+        Type.errorStruct("MyError", "my message"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+      assert.isTrue(afterRan);
+    });
+
+    it("re-propagates a non-HologramBoxedError and still runs the after block", () => {
+      const nativeError = new HologramInterpreterError("native error");
+
+      const body = (_context) => {
+        throw nativeError;
+      };
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, nativeError);
+      assert.isTrue(afterRan);
+    });
+
+    it("propagates an error raised by the after block on the success path", () => {
+      const body = (_context) => Type.atom("ok");
+
+      const afterError = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "after ran"),
+      );
+
+      const afterBlock = (_context) => {
+        throw afterError;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, afterError);
+    });
+
+    it("an after-block error replaces the do-block error on the failure path", () => {
+      const bodyError = new HologramBoxedError(
+        Type.errorStruct("ArgumentError", "boom"),
+      );
+
+      const body = (_context) => {
+        throw bodyError;
+      };
+
+      const afterError = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "after ran"),
+      );
+
+      const afterBlock = (_context) => {
+        throw afterError;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], [], afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, afterError);
+    });
+
+    it("matches the do block result against the else clauses", () => {
+      const body = (_context) => Type.integer(2);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: (_context) => Type.atom("one"),
+        },
+        {
+          match: Type.integer(2),
+          guards: [],
+          body: (_context) => Type.atom("two"),
+        },
+      ];
+
+      const result = Interpreter.try(body, [], [], elseClauses, null, context);
+
+      assert.deepStrictEqual(result, Type.atom("two"));
+    });
+
+    it("raises TryClauseError when no else clause matches", () => {
+      const body = (_context) => Type.integer(3);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: (_context) => Type.atom("one"),
+        },
+      ];
+
+      assertBoxedError(
+        () => Interpreter.try(body, [], [], elseClauses, null, context),
+        "TryClauseError",
+        "no try clause matching:\n\n    3\n",
+      );
+    });
+
+    it("runs the after block when an else clause does not match", () => {
+      const body = (_context) => Type.integer(3);
+
+      const elseClauses = [
+        {
+          match: Type.integer(1),
+          guards: [],
+          body: (_context) => Type.atom("one"),
+        },
+      ];
+
+      let afterRan = false;
+
+      const afterBlock = (_context) => {
+        afterRan = true;
+      };
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], [], elseClauses, afterBlock, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.isTrue(afterRan);
+    });
+
+    it("rescues an :error-kind failure with a bare rescue clause", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {variable: null, modules: [], body: (_context) => Type.atom("rescued")},
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("rescued"));
+    });
+
+    it("binds the rescued exception struct to the clause variable", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("e"),
+          modules: [],
+          body: (context) => context.vars.e,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, struct);
+    });
+
+    it("rescues an exception whose module is listed in the rescue clause", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [Type.alias("ArgumentError")],
+          body: (_context) => Type.atom("rescued"),
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("rescued"));
+    });
+
+    it("rescues a bare :error reason normalized into an exception struct", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.atom("badarg"));
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("e"),
+          modules: [Type.alias("ArgumentError")],
+          body: (context) => context.vars.e,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.errorStruct("ArgumentError", "argument error"),
+      );
+    });
+
+    it("reraise re-raises the rescued exception", () => {
+      // try (raise ArgumentError) rescue error -> reraise error, __STACKTRACE__
+      // reraise expands to :erlang.raise(:error, error, []) for an exception, so
+      // the rescued exception propagates unchanged (__STACKTRACE__ is []).
+      //
+      // This asserts only the re-raised exception. The matching consistency test
+      // additionally asserts that reraise preserves the original raise-site
+      // stacktrace, which is server-only - the client has no stacktraces yet
+      // (__STACKTRACE__ is []), so there is nothing to preserve here.
+      //
+      // TODO: once client-side stacktraces are supported (see the TODO in
+      // lib/hologram/compiler/transformer.ex), tighten this to also assert that
+      // reraise preserves the original raise-site stacktrace, mirroring the
+      // consistency test.
+      const struct = Type.errorStruct("ArgumentError", "my message");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("error"),
+          modules: [],
+          body: (context) =>
+            Erlang["raise/3"](
+              Type.atom("error"),
+              context.vars.error,
+              Type.list(),
+            ),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, rescueClauses, [], [], null, context);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.struct, struct);
+    });
+
+    it("evaluates __STACKTRACE__ to an empty list (no client stacktraces yet)", () => {
+      // CLIENT/SERVER DIVERGENCE: the client does not support stacktraces yet, so
+      // __STACKTRACE__ is compiled to an empty list (its rescue-clause body below
+      // is Type.list(), the compiled form). This DIFFERS from the matching
+      // consistency test (try_test.exs "__STACKTRACE__ holds the stacktrace
+      // pointing to where the error was raised"), which asserts the real,
+      // non-empty server stacktrace.
+      //
+      // TODO: support real client-side stacktraces so this matches the consistency
+      // test. Maintain a call stack in the interpreter (push a frame per function
+      // call), capture it when a HologramBoxedError is raised, and bind
+      // __STACKTRACE__ to that captured trace within rescue/catch clause scopes,
+      // instead of compiling it to an empty list in
+      // lib/hologram/compiler/transformer.ex.
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.errorStruct("RuntimeError", "boom"));
+      };
+
+      // rescue _exception -> __STACKTRACE__   (compiled body is the empty list [])
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("_exception"),
+          modules: [],
+          body: (_context) => Type.list(),
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.list());
+    });
+
+    it("does not rescue an exception whose module is not listed", () => {
+      const boxedError = new HologramBoxedError(
+        Type.errorStruct("RuntimeError", "boom"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const rescueClauses = [
+        {
+          variable: null,
+          modules: [Type.alias("ArgumentError")],
+          body: (_context) => Type.atom("rescued"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, rescueClauses, [], [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("does not rescue a :throw-kind failure", () => {
+      const boxedError = new HologramBoxedError(
+        Type.atom("thrown"),
+        Type.atom("throw"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const rescueClauses = [
+        {variable: null, modules: [], body: (_context) => Type.atom("rescued")},
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, rescueClauses, [], [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("catches a :throw failure, binding the thrown value", () => {
+      const thrown = Type.atom("thrown_value");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(thrown, Type.atom("throw"));
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: (context) => context.vars.v,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, thrown);
+    });
+
+    it("catches an :exit failure", () => {
+      const reason = Type.atom("reason");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(reason, Type.atom("exit"));
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("exit"),
+          value: Type.variablePattern("r"),
+          guards: [],
+          body: (context) => context.vars.r,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, reason);
+    });
+
+    it("catches an :error failure, binding the exception struct", () => {
+      const struct = Type.errorStruct("ArgumentError", "bad arg");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("error"),
+          value: Type.variablePattern("e"),
+          guards: [],
+          body: (context) => context.vars.e,
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, struct);
+    });
+
+    it("catches when the clause guard passes", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.integer(5), Type.atom("throw"));
+      };
+
+      const guard = (context) =>
+        Erlang["==/2"](context.vars.n, Type.integer(5));
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("n"),
+          guards: [guard],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      const result = Interpreter.try(body, [], catchClauses, [], null, context);
+
+      assert.deepStrictEqual(result, Type.atom("caught"));
+    });
+
+    it("does not catch when the clause guard fails", () => {
+      const boxedError = new HologramBoxedError(
+        Type.integer(5),
+        Type.atom("throw"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const guard = (context) =>
+        Erlang["==/2"](context.vars.n, Type.integer(0));
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("n"),
+          guards: [guard],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], catchClauses, [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("does not catch when the clause kind does not match", () => {
+      const boxedError = new HologramBoxedError(
+        Type.atom("x"),
+        Type.atom("exit"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], catchClauses, [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("does not catch when the value pattern does not match", () => {
+      const boxedError = new HologramBoxedError(
+        Type.atom("actual"),
+        Type.atom("throw"),
+      );
+
+      const body = (_context) => {
+        throw boxedError;
+      };
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.atom("expected"),
+          guards: [],
+          body: (_context) => Type.atom("caught"),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, [], catchClauses, [], null, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      assert.equal(caught, boxedError);
+    });
+
+    it("falls through from rescue to catch for a :throw failure", () => {
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.atom("thrown"), Type.atom("throw"));
+      };
+
+      const rescueClauses = [
+        {variable: null, modules: [], body: (_context) => Type.atom("rescued")},
+      ];
+
+      const catchClauses = [
+        {
+          kind: Type.atom("throw"),
+          value: Type.variablePattern("v"),
+          guards: [],
+          body: (context) => context.vars.v,
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        catchClauses,
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.atom("thrown"));
     });
   });
 

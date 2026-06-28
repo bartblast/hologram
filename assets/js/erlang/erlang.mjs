@@ -1706,6 +1706,21 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // TODO: the third argument carries error_info options used for richer error reporting on BEAM; it is currently accepted and ignored.
+  // Start error/3
+  "error/3": (reason, args, _options) => {
+    Erlang["error/2"](reason, args);
+  },
+  // End error/3
+  // Deps: [:erlang.error/2]
+
+  // Start exit/1
+  "exit/1": (reason) => {
+    throw new HologramBoxedError(reason, Type.atom("exit"));
+  },
+  // End exit/1
+  // Deps: []
+
   // Start float/1
   "float/1": (number) => {
     if (Type.isInteger(number)) {
@@ -2971,6 +2986,21 @@ const Erlang = {
   // End pid_to_list/1
   // Deps: []
 
+  // TODO: support stacktraces; the stacktrace argument is currently accepted and ignored.
+  // Start raise/3
+  "raise/3": (kind, reason, _stacktrace) => {
+    if (
+      !Type.isAtom(kind) ||
+      !["error", "exit", "throw"].includes(kind.value)
+    ) {
+      return Type.atom("badarg");
+    }
+
+    throw new HologramBoxedError(reason, kind);
+  },
+  // End raise/3
+  // Deps: []
+
   // Start ref_to_list/1
   "ref_to_list/1": (reference) => {
     if (!Type.isReference(reference)) {
@@ -3136,6 +3166,13 @@ const Erlang = {
   },
   // End system_time/1
   // Deps: [:os.system_time/1]
+
+  // Start throw/1
+  "throw/1": (value) => {
+    throw new HologramBoxedError(value, Type.atom("throw"));
+  },
+  // End throw/1
+  // Deps: []
 
   // Start time_offset/0
   // See: docs/erlang_time_functions_porting_strategy.md

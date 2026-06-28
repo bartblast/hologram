@@ -443,12 +443,30 @@ defmodule Hologram.Compiler.Encoder do
   def encode_ir(%IR.Try{} = ir, context) do
     body_js = encode_closure(ir.body, context)
     rescue_clauses_js = encode_as_array(ir.rescue_clauses, context)
+    catch_clauses_js = encode_as_array(ir.catch_clauses, context)
+    else_clauses_js = encode_as_array(ir.else_clauses, context)
+    after_block_js = encode_closure(ir.after_block, context)
+
+    args_js =
+      "#{body_js}, #{rescue_clauses_js}, #{catch_clauses_js}, #{else_clauses_js}, #{after_block_js}, context"
 
     if context.async? do
-      "(await Interpreter.asyncTry(#{body_js}, #{rescue_clauses_js}, [], [], null, context))"
+      "(await Interpreter.asyncTry(#{args_js}))"
     else
-      "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, context)"
+      "Interpreter.try(#{args_js})"
     end
+  end
+
+  def encode_ir(%IR.TryCatchClause{} = ir, context) do
+    kind_js = encode_ir(ir.kind, %{context | pattern?: true})
+    value_js = encode_ir(ir.value, %{context | pattern?: true})
+
+    # Guards are never async - Elixir guards are restricted to a safe subset of functions.
+    guards_js = encode_as_array(ir.guards, %{context | async?: false}, &encode_closure/2)
+
+    body_js = encode_closure(ir.body, context)
+
+    "{kind: #{kind_js}, value: #{value_js}, guards: #{guards_js}, body: #{body_js}}"
   end
 
   def encode_ir(%IR.TryRescueClause{} = ir, context) do

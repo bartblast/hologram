@@ -2860,6 +2860,263 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir, %Context{async?: true}) == expected
     end
+
+    test "with a catch clause" do
+      # try do
+      #   :ok
+      # catch
+      #   :throw, value -> value
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [],
+        catch_clauses: [
+          %IR.TryCatchClause{
+            kind: %IR.AtomType{value: :throw},
+            value: %IR.Variable{name: :value},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.Variable{name: :value}]
+            }
+          }
+        ],
+        else_clauses: [],
+        after_block: nil
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [], [{kind: Type.atom("throw"), value: Type.variablePattern("value"), guards: [], body: (context) => {
+        return context.vars.value;
+        }}], [], null, context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with an else clause" do
+      # try do
+      #   :ok
+      # else
+      #   :ok -> :matched
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.AtomType{value: :ok},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :matched}]
+            }
+          }
+        ],
+        after_block: nil
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [], [], [{match: Type.atom("ok"), guards: [], body: (context) => {
+        return Type.atom("matched");
+        }}], null, context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with an after block" do
+      # try do
+      #   :ok
+      # after
+      #   :cleanup
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: %IR.Block{
+          expressions: [%IR.AtomType{value: :cleanup}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [], [], [], (context) => {
+        return Type.atom("cleanup");
+        }, context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "with rescue, catch, else and after" do
+      # try do
+      #   :ok
+      # rescue
+      #   e -> :rescued
+      # catch
+      #   :throw, value -> value
+      # else
+      #   :ok -> :matched
+      # after
+      #   :cleanup
+      # end
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [
+          %IR.TryRescueClause{
+            variable: %IR.Variable{name: :e},
+            modules: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :rescued}]
+            }
+          }
+        ],
+        catch_clauses: [
+          %IR.TryCatchClause{
+            kind: %IR.AtomType{value: :throw},
+            value: %IR.Variable{name: :value},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.Variable{name: :value}]
+            }
+          }
+        ],
+        else_clauses: [
+          %IR.Clause{
+            match: %IR.AtomType{value: :ok},
+            guards: [],
+            body: %IR.Block{
+              expressions: [%IR.AtomType{value: :matched}]
+            }
+          }
+        ],
+        after_block: %IR.Block{
+          expressions: [%IR.AtomType{value: :cleanup}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [{variable: Type.variablePattern("e"), modules: [], body: (context) => {
+        return Type.atom("rescued");
+        }}], [{kind: Type.atom("throw"), value: Type.variablePattern("value"), guards: [], body: (context) => {
+        return context.vars.value;
+        }}], [{match: Type.atom("ok"), guards: [], body: (context) => {
+        return Type.atom("matched");
+        }}], (context) => {
+        return Type.atom("cleanup");
+        }, context)\
+        """)
+
+      assert encode_ir(ir) == expected
+    end
+
+    test "async with an after block" do
+      ir = %IR.Try{
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :ok}]
+        },
+        rescue_clauses: [],
+        catch_clauses: [],
+        else_clauses: [],
+        after_block: %IR.Block{
+          expressions: [%IR.AtomType{value: :cleanup}]
+        }
+      }
+
+      expected =
+        normalize_newlines("""
+        (await Interpreter.asyncTry(async (context) => {
+        return Type.atom("ok");
+        }, [], [], [], async (context) => {
+        return Type.atom("cleanup");
+        }, context))\
+        """)
+
+      assert encode_ir(ir, %Context{async?: true}) == expected
+    end
+
+    test "catch clause / without guards" do
+      # catch
+      #   :throw, value -> :caught
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :throw},
+        value: %IR.Variable{name: :value},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [], body: (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
+
+    test "catch clause / with variable kind" do
+      # catch
+      #   kind, value -> :caught
+      ir = %IR.TryCatchClause{
+        kind: %IR.Variable{name: :kind},
+        value: %IR.Variable{name: :value},
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               "{kind: Type.variablePattern(\"kind\"), value: Type.variablePattern(\"value\"), guards: [], body: (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
+
+    test "catch clause / with guards" do
+      # catch
+      #   :throw, value when guard -> :caught
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :throw},
+        value: %IR.Variable{name: :value},
+        guards: [%IR.Variable{name: :guard}],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir) ==
+               "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [(context) => context.vars.guard], body: (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
+
+    test "catch clause / async - guards stay sync, body becomes async" do
+      ir = %IR.TryCatchClause{
+        kind: %IR.AtomType{value: :throw},
+        value: %IR.Variable{name: :value},
+        guards: [%IR.Variable{name: :guard}],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :caught}]
+        }
+      }
+
+      assert encode_ir(ir, %Context{async?: true}) ==
+               "{kind: Type.atom(\"throw\"), value: Type.variablePattern(\"value\"), guards: [(context) => context.vars.guard], body: async (context) => {\nreturn Type.atom(\"caught\");\n}}"
+    end
   end
 
   describe "tuple type" do

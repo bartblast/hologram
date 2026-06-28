@@ -3533,6 +3533,58 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "error/1" do
+    test "raises the given reason" do
+      reason = %RuntimeError{message: "my message"}
+
+      result =
+        reason
+        |> :erlang.error()
+        |> catch_error()
+
+      assert result == reason
+    end
+
+    test "normalizes a bare reason into an exception struct for rescue" do
+      result =
+        try do
+          :erlang.error(:badarg)
+        rescue
+          error -> error
+        end
+
+      assert result == %ArgumentError{}
+    end
+  end
+
+  describe "error/3" do
+    # TODO: args and error_info affect the BEAM stacktrace and error reporting,
+    # which the client does not model yet. Assert their effect once it does.
+    test "raises the given reason" do
+      reason = %RuntimeError{message: "my message"}
+
+      result =
+        reason
+        |> :erlang.error([1, 2], error_info: %{})
+        |> catch_error()
+
+      assert result == reason
+    end
+  end
+
+  describe "exit/1" do
+    test "exits with the given reason" do
+      reason = :my_reason
+
+      result =
+        reason
+        |> :erlang.exit()
+        |> catch_exit()
+
+      assert result == reason
+    end
+  end
+
   describe "float/1" do
     test "converts integer to float" do
       assert :erlang.float(1) == 1.0
@@ -5619,6 +5671,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "raise/3" do
+    test "raises with the given kind and reason" do
+      reason = :my_reason
+
+      result =
+        :throw
+        |> :erlang.raise(reason, [])
+        |> catch_throw()
+
+      assert result == reason
+    end
+
+    test "normalizes a bare :error reason into an exception struct for rescue" do
+      result =
+        try do
+          :erlang.raise(:error, :badarg, [])
+        rescue
+          error -> error
+        end
+
+      assert result == %ArgumentError{}
+    end
+
+    test "returns :badarg when the kind is not a valid exception class" do
+      result = apply(:erlang, :raise, wrap_term([:not_a_kind, :my_reason, []]))
+
+      assert result == :badarg
+    end
+  end
+
   describe "ref_to_list/1" do
     test "reference for local node" do
       result =
@@ -5923,6 +6005,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       assert is_integer(result)
       assert abs(result - expected) < 10_000
+    end
+  end
+
+  describe "throw/1" do
+    test "throws the given value" do
+      value = :my_value
+
+      result =
+        value
+        |> :erlang.throw()
+        |> catch_throw()
+
+      assert result == value
     end
   end
 

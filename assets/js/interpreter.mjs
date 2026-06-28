@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
@@ -8,6 +9,11 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 import uniqWith from "lodash/uniqWith.js";
+
+// Sentinel returned by the rescue/catch clause evaluators when no clause matched.
+// A unique value (not false/null) so that a clause body returning a falsy Elixir
+// term (nil/false) is never mistaken for "no clause matched".
+const NO_MATCH = Symbol("NO_MATCH");
 
 export default class Interpreter {
   // Deps: [:lists.keyfind/3]
@@ -126,6 +132,11 @@ export default class Interpreter {
       `${mfa} can't be transpiled automatically to JavaScript, because its output is too big.\n` +
       "See what to do here: https://www.hologram.page/TODO"
     );
+  }
+
+  // Keep this message in sync with build_try_clause_error_msg in Hologram.Commons.TestUtils.
+  static buildTryClauseErrorMsg(arg) {
+    return "no try clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
   }
 
   // Keep this message in sync with build_undefined_function_error_msg in Hologram.Commons.TestUtils.
@@ -804,6 +815,14 @@ export default class Interpreter {
     return globalThis[Interpreter.moduleJsName(alias)];
   }
 
+  // Turns an :error reason into its exception struct, mirroring Elixir's
+  // Exception.normalize/2: a struct passes through unchanged, while a bare term
+  // (e.g. :badarg) becomes an ArgumentError/ErlangError/... struct.
+  // Deps: [Exception.normalize/2]
+  static normalizeError(reason) {
+    return Elixir_Exception["normalize/2"](Type.atom("error"), reason);
+  }
+
   static raiseArgumentError(message) {
     Interpreter.raiseError("ArgumentError", message);
   }
@@ -877,6 +896,13 @@ export default class Interpreter {
     Interpreter.raiseError("MatchError", message);
   }
 
+  static raiseTryClauseError(arg) {
+    Interpreter.raiseError(
+      "TryClauseError",
+      Interpreter.buildTryClauseErrorMsg(arg),
+    );
+  }
+
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
   }
@@ -921,38 +947,61 @@ export default class Interpreter {
     afterBlock,
     context,
   ) {
-    let result;
-
     try {
-      const contextClone = Interpreter.cloneContext(context);
-      result = body(contextClone);
-      // TODO: finish
-      // eslint-disable-next-line no-useless-catch
-    } catch (error) {
-      throw error;
+      let bodyResult;
 
-      // TODO: handle errors
-      // eslint-disable-next-line no-unreachable
-      result =
-        Interpreter.#evaluateRescueClauses(rescueClauses, error, context) ||
-        Interpreter.#evaluateCatchClauses(catchClauses, error, context);
-    } finally {
-      // TODO: handle after block
-      if (afterBlock) {
-        // eslint-disable-next-line no-unsafe-finally
-        throw new HologramInterpreterError(
-          '"try" expression after block is not yet implemented in Hologram',
+      try {
+        bodyResult = body(Interpreter.cloneContext(context));
+      } catch (error) {
+        // Only boxed Elixir failures participate in rescue/catch matching;
+        // native JS errors and HologramInterpreterError re-propagate.
+        if (!(error instanceof HologramBoxedError)) {
+          throw error;
+        }
+
+        const rescued = Interpreter.#evaluateRescueClauses(
+          rescueClauses,
+          error,
+          context,
         );
-      }
-    }
 
-    if (elseClauses.length === 0) {
-      return result;
-    } else {
-      // TODO: handle else clauses
-      throw new HologramInterpreterError(
-        '"try" expression else clauses are not yet implemented in Hologram',
+        if (rescued !== NO_MATCH) {
+          return rescued;
+        }
+
+        const caught = Interpreter.#evaluateCatchClauses(
+          catchClauses,
+          error,
+          context,
+        );
+
+        if (caught !== NO_MATCH) {
+          return caught;
+        }
+
+        // No clause matched - re-propagate the original failure.
+        throw error;
+      }
+
+      if (elseClauses.length === 0) {
+        return bodyResult;
+      }
+
+      // The do block succeeded - match its result against the else clauses,
+      // raising TryClauseError if none match. Evaluated outside the inner catch,
+      // so a failure here is not re-caught by this try (but after still runs).
+      return Interpreter.#evaluateMatchingClause(
+        bodyResult,
+        elseClauses,
+        context,
+        Interpreter.raiseTryClauseError,
       );
+    } finally {
+      // The after block always runs (on success, handled failure, or
+      // re-propagated failure) and never changes the return value.
+      if (afterBlock !== null) {
+        afterBlock(Interpreter.cloneContext(context));
+      }
     }
   }
 
@@ -965,38 +1014,62 @@ export default class Interpreter {
     afterBlock,
     context,
   ) {
-    let result;
-
     try {
-      const contextClone = Interpreter.cloneContext(context);
-      result = await body(contextClone);
-      // TODO: finish
-      // eslint-disable-next-line no-useless-catch
-    } catch (error) {
-      throw error;
+      let bodyResult;
 
-      // TODO: handle errors
-      // eslint-disable-next-line no-unreachable
-      result =
-        Interpreter.#evaluateRescueClauses(rescueClauses, error, context) ||
-        Interpreter.#evaluateCatchClauses(catchClauses, error, context);
-    } finally {
-      // TODO: handle after block
-      if (afterBlock) {
-        // eslint-disable-next-line no-unsafe-finally
-        throw new HologramInterpreterError(
-          '"try" expression after block is not yet implemented in Hologram',
+      try {
+        bodyResult = await body(Interpreter.cloneContext(context));
+      } catch (error) {
+        // Only boxed Elixir failures participate in rescue/catch matching;
+        // native JS errors and HologramInterpreterError re-propagate.
+        if (!(error instanceof HologramBoxedError)) {
+          throw error;
+        }
+
+        const rescued = await Interpreter.#asyncEvaluateRescueClauses(
+          rescueClauses,
+          error,
+          context,
         );
-      }
-    }
 
-    if (elseClauses.length === 0) {
-      return result;
-    } else {
-      // TODO: handle else clauses
-      throw new HologramInterpreterError(
-        '"try" expression else clauses are not yet implemented in Hologram',
+        if (rescued !== NO_MATCH) {
+          return rescued;
+        }
+
+        const caught = await Interpreter.#asyncEvaluateCatchClauses(
+          catchClauses,
+          error,
+          context,
+        );
+
+        if (caught !== NO_MATCH) {
+          return caught;
+        }
+
+        // No clause matched - re-propagate the original failure.
+        throw error;
+      }
+
+      if (elseClauses.length === 0) {
+        return bodyResult;
+      }
+
+      // The do block succeeded - match its result against the else clauses,
+      // raising TryClauseError if none match. Evaluated outside the inner catch,
+      // so a failure here is not re-caught by this try (but after still runs).
+      return await Interpreter.#asyncEvaluateMatchingClause(
+        bodyResult,
+        elseClauses,
+        context,
+        Interpreter.raiseTryClauseError,
       );
+    } finally {
+      // The after block always runs (on success, handled failure, or
+      // re-propagated failure) and never changes the return value. Awaiting
+      // settles an async after block before this function resolves.
+      if (afterBlock !== null) {
+        await afterBlock(Interpreter.cloneContext(context));
+      }
     }
   }
 
@@ -1272,7 +1345,7 @@ export default class Interpreter {
     return 0;
   }
 
-  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
+  // SYNC/ASYNC PAIR: When modifying this function, also update #asyncEvaluateCatchClauses().
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
@@ -1282,7 +1355,20 @@ export default class Interpreter {
       }
     }
 
-    return false;
+    return NO_MATCH;
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #evaluateCatchClauses().
+  static async #asyncEvaluateCatchClauses(clauses, error, context) {
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.#matchCatchClause(clause, error, contextClone)) {
+        return await clause.body(contextClone);
+      }
+    }
+
+    return NO_MATCH;
   }
 
   static #evaluateGuards(guards, context) {
@@ -1344,7 +1430,7 @@ export default class Interpreter {
     errorFun(value);
   }
 
-  // TODO: add async variant for use in asyncTry() once try/rescue is fully implemented.
+  // SYNC/ASYNC PAIR: When modifying this function, also update #asyncEvaluateRescueClauses().
   static #evaluateRescueClauses(clauses, error, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
@@ -1354,7 +1440,20 @@ export default class Interpreter {
       }
     }
 
-    return false;
+    return NO_MATCH;
+  }
+
+  // SYNC/ASYNC PAIR: When modifying this function, also update #evaluateRescueClauses().
+  static async #asyncEvaluateRescueClauses(clauses, error, context) {
+    for (const clause of clauses) {
+      const contextClone = Interpreter.cloneContext(context);
+
+      if (Interpreter.#matchRescueClause(clause, error, contextClone)) {
+        return await clause.body(contextClone);
+      }
+    }
+
+    return NO_MATCH;
   }
 
   static #handleMatchFail(right, raiseMatchError) {
@@ -1696,11 +1795,20 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchCatchClause(_clause, _error, _context) {
-    // TODO: handle catch clauses
-    throw new HologramInterpreterError(
-      '"try" expression catch clauses are not yet implemented in Hologram',
-    );
+  static #matchCatchClause(clause, error, context) {
+    // Match the kind pattern against the error's kind atom and the value pattern
+    // against the error's raw value, in the same context so the bindings are
+    // shared, then evaluate the guards against the committed bindings.
+    if (
+      Interpreter.isMatched(clause.kind, error.kind, context) &&
+      Interpreter.isMatched(clause.value, error.value, context)
+    ) {
+      Interpreter.updateVarsToMatchedValues(context);
+
+      return Interpreter.#evaluateGuards(clause.guards, context);
+    }
+
+    return false;
   }
 
   // Deps: [:erlang.hd/1, :erlang.tl/1]
@@ -1762,11 +1870,40 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchRescueClause(_clause, _error, _context) {
-    // TODO: handle rescue clauses
-    throw new HologramInterpreterError(
-      '"try" expression rescue clauses are not yet implemented in Hologram',
-    );
+  // Deps: [:maps.get/2]
+  static #matchRescueClause(clause, error, context) {
+    // rescue only catches :error-kind failures. By this point error.struct is
+    // always a normalized exception struct - a bare reason like :badarg or a
+    // non-exception struct has already become an ArgumentError/ErlangError/...
+    // via Exception.normalize/2 - so its __struct__ alone decides matching.
+    if (error.kind.value !== "error") {
+      return false;
+    }
+
+    // A bare `rescue e ->` (empty modules) catches any exception; otherwise the
+    // exception struct's module must be one of the listed modules.
+    if (clause.modules.length > 0) {
+      const structModule = Erlang_Maps["get/2"](
+        Type.atom("__struct__"),
+        error.struct,
+      );
+
+      const isModuleMatched = clause.modules.some((module) =>
+        Interpreter.isStrictlyEqual(module, structModule),
+      );
+
+      if (!isModuleMatched) {
+        return false;
+      }
+    }
+
+    // Bind the rescued exception struct to the clause variable, if present.
+    if (clause.variable !== null) {
+      Interpreter.isMatched(clause.variable, error.struct, context);
+      Interpreter.updateVarsToMatchedValues(context);
+    }
+
+    return true;
   }
 
   static #matchVariablePattern(right, left, context, raiseMatchError) {

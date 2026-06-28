@@ -3696,7 +3696,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Comprehensions:** Bitstring Generator (done), Enumerable Generator (done), Filter (done), :into Option (done), :reduce Option (done), :uniq Option (done)
 
-**Other:** Behaviours (done), Bitwise Module Operators (todo), Error Handling (todo), Processes (deferred), Protocols (done), Regular Expressions (todo)
+**Other:** Behaviours (done), Bitwise Module Operators (todo), Error Handling (done), Processes (deferred), Protocols (done), Regular Expressions (todo)
 
 ### Roadmap
 
@@ -3706,7 +3706,6 @@ Our development roadmap is organized by timeline, with colors representing proxi
 
 #### Short-Term Goals - Foundation & Core Features
 
-- **Client Error Handling** - Implement support for Elixir's error handling features (try/catch/rescue, etc.) on the client side.
 - **DOM Events Support** - Complete implementation of remaining DOM events including touch and window events to achieve full coverage.
 - **Essential Stdlib Functions** - Expand support for the most important Elixir standard library functions needed for Phase 1 use cases: state management, data manipulation, dates/times, strings, and collections.
 - **JS Interop** - Create a clean interface for JavaScript interoperability to leverage existing JavaScript libraries.

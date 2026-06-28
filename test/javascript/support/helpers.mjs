@@ -175,6 +175,29 @@ function defineElixirEnumModule() {
   };
 }
 
+function defineElixirExceptionModule() {
+  return {
+    // Mirrors Exception.normalize(:error, reason): an exception struct passes
+    // through unchanged, :badarg becomes an ArgumentError, and any other bare
+    // reason is wrapped in an ErlangError struct.
+    "normalize/2": (_kind, reason) => {
+      if (Type.isStruct(reason)) {
+        return reason;
+      }
+
+      if (Type.isAtom(reason) && reason.value === "badarg") {
+        return Type.errorStruct("ArgumentError", "argument error");
+      }
+
+      return Type.struct("ErlangError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("original"), reason],
+        [Type.atom("reason"), Type.nil()],
+      ]);
+    },
+  };
+}
+
 function defineElixirHologramRouterHelpersModule() {
   return {
     "page_path/1": (arg) => {
@@ -293,6 +316,7 @@ export function defineGlobalErlangAndElixirModules() {
   defineGlobalModule("Erlang_Uri_String", Erlang_Uri_String);
   defineGlobalModule("Elixir_Code", Elixir_Code);
   defineGlobalModule("Elixir_Enum", defineElixirEnumModule());
+  defineGlobalModule("Elixir_Exception", defineElixirExceptionModule());
 
   defineGlobalModule(
     "Elixir_Hologram_Router_Helpers",

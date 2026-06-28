@@ -17,6 +17,7 @@ import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Os from "../../../assets/js/erlang/os.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
+import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -5568,11 +5569,30 @@ describe("Erlang", () => {
     });
   });
 
-  it("error/1", () => {
+  describe("error/1", () => {
     const error = Erlang["error/1"];
-    const reason = Type.errorStruct("MyError", "my message");
 
-    assertBoxedError(() => error(reason), "MyError", "my message");
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("MyError", "my message");
+
+      assertBoxedError(() => error(reason), "MyError", "my message");
+    });
+
+    it("normalizes a bare reason into a boxed exception struct", () => {
+      const reason = Type.atom("badarg");
+
+      let caught;
+
+      try {
+        error(reason);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.value, reason);
+      assert.isTrue(Type.isStruct(caught.struct));
+    });
   });
 
   it("error/2", () => {
@@ -5581,6 +5601,44 @@ describe("Erlang", () => {
     const args = Type.list([Type.integer(1, Type.integer(2))]);
 
     assertBoxedError(() => error(reason, args), "MyError", "my message");
+  });
+
+  describe("error/3", () => {
+    const error = Erlang["error/3"];
+
+    // TODO: args and error_info affect the BEAM stacktrace and error reporting,
+    // which the client does not model yet. Assert their effect once it does.
+    it("raises the given reason", () => {
+      const reason = Type.errorStruct("MyError", "my message");
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+      const options = Type.list();
+
+      assertBoxedError(
+        () => error(reason, args, options),
+        "MyError",
+        "my message",
+      );
+    });
+  });
+
+  describe("exit/1", () => {
+    const exit = Erlang["exit/1"];
+
+    it("exits with the given reason", () => {
+      const reason = Type.atom("my_reason");
+
+      let error;
+
+      try {
+        exit(reason);
+      } catch (e) {
+        error = e;
+      }
+
+      assert.instanceOf(error, HologramBoxedError);
+      assert.deepStrictEqual(error.kind, Type.atom("exit"));
+      assert.deepStrictEqual(error.value, reason);
+    });
   });
 
   describe("float/1", () => {
@@ -9983,6 +10041,53 @@ describe("Erlang", () => {
     });
   });
 
+  describe("raise/3", () => {
+    const raise = Erlang["raise/3"];
+
+    it("raises with the given kind and reason", () => {
+      const reason = Type.atom("my_reason");
+
+      let error;
+
+      try {
+        raise(Type.atom("throw"), reason, Type.list());
+      } catch (e) {
+        error = e;
+      }
+
+      assert.instanceOf(error, HologramBoxedError);
+      assert.deepStrictEqual(error.kind, Type.atom("throw"));
+      assert.deepStrictEqual(error.value, reason);
+    });
+
+    it("normalizes a bare :error reason into a boxed exception struct", () => {
+      const reason = Type.atom("badarg");
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), reason, Type.list());
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.kind, Type.atom("error"));
+      assert.deepStrictEqual(caught.value, reason);
+      assert.isTrue(Type.isStruct(caught.struct));
+    });
+
+    it("returns :badarg when the kind is not a valid exception class", () => {
+      const result = raise(
+        Type.atom("not_a_kind"),
+        Type.atom("my_reason"),
+        Type.list(),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("badarg"));
+    });
+  });
+
   describe("ref_to_list/1", () => {
     const ref_to_list = Erlang["ref_to_list/1"];
 
@@ -10444,6 +10549,26 @@ describe("Erlang", () => {
       assert.isTrue(Type.isInteger(result));
       assert.isAtLeast(result.value, beforeUs.value);
       assert.isAtMost(result.value, afterUs.value);
+    });
+  });
+
+  describe("throw/1", () => {
+    const throwFun = Erlang["throw/1"];
+
+    it("throws the given value", () => {
+      const value = Type.atom("my_value");
+
+      let error;
+
+      try {
+        throwFun(value);
+      } catch (e) {
+        error = e;
+      }
+
+      assert.instanceOf(error, HologramBoxedError);
+      assert.deepStrictEqual(error.kind, Type.atom("throw"));
+      assert.deepStrictEqual(error.value, value);
     });
   });
 
