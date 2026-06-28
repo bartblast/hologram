@@ -8946,6 +8946,16 @@ describe("Interpreter", () => {
       // try (raise ArgumentError) rescue error -> reraise error, __STACKTRACE__
       // reraise expands to :erlang.raise(:error, error, []) for an exception, so
       // the rescued exception propagates unchanged (__STACKTRACE__ is []).
+      //
+      // This asserts only the re-raised exception. The matching consistency test
+      // additionally asserts that reraise preserves the original raise-site
+      // stacktrace, which is server-only - the client has no stacktraces yet
+      // (__STACKTRACE__ is []), so there is nothing to preserve here.
+      //
+      // TODO: once client-side stacktraces are supported (see the TODO in
+      // lib/hologram/compiler/transformer.ex), tighten this to also assert that
+      // reraise preserves the original raise-site stacktrace, mirroring the
+      // consistency test.
       const struct = Type.errorStruct("ArgumentError", "my message");
 
       const body = (_context) => {

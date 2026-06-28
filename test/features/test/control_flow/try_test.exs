@@ -48,6 +48,15 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
     end
 
     feature "reraise re-raises the rescued exception", %{session: session} do
+      # Asserts only the re-raised exception. The matching consistency test
+      # additionally asserts that reraise preserves the original raise-site
+      # stacktrace, which is server-only - the client has no stacktraces yet
+      # (__STACKTRACE__ is []), so there is nothing to preserve here.
+      #
+      # TODO: once client-side stacktraces are supported (see the TODO in
+      # lib/hologram/compiler/transformer.ex), tighten this to also assert that
+      # reraise preserves the original raise-site stacktrace, mirroring the
+      # consistency test.
       assert_client_error session,
                           ArgumentError,
                           "my message",

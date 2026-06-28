@@ -67,13 +67,35 @@ defmodule Hologram.ExJsConsistency.TryTest do
     end
 
     test "reraise re-raises the rescued exception" do
-      assert_error ArgumentError, "my message", fn ->
+      # reraise/2 must preserve the stacktrace of the original raise site, not the
+      # rescue clause that re-raises. The outer try captures the re-raised error
+      # together with its stacktrace.
+      #
+      # CLIENT/SERVER DIVERGENCE: the stacktrace assertion is server-only. On the
+      # client reraise re-raises with __STACKTRACE__ = [] (no client stacktraces
+      # yet - see the "__STACKTRACE__" describe and the TODO in
+      # lib/hologram/compiler/transformer.ex), so the paired JavaScript and feature
+      # tests assert only that the exception is re-raised.
+      #
+      # TODO: once client-side stacktraces are supported (see the TODO in
+      # lib/hologram/compiler/transformer.ex), the paired JavaScript and feature
+      # tests should be tightened to mirror this stacktrace-preservation assertion.
+      expected_line = __ENV__.line + 5
+
+      {error, stacktrace} =
         try do
-          raise ArgumentError, "my message"
+          try do
+            raise ArgumentError, "my message"
+          rescue
+            error -> reraise error, __STACKTRACE__
+          end
         rescue
-          error -> reraise error, __STACKTRACE__
+          error -> {error, __STACKTRACE__}
         end
-      end
+
+      assert %ArgumentError{message: "my message"} = error
+      assert [{__MODULE__, _function, _arity, location} | _rest] = stacktrace
+      assert Keyword.fetch!(location, :line) == expected_line
     end
   end
 
