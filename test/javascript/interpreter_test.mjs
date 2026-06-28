@@ -8991,8 +8991,9 @@ describe("Interpreter", () => {
       // CLIENT/SERVER DIVERGENCE: the client does not support stacktraces yet, so
       // __STACKTRACE__ is compiled to an empty list (its rescue-clause body below
       // is Type.list(), the compiled form). This DIFFERS from the matching
-      // consistency test (try_test.exs "__STACKTRACE__ holds the stacktrace of the
-      // rescued error"), which asserts the real, non-empty server stacktrace.
+      // consistency test (try_test.exs "__STACKTRACE__ holds the stacktrace
+      // pointing to where the error was raised"), which asserts the real,
+      // non-empty server stacktrace.
       //
       // TODO: support real client-side stacktraces so this matches the consistency
       // test. Maintain a call stack in the interpreter (push a frame per function

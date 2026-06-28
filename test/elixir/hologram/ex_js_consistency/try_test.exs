@@ -158,6 +158,8 @@ defmodule Hologram.ExJsConsistency.TryTest do
     # captured trace within rescue/catch clause scopes, instead of compiling it to an
     # empty list in lib/hologram/compiler/transformer.ex.
     test "holds the stacktrace pointing to where the error was raised" do
+      expected_line = __ENV__.line + 4
+
       result =
         try do
           raise "boom"
@@ -165,14 +167,14 @@ defmodule Hologram.ExJsConsistency.TryTest do
           _exception -> __STACKTRACE__
         end
 
-      # The top frame identifies this test - the module, file, and line where
-      # raise/1 was called - which proves __STACKTRACE__ captured the real call
-      # stack rather than just any list of frame-shaped tuples.
+      # The top frame identifies this test - the module, file, and exact line
+      # where raise/1 was called - which proves __STACKTRACE__ captured the real
+      # call stack rather than just any list of frame-shaped tuples.
       assert [{__MODULE__, _function, _arity, location} | _rest] = result
 
       file = to_string(Keyword.fetch!(location, :file))
       assert String.ends_with?(file, "try_test.exs")
-      assert is_integer(Keyword.fetch!(location, :line))
+      assert Keyword.fetch!(location, :line) == expected_line
     end
   end
 
