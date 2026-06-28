@@ -19,6 +19,28 @@ export default class EventListeners {
     };
   }
 
+  // An IntersectionObserver listener for a single edge child of a scroll container, observed within
+  // the container (the child's parent) as root. The key is per-edge, so a container's up-to-four
+  // reach bindings reconcile independently and a re-render refreshes the matching edge rather than
+  // stacking a second. Unlike the resize observer, the initial on-observe fire is kept: a container
+  // whose edge is already in view at mount dispatches at once, so a short list keeps loading until
+  // the viewport fills. Every fire dispatches its IntersectionObserverEntry.
+  static intersectionObserver(element, edge) {
+    return {
+      key: `intersection-observer:${edge}`,
+      attach: (dispatcher) => {
+        const observer = new IntersectionObserver(
+          (entries) => dispatcher(entries[0]),
+          {root: element.parentElement, rootMargin: $.#rootMargin(edge)},
+        );
+
+        observer.observe(element);
+
+        return () => observer.disconnect();
+      },
+    };
+  }
+
   // A ResizeObserver listener for a single element. The key is constant - an element has at most
   // one resize observer - so a re-render refreshes it rather than stacking a second. The
   // observer's initial on-observe fire is suppressed, so $resize means "size changed" to match
@@ -44,4 +66,16 @@ export default class EventListeners {
       },
     };
   }
+
+  // Builds an IntersectionObserver rootMargin that extends the root's box past the binding's own
+  // edge by the prefetch distance (default one viewport), leaving the other three sides flush, so
+  // the event fires as that edge nears view. Components are in CSS "top right bottom left" order.
+  static #rootMargin(edge, distance = "100%") {
+    const margins = ["0px", "0px", "0px", "0px"];
+    margins[{top: 0, right: 1, bottom: 2, left: 3}[edge]] = distance;
+
+    return margins.join(" ");
+  }
 }
+
+const $ = EventListeners;

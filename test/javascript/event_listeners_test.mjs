@@ -58,6 +58,87 @@ describe("EventListeners", () => {
     });
   });
 
+  describe("intersectionObserver()", () => {
+    let observers;
+    let originalIntersectionObserver;
+
+    beforeEach(() => {
+      observers = [];
+      originalIntersectionObserver = globalThis.IntersectionObserver;
+
+      globalThis.IntersectionObserver = class {
+        constructor(callback, options) {
+          this.callback = callback;
+          this.options = options;
+          this.observe = sinon.spy();
+          this.disconnect = sinon.spy();
+          observers.push(this);
+        }
+      };
+    });
+
+    afterEach(() => {
+      globalThis.IntersectionObserver = originalIntersectionObserver;
+    });
+
+    it("observes the element within its parent as root and disconnects on detach", () => {
+      const parent = {};
+      const element = {parentElement: parent};
+
+      const detach = EventListeners.intersectionObserver(
+        element,
+        "bottom",
+      ).attach(sinon.spy());
+
+      const observer = observers[0];
+
+      assert.strictEqual(observer.options.root, parent);
+      sinon.assert.calledOnceWithExactly(observer.observe, element);
+
+      detach();
+
+      sinon.assert.calledOnce(observer.disconnect);
+    });
+
+    it("keeps the initial fire and dispatches the entry on every change", () => {
+      const dispatcher = sinon.spy();
+
+      EventListeners.intersectionObserver({parentElement: {}}, "bottom").attach(
+        dispatcher,
+      );
+
+      const observer = observers[0];
+      const entry = {isIntersecting: true};
+
+      observer.callback([entry]);
+      sinon.assert.calledOnceWithExactly(dispatcher, entry);
+    });
+
+    it("keys each edge distinctly", () => {
+      const element = {parentElement: {}};
+
+      const keys = ["bottom", "left", "right", "top"].map(
+        (edge) => EventListeners.intersectionObserver(element, edge).key,
+      );
+
+      assert.strictEqual(new Set(keys).size, 4);
+    });
+
+    it("defaults the rootMargin to one viewport past the binding's edge", () => {
+      const element = {parentElement: {}};
+
+      const rootMargin = (edge) => {
+        EventListeners.intersectionObserver(element, edge).attach(sinon.spy());
+        return observers[observers.length - 1].options.rootMargin;
+      };
+
+      assert.strictEqual(rootMargin("top"), "100% 0px 0px 0px");
+      assert.strictEqual(rootMargin("right"), "0px 100% 0px 0px");
+      assert.strictEqual(rootMargin("bottom"), "0px 0px 100% 0px");
+      assert.strictEqual(rootMargin("left"), "0px 0px 0px 100%");
+    });
+  });
+
   describe("resizeObserver()", () => {
     let observers;
     let originalResizeObserver;
