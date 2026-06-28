@@ -1,0 +1,73 @@
+defmodule HologramFeatureTests.Events.ReachTest do
+  use HologramFeatureTests.TestCase, async: true
+
+  alias HologramFeatureTests.Events.ReachPage
+
+  describe "$reach_bottom" do
+    feature "fires on mount when the content does not fill the container", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#filled_bottom_result"), "1")
+    end
+
+    feature "fires when the container is scrolled down to it", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 900;")
+      |> assert_text(css("#scroll_bottom_result"), "1")
+    end
+  end
+
+  describe "$reach_left" do
+    feature "fires on mount when the edge is already in view", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#scroll_left_result"), "1")
+    end
+
+    feature "fires again when the container is scrolled back to it", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#scroll_left_result"), "1")
+      |> execute_script("document.getElementById('scrollable_horizontal').scrollLeft = 900;")
+      # Wait for the right edge so the observer has registered the left edge leaving view.
+      |> assert_text(css("#scroll_right_result"), "1")
+      |> execute_script("document.getElementById('scrollable_horizontal').scrollLeft = 0;")
+      |> assert_text(css("#scroll_left_result"), "2")
+    end
+  end
+
+  describe "$reach_right" do
+    feature "fires on mount when the content does not fill the container", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#filled_right_result"), "1")
+    end
+
+    feature "fires when the container is scrolled right to it", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> execute_script("document.getElementById('scrollable_horizontal').scrollLeft = 900;")
+      |> assert_text(css("#scroll_right_result"), "1")
+    end
+  end
+
+  describe "$reach_top" do
+    feature "fires on mount when the edge is already in view", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#scroll_top_result"), "1")
+    end
+
+    feature "fires again when the container is scrolled back up to it", %{session: session} do
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#scroll_top_result"), "1")
+      |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 900;")
+      # Wait for the bottom edge so the observer has registered the top edge leaving view.
+      |> assert_text(css("#scroll_bottom_result"), "1")
+      |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 0;")
+      |> assert_text(css("#scroll_top_result"), "2")
+    end
+  end
+end
