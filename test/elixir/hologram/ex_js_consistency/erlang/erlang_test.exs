@@ -3544,6 +3544,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       assert result == reason
     end
+
+    test "normalizes a bare reason into an exception struct for rescue" do
+      result =
+        try do
+          :erlang.error(:badarg)
+        rescue
+          error -> error
+        end
+
+      assert result == %ArgumentError{}
+    end
   end
 
   describe "error/3" do
@@ -5670,6 +5681,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
         |> catch_throw()
 
       assert result == reason
+    end
+
+    test "normalizes a bare :error reason into an exception struct for rescue" do
+      result =
+        try do
+          :erlang.raise(:error, :badarg, [])
+        rescue
+          error -> error
+        end
+
+      assert result == %ArgumentError{}
     end
 
     test "returns :badarg when the kind is not a valid exception class" do
