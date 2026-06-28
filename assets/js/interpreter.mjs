@@ -1872,7 +1872,10 @@ export default class Interpreter {
 
   // Deps: [:maps.get/2]
   static #matchRescueClause(clause, error, context) {
-    // rescue only catches :error-kind failures.
+    // rescue only catches :error-kind failures. By this point error.struct is
+    // always a normalized exception struct - a bare reason like :badarg or a
+    // non-exception struct has already become an ArgumentError/ErlangError/...
+    // via Exception.normalize/2 - so its __struct__ alone decides matching.
     if (error.kind.value !== "error") {
       return false;
     }
