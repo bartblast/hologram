@@ -28,6 +28,7 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       <button $click="rescue_with_multiple_modules"> Rescue with multiple modules </button>
       <button $click="rescue_unmatched_module"> Rescue unmatched module </button>
       <button $click="rescue_bare_reason"> Rescue bare reason </button>
+      <button $click="rescue_reraise"> Rescue reraise </button>
     </p>
     <p>
       <strong>Catch clauses</strong>
@@ -35,6 +36,10 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       <button $click="catch_exit"> Catch exit </button>
       <button $click="catch_error"> Catch error </button>
       <button $click="catch_unmatched_kind"> Catch unmatched kind </button>
+    </p>
+    <p>
+      <strong>Stacktrace</strong>
+      <button $click="stacktrace"> Stacktrace </button>
     </p>
     <p>
       <strong>Else clauses</strong>
@@ -194,6 +199,14 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
     put_state(component, :result, result)
   end
 
+  def action(:rescue_reraise, _params, _component) do
+    try do
+      raise ArgumentError, "my message"
+    rescue
+      error -> reraise error, __STACKTRACE__
+    end
+  end
+
   def action(:rescue_unmatched_module, _params, _component) do
     try do
       raise RuntimeError, "my message"
@@ -237,5 +250,16 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
 
   def action(:reset, _params, component) do
     put_state(component, :result, nil)
+  end
+
+  def action(:stacktrace, _params, component) do
+    result =
+      try do
+        raise "boom"
+      rescue
+        _exception -> {:stacktrace, __STACKTRACE__}
+      end
+
+    put_state(component, :result, result)
   end
 end

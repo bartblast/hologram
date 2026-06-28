@@ -46,6 +46,17 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
       |> click(button("Rescue bare reason"))
       |> assert_text(css("#result"), ~s/{:rescued_normalized, "argument error"}/)
     end
+
+    feature "reraise re-raises the rescued exception", %{session: session} do
+      assert_client_error session,
+                          ArgumentError,
+                          "my message",
+                          fn ->
+                            session
+                            |> visit(TryPage)
+                            |> click(button("Rescue reraise"))
+                          end
+    end
   end
 
   describe "catch clauses" do
@@ -79,6 +90,26 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
                             |> visit(TryPage)
                             |> click(button("Catch unmatched kind"))
                           end
+    end
+  end
+
+  describe "__STACKTRACE__" do
+    # CLIENT/SERVER DIVERGENCE: the client does not support stacktraces yet, so
+    # __STACKTRACE__ is compiled to an empty list. The consistency test
+    # (test/elixir/hologram/ex_js_consistency/try_test.exs "__STACKTRACE__ holds the
+    # stacktrace pointing to where the error was raised") asserts the real, non-empty
+    # server stacktrace instead.
+    #
+    # TODO: support real client-side stacktraces so this matches the consistency
+    # test. Maintain a call stack in the interpreter (push a frame per function
+    # call), capture it when a HologramBoxedError is raised, and bind __STACKTRACE__
+    # to that captured trace within rescue/catch clause scopes, instead of compiling
+    # it to an empty list in lib/hologram/compiler/transformer.ex.
+    feature "evaluates to an empty list on the client", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("Stacktrace"))
+      |> assert_text(css("#result"), ~s/{:stacktrace, []}/)
     end
   end
 
