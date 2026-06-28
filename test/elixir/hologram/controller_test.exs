@@ -17,6 +17,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Session
+  alias Hologram.Server
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module11
@@ -30,6 +31,12 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module20
   alias Hologram.Test.Fixtures.Controller.Module21
   alias Hologram.Test.Fixtures.Controller.Module22
+  alias Hologram.Test.Fixtures.Controller.Module23
+  alias Hologram.Test.Fixtures.Controller.Module24
+  alias Hologram.Test.Fixtures.Controller.Module25
+  alias Hologram.Test.Fixtures.Controller.Module26
+  alias Hologram.Test.Fixtures.Controller.Module27
+  alias Hologram.Test.Fixtures.Controller.Module28
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
@@ -556,6 +563,34 @@ defmodule Hologram.ControllerTest do
                "subReceiptAdds" => "Type.list([])",
                "subReceiptDrops" => "Type.list([])"
              }
+    end
+
+    test "skips the command and sends the terminal response when middleware terminates" do
+      conn =
+        execute_command_request(%{
+          module: Module23,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+    end
+
+    test "runs middleware before the command and passes the enriched server" do
+      conn =
+        execute_command_request(%{
+          module: Module24,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response["action"] =~ "injected_by_middleware"
     end
 
     test "establishes a Hologram session ID when absent" do
@@ -1304,6 +1339,58 @@ defmodule Hologram.ControllerTest do
       refute_receive {:identity_changed, _session_id, _user_id}
     end
 
+    test "broadcasts {:identity_changed, ...} on the pre session's announce topic when middleware changes identity and terminates" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module27,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      :post
+      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+      |> handle_command_request()
+
+      assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when middleware terminates without changing identity" do
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      session = Map.put(@session, :hologram_session_id, session_id)
+
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module23,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      :post
+      |> conn_with_parsed_json("/hologram/command", parsed_json, session)
+      |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+      |> handle_command_request()
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
     test "persists the changed user_id into the session when the handler changes identity" do
       parsed_json =
         %{
@@ -1636,8 +1723,23 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module20, :dummy_module_20_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module22, :dummy_module_22_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module26, :dummy_module_26_digest)
 
       :ok
+    end
+
+    test "skips the render and sends the terminal response when page middleware terminates" do
+      conn = render_page_with_instance(Module25, "test-instance-id")
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+    end
+
+    test "runs middleware before the render and passes the enriched server" do
+      conn = render_page_with_instance(Module26, "test-instance-id")
+
+      assert String.contains?(conn.resp_body, "marker=injected_by_middleware")
     end
 
     test "drives SubscriptionRegistry.transition with the page's accumulated subscriptions" do
@@ -1815,6 +1917,48 @@ defmodule Hologram.ControllerTest do
           csrf_token: @masked_csrf_token
         )
       end
+
+      refute_receive {:identity_changed, _session_id, _user_id}
+    end
+
+    test "broadcasts {:identity_changed, ...} on the pre session's announce topic when page middleware changes identity and terminates" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+      |> Plug.Conn.fetch_cookies()
+      |> handle_page_request(Module28, %{}, [],
+        initial_page?: true,
+        instance_id: "test-instance-id",
+        csrf_token: @masked_csrf_token
+      )
+
+      assert_receive {:identity_changed, ^session_id, 7}
+    end
+
+    test "does not broadcast {:identity_changed, ...} when page middleware terminates without changing identity" do
+      wait_for_process_cleanup(Hologram.PubSub)
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
+
+      session_id = "test-session-#{:erlang.unique_integer([:positive])}"
+      topic = Realtime.session_announce_topic(session_id)
+      Phoenix.PubSub.subscribe(Hologram.PubSub, topic)
+
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
+      |> Plug.Conn.fetch_cookies()
+      |> handle_page_request(Module25, %{}, [],
+        initial_page?: true,
+        instance_id: "test-instance-id",
+        csrf_token: @masked_csrf_token
+      )
 
       refute_receive {:identity_changed, _session_id, _user_id}
     end
@@ -2231,6 +2375,38 @@ defmodule Hologram.ControllerTest do
       |> handle_subsequent_page_request(Module4)
 
       assert_receive {:unsub, :room_a}
+    end
+  end
+
+  describe "send_response/2" do
+    setup do
+      [conn: Plug.Test.conn(:get, "/")]
+    end
+
+    test "sends the status and body", %{conn: conn} do
+      server = %Server{status: 201, response_body: "created"}
+      result = send_response(conn, server)
+
+      assert result.status == 201
+      assert result.resp_body == "created"
+      assert result.state == :sent
+    end
+
+    test "sends an empty body when the response body is nil", %{conn: conn} do
+      server = %Server{status: 204}
+      result = send_response(conn, server)
+
+      assert result.status == 204
+      assert result.resp_body == ""
+    end
+
+    test "merges response headers onto existing ones", %{conn: conn} do
+      conn = Plug.Conn.put_resp_header(conn, "x-existing", "kept")
+      server = %Server{status: 200, response_headers: %{"x-custom" => "1"}}
+      result = send_response(conn, server)
+
+      assert Plug.Conn.get_resp_header(result, "x-existing") == ["kept"]
+      assert Plug.Conn.get_resp_header(result, "x-custom") == ["1"]
     end
   end
 

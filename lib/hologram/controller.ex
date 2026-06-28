@@ -17,6 +17,7 @@ defmodule Hologram.Controller do
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
   alias Hologram.Server
+  alias Hologram.Server.Middleware
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 
@@ -189,50 +190,65 @@ defmodule Hologram.Controller do
         subscriptions: target_subscriptions
     }
 
-    command_result = module.command(name, params, server_struct)
+    middleware_server_struct = Middleware.run(server_struct, module.__middleware__())
 
-    {processed_server_struct, next_action} =
-      process_command_result(command_result, server_struct, target)
+    if middleware_server_struct.status do
+      # Middleware produced a terminal response - skip the command and send it,
+      # still applying the decorations accumulated by the steps that ran.
+      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
-    # Apply subscription deltas before flushing broadcasts so a registry
-    # failure (GenServer.call timeout) leaves no half-done state.
-    # flush_broadcasts is effectively infallible, so once apply succeeds both
-    # side effects land.
-    {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
+      conn
+      |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
+      |> maybe_persist_user_id(server_struct, middleware_server_struct)
+      |> send_response(middleware_server_struct)
+      |> Plug.Conn.halt()
+    else
+      command_result = module.command(name, params, middleware_server_struct)
 
-    Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
+      {processed_server_struct, next_action} =
+        process_command_result(command_result, middleware_server_struct, target)
 
-    # Snapshot self-echoes before flush_broadcasts/1 clears the queue. Self-echoes
-    # reach every component on the originating instance subscribed to the
-    # broadcast channel, so they are materialized against the instance-wide
-    # subscription set rather than the cid-scoped server.subscriptions.
-    self_echoes =
-      Realtime.get_self_echoes(
-        processed_server_struct,
-        instance_subscriptions(bindings, processed_server_struct.__meta__.subscription_ops)
-      )
+      # Apply subscription deltas before flushing broadcasts so a registry
+      # failure (GenServer.call timeout) leaves no half-done state.
+      # flush_broadcasts is effectively infallible, so once apply succeeds both
+      # side effects land.
+      {sub_receipt_adds, sub_receipt_drops} = apply_subscription_deltas(processed_server_struct)
 
-    flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
+      Realtime.maybe_announce_identity_change(server_struct, processed_server_struct)
 
-    {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
-    command_status = if encode_status == :ok, do: 1, else: 0
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. Self-echoes
+      # reach every component on the originating instance subscribed to the
+      # broadcast channel, so they are materialized against the instance-wide
+      # subscription set rather than the cid-scoped server.subscriptions.
+      self_echoes =
+        Realtime.get_self_echoes(
+          processed_server_struct,
+          instance_subscriptions(bindings, processed_server_struct.__meta__.subscription_ops)
+        )
 
-    {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
-    {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
-    {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
+      flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
-    conn
-    |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-    |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-    |> maybe_persist_user_id(server_struct, flushed_server_struct)
-    |> Controller.json(%{
-      action: encoded_next_action,
-      selfEchoes: encoded_self_echoes,
-      status: command_status,
-      subReceiptAdds: encoded_sub_receipt_adds,
-      subReceiptDrops: encoded_sub_receipt_drops
-    })
-    |> Plug.Conn.halt()
+      {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
+      command_status = if encode_status == :ok, do: 1, else: 0
+
+      {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
+      {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
+      {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
+
+      conn
+      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
+      |> maybe_persist_user_id(server_struct, flushed_server_struct)
+      |> Controller.json(%{
+        action: encoded_next_action,
+        selfEchoes: encoded_self_echoes,
+        status: command_status,
+        subReceiptAdds: encoded_sub_receipt_adds,
+        subReceiptDrops: encoded_sub_receipt_drops
+      })
+      |> Plug.Conn.halt()
+    end
   end
 
   @doc """
@@ -291,38 +307,54 @@ defmodule Hologram.Controller do
         instance_id: renderer_opts[:instance_id]
     }
 
-    {rendered_html, _component_registry, rendered_server_struct} =
-      Renderer.render_page(page_module, params, server_struct, renderer_opts)
+    middleware_server_struct =
+      Middleware.run(server_struct, page_module.__middleware__())
 
-    # Transition subscriptions before flushing broadcasts so a registry failure
-    # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
-    # effectively infallible, so once transition succeeds both side effects land.
-    {sub_receipt_adds, sub_receipt_drops} =
-      transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
+    if middleware_server_struct.status do
+      # Middleware produced a terminal response - skip the render and send it,
+      # still applying the decorations accumulated by the steps that ran.
+      Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
-    Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
+      conn
+      |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
+      |> maybe_persist_user_id(server_struct, middleware_server_struct)
+      |> send_response(middleware_server_struct)
+      |> Plug.Conn.halt()
+    else
+      {rendered_html, _component_registry, rendered_server_struct} =
+        Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
-    # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
-    # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
-    # this Realtime-domain computation lives in the controller; substituting
-    # back into HTML here keeps the renderer Realtime-agnostic.
-    self_echoes =
-      Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
+      # Transition subscriptions before flushing broadcasts so a registry failure
+      # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is
+      # effectively infallible, so once transition succeeds both side effects land.
+      {sub_receipt_adds, sub_receipt_drops} =
+        transition_subscriptions(rendered_server_struct, client_claimed_sub_keys)
 
-    flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+      Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
 
-    final_html =
-      rendered_html
-      |> Renderer.interpolate_self_echoes_js(self_echoes)
-      |> Renderer.interpolate_sub_receipt_adds_js(sub_receipt_adds)
-      |> Renderer.interpolate_sub_receipt_drops_js(sub_receipt_drops)
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The
+      # renderer leaves `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so
+      # this Realtime-domain computation lives in the controller; substituting
+      # back into HTML here keeps the renderer Realtime-agnostic.
+      self_echoes =
+        Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
 
-    conn
-    |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-    |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-    |> maybe_persist_user_id(server_struct, flushed_server_struct)
-    |> Controller.html(final_html)
-    |> Plug.Conn.halt()
+      flushed_server_struct = Realtime.flush_broadcasts(rendered_server_struct)
+
+      final_html =
+        rendered_html
+        |> Renderer.interpolate_self_echoes_js(self_echoes)
+        |> Renderer.interpolate_sub_receipt_adds_js(sub_receipt_adds)
+        |> Renderer.interpolate_sub_receipt_drops_js(sub_receipt_drops)
+
+      conn
+      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
+      |> maybe_persist_user_id(server_struct, flushed_server_struct)
+      |> Controller.html(final_html)
+      |> Plug.Conn.halt()
+    end
   end
 
   @doc """
@@ -416,6 +448,21 @@ defmodule Hologram.Controller do
       initial_page?: false,
       instance_id: instance_id
     )
+  end
+
+  @doc """
+  Sends the terminal response built from the server struct's response fields.
+
+  Merges `response_headers` onto the connection and sends `status` with `response_body`
+  (an empty body when `response_body` is `nil`).
+  """
+  # Body comes from put_response_body/2 (developer-set) - content safety is the caller's.
+  # sobelow_skip ["XSS.SendResp"]
+  @spec send_response(Plug.Conn.t(), Server.t()) :: Plug.Conn.t()
+  def send_response(conn, server) do
+    conn
+    |> Plug.Conn.merge_resp_headers(Map.to_list(server.response_headers))
+    |> Plug.Conn.send_resp(server.status, server.response_body || "")
   end
 
   @doc false

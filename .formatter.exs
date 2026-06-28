@@ -7,6 +7,10 @@ exported_locals_without_parens = [
   js_import: 1,
   js_import: 2,
 
+  # Hologram.Middleware.Builder
+  middleware: 1,
+  middleware: 2,
+
   # Hologram.Page
   layout: 1,
   layout: 2,

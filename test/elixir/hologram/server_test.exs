@@ -7,6 +7,54 @@ defmodule Hologram.ServerTest do
   alias Hologram.Runtime.Cookie
   alias Hologram.Server
   alias Hologram.Server.Metadata
+  alias Hologram.Test.Fixtures.Router.Helpers.Module1
+  alias Hologram.Test.Fixtures.Router.Helpers.Module2
+
+  describe "append_response_header/3" do
+    test "appends a value to an existing response header" do
+      server = %Server{response_headers: %{"vary" => "Accept"}}
+      result = append_response_header(server, "vary", "Accept-Encoding")
+
+      assert result.response_headers == %{"vary" => "Accept, Accept-Encoding"}
+    end
+
+    test "sets the header when it is not present" do
+      result = append_response_header(%Server{}, "vary", "Accept")
+
+      assert result.response_headers == %{"vary" => "Accept"}
+    end
+
+    test "downcases the header name" do
+      server = %Server{response_headers: %{"vary" => "Accept"}}
+      result = append_response_header(server, "Vary", "Accept-Encoding")
+
+      assert result.response_headers == %{"vary" => "Accept, Accept-Encoding"}
+    end
+
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received 123 and \"Accept\"",
+                   fn ->
+                     append_response_header(%Server{}, 123, "Accept")
+                   end
+    end
+
+    test "raises ArgumentError when the value is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received \"vary\" and 123",
+                   fn ->
+                     append_response_header(%Server{}, "vary", 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     append_response_header(%Server{}, "set-cookie", "id=1")
+                   end
+    end
+  end
 
   describe "delete_cookie/2" do
     test "removes an existing cookie from the server struct" do
@@ -91,6 +139,45 @@ defmodule Hologram.ServerTest do
       result = delete_cookie(server, "user_id")
 
       assert result.next_action == %Action{name: :some_action}
+    end
+  end
+
+  describe "delete_response_header/2" do
+    test "removes an existing response header" do
+      server = %Server{response_headers: %{"cache-control" => "no-store", "x-custom" => "1"}}
+      result = delete_response_header(server, "x-custom")
+
+      assert result.response_headers == %{"cache-control" => "no-store"}
+    end
+
+    test "downcases the name before removing" do
+      server = %Server{response_headers: %{"x-custom" => "1"}}
+      result = delete_response_header(server, "X-Custom")
+
+      assert result.response_headers == %{}
+    end
+
+    test "handles removing a nonexistent header as no-op" do
+      server = %Server{response_headers: %{"x-custom" => "1"}}
+      result = delete_response_header(server, "nonexistent")
+
+      assert result == server
+    end
+
+    test "raises ArgumentError when name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name must be a string, but received 123",
+                   fn ->
+                     delete_response_header(%Server{}, 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     delete_response_header(%Server{}, "set-cookie")
+                   end
     end
   end
 
@@ -189,6 +276,38 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "delete_stash/2" do
+    test "removes a key from the stash" do
+      server = %Server{stash: %{current_user: 123, locale: "en"}}
+      result = delete_stash(server, :current_user)
+
+      assert result.stash == %{locale: "en"}
+    end
+
+    test "handles deleting a missing key as a no-op" do
+      server = %Server{stash: %{locale: "en"}}
+      result = delete_stash(server, :current_user)
+
+      assert result.stash == %{locale: "en"}
+    end
+
+    test "raises ArgumentError when the key is not an atom" do
+      assert_error ArgumentError,
+                   "Stash key must be an atom, but received \"current_user\"",
+                   fn ->
+                     delete_stash(%Server{}, "current_user")
+                   end
+    end
+  end
+
+  describe "delete_user_id/1" do
+    test "clears the user identity" do
+      result = delete_user_id(%Server{user_id: 123})
+
+      assert result.user_id == nil
+    end
+  end
+
   describe "from/1" do
     setup do
       conn =
@@ -199,7 +318,7 @@ defmodule Hologram.ServerTest do
       [conn: conn]
     end
 
-    test "creates Server struct from Plug.Conn struct", %{conn: initial_conn} do
+    test "populates cookies from the conn", %{conn: initial_conn} do
       conn =
         initial_conn
         |> Map.put(:cookies, %{"theme" => "dark", "username" => "abc123"})
@@ -207,10 +326,7 @@ defmodule Hologram.ServerTest do
 
       result = from(conn)
 
-      assert result == %Server{
-               cookies: %{"theme" => "dark", "username" => "abc123"},
-               session: %{"role" => "admin", "user_id" => 123}
-             }
+      assert result.cookies == %{"theme" => "dark", "username" => "abc123"}
     end
 
     test "excludes hologram_session cookie from server cookies", %{conn: initial_conn} do
@@ -286,6 +402,66 @@ defmodule Hologram.ServerTest do
 
       assert from(conn).session == %{"role" => "admin"}
     end
+
+    test "populates request fields from the conn" do
+      conn =
+        :post
+        |> Plug.Test.conn("/admin/users?page=2&sort=desc")
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      result = from(conn)
+
+      assert result.host == "www.example.com"
+      assert result.ip == "127.0.0.1"
+      assert result.method == :post
+      assert result.path == "/admin/users"
+      assert result.port == 80
+      assert result.query == %{"page" => "2", "sort" => "desc"}
+      assert result.raw_query == "page=2&sort=desc"
+      assert result.scheme == :http
+    end
+
+    test "falls back to :unknown for a non-standard request method" do
+      conn =
+        %{Plug.Test.conn(:get, "/") | method: "PROPFIND"}
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+
+      assert from(conn).method == :unknown
+    end
+
+    test "comma-joins a multi-value request header" do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+        |> Map.put(:req_headers, [
+          {"accept", "text/html"},
+          {"accept", "application/json"}
+        ])
+
+      assert from(conn).request_headers == %{"accept" => "text/html, application/json"}
+    end
+
+    test "drops the cookie request header" do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{})
+        |> Map.put(:cookies, %{})
+        |> Map.put(:req_cookies, %{})
+        |> Map.put(:req_headers, [
+          {"cookie", "theme=dark"},
+          {"user-agent", "test-agent"}
+        ])
+
+      assert from(conn).request_headers == %{"user-agent" => "test-agent"}
+    end
   end
 
   describe "get_cookie/2" do
@@ -355,6 +531,82 @@ defmodule Hologram.ServerTest do
                "new_cookie" => %Cookie{value: "new_value"},
                "existing_cookie" => :delete
              }
+    end
+  end
+
+  describe "get_request_header/2 & get_request_header/3" do
+    test "returns the value of a present header" do
+      server = %Server{request_headers: %{"accept-language" => "en-US"}}
+
+      assert get_request_header(server, "accept-language") == "en-US"
+    end
+
+    test "downcases the lookup name" do
+      server = %Server{request_headers: %{"accept-language" => "en-US"}}
+
+      assert get_request_header(server, "Accept-Language") == "en-US"
+    end
+
+    test "returns nil when the header is not present" do
+      assert get_request_header(%Server{}, "accept-language") == nil
+    end
+
+    test "returns the given default when the header is not present" do
+      assert get_request_header(%Server{}, "accept-language", "default") == "default"
+    end
+
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Request header name must be a string, but received 123",
+                   fn ->
+                     get_request_header(%Server{}, 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     get_request_header(%Server{}, "cookie")
+                   end
+    end
+  end
+
+  describe "get_response_header/2 & get_response_header/3" do
+    test "returns the value of a present header" do
+      server = %Server{response_headers: %{"cache-control" => "no-store"}}
+
+      assert get_response_header(server, "cache-control") == "no-store"
+    end
+
+    test "downcases the lookup name" do
+      server = %Server{response_headers: %{"cache-control" => "no-store"}}
+
+      assert get_response_header(server, "Cache-Control") == "no-store"
+    end
+
+    test "returns nil when the header is not present" do
+      assert get_response_header(%Server{}, "cache-control") == nil
+    end
+
+    test "returns the given default when the header is not present" do
+      assert get_response_header(%Server{}, "cache-control", "default") == "default"
+    end
+
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name must be a string, but received 123",
+                   fn ->
+                     get_response_header(%Server{}, 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     get_response_header(%Server{}, "set-cookie")
+                   end
     end
   end
 
@@ -441,6 +693,30 @@ defmodule Hologram.ServerTest do
       result = get_session(server, :user_id, 987)
 
       assert result == 123
+    end
+  end
+
+  describe "get_stash/2 & get_stash/3" do
+    test "returns the value for an existing key" do
+      server = %Server{stash: %{current_user: 123}}
+
+      assert get_stash(server, :current_user) == 123
+    end
+
+    test "returns nil for a missing key" do
+      assert get_stash(%Server{}, :current_user) == nil
+    end
+
+    test "returns the default for a missing key" do
+      assert get_stash(%Server{}, :current_user, :guest) == :guest
+    end
+
+    test "raises ArgumentError when the key is not an atom" do
+      assert_error ArgumentError,
+                   "Stash key must be an atom, but received \"current_user\"",
+                   fn ->
+                     get_stash(%Server{}, "current_user")
+                   end
     end
   end
 
@@ -631,6 +907,136 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "put_redirect/2 & put_redirect/3" do
+    test "redirects to a URL string" do
+      result = put_redirect(%Server{}, "https://example.com/next")
+
+      assert result.status == 302
+      assert result.response_headers == %{"location" => "https://example.com/next"}
+    end
+
+    test "redirects to a page module" do
+      result = put_redirect(%Server{}, Module1)
+
+      assert result.status == 302
+
+      assert result.response_headers == %{
+               "location" => "/hologram-test-fixtures-router-helpers-module1"
+             }
+    end
+
+    test "redirects to a page module with params" do
+      result = put_redirect(%Server{}, Module2, param_1: :foo, param_2: 42)
+
+      assert result.status == 302
+
+      assert result.response_headers == %{
+               "location" => "/hologram-test-fixtures-router-helpers-module2/foo/42"
+             }
+    end
+
+    test "supports other status codes by following with put_status/2" do
+      result =
+        %Server{}
+        |> put_redirect("https://example.com/next")
+        |> put_status(301)
+
+      assert result.status == 301
+      assert result.response_headers == %{"location" => "https://example.com/next"}
+    end
+
+    test "raises ArgumentError when the target is neither a URL string nor a page module" do
+      assert_error ArgumentError,
+                   "Redirect target must be a URL string or a page module, but received 123",
+                   fn ->
+                     put_redirect(%Server{}, 123)
+                   end
+    end
+
+    test "raises ArgumentError when params are given with a URL string" do
+      assert_error ArgumentError,
+                   "Redirect params are only supported with a page module, but received \"https://example.com\"",
+                   fn ->
+                     put_redirect(%Server{}, "https://example.com", foo: 1)
+                   end
+    end
+  end
+
+  describe "put_response_body/2" do
+    test "accepts a binary response body" do
+      result = put_response_body(%Server{}, "Too Many Requests")
+
+      assert result.response_body == "Too Many Requests"
+    end
+
+    test "accepts an iolist response body" do
+      result = put_response_body(%Server{}, ["Too ", "Many ", "Requests"])
+
+      assert result.response_body == ["Too ", "Many ", "Requests"]
+    end
+
+    test "raises ArgumentError when the response body is not iodata" do
+      assert_error ArgumentError,
+                   "Response body must be iodata (a binary or an iolist), but received %{error: \"nope\"}",
+                   fn ->
+                     put_response_body(%Server{}, %{error: "nope"})
+                   end
+    end
+
+    test "raises ArgumentError when a list is not a valid iolist" do
+      assert_error ArgumentError,
+                   "Response body must be iodata (a binary or an iolist), but received [999]",
+                   fn ->
+                     put_response_body(%Server{}, [999])
+                   end
+    end
+  end
+
+  describe "put_response_header/3" do
+    test "adds a response header" do
+      result = put_response_header(%Server{}, "cache-control", "no-store")
+
+      assert result.response_headers == %{"cache-control" => "no-store"}
+    end
+
+    test "downcases the header name" do
+      result = put_response_header(%Server{}, "Cache-Control", "no-store")
+
+      assert result.response_headers == %{"cache-control" => "no-store"}
+    end
+
+    test "overwrites an existing header regardless of case" do
+      server = %Server{response_headers: %{"cache-control" => "no-store"}}
+      result = put_response_header(server, "Cache-Control", "max-age=60")
+
+      assert result.response_headers == %{"cache-control" => "max-age=60"}
+    end
+
+    test "raises ArgumentError when the name is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received 123 and \"no-store\"",
+                   fn ->
+                     put_response_header(%Server{}, 123, "no-store")
+                   end
+    end
+
+    test "raises ArgumentError when the value is not a string" do
+      assert_error ArgumentError,
+                   "Response header name and value must be strings, but received \"x-custom\" and 123",
+                   fn ->
+                     put_response_header(%Server{}, "x-custom", 123)
+                   end
+    end
+
+    test "raises ArgumentError for a cookie header" do
+      assert_error ArgumentError,
+                   "set-cookie is managed by the cookie functions (put_cookie, get_cookie, delete_cookie), not the header helpers",
+                   fn ->
+                     put_response_header(%Server{}, "set-cookie", "id=1")
+                   end
+    end
+  end
+
   describe "put_session/3" do
     test "adds a session entry using atom key" do
       result = put_session(%Server{}, :username, "abc123")
@@ -718,6 +1124,169 @@ defmodule Hologram.ServerTest do
                    fn ->
                      put_session(%Server{}, 123, "value")
                    end
+    end
+  end
+
+  describe "put_stash/3" do
+    test "stores a value under an atom key" do
+      result = put_stash(%Server{}, :current_user, 123)
+
+      assert result.stash == %{current_user: 123}
+    end
+
+    test "overwrites an existing key" do
+      server = %Server{stash: %{current_user: 123}}
+      result = put_stash(server, :current_user, 456)
+
+      assert result.stash == %{current_user: 456}
+    end
+
+    test "raises ArgumentError when the key is not an atom" do
+      assert_error ArgumentError,
+                   "Stash key must be an atom, but received \"current_user\"",
+                   fn ->
+                     put_stash(%Server{}, "current_user", 123)
+                   end
+    end
+  end
+
+  describe "put_status/2" do
+    test "sets an integer status code" do
+      result = put_status(%Server{}, 404)
+
+      assert result.status == 404
+    end
+
+    test "resolves an atom alias to its numeric code" do
+      result = put_status(%Server{}, :not_found)
+
+      assert result.status == 404
+    end
+
+    test "overwrites an existing status" do
+      result = put_status(%Server{status: 200}, 403)
+
+      assert result.status == 403
+    end
+
+    test "raises ArgumentError for an unknown atom alias" do
+      assert_error ArgumentError,
+                   "Unknown status alias: :bogus",
+                   fn ->
+                     put_status(%Server{}, :bogus)
+                   end
+    end
+
+    test "raises ArgumentError for an out-of-range status code" do
+      assert_error ArgumentError,
+                   "Response status must be an HTTP status code (100..599) or a status atom alias, but received 4040",
+                   fn ->
+                     put_status(%Server{}, 4040)
+                   end
+    end
+
+    test "raises ArgumentError when status is not an integer or an atom" do
+      assert_error ArgumentError,
+                   "Response status must be an HTTP status code (100..599) or a status atom alias, but received \"404\"",
+                   fn ->
+                     put_status(%Server{}, "404")
+                   end
+    end
+  end
+
+  describe "put_user_id/2" do
+    test "sets a string identity" do
+      result = put_user_id(%Server{}, "user-123")
+
+      assert result.user_id == "user-123"
+    end
+
+    test "sets an integer identity" do
+      result = put_user_id(%Server{}, 123)
+
+      assert result.user_id == 123
+    end
+
+    test "sets an atom identity" do
+      result = put_user_id(%Server{}, :admin)
+
+      assert result.user_id == :admin
+    end
+
+    test "overwrites an existing user identity" do
+      result = put_user_id(%Server{user_id: 123}, 456)
+
+      assert result.user_id == 456
+    end
+
+    test "raises ArgumentError when the identity is not a string, integer, or atom" do
+      assert_error ArgumentError,
+                   "User ID must be a string, integer, or atom, but received %{}",
+                   fn ->
+                     put_user_id(%Server{}, %{})
+                   end
+    end
+  end
+
+  describe "referrer_url/1" do
+    test "returns the value of the referer header" do
+      server = %Server{request_headers: %{"referer" => "https://example.com/from"}}
+
+      assert referrer_url(server) == "https://example.com/from"
+    end
+
+    test "returns nil when the referer header is absent" do
+      assert referrer_url(%Server{}) == nil
+    end
+  end
+
+  describe "request_url/1" do
+    test "assembles the full URL from the request fields" do
+      server = %Server{
+        scheme: :https,
+        host: "example.com",
+        port: 8443,
+        path: "/admin/users",
+        raw_query: "page=2&sort=desc"
+      }
+
+      assert request_url(server) == "https://example.com:8443/admin/users?page=2&sort=desc"
+    end
+
+    test "omits the default port for http" do
+      server = %Server{scheme: :http, host: "example.com", port: 80, path: "/"}
+
+      assert request_url(server) == "http://example.com/"
+    end
+
+    test "omits the default port for https" do
+      server = %Server{scheme: :https, host: "example.com", port: 443, path: "/"}
+
+      assert request_url(server) == "https://example.com/"
+    end
+
+    test "omits the query string when empty" do
+      server = %Server{
+        scheme: :https,
+        host: "example.com",
+        port: 443,
+        path: "/about",
+        raw_query: ""
+      }
+
+      assert request_url(server) == "https://example.com/about"
+    end
+
+    test "omits the query string when nil" do
+      server = %Server{
+        scheme: :https,
+        host: "example.com",
+        port: 443,
+        path: "/about",
+        raw_query: nil
+      }
+
+      assert request_url(server) == "https://example.com/about"
     end
   end
 end

@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.Session do
   @moduledoc false
 
+  # TODO: consider moving to Hologram.Server (Server-struct concept) when splitting up Hologram.Runtime
+
   # TODO: When standalone Hologram mode is wired, refactor this module into a
   # mode-aware delegator over Hologram.Runtime.Session.Embedded (extracted from
   # the current body) and Hologram.Runtime.Session.Standalone (already preserved).

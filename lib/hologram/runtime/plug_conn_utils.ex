@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.PlugConnUtils do
   @moduledoc false
 
+  # TODO: consider moving to Hologram.Transport (transport/adapter layer) when splitting up Hologram.Runtime
+
   alias Hologram.Runtime.Cookie
 
   @doc """
