@@ -3691,31 +3691,49 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 #### Framework Runtime
 
-**Client:** Actions (done), JS Interop (in progress, 40%), Synchronized Form Inputs (done)
+**Client:** Actions (done), JS Interop (done), Synchronized Form Inputs (done)
 
-**Server:** Commands (done), Cookies (done), Middleware (done), Session (done)
+**Server:** Commands (done), Cookies (done), Middleware (done), Pub/Sub (done), Session (done)
 
-**Events:** Blur (done), Change (done), Click (done), Click Away (todo), Focus (done), Key Down (done), Key Up (done), Mouse Move (done), Pointer Cancel (done), Pointer Down (done), Pointer Move (done), Pointer Up (done), Resize (todo), Scroll (todo), Select (done), Submit (done), Tap (todo), Touch Cancel (todo), Touch End (todo), Touch Move (todo), Touch Start (todo), Transition Cancel (done), Transition End (done), Transition Run (done), Transition Start (done)
+#### Events
+
+**Focus:** Blur (done), Focus (done)
+
+**Form:** Change (done), Select (done), Submit (done)
+
+**Keyboard:** Key Down (done), Key Up (done)
+
+**Mouse:** Mouse Move (done)
+
+**Pointer:** Click (done), Click Outside (done), Pointer Cancel (done), Pointer Down (done), Pointer Move (done), Pointer Up (done)
+
+**Resize:** Resize (done)
+
+**Scroll:** Reach Bottom (done), Reach Left (done), Reach Right (done), Reach Top (done), Scroll (done)
+
+**Transition:** Transition Cancel (done), Transition End (done), Transition Run (done), Transition Start (done)
 
 #### Tooling
 
-**Development:** Incremental Compilation (done), Live Reload (done), Standalone Mode (in progress, 70%), Template Formatter (in progress, 60%)
+**Development:** Incremental Compilation (done), Live Reload (done), Standalone Mode (in progress, 70%), Template Formatter (in progress, 60%), VS Code Extension (done)
 
 #### Elixir Client Runtime
 
 **Data Types:** Atom (done), Bitstring (done), Float (done), Function (done), Integer (done), List (done), Map (done), PID (done), Port (done), Reference (done), Tuple (done)
 
-**Control Flow:** Case (done), Cond (done), If (done), Function (done), Unless (done), With (todo)
+**Control Flow:** Case (done), Cond (done), If (done), Function (done), Unless (done), With (done)
 
 **Functions:** Anonymous Function (done), Function Capture (done), Local Function (done), Remote Function (done)
 
-**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (in progress, 67%), Regex Match =~ (in progress, 61%)
+**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (done), Regex Match =~ (in progress, 61%)
 
 **Guards:** Guards in all contexts (done)
 
 **Comprehensions:** Bitstring Generator (done), Enumerable Generator (done), Filter (done), :into Option (done), :reduce Option (done), :uniq Option (done)
 
-**Other:** Behaviours (done), Bitwise Module Operators (todo), Error Handling (done), Processes (deferred), Protocols (done), Regular Expressions (todo)
+**Bitstrings:** Computed-Size Matching (todo), Construction (done), Dynamic-Size Matching (todo), Fixed-Size Matching (done), UTF Matching (todo), UTF16 and UTF32 Encoding (todo)
+
+**Other:** Behaviours (done), Bitwise Module Operators (done), Error Handling (done), Essential Stdlib Functions (done), Processes (deferred), Protocols (done), Regular Expressions (todo)
 
 ### Roadmap
 
@@ -3725,34 +3743,31 @@ Our development roadmap is organized by timeline, with colors representing proxi
 
 #### Short-Term Goals - Foundation & Core Features
 
-- **DOM Events Support** - Complete implementation of remaining DOM events including touch and window events to achieve full coverage.
-- **Essential Stdlib Functions** - Expand support for the most important Elixir standard library functions needed for Phase 1 use cases: state management, data manipulation, dates/times, strings, and collections.
-- **JS Interop** - Create a clean interface for JavaScript interoperability to leverage existing JavaScript libraries.
-- **Regular Expressions** - Transpile Elixir's PCRE-based regexes to JavaScript runtime and support Regex-related functions such as `=~`.
-- **Server-Triggered Actions** - Enable triggering actions from server code outside of commands, such as background jobs (e.g. Oban) or scheduled tasks.
-- **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
-- **Template Engine Error Reporting** - Improve error reporting in the template engine to make debugging template issues more straightforward.
-- **Template Formatter** - Implement automatic formatting for templates to ensure consistent code style.
-- **VS Code Extension** - Develop a VS Code extension for template syntax highlighting to improve the developer experience.
-- **"with" Expression** - Complete the implementation of Elixir's `with` expression.
-
-#### Medium-Term Goals - Advanced Features & Enhanced DX
-
-- **Advanced Routing** - Add support for multi-tenant routing (subdomain-based) and catch-all (wildcard) routes for dynamic path segments of arbitrary depth.
-- **Auth** - Built-in authentication, authorization, and access control system for managing user identities and protecting resources.
-- **Bitstring UTF16 and UTF32 Encoding** - Add support for UTF16 and UTF32 encodings in bitstrings.
-- **Bitwise Module Operators** - Implement operators from the Bitwise module, enabling bit-level operations.
-- **Client Error Stacktraces** - Ensure error messages and stacktraces on the client match those on the server for easier debugging.
-- **Client MFAs Whitelisting** - Create a mechanism to explicitly whitelist Module-Function-Arity combinations that should be compiled for client-side execution when not automatically detected by the compiler.
-- **Command Failure Handling Control** - Add more granular control over how command failures are handled, allowing developers to customize error handling strategies, retry logic, and failure recovery mechanisms.
-- **Component-Level Rerendering** - Implement selective rerendering of only changed components instead of entire pages.
+- **Component-Level Rerendering** - Implement selective rerendering of only changed components instead of entire pages, significantly improving action execution speed and overall responsiveness.
 - **Dynamic Components** - Support for dynamically loading and rendering components.
 - **Local-First Support** - Implement local-first architecture with offline-capable local database, auto-sync, and conflict resolution for resilient applications.
 - **Navigate Between Pages from Commands** - Enable navigation to another page from within a command.
+- **Regular Expressions** - Transpile Elixir's PCRE-based regexes to JavaScript runtime and support Regex-related functions such as `=~`.
+- **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
+- **Template Engine Error Reporting** - Improve error reporting in the template engine to make debugging template issues more straightforward.
+- **Umbrella Applications** - Support Hologram in umbrella project layouts, resolving dependency and asset paths through Mix and watching source across all child apps for live reload.
+
+#### Medium-Term Goals - Advanced Features & Enhanced DX
+
+- **Advanced Bitstring Support** - Add support for the remaining bitstring capabilities: dynamic and computed segment sizes in patterns, UTF pattern matching, and UTF16/UTF32 encodings.
+- **Advanced Routing** - Add support for multi-tenant routing (subdomain-based) and catch-all (wildcard) routes for dynamic path segments of arbitrary depth.
+- **Auth** - Built-in authentication, authorization, and access control system for managing user identities and protecting resources.
+- **Client Error Stacktraces** - Ensure error messages and stacktraces on the client match those on the server for easier debugging.
+- **Client MFAs Whitelisting** - Create a mechanism to explicitly whitelist Module-Function-Arity combinations that should be compiled for client-side execution when not automatically detected by the compiler.
+- **Command Failure Handling Control** - Add more granular control over how command failures are handled, allowing developers to customize error handling strategies, retry logic, and failure recovery mechanisms.
+- **Internationalization** - Built-in i18n: locale detection and management, locale-aware routing, translation resolution across server and client, and locale-aware date, number, and currency formatting.
+- **Keyed Lists** - Reconcile rendered comprehension lists by key rather than position, auto-keying items by their `:id` with an explicit `$key` override, so reordered items reuse the correct DOM nodes.
 - **Props Validation** - Add a system for validating component props.
 - **Reactivity Layer** - Introduce derived values, prop watchers, and effects for a cohesive reactivity system.
-- **Secrets Protection** - Prevent sensitive information from leaking to the client side.
-- **Shorthand Prop Assignment Syntax** - Create an optional, more concise syntax for assigning props.
+- **Render Coalescing** - Batch multiple state updates that land in the same tick into a single render pass automatically, rather than rendering once per action.
+- **Shorthand Prop Assignment Syntax** - Create an optional, more concise syntax for assigning props while maintaining support for the standard syntax.
+- **Structural Sharing** - Implement structural sharing for immutable data structures to reduce memory usage and improve performance by avoiding unnecessary data copying.
+- **Template Formatter** - Implement automatic formatting for templates to ensure consistent code style.
 - **Template Partials** - Add support for lightweight, reusable template snippets (similar to LiveView's function components) for reducing code duplication without the overhead of full components.
 
 #### Long-Term Goals - Transformative Capabilities
@@ -3760,7 +3775,7 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **Client Processes** - Port Elixir's process model to the client for concurrent and parallel programming patterns.
 - **Desktop Platform Support** - Enable packaging Hologram applications for desktop platforms with native integrations.
 - **Mobile Platform Support** - Enable building native-quality mobile applications from the same Hologram codebase.
-- **Structural Sharing** - Implement structural sharing for immutable data structures to reduce memory usage and improve performance.
+- **Secrets Protection** - Prevent sensitive information from leaking to the client side.
 - **Time Travel Debugger** - Develop a debugging tool that allows stepping backward through state changes.
 
 ### Contributing
