@@ -57,12 +57,24 @@ defmodule Hologram.Template.EventModifiers do
                   home insert page_down page_up tab
                 ) ++ for(n <- 1..12, do: "f#{n}")
 
+  # Event attribute base names that fire when a scroll container reaches an edge - the only events
+  # the within modifier applies to.
+  @reach_events ["$reach_bottom", "$reach_left", "$reach_right", "$reach_top"]
+
   # Modifier types that may appear at most once on a binding - every type except key filters.
-  @single_valued_modifiers ~w(allow_default debounce prevent_default stop_propagation throttle)a
+  @single_valued_modifiers ~w(allow_default debounce prevent_default stop_propagation throttle within)a
 
   # A throttle modifier segment: "throttle(<digits>)". The captured group is validated as a
   # positive integer separately, so the error message can name the offending segment.
   @throttle_regex ~r/^throttle\((.*)\)$/
+
+  # A within modifier segment: "within(<distance>)". The captured group is validated as a px length
+  # or a percentage separately, so the error can name the offending segment.
+  @within_regex ~r/^within\((.*)\)$/
+
+  # The accepted within distance forms: an absolute px length or a percentage of the container.
+  @within_px_regex ~r/^\d+(\.\d+)?px$/
+  @within_percent_regex ~r/^\d+(\.\d+)?%$/
 
   @typedoc """
   An event binding's parsed modifiers, keyed by type. Sparse - only the modifiers present on the
@@ -74,7 +86,8 @@ defmodule Hologram.Template.EventModifiers do
           optional(:key) => list(list(String.t())),
           optional(:prevent_default) => true,
           optional(:stop_propagation) => true,
-          optional(:throttle) => pos_integer
+          optional(:throttle) => pos_integer,
+          optional(:within) => String.t()
         }
 
   @typedoc """
@@ -87,6 +100,7 @@ defmodule Hologram.Template.EventModifiers do
           | {:prevent_default}
           | {:stop_propagation}
           | {:throttle, pos_integer}
+          | {:within, String.t()}
 
   @doc """
   Returns true if the given event attribute base name carries keyboard key filters.
@@ -110,11 +124,15 @@ defmodule Hologram.Template.EventModifiers do
     * `:stop_propagation` - `true` when the binding stops the event from propagating past the
       bound element, valid on any event
     * `:throttle` - the throttle window in milliseconds, valid on any event
+    * `:within` - the prefetch distance before a scroll-edge reach fires, as a CSS px length or
+      percentage string, valid only on `$reach_*` events
 
   Raises `Hologram.TemplateSyntaxError` for a debounce or throttle value that is not a positive
-  integer, a key filter on a non-keyboard event, an empty segment, an unknown key, more than one
-  key in a single filter, a repeated modifier, two key filters that match the same keys, a binding
-  that combines debounce and throttle, or a binding that combines allow_default and prevent_default.
+  integer, a key filter on a non-keyboard event, a within modifier on a non-`$reach_*` event, a
+  within distance that is not a px length or a percentage, an empty segment, an unknown key, more
+  than one key in a single filter, a repeated modifier, two key filters that match the same keys, a
+  binding that combines debounce and throttle, or a binding that combines allow_default and
+  prevent_default.
   """
   @spec parse(String.t(), list(String.t())) :: modifiers
   def parse(base_name, segments) do
@@ -136,6 +154,7 @@ defmodule Hologram.Template.EventModifiers do
       {:key, values}, acc -> Map.update(acc, :key, [values], &[values | &1])
       {:debounce, ms}, acc -> Map.put(acc, :debounce, ms)
       {:throttle, ms}, acc -> Map.put(acc, :throttle, ms)
+      {:within, distance}, acc -> Map.put(acc, :within, distance)
       {:stop_propagation}, acc -> Map.put(acc, :stop_propagation, true)
       {:prevent_default}, acc -> Map.put(acc, :prevent_default, true)
       {:allow_default}, acc -> Map.put(acc, :allow_default, true)
@@ -165,15 +184,6 @@ defmodule Hologram.Template.EventModifiers do
     end
   end
 
-  # Key filters are valid only on keyboard events.
-  defp parse_key_filter(base_name, segment) do
-    if keyboard_event?(base_name) do
-      parse_keyboard_segment(segment)
-    else
-      raise TemplateSyntaxError, message: ~s'unknown event modifier "#{segment}"'
-    end
-  end
-
   defp parse_keyboard_segment(segment) do
     values =
       segment
@@ -194,9 +204,37 @@ defmodule Hologram.Template.EventModifiers do
     end
   end
 
+  # Modifiers restricted to a particular event family: the within modifier on reach events, key
+  # filters on keyboard events. A within-shaped segment is routed to within parsing on any event, so
+  # a misplaced within reports a within-specific error rather than an unknown-modifier one.
+  defp parse_restricted_modifier(base_name, segment)
+
+  defp parse_restricted_modifier(base_name, "within" <> _rest = segment) do
+    cond do
+      not reach_event?(base_name) ->
+        raise TemplateSyntaxError,
+          message: ~s'the within modifier "#{segment}" is only valid on $reach_* events'
+
+      captures = Regex.run(@within_regex, segment) ->
+        parse_within_value(segment, List.last(captures))
+
+      true ->
+        raise TemplateSyntaxError, message: within_error(segment)
+    end
+  end
+
+  # A non-within restricted segment is a keyboard key filter, valid only on keyboard events.
+  defp parse_restricted_modifier(base_name, segment) do
+    if keyboard_event?(base_name) do
+      parse_keyboard_segment(segment)
+    else
+      raise TemplateSyntaxError, message: ~s'unknown event modifier "#{segment}"'
+    end
+  end
+
   defp parse_segment(base_name, segment) do
     case parse_universal_modifier(segment) do
-      :error -> parse_key_filter(base_name, segment)
+      :error -> parse_restricted_modifier(base_name, segment)
       modifier -> modifier
     end
   end
@@ -280,6 +318,14 @@ defmodule Hologram.Template.EventModifiers do
     end
   end
 
+  defp parse_within_value(segment, value) do
+    cond do
+      Regex.match?(@within_px_regex, value) -> {:within, value}
+      Regex.match?(@within_percent_regex, value) -> {:within, value}
+      true -> raise TemplateSyntaxError, message: within_error(segment)
+    end
+  end
+
   defp raw_symbol_message(char) do
     case Map.fetch(@alias_by_char, char) do
       {:ok, name} ->
@@ -289,6 +335,8 @@ defmodule Hologram.Template.EventModifiers do
         ~s'the "#{char}" key has no keyboard key filter alias; match it in the action handler'
     end
   end
+
+  defp reach_event?(base_name), do: base_name in @reach_events
 
   # Key filters are prepended during aggregation, so restore their written order.
   defp reverse_key_filters(modifiers)
@@ -350,5 +398,9 @@ defmodule Hologram.Template.EventModifiers do
       raise TemplateSyntaxError,
         message: "an event binding may not combine allow_default and prevent_default modifiers"
     end
+  end
+
+  defp within_error(segment) do
+    ~s'within modifier "#{segment}" requires a length in px or a percentage'
   end
 end
