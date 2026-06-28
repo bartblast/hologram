@@ -5577,6 +5577,22 @@ describe("Erlang", () => {
 
       assertBoxedError(() => error(reason), "MyError", "my message");
     });
+
+    it("normalizes a bare reason into a boxed exception struct", () => {
+      const reason = Type.atom("badarg");
+
+      let caught;
+
+      try {
+        error(reason);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.value, reason);
+      assert.isTrue(Type.isStruct(caught.struct));
+    });
   });
 
   it("error/2", () => {
@@ -10042,6 +10058,23 @@ describe("Erlang", () => {
       assert.instanceOf(error, HologramBoxedError);
       assert.deepStrictEqual(error.kind, Type.atom("throw"));
       assert.deepStrictEqual(error.value, reason);
+    });
+
+    it("normalizes a bare :error reason into a boxed exception struct", () => {
+      const reason = Type.atom("badarg");
+
+      let caught;
+
+      try {
+        raise(Type.atom("error"), reason, Type.list());
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.kind, Type.atom("error"));
+      assert.deepStrictEqual(caught.value, reason);
+      assert.isTrue(Type.isStruct(caught.struct));
     });
 
     it("returns :badarg when the kind is not a valid exception class", () => {
