@@ -97,6 +97,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module179
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module18
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module180
+  alias Hologram.Test.Fixtures.Compiler.Transformer.Module181
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Transformer.Module20
@@ -217,6 +218,24 @@ defmodule Hologram.Compiler.TransformerTest do
     module
     |> transform_module(context)
     |> fetch_expression()
+  end
+
+  describe "__STACKTRACE__" do
+    test "AST from source code" do
+      ast = ast("__STACKTRACE__")
+
+      assert transform(ast, %Context{}) == %IR.ListType{data: []}
+    end
+
+    test "AST from BEAM file" do
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   body: %IR.Block{expressions: [%IR.ListType{data: []}]}
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module181)
+    end
   end
 
   describe "anonymous function call" do
