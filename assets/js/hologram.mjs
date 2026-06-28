@@ -35,6 +35,7 @@ import InputEvent from "./events/input_event.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
+import ReachEvent from "./events/reach_event.mjs";
 import ResizeEvent from "./events/resize_event.mjs";
 import ScrollEvent from "./events/scroll_event.mjs";
 import SelectEvent from "./events/select_event.mjs";
@@ -374,13 +375,14 @@ export default class Hologram {
     );
 
     // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
-    // and its element-resize bindings into Renderer.resizeBindings; now that the DOM is patched,
-    // reconcile both into real listeners on their targets. Resize bindings are resolved here because
-    // an observer's target is the element's live DOM node, which exists only after patch. Every
-    // page-entry path reaches render() through #mountPage, so this also tears down a previous page's
-    // listeners on navigation.
+    // and its element observer bindings (reach, resize) into Renderer.reachBindings and
+    // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
+    // their targets. The observer bindings are resolved here because an observer's target is a live
+    // DOM node, which exists only after patch. Every page-entry path reaches render() through
+    // #mountPage, so this also tears down a previous page's listeners on navigation.
     EventListenerRegistry.reconcile([
       ...Renderer.listenerBindings,
+      ...Renderer.resolveReachBindings(),
       ...Renderer.resolveResizeBindings(),
     ]);
 
@@ -711,6 +713,12 @@ export default class Hologram {
       case "pointermove":
       case "pointerup":
         return PointerEvent;
+
+      case "reach_bottom":
+      case "reach_left":
+      case "reach_right":
+      case "reach_top":
+        return ReachEvent;
 
       case "resize":
         return ResizeEvent;

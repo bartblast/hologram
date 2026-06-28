@@ -988,6 +988,37 @@ describe("Hologram", () => {
 
       sinon.assert.notCalled(stopPropagation);
     });
+
+    it("ignores a reach event whose edge is out of view", () => {
+      Hologram.handleUiEvent(
+        {isIntersecting: false, target: {id: "dummy_node"}},
+        "reach_bottom",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(scheduleActionStub);
+    });
+
+    it("dispatches a reach event with an empty payload when the edge is in view", () => {
+      const dispatch = Hologram.handleUiEvent(
+        {isIntersecting: true, target: {id: "dummy_node"}},
+        "reach_bottom",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      dispatch();
+
+      const expectedAction = Type.actionStruct({
+        name: Type.atom("my_action"),
+        params: Type.map([[Type.atom("event"), Type.map()]]),
+        target: defaultTarget,
+      });
+
+      sinon.assert.calledOnceWithExactly(executeActionStub, expectedAction);
+    });
   });
 
   describe("handlePrefetchPageSuccess()", () => {
@@ -1297,23 +1328,36 @@ describe("Hologram", () => {
       sinon.restore();
     });
 
-    it("reconciles the global bindings collected during the render", () => {
-      const bindings = [
+    it("reconciles the global and resolved observer bindings collected during the render", () => {
+      const listenerBindings = [
         {target: window, eventName: "keydown", handler: () => {}},
       ];
 
+      const reachBinding = {
+        target: {},
+        key: "intersection-observer:bottom",
+        attach: () => {},
+        handler: () => {},
+      };
+
       // renderPage() collects the page's <window>/<document> bindings into Renderer.listenerBindings.
       sinon.stub(Renderer, "renderPage").callsFake(() => {
-        Renderer.listenerBindings = bindings;
+        Renderer.listenerBindings = listenerBindings;
         return {sel: "html", data: {}, children: []};
       });
+
+      // Observer bindings are resolved from their patched elements right before reconciliation.
+      sinon.stub(Renderer, "resolveReachBindings").returns([reachBinding]);
 
       sinon.stub(Vdom, "patchVirtualDocument");
       const reconcileStub = sinon.stub(EventListenerRegistry, "reconcile");
 
       Hologram.render();
 
-      sinon.assert.calledOnceWithExactly(reconcileStub, bindings);
+      sinon.assert.calledOnceWithExactly(reconcileStub, [
+        ...listenerBindings,
+        reachBinding,
+      ]);
     });
   });
 
