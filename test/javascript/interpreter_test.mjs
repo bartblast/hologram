@@ -8341,6 +8341,20 @@ describe("Interpreter", () => {
     });
   });
 
+  it("normalizeError()", () => {
+    const reason = Type.atom("badarg");
+    const result = Interpreter.normalizeError(reason);
+
+    assert.deepStrictEqual(
+      result,
+      Type.struct("ErlangError", [
+        [Type.atom("__exception__"), Type.boolean(true)],
+        [Type.atom("original"), reason],
+        [Type.atom("reason"), Type.nil()],
+      ]),
+    );
+  });
+
   it("raiseArgumentError()", () => {
     assertBoxedError(
       () => Interpreter.raiseArgumentError("abc"),

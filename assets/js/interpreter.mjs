@@ -815,6 +815,14 @@ export default class Interpreter {
     return globalThis[Interpreter.moduleJsName(alias)];
   }
 
+  // Turns an :error reason into its exception struct, mirroring Elixir's
+  // Exception.normalize/2: a struct passes through unchanged, while a bare term
+  // (e.g. :badarg) becomes an ArgumentError/ErlangError/... struct.
+  // Deps: [Exception.normalize/2]
+  static normalizeError(reason) {
+    return Elixir_Exception["normalize/2"](Type.atom("error"), reason);
+  }
+
   static raiseArgumentError(message) {
     Interpreter.raiseError("ArgumentError", message);
   }

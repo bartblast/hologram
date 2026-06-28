@@ -25,14 +25,19 @@ export default class HologramBoxedError extends Error {
     });
 
     if (kind.value === "error") {
+      // value carries the raw reason; struct carries its normalized exception
+      // form. Normalizing here means rescue always matches against a real
+      // exception struct, even when the reason is a bare term like :badarg.
+      const struct = Interpreter.normalizeError(value);
+
       Object.defineProperty(this, "struct", {
-        value: value,
+        value: struct,
         writable: true,
         configurable: true,
       });
 
       const boxedType = Interpreter.getErrorType(this);
-      const boxedMessage = Interpreter.resolveErrorMessage(value);
+      const boxedMessage = Interpreter.resolveErrorMessage(struct);
 
       this.message = `(${boxedType}) ${boxedMessage}`;
     } else {

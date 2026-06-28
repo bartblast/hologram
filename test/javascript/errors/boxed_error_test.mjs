@@ -27,6 +27,15 @@ describe("HologramBoxedError", () => {
       assert.deepStrictEqual(error.struct, struct);
     });
 
+    it("normalizes a bare reason, keeping the raw reason in value", () => {
+      const reason = Type.atom("badarg");
+      const error = new HologramBoxedError(reason);
+
+      // value carries the raw reason; struct is its normalized exception form.
+      assert.deepStrictEqual(error.value, reason);
+      assert.isTrue(Type.isStruct(error.struct));
+    });
+
     it("renders the message from the exception type and message", () => {
       const struct = Type.errorStruct("MyType", "my message");
       const error = new HologramBoxedError(struct);

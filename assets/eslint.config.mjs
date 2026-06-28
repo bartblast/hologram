@@ -25,6 +25,7 @@ export default [
         ...globals.node,
         Elixir_Code: "readonly",
         Elixir_Enum: "readonly",
+        Elixir_Exception: "readonly",
         Elixir_Hologram_Router_Helpers: "readonly",
         Elixir_Kernel: "readonly",
         Elixir_Map: "readonly",
