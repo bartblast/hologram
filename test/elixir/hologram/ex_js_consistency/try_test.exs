@@ -12,6 +12,17 @@ defmodule Hologram.ExJsConsistency.TryTest do
   @moduletag :consistency
 
   describe "rescue clauses" do
+    test "rescues a bare reason normalized into an exception struct" do
+      result =
+        try do
+          :erlang.error(:badarg)
+        rescue
+          e in ArgumentError -> {:rescued_normalized, e.message}
+        end
+
+      assert result == {:rescued_normalized, "argument error"}
+    end
+
     test "rescues without a module" do
       result =
         try do
