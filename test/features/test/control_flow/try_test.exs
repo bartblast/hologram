@@ -39,6 +39,13 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
                             |> click(button("Rescue unmatched module"))
                           end
     end
+
+    feature "bare reason is normalized into an exception struct", %{session: session} do
+      session
+      |> visit(TryPage)
+      |> click(button("Rescue bare reason"))
+      |> assert_text(css("#result"), ~s/{:rescued_normalized, "argument error"}/)
+    end
   end
 
   describe "catch clauses" do

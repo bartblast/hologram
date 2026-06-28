@@ -27,6 +27,7 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
       <button $click="rescue_with_single_module"> Rescue with a single module </button>
       <button $click="rescue_with_multiple_modules"> Rescue with multiple modules </button>
       <button $click="rescue_unmatched_module"> Rescue unmatched module </button>
+      <button $click="rescue_bare_reason"> Rescue bare reason </button>
     </p>
     <p>
       <strong>Catch clauses</strong>
@@ -180,6 +181,17 @@ defmodule HologramFeatureTests.ControlFlow.TryPage do
     after
       nil
     end
+  end
+
+  def action(:rescue_bare_reason, _params, component) do
+    result =
+      try do
+        :erlang.error(:badarg)
+      rescue
+        e in ArgumentError -> {:rescued_normalized, e.message}
+      end
+
+    put_state(component, :result, result)
   end
 
   def action(:rescue_unmatched_module, _params, _component) do
