@@ -137,6 +137,16 @@ describe("EventListeners", () => {
       assert.strictEqual(rootMargin("bottom"), "0px 0px 100% 0px");
       assert.strictEqual(rootMargin("left"), "0px 0px 0px 100%");
     });
+
+    it("overrides the default rootMargin with a given margin on the binding's edge", () => {
+      const element = {parentElement: {}};
+
+      EventListeners.intersectionObserver(element, "bottom", "200px").attach(
+        sinon.spy(),
+      );
+
+      assert.strictEqual(observers[0].options.rootMargin, "0px 0px 200px 0px");
+    });
   });
 
   describe("resizeObserver()", () => {

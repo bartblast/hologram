@@ -24,14 +24,18 @@ export default class EventListeners {
   // reach bindings reconcile independently and a re-render refreshes the matching edge rather than
   // stacking a second. Unlike the resize observer, the initial on-observe fire is kept: a container
   // whose edge is already in view at mount dispatches at once, so a short list keeps loading until
-  // the viewport fills. Every fire dispatches its IntersectionObserverEntry.
-  static intersectionObserver(element, edge) {
+  // the viewport fills. Every fire dispatches its IntersectionObserverEntry. An optional margin -
+  // the within modifier's CSS distance - overrides the default one-viewport prefetch lead.
+  static intersectionObserver(element, edge, margin) {
     return {
       key: `intersection-observer:${edge}`,
       attach: (dispatcher) => {
         const observer = new IntersectionObserver(
           (entries) => dispatcher(entries[0]),
-          {root: element.parentElement, rootMargin: $.#rootMargin(edge)},
+          {
+            root: element.parentElement,
+            rootMargin: $.#rootMargin(edge, margin),
+          },
         );
 
         observer.observe(element);
