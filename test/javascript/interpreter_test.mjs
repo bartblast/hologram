@@ -8942,6 +8942,79 @@ describe("Interpreter", () => {
       );
     });
 
+    it("reraise re-raises the rescued exception", () => {
+      // try (raise ArgumentError) rescue error -> reraise error, __STACKTRACE__
+      // reraise expands to :erlang.raise(:error, error, []) for an exception, so
+      // the rescued exception propagates unchanged (__STACKTRACE__ is []).
+      const struct = Type.errorStruct("ArgumentError", "my message");
+
+      const body = (_context) => {
+        throw new HologramBoxedError(struct);
+      };
+
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("error"),
+          modules: [],
+          body: (context) =>
+            Erlang["raise/3"](
+              Type.atom("error"),
+              context.vars.error,
+              Type.list(),
+            ),
+        },
+      ];
+
+      let caught;
+
+      try {
+        Interpreter.try(body, rescueClauses, [], [], null, context);
+      } catch (e) {
+        caught = e;
+      }
+
+      assert.instanceOf(caught, HologramBoxedError);
+      assert.deepStrictEqual(caught.struct, struct);
+    });
+
+    it("evaluates __STACKTRACE__ to an empty list (no client stacktraces yet)", () => {
+      // CLIENT/SERVER DIVERGENCE: the client does not support stacktraces yet, so
+      // __STACKTRACE__ is compiled to an empty list (its rescue-clause body below
+      // is Type.list(), the compiled form). This DIFFERS from the matching
+      // consistency test (try_test.exs "__STACKTRACE__ holds the stacktrace of the
+      // rescued error"), which asserts the real, non-empty server stacktrace.
+      //
+      // TODO: support real client-side stacktraces so this matches the consistency
+      // test. Maintain a call stack in the interpreter (push a frame per function
+      // call), capture it when a HologramBoxedError is raised, and bind
+      // __STACKTRACE__ to that captured trace within rescue/catch clause scopes,
+      // instead of compiling it to an empty list in
+      // lib/hologram/compiler/transformer.ex.
+      const body = (_context) => {
+        throw new HologramBoxedError(Type.errorStruct("RuntimeError", "boom"));
+      };
+
+      // rescue _exception -> __STACKTRACE__   (compiled body is the empty list [])
+      const rescueClauses = [
+        {
+          variable: Type.variablePattern("_exception"),
+          modules: [],
+          body: (_context) => Type.list(),
+        },
+      ];
+
+      const result = Interpreter.try(
+        body,
+        rescueClauses,
+        [],
+        [],
+        null,
+        context,
+      );
+
+      assert.deepStrictEqual(result, Type.list());
+    });
+
     it("does not rescue an exception whose module is not listed", () => {
       const boxedError = new HologramBoxedError(
         Type.errorStruct("RuntimeError", "boom"),
