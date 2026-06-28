@@ -983,6 +983,10 @@ Hologram supports various event types that you can bind to elements in your temp
 - `$pointer_down` - triggered when a pointer (mouse, touch, pen) is pressed down on an element
 - `$pointer_move` - triggered when a pointer moves while over an element
 - `$pointer_up` - triggered when a pointer (mouse, touch, pen) is released from an element
+- `$reach_bottom` - triggered when a scroll container's bottom edge comes into view
+- `$reach_left` - triggered when a scroll container's left edge comes into view
+- `$reach_right` - triggered when a scroll container's right edge comes into view
+- `$reach_top` - triggered when a scroll container's top edge comes into view
 - `$resize` - triggered when an element or the browser window is resized
 - `$scroll` - triggered when a scrollable element or the page is scrolled
 - `$select` - triggered when text is selected in an input or textarea element
@@ -1062,6 +1066,21 @@ A `$click` binding fires on a plain click, but not on a modified one - the modif
 ###### Click-Outside Event
 
 The `$click_outside` event fires when a click lands anywhere outside the bound element and its descendants - the gesture behind dismissible UI like dropdowns, popovers, modals, and menus. A click on the element or inside it does nothing. It is usually rendered only while the element is open, behind a conditional, so it listens for outside clicks just then.
+
+##### Reach Events
+
+The reach events fire when a scroll container is scrolled so one of its edges comes into view - the basis for patterns like infinite scroll, load-more, and pull-to-refresh. Bind them to the scrolling element, one per edge:
+
+- `$reach_bottom` - the container's bottom edge comes into view
+- `$reach_left` - the container's left edge comes into view
+- `$reach_right` - the container's right edge comes into view
+- `$reach_top` - the container's top edge comes into view
+
+A reach event carries no data - it is a pure trigger. To branch on the edge in a shared handler, pass it as an action argument.
+
+It also fires on mount when the edge is already in view - for example, a short list keeps loading until the viewport fills. To stop it firing, resolve the binding to `nil` from state, the same way any binding is switched off.
+
+Append `within(distance)` to set how far before the edge it fires - a length such as `200px` or a percentage of the container such as `50%`. The default is `100%` - the container's height for the top and bottom edges, its width for the left and right.
 
 ##### Resize Event
 
