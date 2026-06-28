@@ -26,8 +26,8 @@ export default class Renderer {
   static listenerBindings = [];
 
   // Deferred reach (scroll-edge) intersection-observer bindings collected during the current render,
-  // each a {vnode, edge, handler}. The observer watches the container's edge child, a live DOM node
-  // Snabbdom sets on the vnode only during patch, so the binding is held here until
+  // each a {vnode, edge, handler, margin}. The observer watches the container's edge child, a live
+  // DOM node Snabbdom sets on the vnode only during patch, so the binding is held here until
   // resolveReachBindings turns it into a registry binding once `.elm` exists. renderPage() resets
   // this.
   static reachBindings = [];
@@ -132,7 +132,7 @@ export default class Renderer {
   // childless container has no edge to watch, so its binding is dropped this render. Per-edge keys
   // keep top/left (and bottom/right), which share a child, reconciling independently.
   static resolveReachBindings() {
-    return $.reachBindings.flatMap(({vnode, edge, handler}) => {
+    return $.reachBindings.flatMap(({vnode, edge, handler, margin}) => {
       const child =
         edge === "top" || edge === "left"
           ? vnode.elm.firstElementChild
@@ -142,7 +142,11 @@ export default class Renderer {
         return [];
       }
 
-      const {key, attach} = EventListeners.intersectionObserver(child, edge);
+      const {key, attach} = EventListeners.intersectionObserver(
+        child,
+        edge,
+        margin,
+      );
 
       return [{target: child, key, attach, handler}];
     });
@@ -461,10 +465,11 @@ export default class Renderer {
   // A scroll-edge reach is delivered by an IntersectionObserver watching the container's edge child,
   // not a DOM event, so it cannot ride the element's "on" map, and the observed child is a live DOM
   // node Snabbdom sets on the vnode only during patch. So the binding carries the vnode, the edge,
-  // and its handler, and resolveReachBindings turns it into a registry binding once `.elm` exists.
-  // The handler keys its debounce/throttle window on the entry's target (the observed child), as an
-  // IntersectionObserverEntry has no currentTarget. The Hologram event type is "reach_<edge>", which
-  // selects ReachEvent and carries the edge for a handler that branches on it.
+  // its handler, and the within modifier's margin, and resolveReachBindings turns it into a registry
+  // binding once `.elm` exists. The handler keys its debounce/throttle window on the entry's target
+  // (the observed child), as an IntersectionObserverEntry has no currentTarget. The Hologram event
+  // type is "reach_<edge>", which selects ReachEvent and carries the edge for a handler that
+  // branches on it.
   static #collectReachBindings(attrsDom, elementVnode, defaultTarget) {
     attrsDom.data.forEach((attrDom, attrIndex) => {
       const eventName = Bitstring.toText(attrDom.data[0]).substring(1);
@@ -474,6 +479,7 @@ export default class Renderer {
       }
 
       const edge = eventName.substring("reach_".length);
+      const margin = $.#withinFromModifiers(attrDom.data[2]);
 
       const handler = $.#buildEventHandler(
         attrDom,
@@ -483,7 +489,7 @@ export default class Renderer {
         (event) => event.target,
       );
 
-      $.reachBindings.push({vnode: elementVnode, edge, handler});
+      $.reachBindings.push({vnode: elementVnode, edge, handler, margin});
     });
   }
 
@@ -521,6 +527,7 @@ export default class Renderer {
 
   // Returns the debounce window in milliseconds from a modifiers map, or null when there is no
   // debounce modifier.
+  // Deps: [:maps.get/3]
   static #debounceMsFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return null;
@@ -648,6 +655,7 @@ export default class Renderer {
   // Decides whether a live event satisfies an attribute's modifier filters. Modifiers are a
   // tagged list; a {:key, values} modifier is matched by the keyboard matcher, and any other
   // kind does not gate dispatch.
+  // Deps: [:maps.get/3]
   static #eventMatchesModifiers(modifiersDom, event) {
     const keyFilters = Erlang_Maps["get/3"](
       Type.atom("key"),
@@ -1387,6 +1395,7 @@ export default class Renderer {
 
   // Returns the throttle window in milliseconds from a modifiers map, or null when there is no
   // throttle modifier.
+  // Deps: [:maps.get/3]
   static #throttleMsFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return null;
@@ -1421,6 +1430,23 @@ export default class Renderer {
 
   static #valueDomToText(valueDom) {
     return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
+  }
+
+  // Returns the within modifier's CSS prefetch distance (e.g. "200px", "50%") from a modifiers map,
+  // or undefined when there is no within modifier, so the observer falls back to its default lead.
+  // Deps: [:maps.get/3]
+  static #withinFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return undefined;
+    }
+
+    const within = Erlang_Maps["get/3"](
+      Type.atom("within"),
+      modifiersDom,
+      null,
+    );
+
+    return within === null ? undefined : Bitstring.toText(within);
   }
 }
 

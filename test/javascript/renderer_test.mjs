@@ -5896,6 +5896,53 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(Renderer.resolveReachBindings(), []);
     });
+
+    it("threads the within modifier's distance into the observer's rootMargin", () => {
+      // <div $reach_bottom.within(200px)="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$reach_bottom"),
+            actionSpecDom,
+            Type.map([[Type.atom("within"), Type.bitstring("200px")]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the container and its observed child.
+      const child = {parentElement: {}};
+      vdom.elm = {firstElementChild: {}, lastElementChild: child};
+
+      const originalIntersectionObserver = globalThis.IntersectionObserver;
+      let options;
+
+      globalThis.IntersectionObserver = class {
+        constructor(_callback, opts) {
+          options = opts;
+        }
+        observe() {}
+        disconnect() {}
+      };
+
+      try {
+        Renderer.resolveReachBindings()[0].attach(() => {});
+      } finally {
+        globalThis.IntersectionObserver = originalIntersectionObserver;
+      }
+
+      assert.equal(options.rootMargin, "0px 0px 200px 0px");
+    });
   });
 
   describe("resize binding", () => {
