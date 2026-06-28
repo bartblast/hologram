@@ -65,6 +65,16 @@ defmodule Hologram.ExJsConsistency.TryTest do
         end
       end
     end
+
+    test "reraise re-raises the rescued exception" do
+      assert_error ArgumentError, "my message", fn ->
+        try do
+          raise ArgumentError, "my message"
+        rescue
+          error -> reraise error, __STACKTRACE__
+        end
+      end
+    end
   end
 
   describe "catch clauses" do
@@ -109,6 +119,38 @@ defmodule Hologram.ExJsConsistency.TryTest do
           :throw, value -> {:caught_throw, value}
         end
       end
+    end
+  end
+
+  describe "__STACKTRACE__" do
+    # CLIENT/SERVER DIVERGENCE: on the server __STACKTRACE__ is the real stacktrace
+    # asserted below, but the client does not support stacktraces yet, so it
+    # compiles __STACKTRACE__ to an empty list. The related JavaScript test
+    # (interpreter_test.mjs) and the try feature test therefore assert [] instead
+    # of this shape - they carry a TODO pointing here, and the steps to make the
+    # client match this test live in the TODO in lib/hologram/compiler/transformer.ex.
+    #
+    # TODO: support real client-side stacktraces so the client matches this test.
+    # Maintain a call stack in the interpreter (push a frame per function call),
+    # capture it when a HologramBoxedError is raised, and bind __STACKTRACE__ to that
+    # captured trace within rescue/catch clause scopes, instead of compiling it to an
+    # empty list in lib/hologram/compiler/transformer.ex.
+    test "holds the stacktrace pointing to where the error was raised" do
+      result =
+        try do
+          raise "boom"
+        rescue
+          _exception -> __STACKTRACE__
+        end
+
+      # The top frame identifies this test - the module, file, and line where
+      # raise/1 was called - which proves __STACKTRACE__ captured the real call
+      # stack rather than just any list of frame-shaped tuples.
+      assert [{__MODULE__, _function, _arity, location} | _rest] = result
+
+      file = to_string(Keyword.fetch!(location, :file))
+      assert String.ends_with?(file, "try_test.exs")
+      assert is_integer(Keyword.fetch!(location, :line))
     end
   end
 
