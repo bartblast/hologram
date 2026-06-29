@@ -250,10 +250,10 @@ export default class Renderer {
       return null;
     }
 
-    // A scroll-edge reach ($reach_top/bottom/left/right) is delivered by an IntersectionObserver
-    // watching the container's edge child, not a DOM event, so it is collected as an observer
-    // binding in #renderElement. Returning null keeps it out of the element's "on" map, where the
-    // browser would never fire it.
+    // A scroll-edge reach ($reach_top/bottom/left/right) is delivered by a scroll listener reading
+    // the container's own scroll metrics, not a DOM event, so it is collected as a deferred binding
+    // in #renderElement. Returning null keeps it out of the element's "on" map, where the browser
+    // would never fire it.
     if (originalEventName.startsWith("reach_") && tagName !== null) {
       return null;
     }

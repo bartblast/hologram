@@ -17,17 +17,7 @@ describe("ReachEvent", () => {
     assert.deepStrictEqual(result, Type.map());
   });
 
-  describe("isEventIgnored()", () => {
-    it("a scroll-edge fire is never ignored", () => {
-      assert.isFalse(ReachEvent.isEventIgnored({target: {}}));
-    });
-
-    it("an arriving IntersectionObserver entry is not ignored", () => {
-      assert.isFalse(ReachEvent.isEventIgnored({isIntersecting: true}));
-    });
-
-    it("a leaving IntersectionObserver entry is ignored", () => {
-      assert.isTrue(ReachEvent.isEventIgnored({isIntersecting: false}));
-    });
+  it("isEventIgnored()", () => {
+    assert.isFalse(ReachEvent.isEventIgnored({target: {}}));
   });
 });

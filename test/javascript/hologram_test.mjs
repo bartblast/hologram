@@ -990,21 +990,9 @@ describe("Hologram", () => {
       sinon.assert.notCalled(stopPropagation);
     });
 
-    it("ignores a reach event whose edge is out of view", () => {
-      Hologram.handleUiEvent(
-        {isIntersecting: false, target: {id: "dummy_node"}},
-        "reach_bottom",
-        actionSpecDom,
-        defaultTarget,
-      );
-
-      sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(scheduleActionStub);
-    });
-
-    it("dispatches a reach event with an empty payload when the edge is in view", () => {
+    it("dispatches a reach event with an empty payload", () => {
       const dispatch = Hologram.handleUiEvent(
-        {isIntersecting: true, target: {id: "dummy_node"}},
+        {target: {id: "dummy_node"}},
         "reach_bottom",
         actionSpecDom,
         defaultTarget,

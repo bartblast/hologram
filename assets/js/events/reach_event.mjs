@@ -12,10 +12,8 @@ export default class ReachEvent {
     return Type.map();
   }
 
-  // The scroll-edge listener gates its own firing, so its {target} events are never ignored. The
-  // strict comparison still discards a non-intersecting IntersectionObserver entry - the edge
-  // scrolling back out - while the observer-backed path remains.
-  static isEventIgnored(event) {
-    return event.isIntersecting === false;
+  // The scroll-edge listener gates its own firing, so its events are never ignored here.
+  static isEventIgnored(_event) {
+    return false;
   }
 }
