@@ -5853,7 +5853,7 @@ describe("Renderer", () => {
 
       assert.equal(resolved.length, 1);
       assert.equal(resolved[0].target, container);
-      assert.equal(resolved[0].key, "scroll-edge:bottom");
+      assert.equal(resolved[0].key, "scroll-edge:bottom:100%");
       assert.equal(resolved[0].handler, Renderer.reachBindings[0].handler);
       assert.isFunction(resolved[0].attach);
     });

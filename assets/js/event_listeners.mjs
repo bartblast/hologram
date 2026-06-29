@@ -73,8 +73,9 @@ export default class EventListeners {
   static scrollEdge(element, edge, within) {
     return {
       // within is part of the key: the listener closes over it, and a retained (target, key) entry
-      // keeps its attachment without re-running attach, so a changed within must key a fresh one.
-      key: `scroll-edge:${edge}:${within}`,
+      // keeps its attachment without re-running attach, so a changed within must key a fresh one. The
+      // default (100%) is normalized in, so an omitted within and an explicit within(100%) share a key.
+      key: `scroll-edge:${edge}:${within ?? "100%"}`,
       attach: (dispatcher) => {
         let wasWithin = false;
         let lastFiredSize = 0;
