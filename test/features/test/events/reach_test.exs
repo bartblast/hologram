@@ -28,6 +28,16 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> execute_script("document.getElementById('hidden_child_vertical').scrollTop = 900;")
       |> assert_text(css("#hidden_child_bottom_result"), "1")
     end
+
+    feature "fires for a reach container nested inside a component", %{session: session} do
+      # A wiring scheme that only reaches the page's top-level elements, or that skips re-wiring
+      # after a patch, would miss a reach container living inside a child component. Hologram
+      # re-resolves reach bindings from the patched DOM on every render at any depth, so a nested
+      # container is wired like any other.
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#nested_bottom_result"), "1")
+    end
   end
 
   describe "$reach_left" do

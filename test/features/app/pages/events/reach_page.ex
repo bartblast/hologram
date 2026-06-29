@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Events.ReachPage do
   use Hologram.Page
 
+  alias HologramFeatureTests.Components.Events.ReachNested
+
   route "/events/reach"
 
   layout HologramFeatureTests.Components.DefaultLayout
@@ -78,6 +80,7 @@ defmodule HologramFeatureTests.Events.ReachPage do
     <p>
       Hidden child bottom: <strong id="hidden_child_bottom_result"><code>{@hidden_child_bottom}</code></strong>
     </p>
+    <ReachNested cid="reach_nested" />
     """
   end
 
