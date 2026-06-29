@@ -38,6 +38,24 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> visit(ReachPage)
       |> assert_text(css("#nested_bottom_result"), "1")
     end
+
+    feature "does not fire early when a tall edge child appears before the true edge", %{
+      session: session
+    } do
+      # The last child is 400px tall, so it enters the 100px viewport ~520px before the container's
+      # true bottom. A detector tied to that child's geometry would fire as soon as it appears, far
+      # outside within(200px). Scroll-offset measures the distance to the real edge: at scrollTop 600
+      # the tall child is in view but the edge is still 320px away, so it must not fire. Scrolling a
+      # different container to its edge is the sync point that proves a frame elapsed before checking.
+      session
+      |> visit(ReachPage)
+      |> execute_script("document.getElementById('tall_child_vertical').scrollTop = 600;")
+      |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 1000;")
+      |> assert_text(css("#scroll_bottom_result"), "1")
+      |> assert_text(css("#tall_child_bottom_result"), "0")
+      |> execute_script("document.getElementById('tall_child_vertical').scrollTop = 850;")
+      |> assert_text(css("#tall_child_bottom_result"), "1")
+    end
   end
 
   describe "$reach_left" do
