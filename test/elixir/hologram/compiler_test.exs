@@ -5,7 +5,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.Digraph
+  alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
@@ -350,6 +352,19 @@ defmodule Hologram.CompilerTest do
              js,
              ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
            )
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("String.Chars", "to_string", 1, "public"/
+           )
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
+           )
+
+    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+    refute String.contains?(js, "Hologram.Test.Fixtures.Reflection.Module5")
 
     assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
 
@@ -1117,6 +1132,41 @@ defmodule Hologram.CompilerTest do
                ]
              }
            }
+  end
+
+  test "prune_module_def/2 keeps protocol dispatch bounded to reachable implementations" do
+    reachable_mfas = [
+      {String.Chars, :to_string, 1},
+      {String.Chars, :impl_for!, 1},
+      {String.Chars, :impl_for, 1},
+      {String.Chars, :struct_impl_for, 1},
+      {String.Chars.Atom, :__impl__, 1},
+      {String.Chars.Atom, :to_string, 1},
+      {String.Chars.URI, :__impl__, 1},
+      {String.Chars.URI, :to_string, 1}
+    ]
+
+    js =
+      String.Chars
+      |> IR.for_module()
+      |> prune_module_def(reachable_mfas)
+      |> Encoder.encode_ir(%Context{
+        module: String.Chars,
+        async_mfas: MapSet.new()
+      })
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
+           )
+
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.Atom")/)
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.URI")/)
+
+    refute String.contains?(js, "Elixir.String.Chars.Decimal")
+    refute String.contains?(js, "Elixir.String.Chars.Version")
+    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
+    refute String.contains?(js, "Hologram.Test.Fixtures.Reflection.Module5")
   end
 
   describe "validate_page_modules/1" do

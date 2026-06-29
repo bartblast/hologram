@@ -16,6 +16,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
+  @typep vertices :: [vertex]
+  @typep vertex_set :: MapSet.t(vertex)
 
   @built_in_protocol_types [
     Any,
@@ -797,6 +799,7 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
+  @spec reject_hex_mfas([mfa]) :: [mfa]
   defp reject_hex_mfas(mfas) do
     Enum.reject(mfas, fn {module, _function, _arity} ->
       module_str = to_string(module)
@@ -808,6 +811,7 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
+  @spec protocol_aware_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
   defp protocol_aware_reachable_mfas(graph, vertices) do
     graph
     |> protocol_aware_reachable_vertices(vertices)
@@ -818,29 +822,56 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
+  @spec protocol_aware_reachable_vertices(Digraph.t(), [vertex]) :: [vertex]
   defp protocol_aware_reachable_vertices(graph, vertices) do
-    do_protocol_aware_reachable_vertices(graph, MapSet.new(), vertices)
+    do_protocol_aware_reachable_vertices(graph, [], [], vertices)
   end
 
-  defp do_protocol_aware_reachable_vertices(graph, reached_vertices, entry_vertices) do
+  @spec do_protocol_aware_reachable_vertices(Digraph.t(), vertices, vertices, vertices) ::
+          vertices
+  defp do_protocol_aware_reachable_vertices(
+         graph,
+         reached_vertices,
+         type_vertices,
+         entry_vertices
+       ) do
+    previous_type_vertices = MapSet.new(type_vertices)
+
     new_vertices =
       graph
       |> Digraph.reachable(entry_vertices, opaque_vertex?: &protocol_function_vertex?/1)
-      |> MapSet.new()
-      |> MapSet.difference(reached_vertices)
+      |> Enum.reject(&MapSet.member?(previous_type_vertices, &1))
 
-    reached_vertices = MapSet.union(reached_vertices, new_vertices)
+    type_vertices = Enum.uniq(type_vertices ++ new_vertices)
+    current_type_vertices = MapSet.new(type_vertices)
+
+    # Keep protocol dispatch helpers in the emitted MFA set, but don't let their
+    # consolidated type clauses make every protocol implementation reachable again.
+    protocol_dispatch_dependency_vertices =
+      protocol_dispatch_dependency_vertices(graph, current_type_vertices)
+
+    reached_vertices =
+      reached_vertices
+      |> Enum.concat(type_vertices)
+      |> Enum.concat(protocol_dispatch_dependency_vertices)
+      |> Enum.uniq()
 
     protocol_impl_entry_vertices =
-      reached_vertices
+      type_vertices
       |> protocol_impl_entry_vertices()
-      |> Enum.filter(&Digraph.has_vertex?(graph, &1))
-      |> Enum.reject(&MapSet.member?(reached_vertices, &1))
+      |> Enum.filter(fn vertex ->
+        Digraph.has_vertex?(graph, vertex) && !MapSet.member?(current_type_vertices, vertex)
+      end)
 
     if protocol_impl_entry_vertices == [] do
-      MapSet.to_list(reached_vertices)
+      reached_vertices
     else
-      do_protocol_aware_reachable_vertices(graph, reached_vertices, protocol_impl_entry_vertices)
+      do_protocol_aware_reachable_vertices(
+        graph,
+        reached_vertices,
+        type_vertices,
+        protocol_impl_entry_vertices
+      )
     end
   end
 
@@ -1097,12 +1128,14 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
+  @spec protocol_function_vertex?(vertex) :: boolean
   defp protocol_function_vertex?({module, function, arity}) do
     Reflection.protocol?(module) && {function, arity} in module.__protocol__(:functions)
   end
 
   defp protocol_function_vertex?(_vertex), do: false
 
+  @spec protocol_impl_entry_vertices(vertices) :: vertices
   defp protocol_impl_entry_vertices(reached_vertices) do
     reachable_protocol_types = reachable_protocol_types(reached_vertices)
 
@@ -1115,11 +1148,47 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
+  @spec protocol_dispatch_dependency_vertices(Digraph.t(), vertex_set) :: [vertex]
+  defp protocol_dispatch_dependency_vertices(graph, reached_vertices) do
+    helper_entry_vertices = protocol_dispatch_helper_entry_vertices(graph, reached_vertices)
+
+    graph
+    |> Digraph.reachable(
+      helper_entry_vertices,
+      opaque_vertex?: &protocol_dispatch_dependency_opaque_vertex?/1
+    )
+    |> Enum.filter(&is_tuple/1)
+  end
+
+  @spec protocol_dispatch_dependency_opaque_vertex?(vertex) :: boolean
+  defp protocol_dispatch_dependency_opaque_vertex?(vertex) do
+    is_atom(vertex) || protocol_function_vertex?(vertex)
+  end
+
+  @spec protocol_dispatch_helper_entry_vertices(Digraph.t(), vertex_set) :: [vertex]
+  defp protocol_dispatch_helper_entry_vertices(%Digraph{outgoing_edges: outgoing_edges}, vertices) do
+    for {protocol, _function, _arity} = vertex <- vertices,
+        protocol_function_vertex?(vertex),
+        {target, _flag} <- Map.get(outgoing_edges, vertex, %{}),
+        protocol_dispatch_helper_vertex?(protocol, target) do
+      target
+    end
+  end
+
+  @spec protocol_dispatch_helper_vertex?(module, vertex) :: boolean
+  defp protocol_dispatch_helper_vertex?(protocol, {protocol, _function, _arity} = vertex) do
+    !protocol_function_vertex?(vertex)
+  end
+
+  defp protocol_dispatch_helper_vertex?(_protocol, _vertex), do: false
+
+  @spec protocol_impl_reachable?(module, MapSet.t(module)) :: boolean
   defp protocol_impl_reachable?(impl, reachable_protocol_types) do
     Reflection.has_function?(impl, :__impl__, 1) &&
       MapSet.member?(reachable_protocol_types, impl.__impl__(:for))
   end
 
+  @spec reachable_protocol_types(vertices) :: MapSet.t(module)
   defp reachable_protocol_types(reached_vertices) do
     Enum.reduce(reached_vertices, MapSet.new(@built_in_protocol_types), fn
       module, acc when is_atom(module) ->
@@ -1136,6 +1205,7 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
+  @spec maybe_put_struct_protocol_type(MapSet.t(module), module) :: MapSet.t(module)
   defp maybe_put_struct_protocol_type(types, module) do
     if Reflection.has_struct?(module) do
       MapSet.put(types, module)

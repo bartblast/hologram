@@ -1093,6 +1093,16 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {StringCharsModule12, :to_string, 1} in result
     end
 
+    test "includes protocol dispatch helpers used by generic protocol functions", %{
+      runtime_mfas: result
+    } do
+      assert {String.Chars, :to_string, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
     test "results are deduped", %{runtime_mfas: result} do
       assert result == Enum.uniq(result)
     end

@@ -10,6 +10,7 @@ defmodule Hologram.RouterTest do
   alias Hologram.Commons.ETS
   alias Hologram.Realtime.Handshake
   alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Server.Status
   alias Hologram.Test.Fixtures.Router.Module1
   alias Hologram.Test.Fixtures.Router.Module2
 
@@ -206,10 +207,7 @@ defmodule Hologram.RouterTest do
       assert conn.halted == true
       assert conn.state == :upgraded
 
-      # Note: In production, WebSocket upgrades should set status to 101 (Switching Protocols),
-      # but Plug.Adapters.Test.Conn.upgrade/3 doesn't simulate this HTTP protocol behavior.
-      # The :upgraded state confirms the upgrade was processed correctly in the test environment.
-      assert conn.status == nil
+      assert conn.status == Status.code(:switching_protocols)
     end
   end
 

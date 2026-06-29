@@ -586,13 +586,17 @@ defmodule Hologram.Compiler do
       |> MapSet.new()
 
     function_defs =
-      Enum.filter(module_def_ir.body.expressions, fn
-        %IR.FunctionDefinition{name: function, arity: arity} ->
-          MapSet.member?(module_reachable_mfas, {module, function, arity})
+      maybe_prune_protocol_dispatcher_function_defs(
+        Enum.filter(module_def_ir.body.expressions, fn
+          %IR.FunctionDefinition{name: function, arity: arity} ->
+            MapSet.member?(module_reachable_mfas, {module, function, arity})
 
-        _fallback ->
-          false
-      end)
+          _fallback ->
+            false
+        end),
+        module,
+        reachable_mfas
+      )
 
     %IR.ModuleDefinition{
       module: module_def_ir.module,
@@ -684,6 +688,67 @@ defmodule Hologram.Compiler do
           """
       end
     end
+  end
+
+  defp maybe_prune_protocol_dispatcher_function_defs(function_defs, protocol, reachable_mfas) do
+    if Reflection.protocol?(protocol) do
+      # Consolidated protocol dispatchers list every loaded implementation. Keep
+      # only clauses for implementations already selected by protocol-aware reachability.
+      reachable_impls = reachable_protocol_impls(reachable_mfas, protocol)
+
+      Enum.flat_map(function_defs, fn function_def ->
+        prune_protocol_dispatcher_function_def(function_def, protocol, reachable_impls)
+      end)
+    else
+      function_defs
+    end
+  end
+
+  defp prune_protocol_dispatcher_function_def(
+         %IR.FunctionDefinition{name: function, arity: 1, clause: clause} = function_def,
+         protocol,
+         reachable_impls
+       )
+       when function in [:impl_for, :struct_impl_for] do
+    if keep_protocol_dispatcher_clause?(clause, protocol, reachable_impls) do
+      [function_def]
+    else
+      []
+    end
+  end
+
+  defp prune_protocol_dispatcher_function_def(function_def, _protocol, _reachable_impls) do
+    [function_def]
+  end
+
+  defp keep_protocol_dispatcher_clause?(clause, protocol, reachable_impls) do
+    case protocol_impl_returned_by_clause(clause, protocol) do
+      {:ok, impl} -> MapSet.member?(reachable_impls, impl)
+      :not_protocol_impl -> true
+    end
+  end
+
+  defp protocol_impl_returned_by_clause(
+         %IR.FunctionClause{body: %IR.Block{expressions: [%IR.AtomType{value: module}]}},
+         protocol
+       ) do
+    if Reflection.protocol_impl(module) == protocol do
+      {:ok, module}
+    else
+      :not_protocol_impl
+    end
+  end
+
+  defp protocol_impl_returned_by_clause(_clause, _protocol), do: :not_protocol_impl
+
+  defp reachable_protocol_impls(reachable_mfas, protocol) do
+    Enum.reduce(reachable_mfas, MapSet.new(), fn {module, _function, _arity}, acc ->
+      if Reflection.protocol_impl(module) == protocol do
+        MapSet.put(acc, module)
+      else
+        acc
+      end
+    end)
   end
 
   defp rebuild_ir_plt_entry!(ir_plt, module) do
