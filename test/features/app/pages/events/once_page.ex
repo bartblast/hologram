@@ -13,7 +13,9 @@ defmodule HologramFeatureTests.Events.OncePage do
       click_count: 0,
       rearm_count: 0,
       rearm_shown: true,
-      rerender_tick: 0
+      rerender_tick: 0,
+      resize_once_count: 0,
+      resize_plain_count: 0
     )
   end
 
@@ -40,6 +42,14 @@ defmodule HologramFeatureTests.Events.OncePage do
     <p>
       Rearm: <strong id="rearm_result"><code>{inspect(@rearm_count)}</code></strong>
     </p>
+    <div $resize.once="record_resize_once" id="resize_once_box" style="width: 100px; height: 50px">Once</div>
+    <div $resize="record_resize_plain" id="resize_plain_box" style="width: 100px; height: 50px">Plain</div>
+    <p>
+      Resize once: <strong id="resize_once_result"><code>{inspect(@resize_once_count)}</code></strong>
+    </p>
+    <p>
+      Resize plain: <strong id="resize_plain_result"><code>{inspect(@resize_plain_count)}</code></strong>
+    </p>
     """
   end
 
@@ -49,6 +59,14 @@ defmodule HologramFeatureTests.Events.OncePage do
 
   def action(:record_rearm, _params, component) do
     put_state(component, :rearm_count, component.state.rearm_count + 1)
+  end
+
+  def action(:record_resize_once, _params, component) do
+    put_state(component, :resize_once_count, component.state.resize_once_count + 1)
+  end
+
+  def action(:record_resize_plain, _params, component) do
+    put_state(component, :resize_plain_count, component.state.resize_plain_count + 1)
   end
 
   def action(:rerender, _params, component) do

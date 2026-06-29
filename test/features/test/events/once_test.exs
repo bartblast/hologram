@@ -27,4 +27,23 @@ defmodule HologramFeatureTests.Events.OnceTest do
     |> click(css("#rearm_button"))
     |> assert_text(css("#rearm_result"), "2")
   end
+
+  feature "fires on the first resize only, then the observer is torn down",
+          %{session: session} do
+    session
+    |> visit(OncePage)
+    |> execute_script("""
+    document.getElementById('resize_once_box').style.width = '150px';
+    document.getElementById('resize_plain_box').style.width = '150px';
+    """)
+    |> assert_text(css("#resize_plain_result"), "1")
+    |> execute_script("""
+    document.getElementById('resize_once_box').style.width = '200px';
+    document.getElementById('resize_plain_box').style.width = '200px';
+    """)
+    # The plain binding reaching 2 proves both resizes were processed, so the once binding staying
+    # at 1 means the second resize did not fire it.
+    |> assert_text(css("#resize_plain_result"), "2")
+    |> assert_text(css("#resize_once_result"), "1")
+  end
 end
