@@ -5801,6 +5801,30 @@ describe("Renderer", () => {
       // Now it is dropped, so reconcile detaches its real listener.
       assert.equal(Renderer.resolveListenerBindings().length, 0);
     });
+
+    it("keeps a non-once binding that reuses a spent once binding's slot", () => {
+      // A listener slot is positional across a render's listener bindings, so when the binding set
+      // changes a non-once binding can inherit the slot a spent once binding held. A throwaway
+      // stand-in for the shared window/document target keeps this fired-state from leaking to other
+      // tests; a prior render's spent once binding marked this (target, slot).
+      const target = {};
+      Once.markFired(target, 0);
+
+      // This render, a non-once binding takes the same slot on the same target. The drop is gated on
+      // the binding's own once flag, so the inherited fired-state must not suppress it.
+      Renderer.listenerBindings = [
+        {
+          target,
+          key: "bubble:keyup",
+          attach: () => {},
+          handler: () => {},
+          slotKey: 0,
+          once: false,
+        },
+      ];
+
+      assert.equal(Renderer.resolveListenerBindings().length, 1);
+    });
   });
 
   describe("document node", () => {

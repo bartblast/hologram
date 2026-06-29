@@ -131,12 +131,15 @@ export default class Renderer {
     return htmlVnode;
   }
 
-  // Resolves this render's <window>/<document> listener bindings, dropping any whose once modifier
-  // has fired so reconcile detaches its real listener through the same path that removes a vanished
-  // binding. The fired-state is keyed by the binding's target and slot, both carried on the binding.
+  // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
+  // reconcile detaches its real listener through the same path that removes a vanished binding. The
+  // fired-state is keyed by the binding's target and slot, both carried on the binding. The drop is
+  // gated on the binding's own once flag: a listener slot is positional across this render's listener
+  // bindings, so a non-once binding can reuse a spent once binding's slot on the shared target, and
+  // the gate keeps it from inheriting that permanent fired-state.
   static resolveListenerBindings() {
     return $.listenerBindings.filter(
-      ({target, slotKey}) => !Once.hasFired(target, slotKey),
+      ({target, slotKey, once}) => !(once && Once.hasFired(target, slotKey)),
     );
   }
 
@@ -148,7 +151,10 @@ export default class Renderer {
   // dropped, so reconcile detaches its scroll listener.
   static resolveReachBindings() {
     return $.reachBindings
-      .filter(({vnode, slotKey}) => !Once.hasFired(vnode.elm, slotKey))
+      .filter(
+        ({vnode, slotKey, once}) =>
+          !(once && Once.hasFired(vnode.elm, slotKey)),
+      )
       .map(({vnode, edge, handler, within}) => {
         const {key, attach} = EventListeners.scrollEdge(
           vnode.elm,
@@ -167,7 +173,10 @@ export default class Renderer {
   // whose once modifier has fired is dropped, so reconcile disconnects its observer.
   static resolveResizeBindings() {
     return $.resizeBindings
-      .filter(({vnode, slotKey}) => !Once.hasFired(vnode.elm, slotKey))
+      .filter(
+        ({vnode, slotKey, once}) =>
+          !(once && Once.hasFired(vnode.elm, slotKey)),
+      )
       .map(({vnode, handler}) => {
         const element = vnode.elm;
         const {key, attach} = EventListeners.resizeObserver(element);
@@ -457,6 +466,9 @@ export default class Renderer {
         attach,
         handler,
         slotKey: $.listenerBindings.length,
+        // A synthetic click_outside binding has no once modifier, so it is never a spent once
+        // binding and resolveListenerBindings must never drop it for a reused slot.
+        once: false,
       });
     });
   }
@@ -490,6 +502,7 @@ export default class Renderer {
           attach,
           handler: binding.handler,
           slotKey,
+          once: $.#onceFromModifiers(attrDom.data[2]),
         });
       }
     });
@@ -528,6 +541,7 @@ export default class Renderer {
         handler,
         within,
         slotKey: attrIndex,
+        once: $.#onceFromModifiers(attrDom.data[2]),
       });
     });
   }
@@ -553,7 +567,12 @@ export default class Renderer {
         (event) => event.target,
       );
 
-      $.resizeBindings.push({vnode: elementVnode, handler, slotKey: attrIndex});
+      $.resizeBindings.push({
+        vnode: elementVnode,
+        handler,
+        slotKey: attrIndex,
+        once: $.#onceFromModifiers(attrDom.data[2]),
+      });
     });
   }
 
