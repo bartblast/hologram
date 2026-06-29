@@ -202,7 +202,9 @@ describe("EventListeners", () => {
   describe("scrollEdge()", () => {
     let originalRaf;
     let originalCaf;
+    let originalResizeObserver;
     let rafCallbacks;
+    let resizeObservers;
 
     const mockElement = (metrics = {}) => ({
       addEventListener: sinon.spy(),
@@ -224,8 +226,10 @@ describe("EventListeners", () => {
 
     beforeEach(() => {
       rafCallbacks = [];
+      resizeObservers = [];
       originalRaf = globalThis.requestAnimationFrame;
       originalCaf = globalThis.cancelAnimationFrame;
+      originalResizeObserver = globalThis.ResizeObserver;
 
       globalThis.requestAnimationFrame = (callback) => {
         rafCallbacks.push(callback);
@@ -233,11 +237,21 @@ describe("EventListeners", () => {
       };
 
       globalThis.cancelAnimationFrame = sinon.spy();
+
+      globalThis.ResizeObserver = class {
+        constructor(callback) {
+          this.callback = callback;
+          this.observe = sinon.spy();
+          this.disconnect = sinon.spy();
+          resizeObservers.push(this);
+        }
+      };
     });
 
     afterEach(() => {
       globalThis.requestAnimationFrame = originalRaf;
       globalThis.cancelAnimationFrame = originalCaf;
+      globalThis.ResizeObserver = originalResizeObserver;
     });
 
     it("attaches a passive scroll listener and removes it on detach", () => {
@@ -371,6 +385,40 @@ describe("EventListeners", () => {
       detach();
 
       sinon.assert.calledOnceWithExactly(globalThis.cancelAnimationFrame, 1);
+    });
+
+    it("observes the container for resize and disconnects on detach", () => {
+      const element = mockElement();
+
+      const detach = EventListeners.scrollEdge(element, "bottom").attach(
+        sinon.spy(),
+      );
+
+      const observer = resizeObservers[0];
+      sinon.assert.calledOnceWithExactly(observer.observe, element);
+
+      detach();
+
+      sinon.assert.calledOnce(observer.disconnect);
+    });
+
+    it("rechecks when the container resizes", () => {
+      const element = mockElement({
+        clientHeight: 100,
+        scrollHeight: 1000,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      sinon.assert.notCalled(dispatcher);
+
+      // The container grows, so the bottom edge falls within range.
+      element.clientHeight = 950;
+      resizeObservers[0].callback();
+      flushFrames();
+
+      sinon.assert.calledOnce(dispatcher);
     });
 
     it("measures the distance to each edge from the scroll metrics", () => {

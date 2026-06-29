@@ -73,11 +73,13 @@ export default class EventListeners {
 
   // A scroll-offset listener for one edge of a scroll container, reading the container's own scroll
   // metrics rather than observing a child. The key is per-edge, so a container's up-to-four reach
-  // bindings reconcile independently. The listener is passive and coalesced to one check per frame.
-  // Firing is edge-triggered: a per-edge in/out flag dispatches only on the transition into the
-  // within distance, so staying inside the distance does not re-fire. An initial check on attach
-  // fires when the edge is already within range. Every fire dispatches a {target} carrying the
-  // container, as a scroll event has no per-binding target of its own.
+  // bindings reconcile independently. Scroll events and the resize recompute are passive and
+  // coalesced to one check per frame. Firing is edge-triggered: a per-edge in/out flag dispatches
+  // only on the transition into the within distance, so staying inside the distance does not
+  // re-fire. An initial check on attach fires when the edge is already within range, and a
+  // ResizeObserver on the container rechecks when its size changes - a viewport or responsive
+  // layout change shifts the edge distance and the percentage within. Every fire dispatches a
+  // {target} carrying the container, as a scroll event has no per-binding target of its own.
   static scrollEdge(element, edge, within) {
     return {
       key: `scroll-edge:${edge}`,
@@ -97,17 +99,21 @@ export default class EventListeners {
           wasWithin = isWithin;
         };
 
-        const onScroll = () => {
+        const schedule = () => {
           if (frame === null) {
             frame = requestAnimationFrame(check);
           }
         };
 
-        element.addEventListener("scroll", onScroll, {passive: true});
+        const observer = new ResizeObserver(schedule);
+
+        element.addEventListener("scroll", schedule, {passive: true});
+        observer.observe(element);
         check();
 
         return () => {
-          element.removeEventListener("scroll", onScroll, {passive: true});
+          element.removeEventListener("scroll", schedule, {passive: true});
+          observer.disconnect();
 
           if (frame !== null) {
             cancelAnimationFrame(frame);
