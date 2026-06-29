@@ -71,6 +71,73 @@ export default class EventListeners {
     };
   }
 
+  // A scroll-offset listener for one edge of a scroll container, reading the container's own scroll
+  // metrics rather than observing a child. The key is per-edge, so a container's up-to-four reach
+  // bindings reconcile independently. The listener is passive and coalesced to one check per frame.
+  // Firing is edge-triggered: a per-edge in/out flag dispatches only on the transition into the
+  // within distance, so staying inside the distance does not re-fire. An initial check on attach
+  // fires when the edge is already within range. Every fire dispatches a {target} carrying the
+  // container, as a scroll event has no per-binding target of its own.
+  static scrollEdge(element, edge, within) {
+    return {
+      key: `scroll-edge:${edge}`,
+      attach: (dispatcher) => {
+        let wasWithin = false;
+        let frame = null;
+
+        const check = () => {
+          frame = null;
+
+          const isWithin = $.#isWithinEdge(element, edge, within);
+
+          if (isWithin && !wasWithin) {
+            dispatcher({target: element});
+          }
+
+          wasWithin = isWithin;
+        };
+
+        const onScroll = () => {
+          if (frame === null) {
+            frame = requestAnimationFrame(check);
+          }
+        };
+
+        element.addEventListener("scroll", onScroll, {passive: true});
+        check();
+
+        return () => {
+          element.removeEventListener("scroll", onScroll, {passive: true});
+
+          if (frame !== null) {
+            cancelAnimationFrame(frame);
+          }
+        };
+      },
+    };
+  }
+
+  // Whether the container is scrolled within `within` of the given edge, measuring the distance to
+  // that edge directly from the scroll metrics. A percentage resolves against the container's client
+  // height (top/bottom) or width (left/right); a length is taken as pixels. Default is 100%.
+  static #isWithinEdge(element, edge, within = "100%") {
+    const vertical = edge === "top" || edge === "bottom";
+    const clientSize = vertical ? element.clientHeight : element.clientWidth;
+
+    const threshold = within.endsWith("%")
+      ? (parseFloat(within) / 100) * clientSize
+      : parseFloat(within);
+
+    const distance = {
+      bottom: element.scrollHeight - element.scrollTop - element.clientHeight,
+      left: element.scrollLeft,
+      right: element.scrollWidth - element.scrollLeft - element.clientWidth,
+      top: element.scrollTop,
+    }[edge];
+
+    return distance <= threshold;
+  }
+
   // Builds an IntersectionObserver rootMargin that extends the root's box past the binding's own
   // edge by the prefetch distance (default one viewport), leaving the other three sides flush, so
   // the event fires as that edge nears view. Components are in CSS "top right bottom left" order.
