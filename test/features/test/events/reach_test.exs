@@ -10,9 +10,12 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> assert_text(css("#filled_bottom_result"), "1")
     end
 
-    feature "fires within the prefetch distance before the edge is visible", %{session: session} do
-      # The container is 100px tall and its bottom child sits at 980-1000px, so at scrollTop 780
-      # (visible 780-880) the child is below the fold but inside the 200px within() prefetch.
+    feature "fires before the edge is visible but inside the within() distance", %{
+      session: session
+    } do
+      # The container is 100px tall with 1000px of content. At scrollTop 780 the bottom edge is still
+      # 120px below the fold (1000 - 780 - 100), inside the 200px within() distance, so the reach
+      # fires before the edge is scrolled into view.
       session
       |> visit(ReachPage)
       |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 780;")
@@ -83,7 +86,8 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> visit(ReachPage)
       |> assert_text(css("#scroll_left_result"), "1")
       |> execute_script("document.getElementById('scrollable_horizontal').scrollLeft = 900;")
-      # Wait for the right edge so the observer has registered the left edge leaving view.
+      # Wait for the right edge to fire first: that proves the container scrolled off the left edge,
+      # resetting its edge-trigger so scrolling back re-fires it.
       |> assert_text(css("#scroll_right_result"), "1")
       |> execute_script("document.getElementById('scrollable_horizontal').scrollLeft = 0;")
       |> assert_text(css("#scroll_left_result"), "2")
@@ -117,7 +121,8 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> visit(ReachPage)
       |> assert_text(css("#scroll_top_result"), "1")
       |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 900;")
-      # Wait for the bottom edge so the observer has registered the top edge leaving view.
+      # Wait for the bottom edge to fire first: that proves the container scrolled off the top edge,
+      # resetting its edge-trigger so scrolling back up re-fires it.
       |> assert_text(css("#scroll_bottom_result"), "1")
       |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 0;")
       |> assert_text(css("#scroll_top_result"), "2")
