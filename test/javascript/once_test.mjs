@@ -48,4 +48,15 @@ describe("Once", () => {
       assert.isFalse(Once.hasFired(elementB, "slot"));
     });
   });
+
+  describe("reset()", () => {
+    it("clears fired-state so a marked slot reads as not fired", () => {
+      const element = {};
+
+      Once.markFired(element, "slot");
+      Once.reset();
+
+      assert.isFalse(Once.hasFired(element, "slot"));
+    });
+  });
 });

@@ -25,6 +25,13 @@ export default class Once {
 
     firedSlots.add(slotKey);
   }
+
+  // Test-only: clears all fired-state. A test that marks a long-lived target such as window or
+  // document leaves that entry in the WeakMap for the life of the target, so a teardown calls this
+  // to keep the suite order-independent.
+  static reset() {
+    $.#firedSlotsByElement = new WeakMap();
+  }
 }
 
 const $ = Once;

@@ -5676,6 +5676,12 @@ describe("Renderer", () => {
       Renderer.listenerBindings = [];
     });
 
+    // The once tests below mark the real window, which is never collected, so the fired-state would
+    // otherwise persist into later tests. Reset it after each so the suite stays order-independent.
+    afterEach(() => {
+      Once.reset();
+    });
+
     it("renders nil and collects the binding scoped to the enclosing component", () => {
       // <window $key_down="my_action" />
       const actionSpecDom = Type.list([
