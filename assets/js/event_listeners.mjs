@@ -72,7 +72,9 @@ export default class EventListeners {
   // instead of positional in-place mutation. Tracked by keyed lists (#876), revisit when that lands.
   static scrollEdge(element, edge, within) {
     return {
-      key: `scroll-edge:${edge}`,
+      // within is part of the key: the listener closes over it, and a retained (target, key) entry
+      // keeps its attachment without re-running attach, so a changed within must key a fresh one.
+      key: `scroll-edge:${edge}:${within}`,
       attach: (dispatcher) => {
         let wasWithin = false;
         let lastFiredSize = 0;

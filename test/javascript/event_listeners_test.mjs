@@ -205,6 +205,21 @@ describe("EventListeners", () => {
       assert.strictEqual(new Set(keys).size, 4);
     });
 
+    it("keys each within distinctly so a changed threshold re-attaches", () => {
+      // within is closed over by the attachment, so a retained (target, key) entry would keep a
+      // stale threshold unless within is part of the key. Default, and two distinct distances, must
+      // all key differently.
+      const element = mockElement();
+
+      const keys = [
+        EventListeners.scrollEdge(element, "bottom").key,
+        EventListeners.scrollEdge(element, "bottom", "100px").key,
+        EventListeners.scrollEdge(element, "bottom", "200px").key,
+      ];
+
+      assert.strictEqual(new Set(keys).size, 3);
+    });
+
     it("fires on mount on the next frame, not synchronously during attach", () => {
       const element = mockElement({
         clientHeight: 100,
