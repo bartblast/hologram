@@ -74,26 +74,34 @@ export default class EventListeners {
   // A scroll-offset listener for one edge of a scroll container, reading the container's own scroll
   // metrics rather than observing a child. The key is per-edge, so a container's up-to-four reach
   // bindings reconcile independently. Scroll events and the resize recompute are passive and
-  // coalesced to one check per frame. Firing is edge-triggered: a per-edge in/out flag dispatches
-  // only on the transition into the within distance, so staying inside the distance does not
-  // re-fire. An initial check on attach fires when the edge is already within range, and a
-  // ResizeObserver on the container rechecks when its size changes - a viewport or responsive
-  // layout change shifts the edge distance and the percentage within. Every fire dispatches a
-  // {target} carrying the container, as a scroll event has no per-binding target of its own.
+  // coalesced to one check per frame. Firing is edge-triggered - a per-edge in/out flag dispatches
+  // on the transition into the within distance - and content-change-gated - it also dispatches while
+  // still within range when the scrollable size has grown since the last fire, which drives
+  // mount-fill and auto-fill. A ResizeObserver watches the container and its children, so a viewport
+  // change or an item resizing (a late-loading image) rechecks. Every fire dispatches a {target}
+  // carrying the container, as a scroll event has no per-binding target of its own.
   static scrollEdge(element, edge, within) {
     return {
       key: `scroll-edge:${edge}`,
       attach: (dispatcher) => {
         let wasWithin = false;
+        let lastFiredSize = 0;
         let frame = null;
+
+        const scrollSize = () =>
+          edge === "top" || edge === "bottom"
+            ? element.scrollHeight
+            : element.scrollWidth;
 
         const check = () => {
           frame = null;
 
           const isWithin = $.#isWithinEdge(element, edge, within);
+          const size = scrollSize();
 
-          if (isWithin && !wasWithin) {
+          if (isWithin && (!wasWithin || size > lastFiredSize)) {
             dispatcher({target: element});
+            lastFiredSize = size;
           }
 
           wasWithin = isWithin;
@@ -109,6 +117,11 @@ export default class EventListeners {
 
         element.addEventListener("scroll", schedule, {passive: true});
         observer.observe(element);
+
+        for (const child of element.children) {
+          observer.observe(child);
+        }
+
         check();
 
         return () => {

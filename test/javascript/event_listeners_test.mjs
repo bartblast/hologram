@@ -209,6 +209,7 @@ describe("EventListeners", () => {
     const mockElement = (metrics = {}) => ({
       addEventListener: sinon.spy(),
       removeEventListener: sinon.spy(),
+      children: [],
       clientHeight: 0,
       clientWidth: 0,
       scrollHeight: 0,
@@ -464,6 +465,56 @@ describe("EventListeners", () => {
       EventListeners.scrollEdge(mockElement(metrics), "bottom", "50%").attach(
         dispatcher,
       );
+      sinon.assert.calledOnce(dispatcher);
+    });
+
+    it("observes the container's children for resize", () => {
+      const child1 = {};
+      const child2 = {};
+      const element = mockElement({children: [child1, child2]});
+
+      EventListeners.scrollEdge(element, "bottom").attach(sinon.spy());
+      const observer = resizeObservers[0];
+
+      sinon.assert.calledWith(observer.observe, element);
+      sinon.assert.calledWith(observer.observe, child1);
+      sinon.assert.calledWith(observer.observe, child2);
+    });
+
+    it("re-fires while within range when the content grows", () => {
+      // The bottom edge is 50px away, inside the default range, so it fires on mount.
+      const element = mockElement({
+        clientHeight: 100,
+        scrollHeight: 150,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      sinon.assert.calledOnce(dispatcher);
+
+      // Content grows but the edge is still within range.
+      element.scrollHeight = 180;
+      resizeObservers[0].callback();
+      flushFrames();
+
+      sinon.assert.calledTwice(dispatcher);
+    });
+
+    it("does not re-fire while within range when the content has not grown", () => {
+      const element = mockElement({
+        clientHeight: 100,
+        scrollHeight: 150,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      sinon.assert.calledOnce(dispatcher);
+
+      resizeObservers[0].callback();
+      flushFrames();
+
       sinon.assert.calledOnce(dispatcher);
     });
   });
