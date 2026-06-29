@@ -5232,7 +5232,7 @@ describe("Bitstring", () => {
         0, 1, 1, 0, 0, 0, 0, 1, // "a"
         0, 1, 1, 0, 0, 0, 1, 0, // "b"
         1, 0, 1
-      ]
+      ];
 
       const bitstring = Bitstring.fromBits(bits);
 

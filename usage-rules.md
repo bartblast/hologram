@@ -45,7 +45,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Available prop types: `:any`, `:atom`, `:boolean`, `:bitstring`, `:float`, `:function`, `:integer`, `:list`, `:map`, `:pid`, `:port`, `:reference`, `:string`, `:tuple`.
 - Source props from context: `prop :user, :map, from_context: :current_user`.
 - Stateful components require a `cid` attribute: `<MyComponent cid="my_id" />`. Without `cid`, the component is stateless.
-- Server-side init uses `init/3` (props, component, server). Client-side init uses `init/2` (props, component).
+- Each stateful instance is initialized exactly once: `init/3` (props, component, server) runs when its lifecycle starts during server-side page rendering, `init/2` (props, component) when it is dynamically added to an already-loaded page.
 - `init/3` can return a `Component` struct, a `Server` struct, or a `{component, server}` tuple.
 - Both `init/3` and `init/2` are optional.
 - Use `<slot />` for child content. **Not** `<:slot>` or `inner_block`.
@@ -73,7 +73,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 
 ## Events
 
-- Bind events with `$` prefix: `$click`, `$click_outside`, `$change`, `$submit`, `$blur`, `$focus`, `$key_down`, `$key_up`, `$mouse_move`, `$pointer_down`, `$pointer_up`, `$pointer_move`, `$pointer_cancel`, `$resize`, `$scroll`, `$select`, `$transition_end`, `$transition_start`, `$transition_run`, `$transition_cancel`. **Not** `phx-click` or `phx-change`.
+- Bind events with `$` prefix: `$click`, `$click_outside`, `$change`, `$submit`, `$blur`, `$focus`, `$key_down`, `$key_up`, `$mouse_move`, `$pointer_down`, `$pointer_up`, `$pointer_move`, `$pointer_cancel`, `$resize`, `$scroll`, `$reach_bottom`, `$reach_left`, `$reach_right`, `$reach_top`, `$select`, `$transition_end`, `$transition_start`, `$transition_run`, `$transition_cancel`. **Not** `phx-click` or `phx-change`.
 - Text syntax (actions only): `$click="my_action"`.
 - Shorthand with params (actions only): `$click={:my_action, key: value}`.
 - Longhand (actions or commands): `$click={action: :my_action, target: "cid", params: %{key: value}}`.
@@ -91,6 +91,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - `$click_outside` fires when a click lands anywhere outside the bound element and its descendants - for dismissible UI like dropdowns, popovers, modals, and menus. A click on or inside the element does nothing. Usually rendered only while the element is open (behind a conditional) so it listens for outside clicks just then.
 - `$resize` fires when the bound target's size changes (no initial dispatch on first render) - bind it to an element to track that element, or to `<window>` for the browser window. For an element, `params.event` has `border_box_size`, `content_box_size`, and `device_pixel_content_box_size`, each a `%{block_size, inline_size}` map (the device-pixel one is `nil` where unsupported - notably Safari and all iOS browsers). A window resize has an empty payload (the native event provides no size data). It fires rapidly, so pair it with `throttle(ms)` or `debounce(ms)`.
 - `$scroll` fires when a scrollable element, or the page, is scrolled - bind it to an element to track that element, or to `<window>` / `<document>` to track the page. `params.event` has `scroll_left` and `scroll_top`. It fires rapidly, so pair it with `throttle(ms)` or `debounce(ms)`.
+- `$reach_bottom`, `$reach_left`, `$reach_right`, `$reach_top` fire when a scroll container is scrolled so the matching edge comes into view (the basis for infinite scroll, load-more, pull-to-refresh) - bind them to the scrolling element, one per edge. They carry no `params.event` data (a pure trigger). Each also fires on mount when its edge is already in view, so resolve the binding to `nil` to stop it (e.g. at end-of-data). Append `within(<distance>)` to fire ahead of the edge - a length (`200px`) or a percentage of the container (`50%`), with a default of `100%` (the container's height for top/bottom, its width for left/right).
+- Prepending content above the viewport (for `$reach_top`/`$reach_left`) does not yet preserve scroll position - the view stays at the top, showing the newly loaded content. Keyed lists will address this.
 - Keyboard events (`$key_down`, `$key_up`): `params.event` has `key` (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), `code`, `alt_key`, `ctrl_key`, `meta_key`, `shift_key`, `repeat`.
 - Filter keyboard events to a key with a dot: `$key_down.enter="submit"`; combine modifiers with `+`: `$key_down.ctrl+enter="send"`. Works on `$key_down` and `$key_up`, case-insensitive, and matches a superset (extra held modifiers do not block it).
 - Filter keys: letters/digits as the character (`k`, `7`); modifiers `alt`/`ctrl`/`meta`/`shift` (only when combined with a key); named keys (`arrow_up`, `enter`, `escape`, `space`, `tab`, `f1`-`f12`, ...); symbol keys as alias words (`slash`, `period`, `comma`, `minus`, ...) **not** raw characters.
@@ -138,7 +140,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Use standard HTML `<form>`, `<input>`, `<select>`, `<textarea>` elements. **Not** Phoenix form helpers (`to_form`, `<.simple_form>`, `<.input>`).
 - **Synchronized inputs** use `value={@state_var}` + `$change="handler"` on the input element. The component state is the single source of truth.
 - **Non-synchronized inputs** omit `$change` on the input. Access values via form-level `$change` or `$submit` handlers from `params.event`.
-- Text inputs and textareas sync with `value` attribute. Checkboxes and radio buttons sync with `checked` attribute.
+- Text inputs, textareas, and selects sync with the `value` attribute. Checkboxes and radio buttons sync with the `checked` attribute.
 - Input-level `$change` on text inputs fires on every keystroke. Form-level `$change` fires on field blur.
 - `$submit` event data contains all form field values as a map: `params.event` => `%{field_name: value}`.
 - Elixir validation code (including Ecto changesets) runs both client-side and server-side since Hologram runs Elixir in the browser.
@@ -161,6 +163,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Composite: a `use Hologram.Middleware` module that declares a sub-chain with `middleware ...` lines and omits `call/2` (generated for you). It attaches anywhere a leaf can, including inside another composite.
 - Attach to a page or component with `middleware SomeModule` or `middleware :some_function`, each with optional keyword opts (`middleware SomeModule, role: :admin`). Declarations run top to bottom.
 - Every middleware receives and returns a `%Server{}` struct - the same one `init/3` and commands use. The `Server` helpers (`put_status`, `put_redirect`, `put_session`, `put_stash`, `get_request_header`, ...) are imported unqualified.
+- Read the incoming request as `Server` struct fields: `method`, `scheme`, `host`, `port`, `path`, `query`, `raw_query`, `ip`. These are **not** authenticated - `host` is client-supplied and spoofable, so validate it against an allowlist before any security decision and never build security-sensitive URLs (password-reset links, emails) from it.
+- Set or clear the authenticated user with `put_user_id(server, user_id)` / `delete_user_id(server)` (persisted to the session) - the canonical login/logout mechanism.
 - Stop the chain by setting a status - `put_status(server, :forbidden)`, `put_status(server, 403)`, or `put_redirect(server, MyApp.LoginPage)`. There is no separate `halt`: a non-nil status is the signal, checked after each middleware returns (it does not abort on the spot).
 - Pass data downstream with `put_stash(server, :key, value)`, read later with `get_stash` in middleware, `init/3`, or commands.
 - Dispatch is flat: page middleware covers the page render and the page's own commands; component middleware covers only that component's commands. A page's middleware does **not** cover its components' commands - attach the gate to the component (or a shared composite) to protect them.
@@ -172,7 +176,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Read: `get_session(server, :key)` or `get_session(server, :key, default)`.
 - Write: `put_session(server, :key, value)`.
 - Delete: `delete_session(server, :key)`.
-- Session keys must be atoms or strings.
+- Session keys must be atoms or strings (atoms are converted to strings, so `:user_id` and `"user_id"` address the same value).
 - Sessions can store any Elixir data type (maps, lists, tuples, etc.).
 - Session data cannot be read by client-side code. Use cookies if you need client-side access.
 
@@ -209,11 +213,12 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Relative paths (`./`, `../`) resolve relative to the Elixir source file. Bare specifiers resolve as npm packages.
 - Call a function: `JS.call(:multiply, [4, 6])`. Call a method: `JS.call(:Math, :round, [3.7])`.
 - Instantiate a class: `JS.new(:Calculator, [10])`. Chain with `|>`: `:Calculator |> JS.new([10]) |> JS.call(:add, [5])`.
-- Get/set properties: `JS.get(obj, :value)`, `JS.set(obj, :value, 20)`.
+- Get/set/delete properties: `JS.get(obj, :value)`, `JS.set(obj, :value, 20)`, `JS.delete(obj, :value)`. Inspect values: `JS.typeof(obj)`, `JS.instanceof(obj, :Class)`.
 - Evaluate JS: `JS.eval("3 + 4")`. Execute JS: `JS.exec("const x = 2; return x + 3;")`. Inline JS: `~JS"""..."""`.
 - Async: JS Promises become Elixir Tasks. Use `Task.await/1` to get the result.
-- Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`.
+- Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`. Available immediately - calls before the runtime loads are queued and replayed on mount (safe for inline `<script>`).
 - Dispatch DOM events from Elixir: `JS.dispatch_event(target, "my:event", detail: %{value: 42})`.
+- Direct DOM manipulation via JS interop is preserved across Hologram re-renders, as long as the container element stays in the template.
 - Elixir anonymous functions can be passed as JS callbacks.
 - JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
 - Prefer `JS.call` over `JS.exec`/`JS.eval`. Isolate JS interop behind facade modules.

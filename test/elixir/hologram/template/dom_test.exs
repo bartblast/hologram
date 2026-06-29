@@ -659,6 +659,58 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
+    test "reach event with a px within modifier" do
+      # <div $reach_bottom.within(200px)="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$reach_bottom.within(200px)", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {:{}, [line: 1],
+                     [
+                       "$reach_bottom",
+                       [text: "my_value"],
+                       {:%{}, [line: 1], [within: "200px"]}
+                     ]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "reach event with a percentage within modifier" do
+      # The "%" character is map syntax in Elixir source, so this locks that a within value survives
+      # inspect -> code -> AST.for_code quoted, reaching the client as the plain string "50%".
+      # <div $reach_top.within(50%)="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$reach_top.within(50%)", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {:{}, [line: 1],
+                     [
+                       "$reach_top",
+                       [text: "my_value"],
+                       {:%{}, [line: 1], [within: "50%"]}
+                     ]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
     test "raises for an unknown key in a keyboard event" do
       # <div $key_down.entr="my_value"></div>
       tags = [

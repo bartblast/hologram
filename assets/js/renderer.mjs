@@ -25,6 +25,13 @@ export default class Renderer {
   // render loop drains it after patching to reconcile real listeners on each binding's target.
   static listenerBindings = [];
 
+  // Deferred reach (scroll-edge) bindings collected during the current render, each a
+  // {vnode, edge, handler, within}. The listener reads the container's own scroll metrics, a live
+  // DOM node Snabbdom sets on the vnode only during patch, so the binding is held here until
+  // resolveReachBindings turns it into a registry binding once `.elm` exists. renderPage() resets
+  // this.
+  static reachBindings = [];
+
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
@@ -92,6 +99,7 @@ export default class Renderer {
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
     Renderer.listenerBindings = [];
+    Renderer.reachBindings = [];
     Renderer.resizeBindings = [];
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
@@ -114,6 +122,19 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // Resolves this render's deferred reach bindings into {target, key, attach, handler} registry
+  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The target
+  // is the container itself, whose own scroll metrics the listener reads, so the registry keeps one
+  // listener per container edge across renders rather than re-pointing it. Per-edge keys keep a
+  // container's bindings reconciling independently.
+  static resolveReachBindings() {
+    return $.reachBindings.map(({vnode, edge, handler, within}) => {
+      const {key, attach} = EventListeners.scrollEdge(vnode.elm, edge, within);
+
+      return {target: vnode.elm, key, attach, handler};
+    });
   }
 
   // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
@@ -226,6 +247,14 @@ export default class Renderer {
     // so it is collected as a document-level "click" binding in #renderElement. Returning null here
     // keeps it out of the element's "on" map.
     if (originalEventName === "click_outside") {
+      return null;
+    }
+
+    // A scroll-edge reach ($reach_top/bottom/left/right) is delivered by a scroll listener reading
+    // the container's own scroll metrics, not a DOM event, so it is collected as a deferred binding
+    // in #renderElement. Returning null keeps it out of the element's "on" map, where the browser
+    // would never fire it.
+    if (originalEventName.startsWith("reach_") && tagName !== null) {
       return null;
     }
 
@@ -417,6 +446,37 @@ export default class Renderer {
     });
   }
 
+  // Records each $reach_<edge> attribute on the element as a deferred scroll-edge binding. A reach
+  // is delivered by a scroll listener reading the container's own scroll metrics, not a DOM event,
+  // so it cannot ride the element's "on" map, and the container is a live DOM node Snabbdom sets on
+  // the vnode only during patch. So the binding carries the vnode, the edge, its handler, and the
+  // within modifier's distance, and resolveReachBindings turns it into a registry binding once `.elm`
+  // exists. The handler keys its debounce/throttle window on the dispatched event's target (the
+  // container). The Hologram event type is "reach_<edge>", which selects ReachEvent and carries the
+  // edge for a handler that branches on it.
+  static #collectReachBindings(attrsDom, elementVnode, defaultTarget) {
+    attrsDom.data.forEach((attrDom, attrIndex) => {
+      const eventName = Bitstring.toText(attrDom.data[0]).substring(1);
+
+      if (!eventName.startsWith("reach_")) {
+        return;
+      }
+
+      const edge = eventName.substring("reach_".length);
+      const within = $.#withinFromModifiers(attrDom.data[2]);
+
+      const handler = $.#buildEventHandler(
+        attrDom,
+        attrIndex,
+        eventName,
+        defaultTarget,
+        (event) => event.target,
+      );
+
+      $.reachBindings.push({vnode: elementVnode, edge, handler, within});
+    });
+  }
+
   // Records each $resize attribute on the element as a deferred resize-observer binding. Element
   // resize is delivered by a ResizeObserver, not a DOM event, so it cannot ride the element's "on"
   // map, and the observer's target is the element's live DOM node, which Snabbdom sets on the vnode
@@ -451,6 +511,7 @@ export default class Renderer {
 
   // Returns the debounce window in milliseconds from a modifiers map, or null when there is no
   // debounce modifier.
+  // Deps: [:maps.get/3]
   static #debounceMsFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return null;
@@ -578,6 +639,7 @@ export default class Renderer {
   // Decides whether a live event satisfies an attribute's modifier filters. Modifiers are a
   // tagged list; a {:key, values} modifier is matched by the keyboard matcher, and any other
   // kind does not gate dispatch.
+  // Deps: [:maps.get/3]
   static #eventMatchesModifiers(modifiersDom, event) {
     const keyFilters = Erlang_Maps["get/3"](
       Type.atom("key"),
@@ -1104,6 +1166,8 @@ export default class Renderer {
       defaultTarget,
     );
 
+    Renderer.#collectReachBindings(attrsDom, elementVnode, defaultTarget);
+
     Renderer.#collectResizeBindings(attrsDom, elementVnode, defaultTarget);
 
     return elementVnode;
@@ -1315,6 +1379,7 @@ export default class Renderer {
 
   // Returns the throttle window in milliseconds from a modifiers map, or null when there is no
   // throttle modifier.
+  // Deps: [:maps.get/3]
   static #throttleMsFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return null;
@@ -1349,6 +1414,24 @@ export default class Renderer {
 
   static #valueDomToText(valueDom) {
     return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
+  }
+
+  // Returns the within modifier's CSS distance (e.g. "200px", "50%") from a modifiers map, or
+  // undefined when there is no within modifier, so the scroll-edge listener falls back to its
+  // default within (100%).
+  // Deps: [:maps.get/3]
+  static #withinFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return undefined;
+    }
+
+    const within = Erlang_Maps["get/3"](
+      Type.atom("within"),
+      modifiersDom,
+      null,
+    );
+
+    return within === null ? undefined : Bitstring.toText(within);
   }
 }
 

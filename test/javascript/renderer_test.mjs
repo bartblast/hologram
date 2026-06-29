@@ -76,6 +76,7 @@ import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import EventListeners from "../../assets/js/event_listeners.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -5763,6 +5764,137 @@ describe("Renderer", () => {
       );
 
       Hologram.handleUiEvent.restore();
+    });
+  });
+
+  describe("reach binding", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    const reachElement = (attrName, specDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([Type.tuple([Type.bitstring(attrName), specDom])]),
+        Type.list(),
+      ]);
+
+    beforeEach(() => {
+      Renderer.listenerBindings = [];
+      Renderer.reachBindings = [];
+    });
+
+    it("adds no per-element listener and collects a deferred binding carrying the vnode and edge", () => {
+      // <div $reach_bottom="my_action"></div>
+      const vdom = Renderer.renderDom(
+        reachElement("$reach_bottom", actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // A reach is delivered by a scroll listener, so nothing is added to the element's "on" map.
+      assert.deepStrictEqual(vdom.data.on, {});
+
+      assert.equal(Renderer.reachBindings.length, 1);
+      assert.equal(Renderer.reachBindings[0].vnode, vdom);
+      assert.equal(Renderer.reachBindings[0].edge, "bottom");
+    });
+
+    it("dispatches the event through the bound element's handler under the edge-typed event", () => {
+      Renderer.renderDom(
+        reachElement("$reach_bottom", actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const stub = sinon
+        .stub(Hologram, "handleUiEvent")
+        .callsFake(
+          (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+        );
+
+      const event = {target: {}};
+
+      Renderer.reachBindings[0].handler(event);
+
+      sinon.assert.calledOnceWithExactly(
+        stub,
+        event,
+        "reach_bottom",
+        actionSpecDom,
+        defaultTarget,
+        false,
+        false,
+        false,
+      );
+
+      Hologram.handleUiEvent.restore();
+    });
+
+    it("resolves into a registry binding targeting the container", () => {
+      const vdom = Renderer.renderDom(
+        reachElement("$reach_bottom", actionSpecDom),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the container here.
+      const container = {};
+      vdom.elm = container;
+
+      const resolved = Renderer.resolveReachBindings();
+
+      assert.equal(resolved.length, 1);
+      assert.equal(resolved[0].target, container);
+      assert.equal(resolved[0].key, "scroll-edge:bottom:100%");
+      assert.equal(resolved[0].handler, Renderer.reachBindings[0].handler);
+      assert.isFunction(resolved[0].attach);
+    });
+
+    it("threads the within modifier's distance into the scroll-edge listener", () => {
+      // <div $reach_bottom.within(200px)="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$reach_bottom"),
+            actionSpecDom,
+            Type.map([[Type.atom("within"), Type.bitstring("200px")]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const container = {};
+      vdom.elm = container;
+
+      const stub = sinon
+        .stub(EventListeners, "scrollEdge")
+        .returns({key: "scroll-edge:bottom", attach: () => {}});
+
+      try {
+        Renderer.resolveReachBindings();
+      } finally {
+        EventListeners.scrollEdge.restore();
+      }
+
+      sinon.assert.calledOnceWithExactly(stub, container, "bottom", "200px");
     });
   });
 

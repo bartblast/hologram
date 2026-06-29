@@ -277,6 +277,69 @@ defmodule Hologram.Template.EventModifiersTest do
     end
   end
 
+  describe "parse/2 within modifier" do
+    test "px length is kept verbatim" do
+      assert parse("$reach_bottom", ["within(200px)"]) == %{within: "200px"}
+    end
+
+    test "percentage is kept verbatim" do
+      assert parse("$reach_top", ["within(50%)"]) == %{within: "50%"}
+    end
+
+    test "valid on every reach edge" do
+      for edge <- ["$reach_bottom", "$reach_left", "$reach_right", "$reach_top"] do
+        assert parse(edge, ["within(50%)"]) == %{within: "50%"}
+      end
+    end
+
+    test "composes with a universal modifier" do
+      assert parse("$reach_bottom", ["within(200px)", "stop_propagation"]) ==
+               %{stop_propagation: true, within: "200px"}
+    end
+
+    test "raises on a non-reach event" do
+      assert_raise TemplateSyntaxError,
+                   ~s'the within modifier "within(50%)" is only valid on $reach_* events',
+                   fn -> parse("$click", ["within(50%)"]) end
+    end
+
+    test "raises for a value with no unit" do
+      assert_raise TemplateSyntaxError,
+                   ~s'within modifier "within(2)" requires a length in px or a percentage',
+                   fn -> parse("$reach_bottom", ["within(2)"]) end
+    end
+
+    test "raises for an unknown unit" do
+      assert_raise TemplateSyntaxError,
+                   ~s'within modifier "within(50em)" requires a length in px or a percentage',
+                   fn -> parse("$reach_bottom", ["within(50em)"]) end
+    end
+
+    test "raises for a missing value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'within modifier "within()" requires a length in px or a percentage',
+                   fn -> parse("$reach_bottom", ["within()"]) end
+    end
+
+    test "raises for a bare within with no value" do
+      assert_raise TemplateSyntaxError,
+                   ~s'within modifier "within" requires a length in px or a percentage',
+                   fn -> parse("$reach_bottom", ["within"]) end
+    end
+
+    test "raises for more than one within modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one within modifier",
+                   fn -> parse("$reach_bottom", ["within(100px)", "within(200px)"]) end
+    end
+
+    test "raises for a key filter on a reach event" do
+      assert_raise TemplateSyntaxError,
+                   ~s'unknown event modifier "enter"',
+                   fn -> parse("$reach_bottom", ["enter"]) end
+    end
+  end
+
   describe "parse/2 modifier combinations" do
     test "allow_default composes with another modifier" do
       assert parse("$key_down", ["allow_default", "enter"]) ==
