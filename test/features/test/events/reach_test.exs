@@ -56,6 +56,19 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> execute_script("document.getElementById('tall_child_vertical').scrollTop = 850;")
       |> assert_text(css("#tall_child_bottom_result"), "1")
     end
+
+    feature "fires again when the content grows without a scroll", %{session: session} do
+      # The container starts short enough that its bottom edge is within range, so it fires on mount.
+      # A detector wired only to scroll events would then go silent: the user never scrolls, the
+      # content just grows under them. The container watches its children for resize, so a child
+      # growing while the bottom edge stays within range fires again - the auto-fill signal that the
+      # freshly loaded content still did not fill the container and more is needed.
+      session
+      |> visit(ReachPage)
+      |> assert_text(css("#resize_bottom_result"), "1")
+      |> execute_script("document.getElementById('resize_spacer').style.height = '140px';")
+      |> assert_text(css("#resize_bottom_result"), "2")
+    end
   end
 
   describe "$reach_left" do

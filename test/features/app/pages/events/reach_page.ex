@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.Events.ReachPage do
       filled_bottom: 0,
       filled_right: 0,
       hidden_child_bottom: 0,
+      resize_bottom: 0,
       scroll_bottom: 0,
       scroll_left: 0,
       scroll_right: 0,
@@ -65,6 +66,11 @@ defmodule HologramFeatureTests.Events.ReachPage do
       <div style="height: 600px">Spacer</div>
       <div style="height: 400px">Tall</div>
     </div>
+    <div $reach_bottom="resize_bottom" id="resize_vertical" style="height: 100px; overflow: auto">
+      <div style="height: 20px">Top</div>
+      <div id="resize_spacer" style="height: 80px">Spacer</div>
+      <div style="height: 20px">Bottom</div>
+    </div>
     <p>
       Scroll top: <strong id="scroll_top_result"><code>{@scroll_top}</code></strong>
     </p>
@@ -89,6 +95,9 @@ defmodule HologramFeatureTests.Events.ReachPage do
     <p>
       Tall child bottom: <strong id="tall_child_bottom_result"><code>{@tall_child_bottom}</code></strong>
     </p>
+    <p>
+      Resize bottom: <strong id="resize_bottom_result"><code>{@resize_bottom}</code></strong>
+    </p>
     <ReachNested cid="reach_nested" />
     """
   end
@@ -103,6 +112,10 @@ defmodule HologramFeatureTests.Events.ReachPage do
 
   def action(:hidden_child_bottom, _params, component) do
     put_state(component, :hidden_child_bottom, component.state.hidden_child_bottom + 1)
+  end
+
+  def action(:resize_bottom, _params, component) do
+    put_state(component, :resize_bottom, component.state.resize_bottom + 1)
   end
 
   def action(:scroll_bottom, _params, component) do
