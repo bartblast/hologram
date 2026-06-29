@@ -11,6 +11,9 @@ defmodule HologramFeatureTests.Events.OncePage do
   def init(_params, component, _server) do
     put_state(component,
       click_count: 0,
+      reach_bottom_count: 0,
+      reach_once_count: 0,
+      reach_top_count: 0,
       rearm_count: 0,
       rearm_shown: true,
       rerender_tick: 0,
@@ -50,11 +53,43 @@ defmodule HologramFeatureTests.Events.OncePage do
     <p>
       Resize plain: <strong id="resize_plain_result"><code>{inspect(@resize_plain_count)}</code></strong>
     </p>
+    <div $reach_bottom.once="record_reach_once" id="reach_once_box" style="height: 100px; overflow: auto">
+      <div style="height: 1000px">Content</div>
+    </div>
+    <div
+      $reach_bottom="record_reach_bottom"
+      $reach_top="record_reach_top"
+      id="reach_witness_box"
+      style="height: 100px; overflow: auto"
+    >
+      <div style="height: 1000px">Content</div>
+    </div>
+    <p>
+      Reach once: <strong id="reach_once_result"><code>{inspect(@reach_once_count)}</code></strong>
+    </p>
+    <p>
+      Reach bottom: <strong id="reach_bottom_result"><code>{inspect(@reach_bottom_count)}</code></strong>
+    </p>
+    <p>
+      Reach top: <strong id="reach_top_result"><code>{inspect(@reach_top_count)}</code></strong>
+    </p>
     """
   end
 
   def action(:record_click, _params, component) do
     put_state(component, :click_count, component.state.click_count + 1)
+  end
+
+  def action(:record_reach_bottom, _params, component) do
+    put_state(component, :reach_bottom_count, component.state.reach_bottom_count + 1)
+  end
+
+  def action(:record_reach_once, _params, component) do
+    put_state(component, :reach_once_count, component.state.reach_once_count + 1)
+  end
+
+  def action(:record_reach_top, _params, component) do
+    put_state(component, :reach_top_count, component.state.reach_top_count + 1)
   end
 
   def action(:record_rearm, _params, component) do

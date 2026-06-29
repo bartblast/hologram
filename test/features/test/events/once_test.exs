@@ -46,4 +46,32 @@ defmodule HologramFeatureTests.Events.OnceTest do
     |> assert_text(css("#resize_plain_result"), "2")
     |> assert_text(css("#resize_once_result"), "1")
   end
+
+  feature "fires on the first reach only, then the scroll listener is torn down",
+          %{session: session} do
+    session
+    |> visit(OncePage)
+    # Scroll both containers to the bottom: the first reach for each.
+    |> execute_script("""
+    document.getElementById('reach_once_box').scrollTop = 900;
+    document.getElementById('reach_witness_box').scrollTop = 900;
+    """)
+    |> assert_text(css("#reach_bottom_result"), "1")
+    # Scroll both back to the top. Waiting for the witness's top reach proves a frame elapsed and
+    # the witness's bottom edge-trigger reset, so the next scroll down can re-fire it.
+    |> execute_script("""
+    document.getElementById('reach_once_box').scrollTop = 0;
+    document.getElementById('reach_witness_box').scrollTop = 0;
+    """)
+    |> assert_text(css("#reach_top_result"), "2")
+    # Scroll both to the bottom again. The witness re-fires; the once binding's listener is gone.
+    |> execute_script("""
+    document.getElementById('reach_once_box').scrollTop = 900;
+    document.getElementById('reach_witness_box').scrollTop = 900;
+    """)
+    # The witness reaching 2 proves a second reach was processed, so the once binding staying at 1
+    # means the second reach did not fire it.
+    |> assert_text(css("#reach_bottom_result"), "2")
+    |> assert_text(css("#reach_once_result"), "1")
+  end
 end
