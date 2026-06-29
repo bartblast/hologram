@@ -5986,6 +5986,53 @@ describe("Renderer", () => {
 
       Hologram.handleUiEvent.restore();
     });
+
+    it("with a once modifier fires once across repeated outside clicks, then re-arms on a re-created element", () => {
+      // <div $click_outside.once="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$click_outside"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Every click lands outside the bound element. once keys on the element, read live from `.elm`.
+      vdom.elm = {contains: () => false};
+
+      const dispatch = sinon.spy();
+      sinon.stub(Hologram, "handleUiEvent").returns(dispatch);
+
+      const handler = Renderer.listenerBindings[0].handler;
+
+      handler({target: {}});
+      handler({target: {}});
+      handler({target: {}});
+
+      // Spent after the first outside click; later ones are no-ops.
+      sinon.assert.calledOnce(dispatch);
+
+      // A re-created element is a new node with no fired-state, so the binding re-arms.
+      vdom.elm = {contains: () => false};
+      handler({target: {}});
+
+      sinon.assert.calledTwice(dispatch);
+
+      Hologram.handleUiEvent.restore();
+    });
   });
 
   describe("reach binding", () => {

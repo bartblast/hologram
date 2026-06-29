@@ -429,14 +429,17 @@ export default class Renderer {
   // live `.elm` at dispatch - Snabbdom sets it during patch, and the binding is only reconciled into
   // a real listener after that. The Hologram event type is the synthetic "click_outside" - the DSL
   // name unchanged, deliberately not run through #normalizeEventName, since there is no DOM event to
-  // map to.
+  // map to. A once modifier keys on the bound element (re-arming when it is re-created) and stays
+  // inert until then, like a DOM-element once binding - click_outside does not go through
+  // #buildEventHandler, so its once is wired here rather than inheriting the shared dispatch path.
   static #collectClickOutsideBindings(attrsDom, elementVnode, defaultTarget) {
-    attrsDom.data.forEach((attrDom) => {
+    attrsDom.data.forEach((attrDom, attrIndex) => {
       if (Bitstring.toText(attrDom.data[0]) !== "$click_outside") {
         return;
       }
 
       const operationSpecDom = attrDom.data[1];
+      const once = $.#onceFromModifiers(attrDom.data[2]);
 
       const handler = (event) => {
         if (elementVnode.elm.contains(event.target)) {
@@ -450,9 +453,21 @@ export default class Renderer {
           defaultTarget,
         );
 
-        if (dispatch !== null) {
-          dispatch();
+        if (dispatch === null) {
+          return;
         }
+
+        // once keys on the bound element and its attribute index, so it re-arms only when the
+        // element is re-created (a new node, a fresh fired-state) and stays spent across re-renders.
+        if (once && Once.hasFired(elementVnode.elm, attrIndex)) {
+          return;
+        }
+
+        if (once) {
+          Once.markFired(elementVnode.elm, attrIndex);
+        }
+
+        dispatch();
       };
 
       // Capture phase: Hologram renders synchronously inside the click handler, so a bubble-phase
@@ -466,8 +481,9 @@ export default class Renderer {
         attach,
         handler,
         slotKey: $.listenerBindings.length,
-        // A synthetic click_outside binding has no once modifier, so it is never a spent once
-        // binding and resolveListenerBindings must never drop it for a reused slot.
+        // click_outside once is keyed on the bound element and torn down when that element is
+        // removed (its handler drops out of the shared document listener), not proactively filtered
+        // here - so resolveListenerBindings must never drop it for a reused positional slot.
         once: false,
       });
     });
