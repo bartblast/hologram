@@ -68,7 +68,7 @@ defmodule HologramFeatureTests.Events.ReachPage do
     </div>
     <div $reach_bottom="resize_bottom" id="resize_vertical" style="height: 100px; overflow: auto">
       <div style="height: 20px">Top</div>
-      <div id="resize_spacer" style="height: 80px">Spacer</div>
+      <div id="resize_spacer" style="height: 200px">Spacer</div>
       <div style="height: 20px">Bottom</div>
     </div>
     <p>
