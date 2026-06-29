@@ -33,6 +33,12 @@ export default class Renderer {
   // this.
   static reachBindings = [];
 
+  // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
+  // An element's observer target is its live DOM node, which Snabbdom sets on the vnode only during
+  // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
+  // once `.elm` exists. renderPage() resets this.
+  static resizeBindings = [];
+
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
@@ -125,36 +131,49 @@ export default class Renderer {
     return htmlVnode;
   }
 
+  // Resolves this render's <window>/<document> listener bindings, dropping any whose once modifier
+  // has fired so reconcile detaches its real listener through the same path that removes a vanished
+  // binding. The fired-state is keyed by the binding's target and slot, both carried on the binding.
+  static resolveListenerBindings() {
+    return $.listenerBindings.filter(
+      ({target, slotKey}) => !Once.hasFired(target, slotKey),
+    );
+  }
+
   // Resolves this render's deferred reach bindings into {target, key, attach, handler} registry
   // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The target
   // is the container itself, whose own scroll metrics the listener reads, so the registry keeps one
   // listener per container edge across renders rather than re-pointing it. Per-edge keys keep a
-  // container's bindings reconciling independently.
+  // container's bindings reconciling independently. A binding whose once modifier has fired is
+  // dropped, so reconcile detaches its scroll listener.
   static resolveReachBindings() {
-    return $.reachBindings.map(({vnode, edge, handler, within}) => {
-      const {key, attach} = EventListeners.scrollEdge(vnode.elm, edge, within);
+    return $.reachBindings
+      .filter(({vnode, slotKey}) => !Once.hasFired(vnode.elm, slotKey))
+      .map(({vnode, edge, handler, within}) => {
+        const {key, attach} = EventListeners.scrollEdge(
+          vnode.elm,
+          edge,
+          within,
+        );
 
-      return {target: vnode.elm, key, attach, handler};
-    });
+        return {target: vnode.elm, key, attach, handler};
+      });
   }
-
-  // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
-  // An element's observer target is its live DOM node, which Snabbdom sets on the vnode only during
-  // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
-  // once `.elm` exists. renderPage() resets this.
-  static resizeBindings = [];
 
   // Resolves this render's deferred resize bindings into {target, key, attach, handler} registry
   // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The observer
   // target and its attach are built here from that element; a persistent element keeps the same
-  // `.elm`, so the registry keeps its observer across renders and only swaps the handler.
+  // `.elm`, so the registry keeps its observer across renders and only swaps the handler. A binding
+  // whose once modifier has fired is dropped, so reconcile disconnects its observer.
   static resolveResizeBindings() {
-    return $.resizeBindings.map(({vnode, handler}) => {
-      const element = vnode.elm;
-      const {key, attach} = EventListeners.resizeObserver(element);
+    return $.resizeBindings
+      .filter(({vnode, slotKey}) => !Once.hasFired(vnode.elm, slotKey))
+      .map(({vnode, handler}) => {
+        const element = vnode.elm;
+        const {key, attach} = EventListeners.resizeObserver(element);
 
-      return {target: element, key, attach, handler};
-    });
+        return {target: element, key, attach, handler};
+      });
   }
 
   static toBitstring(term) {
@@ -431,7 +450,14 @@ export default class Renderer {
       // listener installed while the opening click is still bubbling would fire for that very click
       // and self-dismiss. Capture sidesteps it - that phase has already passed by install time.
       const {key, attach} = EventListeners.domEvent(document, "click", true);
-      $.listenerBindings.push({target: document, key, attach, handler});
+
+      $.listenerBindings.push({
+        target: document,
+        key,
+        attach,
+        handler,
+        slotKey: $.listenerBindings.length,
+      });
     });
   }
 
@@ -442,9 +468,11 @@ export default class Renderer {
   // no element tag name, so event-name mapping is skipped (passed null).
   static #collectListenerBindings(target, attrsDom, defaultTarget) {
     attrsDom.data.forEach((attrDom) => {
+      const slotKey = $.listenerBindings.length;
+
       const binding = $.#buildEventBinding(
         attrDom,
-        $.listenerBindings.length,
+        slotKey,
         null,
         {},
         defaultTarget,
@@ -461,6 +489,7 @@ export default class Renderer {
           key,
           attach,
           handler: binding.handler,
+          slotKey,
         });
       }
     });
@@ -493,7 +522,13 @@ export default class Renderer {
         (event) => event.target,
       );
 
-      $.reachBindings.push({vnode: elementVnode, edge, handler, within});
+      $.reachBindings.push({
+        vnode: elementVnode,
+        edge,
+        handler,
+        within,
+        slotKey: attrIndex,
+      });
     });
   }
 
@@ -518,7 +553,7 @@ export default class Renderer {
         (event) => event.target,
       );
 
-      $.resizeBindings.push({vnode: elementVnode, handler});
+      $.resizeBindings.push({vnode: elementVnode, handler, slotKey: attrIndex});
     });
   }
 

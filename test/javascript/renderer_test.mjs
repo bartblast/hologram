@@ -80,6 +80,7 @@ import EventListeners from "../../assets/js/event_listeners.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -5770,6 +5771,36 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, Type.nil());
       assert.equal(Renderer.listenerBindings.length, 0);
     });
+
+    it("drops a binding whose once modifier has fired", () => {
+      // <window $key_down.once="my_action" />
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("window"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$key_down"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      // Before firing, the binding resolves into the desired set.
+      assert.equal(Renderer.resolveListenerBindings().length, 1);
+
+      // A window binding keys once on the window target and its push position.
+      const {target, slotKey} = Renderer.listenerBindings[0];
+      Once.markFired(target, slotKey);
+
+      // Now it is dropped, so reconcile detaches its real listener.
+      assert.equal(Renderer.resolveListenerBindings().length, 0);
+    });
   });
 
   describe("document node", () => {
@@ -6062,6 +6093,46 @@ describe("Renderer", () => {
 
       sinon.assert.calledOnceWithExactly(stub, container, "bottom", "200px");
     });
+
+    it("drops a binding whose once modifier has fired, then re-arms on a re-created element", () => {
+      // <div $reach_bottom.once="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$reach_bottom"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const container = {};
+      vdom.elm = container;
+
+      // Before firing, the binding resolves into the desired set.
+      assert.equal(Renderer.resolveReachBindings().length, 1);
+
+      // The reach handler keys once on the dispatched event's target, the container.
+      Once.markFired(container, 0);
+
+      // Now it is dropped, so reconcile detaches its scroll listener.
+      assert.equal(Renderer.resolveReachBindings().length, 0);
+
+      // A re-created element is a new node with no fired-state, so the binding re-arms.
+      vdom.elm = {};
+      assert.equal(Renderer.resolveReachBindings().length, 1);
+    });
   });
 
   describe("resize binding", () => {
@@ -6167,6 +6238,52 @@ describe("Renderer", () => {
       assert.equal(resolved[0].key, "resize-observer");
       assert.equal(resolved[0].handler, Renderer.resizeBindings[0].handler);
       assert.isFunction(resolved[0].attach);
+    });
+
+    it("drops a binding whose once modifier has fired", () => {
+      // <div $resize.once="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$resize"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const element = {};
+      vdom.elm = element;
+
+      const originalResizeObserver = globalThis.ResizeObserver;
+      globalThis.ResizeObserver = class {
+        observe() {}
+        disconnect() {}
+      };
+
+      try {
+        // Before firing, the binding resolves into the desired set.
+        assert.equal(Renderer.resolveResizeBindings().length, 1);
+
+        // The resize handler keys once on the observed element.
+        Once.markFired(element, 0);
+
+        // Now it is dropped, so reconcile disconnects its observer.
+        assert.equal(Renderer.resolveResizeBindings().length, 0);
+      } finally {
+        globalThis.ResizeObserver = originalResizeObserver;
+      }
     });
 
     it("a <window> $resize stays a DOM-event listener binding, not an observer one", () => {
