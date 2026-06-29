@@ -12,6 +12,7 @@ import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
+import EventListeners from "../../assets/js/event_listeners.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
@@ -1335,7 +1336,7 @@ describe("Hologram", () => {
 
       const reachBinding = {
         target: {},
-        key: "intersection-observer:bottom",
+        key: "scroll-edge:bottom",
         attach: () => {},
         handler: () => {},
       };
@@ -1351,6 +1352,7 @@ describe("Hologram", () => {
 
       sinon.stub(Vdom, "patchVirtualDocument");
       const reconcileStub = sinon.stub(EventListenerRegistry, "reconcile");
+      const recheckStub = sinon.stub(EventListeners, "recheckScrollEdges");
 
       Hologram.render();
 
@@ -1358,6 +1360,10 @@ describe("Hologram", () => {
         ...listenerBindings,
         reachBinding,
       ]);
+
+      // Reach listeners persist, so each is rechecked after reconcile to re-sync and auto-fill.
+      sinon.assert.calledOnce(recheckStub);
+      sinon.assert.callOrder(reconcileStub, recheckStub);
     });
   });
 

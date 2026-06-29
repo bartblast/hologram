@@ -9,6 +9,7 @@ import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
+import EventListeners from "./event_listeners.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
@@ -385,6 +386,11 @@ export default class Hologram {
       ...Renderer.resolveReachBindings(),
       ...Renderer.resolveResizeBindings(),
     ]);
+
+    // Reach listeners persist across renders, so reconcile alone does not re-run them. Recheck them
+    // now that the DOM is patched, so each re-syncs the children it watches and recomputes - firing
+    // again as content this render added extends or fills the container.
+    EventListeners.recheckScrollEdges();
 
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
   }
