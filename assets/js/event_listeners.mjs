@@ -65,6 +65,11 @@ export default class EventListeners {
   // patch, re-syncs the watched children to the patched DOM and recomputes, catching content a
   // render added. Every fire dispatches a {target} carrying the container, as a scroll event has no
   // per-binding target of its own.
+  //
+  // TODO: $reach_top / $reach_left do not preserve scroll position when content is prepended above
+  // the viewport (the "load older content" pattern) - the view jumps. Native overflow-anchor would
+  // hold the view, but only once list children are keyed so a prepend reconciles as an insert-before
+  // instead of positional in-place mutation. Tracked by keyed lists (#876), revisit when that lands.
   static scrollEdge(element, edge, within) {
     return {
       key: `scroll-edge:${edge}`,
