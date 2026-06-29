@@ -21,32 +21,6 @@ export default class EventListeners {
     };
   }
 
-  // An IntersectionObserver listener for a single edge child of a scroll container, observed within
-  // the container (the child's parent) as root. The key is per-edge, so a container's up-to-four
-  // reach bindings reconcile independently and a re-render refreshes the matching edge rather than
-  // stacking a second. Unlike the resize observer, the initial on-observe fire is kept: a container
-  // whose edge is already in view at mount dispatches at once, so a short list keeps loading until
-  // the viewport fills. Every fire dispatches its IntersectionObserverEntry. An optional margin -
-  // the within modifier's CSS distance - overrides the default one-viewport prefetch lead.
-  static intersectionObserver(element, edge, margin) {
-    return {
-      key: `intersection-observer:${edge}`,
-      attach: (dispatcher) => {
-        const observer = new IntersectionObserver(
-          (entries) => dispatcher(entries[0]),
-          {
-            root: element.parentElement,
-            rootMargin: $.#rootMargin(edge, margin),
-          },
-        );
-
-        observer.observe(element);
-
-        return () => observer.disconnect();
-      },
-    };
-  }
-
   // Rechecks every live scroll-edge listener. Run after a patch so each re-syncs the children its
   // ResizeObserver watches to the patched DOM and re-runs its check, driving auto-fill as a render
   // loads content.
@@ -189,16 +163,6 @@ export default class EventListeners {
     }[edge];
 
     return distance <= threshold;
-  }
-
-  // Builds an IntersectionObserver rootMargin that extends the root's box past the binding's own
-  // edge by the prefetch distance (default one viewport), leaving the other three sides flush, so
-  // the event fires as that edge nears view. Components are in CSS "top right bottom left" order.
-  static #rootMargin(edge, distance = "100%") {
-    const margins = ["0px", "0px", "0px", "0px"];
-    margins[{top: 0, right: 1, bottom: 2, left: 3}[edge]] = distance;
-
-    return margins.join(" ");
   }
 }
 

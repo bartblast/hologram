@@ -25,8 +25,8 @@ export default class Renderer {
   // render loop drains it after patching to reconcile real listeners on each binding's target.
   static listenerBindings = [];
 
-  // Deferred reach (scroll-edge) intersection-observer bindings collected during the current render,
-  // each a {vnode, edge, handler, margin}. The observer watches the container's edge child, a live
+  // Deferred reach (scroll-edge) bindings collected during the current render, each a
+  // {vnode, edge, handler, margin}. The listener reads the container's own scroll metrics, a live
   // DOM node Snabbdom sets on the vnode only during patch, so the binding is held here until
   // resolveReachBindings turns it into a registry binding once `.elm` exists. renderPage() resets
   // this.
