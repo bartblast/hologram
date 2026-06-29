@@ -6,6 +6,8 @@
 // owns the reconciliation; these own the transport - how a listener is actually installed - so a
 // new transport (a DOM event, an observer) is a new factory here, not a registry change.
 export default class EventListeners {
+  static #scrollEdgeRechecks = new Set();
+
   // A DOM addEventListener/removeEventListener listener. The key separates a capture-phase
   // listener from a bubble-phase one for the same target and event, so the two reconcile as
   // independent listeners.
@@ -45,6 +47,13 @@ export default class EventListeners {
     };
   }
 
+  // Rechecks every live scroll-edge listener. Run after a patch so each re-syncs the children its
+  // ResizeObserver watches to the patched DOM and re-runs its check, driving auto-fill as a render
+  // loads content.
+  static recheckScrollEdges() {
+    $.#scrollEdgeRechecks.forEach((recheck) => recheck());
+  }
+
   // A ResizeObserver listener for a single element. The key is constant - an element has at most
   // one resize observer - so a re-render refreshes it rather than stacking a second. The
   // observer's initial on-observe fire is suppressed, so $resize means "size changed" to match
@@ -78,8 +87,10 @@ export default class EventListeners {
   // on the transition into the within distance - and content-change-gated - it also dispatches while
   // still within range when the scrollable size has grown since the last fire, which drives
   // mount-fill and auto-fill. A ResizeObserver watches the container and its children, so a viewport
-  // change or an item resizing (a late-loading image) rechecks. Every fire dispatches a {target}
-  // carrying the container, as a scroll event has no per-binding target of its own.
+  // change or an item resizing (a late-loading image) rechecks. recheckScrollEdges, run after each
+  // patch, re-syncs the watched children to the patched DOM and recomputes, catching content a
+  // render added. Every fire dispatches a {target} carrying the container, as a scroll event has no
+  // per-binding target of its own.
   static scrollEdge(element, edge, within) {
     return {
       key: `scroll-edge:${edge}`,
@@ -87,6 +98,7 @@ export default class EventListeners {
         let wasWithin = false;
         let lastFiredSize = 0;
         let frame = null;
+        let observed = new Set();
 
         const scrollSize = () =>
           edge === "top" || edge === "bottom"
@@ -115,16 +127,38 @@ export default class EventListeners {
 
         const observer = new ResizeObserver(schedule);
 
+        // Watch each child so an item resizing rechecks; re-sync to the live children on recheck.
+        const syncChildren = () => {
+          const children = new Set(element.children);
+
+          observed.forEach((child) => {
+            if (!children.has(child)) {
+              observer.unobserve(child);
+            }
+          });
+
+          children.forEach((child) => {
+            if (!observed.has(child)) {
+              observer.observe(child);
+            }
+          });
+
+          observed = children;
+        };
+
+        const recheck = () => {
+          syncChildren();
+          schedule();
+        };
+
         element.addEventListener("scroll", schedule, {passive: true});
         observer.observe(element);
-
-        for (const child of element.children) {
-          observer.observe(child);
-        }
-
+        syncChildren();
+        $.#scrollEdgeRechecks.add(recheck);
         check();
 
         return () => {
+          $.#scrollEdgeRechecks.delete(recheck);
           element.removeEventListener("scroll", schedule, {passive: true});
           observer.disconnect();
 

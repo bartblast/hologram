@@ -243,6 +243,7 @@ describe("EventListeners", () => {
         constructor(callback) {
           this.callback = callback;
           this.observe = sinon.spy();
+          this.unobserve = sinon.spy();
           this.disconnect = sinon.spy();
           resizeObservers.push(this);
         }
@@ -516,6 +517,68 @@ describe("EventListeners", () => {
       flushFrames();
 
       sinon.assert.calledOnce(dispatcher);
+    });
+
+    it("re-syncs the observed children on recheckScrollEdges", () => {
+      const child1 = {};
+      const element = mockElement({children: [child1]});
+
+      const detach = EventListeners.scrollEdge(element, "bottom").attach(
+        sinon.spy(),
+      );
+      const observer = resizeObservers[0];
+
+      const child2 = {};
+      element.children = [child2];
+      EventListeners.recheckScrollEdges();
+
+      sinon.assert.calledWith(observer.observe, child2);
+      sinon.assert.calledWith(observer.unobserve, child1);
+
+      detach();
+    });
+
+    it("recomputes against the patched DOM on recheckScrollEdges", () => {
+      const element = mockElement({
+        clientHeight: 100,
+        scrollHeight: 1000,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      const detach = EventListeners.scrollEdge(element, "bottom").attach(
+        dispatcher,
+      );
+      sinon.assert.notCalled(dispatcher);
+
+      // A render shortens the content, bringing the bottom edge within range.
+      element.scrollHeight = 150;
+      EventListeners.recheckScrollEdges();
+      flushFrames();
+
+      sinon.assert.calledOnce(dispatcher);
+
+      detach();
+    });
+
+    it("stops rechecking after detach", () => {
+      const element = mockElement({
+        clientHeight: 100,
+        scrollHeight: 1000,
+        scrollTop: 0,
+      });
+
+      const dispatcher = sinon.spy();
+      const detach = EventListeners.scrollEdge(element, "bottom").attach(
+        dispatcher,
+      );
+      detach();
+
+      element.scrollHeight = 150;
+      EventListeners.recheckScrollEdges();
+      flushFrames();
+
+      sinon.assert.notCalled(dispatcher);
     });
   });
 });
