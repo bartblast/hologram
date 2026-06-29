@@ -1082,14 +1082,13 @@ It also fires on mount when the edge is already in view - for example, a short l
 
 Append `within(distance)` to set how far before the edge it fires - a length such as `200px` or a percentage of the container such as `50%`. The default is `100%` - the container's height for the top and bottom edges, its width for the left and right.
 
-Each binding watches the container's existing edge child - the first child for `$reach_top` and `$reach_left`, the last child for `$reach_bottom` and `$reach_right` - so nothing is injected into your markup. For a normal list this is exactly what you want: the event fires as the first or last item approaches. Two consequences follow. If the edge item is very tall, the event fires as soon as it starts to appear, well before you reach the content's actual edge. And an empty container has nothing to watch, so it never fires.
+Prepending content above the viewport (for `$reach_top` or `$reach_left`) does not yet preserve the scroll position - the view stays at the top, showing the newly loaded content. This will be addressed by keyed lists, which let the browser hold the scroll position as items are inserted above.
 
-If you need the event pinned to the exact content edge, or you want an initially-empty list to fire on mount, add a small sentinel element at that edge (the trailing `<div class="sentinel"></div>` below) - it becomes the watched child:
+Bind it to the scroll container - for example, a list that loads more as its bottom edge approaches:
 
 ```holo
 <div $reach_bottom="load_more" style="height: 400px; overflow: auto">
   {%for item <- @items}<div>{item.title}</div>{/for}
-  <div class="sentinel"></div>
 </div>
 ```
 
