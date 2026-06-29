@@ -1669,6 +1669,172 @@ describe("Renderer", () => {
           });
         });
 
+        describe("once", () => {
+          let clock;
+
+          beforeEach(() => {
+            clock = sinon.useFakeTimers();
+          });
+
+          afterEach(() => {
+            clock.restore();
+          });
+
+          const buildNode = (modifiers) =>
+            Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("button"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$click"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  modifiers,
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+          it("dispatches the action only on the first event, then stops", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(Type.map([[Type.atom("once"), Type.boolean(true)]])),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+
+            vdom.data.on.click({currentTarget: element});
+            vdom.data.on.click({currentTarget: element});
+
+            // handleUiEvent runs on both events, so a spent binding still applies preventDefault /
+            // stop_propagation - only the re-dispatch is suppressed.
+            sinon.assert.calledTwice(stub);
+            sinon.assert.calledOnce(dispatches[0]);
+            sinon.assert.notCalled(dispatches[1]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("stays armed when the first event's dispatch is ignored", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(Type.map([[Type.atom("once"), Type.boolean(true)]])),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatch = sinon.spy();
+            const stub = sinon.stub(Hologram, "handleUiEvent");
+            stub.onCall(0).returns(null);
+            stub.onCall(1).returns(dispatch);
+
+            const element = {};
+
+            // The first event is ignored (null dispatch), so once is not consumed.
+            vdom.data.on.click({currentTarget: element});
+            // The second event dispatches and spends the binding.
+            vdom.data.on.click({currentTarget: element});
+
+            sinon.assert.calledOnce(dispatch);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("fires once on the trailing edge when composed with debounce", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(
+                Type.map([
+                  [Type.atom("debounce"), Type.integer(250)],
+                  [Type.atom("once"), Type.boolean(true)],
+                ]),
+              ),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+
+            vdom.data.on.click({currentTarget: element});
+            vdom.data.on.click({currentTarget: element});
+            clock.tick(250);
+
+            // Trailing edge: only the last event in the burst dispatches.
+            sinon.assert.notCalled(dispatches[0]);
+            sinon.assert.calledOnce(dispatches[1]);
+
+            // A later event finds the binding spent, so nothing further is scheduled or dispatched.
+            vdom.data.on.click({currentTarget: element});
+            clock.tick(250);
+            assert.strictEqual(dispatches.length, 3);
+            sinon.assert.notCalled(dispatches[2]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("fires once on the leading edge when composed with throttle", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(
+                Type.map([
+                  [Type.atom("once"), Type.boolean(true)],
+                  [Type.atom("throttle"), Type.integer(100)],
+                ]),
+              ),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+
+            // Leading edge dispatches and spends the binding.
+            vdom.data.on.click({currentTarget: element});
+            sinon.assert.calledOnce(dispatches[0]);
+
+            // A second event within the window finds the binding spent, so nothing is held.
+            vdom.data.on.click({currentTarget: element});
+            sinon.assert.notCalled(dispatches[1]);
+
+            // The window closes with nothing held, so the trailing edge never fires.
+            clock.tick(100);
+            sinon.assert.calledOnce(dispatches[0]);
+            sinon.assert.notCalled(dispatches[1]);
+
+            Hologram.handleUiEvent.restore();
+          });
+        });
+
         describe("prevent default", () => {
           const buildNode = (modifiers) =>
             Type.tuple([

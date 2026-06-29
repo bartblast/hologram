@@ -11,6 +11,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
+import Once from "./once.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -213,6 +214,7 @@ export default class Renderer {
 
   // Returns true when the modifiers map carries an allow_default modifier, which opts the binding
   // out of the framework's preventDefault.
+  // Deps: [:maps.is_key/2]
   static #allowDefaultFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
@@ -300,6 +302,7 @@ export default class Renderer {
     const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
     const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
     const forcePreventDefault = $.#preventDefaultFromModifiers(modifiersDom);
+    const once = $.#onceFromModifiers(modifiersDom);
     const stopPropagation = $.#stopPropagationFromModifiers(modifiersDom);
     const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
 
@@ -328,15 +331,32 @@ export default class Renderer {
 
       // The throttle target is read synchronously here - a DOM event nulls its currentTarget after
       // dispatch. Debounce and throttle are mutually exclusive (enforced at compile time), so at
-      // most one applies.
+      // most one applies. It doubles as the once key: the bound element for DOM and window/document,
+      // the observed element or reach container for the observer transports.
       const throttleTarget = getThrottleTarget(event);
 
+      // A spent once binding has already run preventDefault / stop_propagation above, so it only
+      // stops re-dispatching: return before routing the dispatch.
+      if (once && Once.hasFired(throttleTarget, slotKey)) {
+        return;
+      }
+
+      // Mark fired when the dispatch actually runs, not when the event arrives, so once is spent on
+      // the real fire: a debounce coalesces the burst into one trailing fire that spends it, and a
+      // throttle leading edge spends it before the next event so the trailing edge never fires.
+      const finalDispatch = once
+        ? () => {
+            Once.markFired(throttleTarget, slotKey);
+            dispatch();
+          }
+        : dispatch;
+
       if (debounceMs !== null) {
-        Debouncer.run(throttleTarget, slotKey, debounceMs, dispatch);
+        Debouncer.run(throttleTarget, slotKey, debounceMs, finalDispatch);
       } else if (throttleMs !== null) {
-        Throttler.run(throttleTarget, slotKey, throttleMs, dispatch);
+        Throttler.run(throttleTarget, slotKey, throttleMs, finalDispatch);
       } else {
-        dispatch();
+        finalDispatch();
       }
     };
   }
@@ -877,8 +897,22 @@ export default class Renderer {
     ]);
   }
 
+  // Returns true when the modifiers map carries a once modifier, which fires the binding a single
+  // time then stops re-dispatching.
+  // Deps: [:maps.is_key/2]
+  static #onceFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return false;
+    }
+
+    return Type.isTrue(
+      Erlang_Maps["is_key/2"](Type.atom("once"), modifiersDom),
+    );
+  }
+
   // Returns true when the modifiers map carries a prevent_default modifier, which forces the
   // framework's preventDefault even on events that allow the default by design.
+  // Deps: [:maps.is_key/2]
   static #preventDefaultFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
@@ -1367,6 +1401,7 @@ export default class Renderer {
 
   // Returns true when the modifiers map carries a stop_propagation modifier, which stops the
   // event from bubbling past the bound element.
+  // Deps: [:maps.is_key/2]
   static #stopPropagationFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
