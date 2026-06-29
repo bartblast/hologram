@@ -84,4 +84,14 @@ defmodule HologramFeatureTests.Events.OnceTest do
     # The debounced dispatch fires once after the burst settles, then once stops it.
     |> assert_text(css("#debounce_result"), "1")
   end
+
+  feature "fires once on an outside click, then stops", %{session: session} do
+    session
+    |> visit(OncePage)
+    # Each trigger click lands outside the bound box, so it is an outside click for the box.
+    |> click(css("#click_outside_trigger"))
+    |> click(css("#click_outside_trigger"))
+    |> click(css("#click_outside_trigger"))
+    |> assert_text(css("#click_outside_result"), "1")
+  end
 end

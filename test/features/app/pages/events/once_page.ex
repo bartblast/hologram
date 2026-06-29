@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.Events.OncePage do
   def init(_params, component, _server) do
     put_state(component,
       click_count: 0,
+      click_outside_count: 0,
       debounce_count: 0,
       reach_bottom_count: 0,
       reach_once_count: 0,
@@ -80,11 +81,22 @@ defmodule HologramFeatureTests.Events.OncePage do
     <p>
       Debounce: <strong id="debounce_result"><code>{inspect(@debounce_count)}</code></strong>
     </p>
+    <p>
+      <button id="click_outside_trigger">Outside</button>
+    </p>
+    <div $click_outside.once="record_click_outside" id="click_outside_box">Box</div>
+    <p>
+      Click outside: <strong id="click_outside_result"><code>{inspect(@click_outside_count)}</code></strong>
+    </p>
     """
   end
 
   def action(:record_click, _params, component) do
     put_state(component, :click_count, component.state.click_count + 1)
+  end
+
+  def action(:record_click_outside, _params, component) do
+    put_state(component, :click_outside_count, component.state.click_outside_count + 1)
   end
 
   def action(:record_debounce, _params, component) do
