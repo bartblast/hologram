@@ -109,9 +109,11 @@ describe("EventListeners", () => {
   });
 
   describe("scrollEdge()", () => {
+    let detachers;
     let originalRaf;
     let originalCaf;
     let originalResizeObserver;
+    let originalScrollEdge;
     let rafCallbacks;
     let rafCounter;
     let resizeObservers;
@@ -136,12 +138,29 @@ describe("EventListeners", () => {
     };
 
     beforeEach(() => {
+      detachers = [];
       rafCallbacks = new Map();
       rafCounter = 0;
       resizeObservers = [];
       originalRaf = globalThis.requestAnimationFrame;
       originalCaf = globalThis.cancelAnimationFrame;
       originalResizeObserver = globalThis.ResizeObserver;
+      originalScrollEdge = EventListeners.scrollEdge;
+
+      // Track every attached listener's detach so afterEach can tear them all down, keeping the
+      // shared recheck registry from leaking callbacks between tests.
+      EventListeners.scrollEdge = (element, edge, within) => {
+        const listener = originalScrollEdge(element, edge, within);
+
+        return {
+          ...listener,
+          attach: (dispatcher) => {
+            const detach = listener.attach(dispatcher);
+            detachers.push(detach);
+            return detach;
+          },
+        };
+      };
 
       globalThis.requestAnimationFrame = (callback) => {
         rafCounter += 1;
@@ -166,6 +185,10 @@ describe("EventListeners", () => {
     });
 
     afterEach(() => {
+      // Detach before restoring the globals, so each teardown still runs against the mocks.
+      detachers.forEach((detach) => detach());
+
+      EventListeners.scrollEdge = originalScrollEdge;
       globalThis.requestAnimationFrame = originalRaf;
       globalThis.cancelAnimationFrame = originalCaf;
       globalThis.ResizeObserver = originalResizeObserver;
