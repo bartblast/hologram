@@ -9,9 +9,17 @@ defmodule HologramFeatureTests.Events.OncePage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def init(_params, component, _server) do
-    put_state(component, click_count: 0)
+    put_state(component,
+      click_count: 0,
+      rearm_count: 0,
+      rearm_shown: true,
+      rerender_tick: 0
+    )
   end
 
+  # The re-arm button is the sole child of its own <p> so that hiding it destroys the DOM node and
+  # showing it creates a fresh one. Sharing a parent with siblings would let the reconciler reuse the
+  # node by position, leaving the same element instance in place and the binding spent.
   def template do
     ~HOLO"""
     <p>
@@ -20,10 +28,34 @@ defmodule HologramFeatureTests.Events.OncePage do
     <p>
       Click: <strong id="click_result"><code>{inspect(@click_count)}</code></strong>
     </p>
+    <p>
+      {%if @rearm_shown}
+        <button $click.once="record_rearm" id="rearm_button">Rearm</button>
+      {/if}
+    </p>
+    <p>
+      <button $click="rerender" id="rerender_button">Rerender</button>
+      <button $click="toggle_rearm" id="toggle_button">Toggle</button>
+    </p>
+    <p>
+      Rearm: <strong id="rearm_result"><code>{inspect(@rearm_count)}</code></strong>
+    </p>
     """
   end
 
   def action(:record_click, _params, component) do
     put_state(component, :click_count, component.state.click_count + 1)
+  end
+
+  def action(:record_rearm, _params, component) do
+    put_state(component, :rearm_count, component.state.rearm_count + 1)
+  end
+
+  def action(:rerender, _params, component) do
+    put_state(component, :rerender_tick, component.state.rerender_tick + 1)
+  end
+
+  def action(:toggle_rearm, _params, component) do
+    put_state(component, :rearm_shown, !component.state.rearm_shown)
   end
 end
