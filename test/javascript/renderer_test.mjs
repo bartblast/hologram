@@ -76,6 +76,7 @@ import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import EventListeners from "../../assets/js/event_listeners.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -5794,7 +5795,7 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      // A reach rides an IntersectionObserver, so nothing is added to the element's "on" map.
+      // A reach is delivered by a scroll listener, so nothing is added to the element's "on" map.
       assert.deepStrictEqual(vdom.data.on, {});
 
       assert.equal(Renderer.reachBindings.length, 1);
@@ -5802,7 +5803,7 @@ describe("Renderer", () => {
       assert.equal(Renderer.reachBindings[0].edge, "bottom");
     });
 
-    it("dispatches the observer entry through the bound element's handler under the edge-typed event", () => {
+    it("dispatches the event through the bound element's handler under the edge-typed event", () => {
       Renderer.renderDom(
         reachElement("$reach_bottom", actionSpecDom),
         context,
@@ -5817,13 +5818,13 @@ describe("Renderer", () => {
           (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
         );
 
-      const entry = {target: {}, isIntersecting: true};
+      const event = {target: {}};
 
-      Renderer.reachBindings[0].handler(entry);
+      Renderer.reachBindings[0].handler(event);
 
       sinon.assert.calledOnceWithExactly(
         stub,
-        entry,
+        event,
         "reach_bottom",
         actionSpecDom,
         defaultTarget,
@@ -5835,7 +5836,7 @@ describe("Renderer", () => {
       Hologram.handleUiEvent.restore();
     });
 
-    it("resolves into an observer registry binding targeting the edge child", () => {
+    it("resolves into a registry binding targeting the container", () => {
       const vdom = Renderer.renderDom(
         reachElement("$reach_bottom", actionSpecDom),
         context,
@@ -5844,60 +5845,20 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      // Snabbdom sets `.elm` during patch; emulate the container and its children here.
-      const lastChild = {};
-      vdom.elm = {firstElementChild: {}, lastElementChild: lastChild};
+      // Snabbdom sets `.elm` during patch; emulate the container here.
+      const container = {};
+      vdom.elm = container;
 
       const resolved = Renderer.resolveReachBindings();
 
       assert.equal(resolved.length, 1);
-      assert.equal(resolved[0].target, lastChild);
-      assert.equal(resolved[0].key, "intersection-observer:bottom");
+      assert.equal(resolved[0].target, container);
+      assert.equal(resolved[0].key, "scroll-edge:bottom");
       assert.equal(resolved[0].handler, Renderer.reachBindings[0].handler);
       assert.isFunction(resolved[0].attach);
     });
 
-    it("targets the first child for top/left and the last child for bottom/right", () => {
-      const firstChild = {};
-      const lastChild = {};
-
-      const targetFor = (attrName) => {
-        Renderer.reachBindings = [];
-
-        const vdom = Renderer.renderDom(
-          reachElement(attrName, actionSpecDom),
-          context,
-          slots,
-          defaultTarget,
-          parentTagName,
-        );
-
-        vdom.elm = {firstElementChild: firstChild, lastElementChild: lastChild};
-
-        return Renderer.resolveReachBindings()[0].target;
-      };
-
-      assert.equal(targetFor("$reach_top"), firstChild);
-      assert.equal(targetFor("$reach_left"), firstChild);
-      assert.equal(targetFor("$reach_bottom"), lastChild);
-      assert.equal(targetFor("$reach_right"), lastChild);
-    });
-
-    it("drops a binding whose container has no edge child", () => {
-      const vdom = Renderer.renderDom(
-        reachElement("$reach_bottom", actionSpecDom),
-        context,
-        slots,
-        defaultTarget,
-        parentTagName,
-      );
-
-      vdom.elm = {firstElementChild: null, lastElementChild: null};
-
-      assert.deepStrictEqual(Renderer.resolveReachBindings(), []);
-    });
-
-    it("threads the within modifier's distance into the observer's rootMargin", () => {
+    it("threads the within modifier's distance into the scroll-edge listener", () => {
       // <div $reach_bottom.within(200px)="my_action"></div>
       const node = Type.tuple([
         Type.atom("element"),
@@ -5920,28 +5881,20 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      // Snabbdom sets `.elm` during patch; emulate the container and its observed child.
-      const child = {parentElement: {}};
-      vdom.elm = {firstElementChild: {}, lastElementChild: child};
+      const container = {};
+      vdom.elm = container;
 
-      const originalIntersectionObserver = globalThis.IntersectionObserver;
-      let options;
-
-      globalThis.IntersectionObserver = class {
-        constructor(_callback, opts) {
-          options = opts;
-        }
-        observe() {}
-        disconnect() {}
-      };
+      const stub = sinon
+        .stub(EventListeners, "scrollEdge")
+        .returns({key: "scroll-edge:bottom", attach: () => {}});
 
       try {
-        Renderer.resolveReachBindings()[0].attach(() => {});
+        Renderer.resolveReachBindings();
       } finally {
-        globalThis.IntersectionObserver = originalIntersectionObserver;
+        EventListeners.scrollEdge.restore();
       }
 
-      assert.equal(options.rootMargin, "0px 0px 200px 0px");
+      sinon.assert.calledOnceWithExactly(stub, container, "bottom", "200px");
     });
   });
 

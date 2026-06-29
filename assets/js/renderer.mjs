@@ -125,30 +125,15 @@ export default class Renderer {
   }
 
   // Resolves this render's deferred reach bindings into {target, key, attach, handler} registry
-  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The observed
-  // target is the container's first child (top/left) or last child (bottom/right), and it - not the
-  // container - is the registry target: when content load swaps the edge child, the old child's
-  // binding detaches and the new child's attaches, re-pointing the observer at the new edge. A
-  // childless container has no edge to watch, so its binding is dropped this render. Per-edge keys
-  // keep top/left (and bottom/right), which share a child, reconciling independently.
+  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The target
+  // is the container itself, whose own scroll metrics the listener reads, so the registry keeps one
+  // listener per container edge across renders rather than re-pointing it. Per-edge keys keep a
+  // container's bindings reconciling independently.
   static resolveReachBindings() {
-    return $.reachBindings.flatMap(({vnode, edge, handler, margin}) => {
-      const child =
-        edge === "top" || edge === "left"
-          ? vnode.elm.firstElementChild
-          : vnode.elm.lastElementChild;
+    return $.reachBindings.map(({vnode, edge, handler, margin}) => {
+      const {key, attach} = EventListeners.scrollEdge(vnode.elm, edge, margin);
 
-      if (child === null) {
-        return [];
-      }
-
-      const {key, attach} = EventListeners.intersectionObserver(
-        child,
-        edge,
-        margin,
-      );
-
-      return [{target: child, key, attach, handler}];
+      return {target: vnode.elm, key, attach, handler};
     });
   }
 
@@ -461,15 +446,14 @@ export default class Renderer {
     });
   }
 
-  // Records each $reach_<edge> attribute on the element as a deferred intersection-observer binding.
-  // A scroll-edge reach is delivered by an IntersectionObserver watching the container's edge child,
-  // not a DOM event, so it cannot ride the element's "on" map, and the observed child is a live DOM
-  // node Snabbdom sets on the vnode only during patch. So the binding carries the vnode, the edge,
-  // its handler, and the within modifier's margin, and resolveReachBindings turns it into a registry
-  // binding once `.elm` exists. The handler keys its debounce/throttle window on the entry's target
-  // (the observed child), as an IntersectionObserverEntry has no currentTarget. The Hologram event
-  // type is "reach_<edge>", which selects ReachEvent and carries the edge for a handler that
-  // branches on it.
+  // Records each $reach_<edge> attribute on the element as a deferred scroll-edge binding. A reach
+  // is delivered by a scroll listener reading the container's own scroll metrics, not a DOM event,
+  // so it cannot ride the element's "on" map, and the container is a live DOM node Snabbdom sets on
+  // the vnode only during patch. So the binding carries the vnode, the edge, its handler, and the
+  // within modifier's margin, and resolveReachBindings turns it into a registry binding once `.elm`
+  // exists. The handler keys its debounce/throttle window on the dispatched event's target (the
+  // container). The Hologram event type is "reach_<edge>", which selects ReachEvent and carries the
+  // edge for a handler that branches on it.
   static #collectReachBindings(attrsDom, elementVnode, defaultTarget) {
     attrsDom.data.forEach((attrDom, attrIndex) => {
       const eventName = Bitstring.toText(attrDom.data[0]).substring(1);
