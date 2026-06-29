@@ -1771,7 +1771,7 @@ describe("Renderer", () => {
             );
 
             const dispatches = [];
-            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+            sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
               const dispatch = sinon.spy();
               dispatches.push(dispatch);
               return dispatch;
@@ -1811,7 +1811,7 @@ describe("Renderer", () => {
             );
 
             const dispatches = [];
-            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+            sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
               const dispatch = sinon.spy();
               dispatches.push(dispatch);
               return dispatch;
