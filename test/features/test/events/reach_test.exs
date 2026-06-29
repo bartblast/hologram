@@ -18,6 +18,16 @@ defmodule HologramFeatureTests.Events.ReachTest do
       |> execute_script("document.getElementById('scrollable_vertical').scrollTop = 780;")
       |> assert_text(css("#scroll_bottom_result"), "1")
     end
+
+    feature "fires when scrolled to the bottom past a hidden last child", %{session: session} do
+      # A detector that watched the container's last element would miss this: a display:none child
+      # is boxless, so it never intersects and reports an all-zero rect. Scroll-offset reads the
+      # container's own scroll metrics, so a hidden last child cannot suppress the event.
+      session
+      |> visit(ReachPage)
+      |> execute_script("document.getElementById('hidden_child_vertical').scrollTop = 900;")
+      |> assert_text(css("#hidden_child_bottom_result"), "1")
+    end
   end
 
   describe "$reach_left" do

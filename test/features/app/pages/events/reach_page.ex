@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.Events.ReachPage do
     put_state(component,
       filled_bottom: 0,
       filled_right: 0,
+      hidden_child_bottom: 0,
       scroll_bottom: 0,
       scroll_left: 0,
       scroll_right: 0,
@@ -50,6 +51,12 @@ defmodule HologramFeatureTests.Events.ReachPage do
       <div style="flex: 0 0 20px">Left</div>
       <div style="flex: 0 0 20px">Right</div>
     </div>
+    <div $reach_bottom="hidden_child_bottom" id="hidden_child_vertical" style="height: 100px; overflow: auto">
+      <div style="height: 20px">Top</div>
+      <div style="height: 960px">Spacer</div>
+      <div style="height: 20px">Bottom</div>
+      <div style="display: none">Hidden</div>
+    </div>
     <p>
       Scroll top: <strong id="scroll_top_result"><code>{@scroll_top}</code></strong>
     </p>
@@ -68,6 +75,9 @@ defmodule HologramFeatureTests.Events.ReachPage do
     <p>
       Filled right: <strong id="filled_right_result"><code>{@filled_right}</code></strong>
     </p>
+    <p>
+      Hidden child bottom: <strong id="hidden_child_bottom_result"><code>{@hidden_child_bottom}</code></strong>
+    </p>
     """
   end
 
@@ -77,6 +87,10 @@ defmodule HologramFeatureTests.Events.ReachPage do
 
   def action(:filled_right, _params, component) do
     put_state(component, :filled_right, component.state.filled_right + 1)
+  end
+
+  def action(:hidden_child_bottom, _params, component) do
+    put_state(component, :hidden_child_bottom, component.state.hidden_child_bottom + 1)
   end
 
   def action(:scroll_bottom, _params, component) do
