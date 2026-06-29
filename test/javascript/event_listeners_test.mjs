@@ -113,6 +113,7 @@ describe("EventListeners", () => {
     let originalCaf;
     let originalResizeObserver;
     let rafCallbacks;
+    let rafCounter;
     let resizeObservers;
 
     const mockElement = (metrics = {}) => ({
@@ -129,24 +130,29 @@ describe("EventListeners", () => {
     });
 
     const flushFrames = () => {
-      const callbacks = rafCallbacks;
-      rafCallbacks = [];
+      const callbacks = [...rafCallbacks.values()];
+      rafCallbacks.clear();
       callbacks.forEach((callback) => callback());
     };
 
     beforeEach(() => {
-      rafCallbacks = [];
+      rafCallbacks = new Map();
+      rafCounter = 0;
       resizeObservers = [];
       originalRaf = globalThis.requestAnimationFrame;
       originalCaf = globalThis.cancelAnimationFrame;
       originalResizeObserver = globalThis.ResizeObserver;
 
       globalThis.requestAnimationFrame = (callback) => {
-        rafCallbacks.push(callback);
-        return rafCallbacks.length;
+        rafCounter += 1;
+        rafCallbacks.set(rafCounter, callback);
+        return rafCounter;
       };
 
-      globalThis.cancelAnimationFrame = sinon.spy();
+      // Mirror the real cancelAnimationFrame: drop the callback so a cancelled frame never runs.
+      globalThis.cancelAnimationFrame = sinon.spy((id) => {
+        rafCallbacks.delete(id);
+      });
 
       globalThis.ResizeObserver = class {
         constructor(callback) {
@@ -199,7 +205,7 @@ describe("EventListeners", () => {
       assert.strictEqual(new Set(keys).size, 4);
     });
 
-    it("fires on mount when the edge is already within range", () => {
+    it("fires on mount on the next frame, not synchronously during attach", () => {
       const element = mockElement({
         clientHeight: 100,
         scrollHeight: 1000,
@@ -208,6 +214,12 @@ describe("EventListeners", () => {
 
       const dispatcher = sinon.spy();
       EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+
+      // attach runs inside the render's reconcile, so a synchronous mount fire would dispatch an
+      // action that re-renders re-entrantly. The check is deferred to the next frame instead.
+      sinon.assert.notCalled(dispatcher);
+
+      flushFrames();
 
       sinon.assert.calledOnceWithExactly(dispatcher, {target: element});
     });
@@ -221,6 +233,7 @@ describe("EventListeners", () => {
 
       const dispatcher = sinon.spy();
       EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      flushFrames();
 
       sinon.assert.notCalled(dispatcher);
     });
@@ -236,6 +249,7 @@ describe("EventListeners", () => {
       EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
       const onScroll = element.addEventListener.firstCall.args[1];
 
+      flushFrames();
       sinon.assert.notCalled(dispatcher);
 
       element.scrollTop = 850;
@@ -269,12 +283,14 @@ describe("EventListeners", () => {
       EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
       const onScroll = element.addEventListener.firstCall.args[1];
 
+      flushFrames();
+
       element.scrollTop = 850;
       onScroll();
       onScroll();
       onScroll();
 
-      assert.strictEqual(rafCallbacks.length, 1);
+      assert.strictEqual(rafCallbacks.size, 1);
 
       flushFrames();
       sinon.assert.calledOnce(dispatcher);
@@ -322,6 +338,7 @@ describe("EventListeners", () => {
 
       const dispatcher = sinon.spy();
       EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      flushFrames();
       sinon.assert.notCalled(dispatcher);
 
       // The container grows, so the bottom edge falls within range.
@@ -346,6 +363,7 @@ describe("EventListeners", () => {
         EventListeners.scrollEdge(mockElement(metrics), edge).attach(
           dispatcher,
         );
+        flushFrames();
         sinon.assert.calledOnce(dispatcher);
       });
     });
@@ -358,12 +376,14 @@ describe("EventListeners", () => {
       EventListeners.scrollEdge(mockElement(metrics), "bottom", "200px").attach(
         dispatcher,
       );
+      flushFrames();
       sinon.assert.calledOnce(dispatcher);
 
       const defaultDispatcher = sinon.spy();
       EventListeners.scrollEdge(mockElement(metrics), "bottom").attach(
         defaultDispatcher,
       );
+      flushFrames();
       sinon.assert.notCalled(defaultDispatcher);
     });
 
@@ -375,6 +395,7 @@ describe("EventListeners", () => {
       EventListeners.scrollEdge(mockElement(metrics), "bottom", "50%").attach(
         dispatcher,
       );
+      flushFrames();
       sinon.assert.calledOnce(dispatcher);
     });
 
@@ -401,6 +422,7 @@ describe("EventListeners", () => {
 
       const dispatcher = sinon.spy();
       EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      flushFrames();
       sinon.assert.calledOnce(dispatcher);
 
       // Content grows but the edge is still within range.
@@ -420,6 +442,7 @@ describe("EventListeners", () => {
 
       const dispatcher = sinon.spy();
       EventListeners.scrollEdge(element, "bottom").attach(dispatcher);
+      flushFrames();
       sinon.assert.calledOnce(dispatcher);
 
       resizeObservers[0].callback();
@@ -458,6 +481,7 @@ describe("EventListeners", () => {
       const detach = EventListeners.scrollEdge(element, "bottom").attach(
         dispatcher,
       );
+      flushFrames();
       sinon.assert.notCalled(dispatcher);
 
       // A render shortens the content, bringing the bottom edge within range.

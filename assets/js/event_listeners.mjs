@@ -129,7 +129,12 @@ export default class EventListeners {
         observer.observe(element);
         syncChildren();
         $.#scrollEdgeRechecks.add(recheck);
-        check();
+
+        // Defer the mount check to the next frame instead of running it synchronously: attach runs
+        // inside the render's reconcile, so a synchronous fire would dispatch an action that
+        // re-renders re-entrantly, re-attaching mid-render. Scheduling lets the mount-fire (and the
+        // auto-fill of a container the content does not fill) happen once the render has settled.
+        schedule();
 
         return () => {
           $.#scrollEdgeRechecks.delete(recheck);
