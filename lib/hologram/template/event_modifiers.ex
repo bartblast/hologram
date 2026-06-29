@@ -124,8 +124,8 @@ defmodule Hologram.Template.EventModifiers do
     * `:stop_propagation` - `true` when the binding stops the event from propagating past the
       bound element, valid on any event
     * `:throttle` - the throttle window in milliseconds, valid on any event
-    * `:within` - the prefetch distance before a scroll-edge reach fires, as a CSS px length or
-      percentage string, valid only on `$reach_*` events
+    * `:within` - the distance from the edge within which a scroll-edge reach fires, as a CSS px
+      length or percentage string, valid only on `$reach_*` events
 
   Raises `Hologram.TemplateSyntaxError` for a debounce or throttle value that is not a positive
   integer, a key filter on a non-keyboard event, a within modifier on a non-`$reach_*` event, a

@@ -376,10 +376,10 @@ export default class Hologram {
     );
 
     // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
-    // and its element observer bindings (reach, resize) into Renderer.reachBindings and
+    // and its deferred element bindings (reach, resize) into Renderer.reachBindings and
     // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
-    // their targets. The observer bindings are resolved here because an observer's target is a live
-    // DOM node, which exists only after patch. Every page-entry path reaches render() through
+    // their targets. The deferred bindings are resolved here because their target is a live DOM
+    // element, which exists only after patch. Every page-entry path reaches render() through
     // #mountPage, so this also tears down a previous page's listeners on navigation.
     EventListenerRegistry.reconcile([
       ...Renderer.listenerBindings,

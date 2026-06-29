@@ -26,7 +26,7 @@ export default class Renderer {
   static listenerBindings = [];
 
   // Deferred reach (scroll-edge) bindings collected during the current render, each a
-  // {vnode, edge, handler, margin}. The listener reads the container's own scroll metrics, a live
+  // {vnode, edge, handler, within}. The listener reads the container's own scroll metrics, a live
   // DOM node Snabbdom sets on the vnode only during patch, so the binding is held here until
   // resolveReachBindings turns it into a registry binding once `.elm` exists. renderPage() resets
   // this.
@@ -130,8 +130,8 @@ export default class Renderer {
   // listener per container edge across renders rather than re-pointing it. Per-edge keys keep a
   // container's bindings reconciling independently.
   static resolveReachBindings() {
-    return $.reachBindings.map(({vnode, edge, handler, margin}) => {
-      const {key, attach} = EventListeners.scrollEdge(vnode.elm, edge, margin);
+    return $.reachBindings.map(({vnode, edge, handler, within}) => {
+      const {key, attach} = EventListeners.scrollEdge(vnode.elm, edge, within);
 
       return {target: vnode.elm, key, attach, handler};
     });
@@ -450,7 +450,7 @@ export default class Renderer {
   // is delivered by a scroll listener reading the container's own scroll metrics, not a DOM event,
   // so it cannot ride the element's "on" map, and the container is a live DOM node Snabbdom sets on
   // the vnode only during patch. So the binding carries the vnode, the edge, its handler, and the
-  // within modifier's margin, and resolveReachBindings turns it into a registry binding once `.elm`
+  // within modifier's distance, and resolveReachBindings turns it into a registry binding once `.elm`
   // exists. The handler keys its debounce/throttle window on the dispatched event's target (the
   // container). The Hologram event type is "reach_<edge>", which selects ReachEvent and carries the
   // edge for a handler that branches on it.
@@ -463,7 +463,7 @@ export default class Renderer {
       }
 
       const edge = eventName.substring("reach_".length);
-      const margin = $.#withinFromModifiers(attrDom.data[2]);
+      const within = $.#withinFromModifiers(attrDom.data[2]);
 
       const handler = $.#buildEventHandler(
         attrDom,
@@ -473,7 +473,7 @@ export default class Renderer {
         (event) => event.target,
       );
 
-      $.reachBindings.push({vnode: elementVnode, edge, handler, margin});
+      $.reachBindings.push({vnode: elementVnode, edge, handler, within});
     });
   }
 
@@ -1416,8 +1416,9 @@ export default class Renderer {
     return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
   }
 
-  // Returns the within modifier's CSS prefetch distance (e.g. "200px", "50%") from a modifiers map,
-  // or undefined when there is no within modifier, so the observer falls back to its default lead.
+  // Returns the within modifier's CSS distance (e.g. "200px", "50%") from a modifiers map, or
+  // undefined when there is no within modifier, so the scroll-edge listener falls back to its
+  // default within (100%).
   // Deps: [:maps.get/3]
   static #withinFromModifiers(modifiersDom) {
     if (!modifiersDom) {
