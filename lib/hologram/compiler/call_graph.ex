@@ -17,6 +17,21 @@ defmodule Hologram.Compiler.CallGraph do
   @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
 
+  @built_in_protocol_types [
+    Any,
+    Atom,
+    BitString,
+    Float,
+    Function,
+    Integer,
+    List,
+    Map,
+    PID,
+    Port,
+    Reference,
+    Tuple
+  ]
+
   # These edges can't be discovered from static IR analysis.
   @dynamic_dispatch_edges [
     {{Date, :day_of_era, 1}, {Calendar.ISO, :day_of_era, 3}},
@@ -641,7 +656,7 @@ defmodule Hologram.Compiler.CallGraph do
     graph = get_graph(call_graph)
 
     graph
-    |> sorted_reachable_mfas(entry_mfas)
+    |> sorted_protocol_aware_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
@@ -674,7 +689,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     call_graph
     |> get_graph()
-    |> sorted_reachable_mfas(entry_mfas)
+    |> sorted_protocol_aware_reachable_mfas(entry_mfas)
     |> reject_hex_mfas()
   end
 
@@ -771,10 +786,10 @@ defmodule Hologram.Compiler.CallGraph do
   Lists MFAs that are reachable from the given call graph vertices.
   Unimplemented protocol implementations are excluded.
   """
-  @spec reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
-  def reachable_mfas(graph, vertices) do
+  @spec reachable_mfas(Digraph.t(), [vertex], keyword) :: [mfa]
+  def reachable_mfas(graph, vertices, opts \\ []) do
     graph
-    |> Digraph.reachable(vertices)
+    |> Digraph.reachable(vertices, opts)
     |> Enum.filter(fn
       # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
       {module, _function, _arity} -> Reflection.module?(module)
@@ -791,6 +806,42 @@ defmodule Hologram.Compiler.CallGraph do
         String.starts_with?(module_str, "Elixir.Inspect.Hex.") ||
         String.starts_with?(module_str, "Elixir.String.Chars.Hex.")
     end)
+  end
+
+  defp protocol_aware_reachable_mfas(graph, vertices) do
+    graph
+    |> protocol_aware_reachable_vertices(vertices)
+    |> Enum.filter(fn
+      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+      {module, _function, _arity} -> Reflection.module?(module)
+      _module -> false
+    end)
+  end
+
+  defp protocol_aware_reachable_vertices(graph, vertices) do
+    do_protocol_aware_reachable_vertices(graph, MapSet.new(), vertices)
+  end
+
+  defp do_protocol_aware_reachable_vertices(graph, reached_vertices, entry_vertices) do
+    new_vertices =
+      graph
+      |> Digraph.reachable(entry_vertices, opaque_vertex?: &protocol_function_vertex?/1)
+      |> MapSet.new()
+      |> MapSet.difference(reached_vertices)
+
+    reached_vertices = MapSet.union(reached_vertices, new_vertices)
+
+    protocol_impl_entry_vertices =
+      reached_vertices
+      |> protocol_impl_entry_vertices()
+      |> Enum.filter(&Digraph.has_vertex?(graph, &1))
+      |> Enum.reject(&MapSet.member?(reached_vertices, &1))
+
+    if protocol_impl_entry_vertices == [] do
+      MapSet.to_list(reached_vertices)
+    else
+      do_protocol_aware_reachable_vertices(graph, reached_vertices, protocol_impl_entry_vertices)
+    end
   end
 
   @doc """
@@ -897,10 +948,16 @@ defmodule Hologram.Compiler.CallGraph do
   Unimplemented protocol implementations are excluded.
   The MFAs returned are sorted.
   """
-  @spec sorted_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
-  def sorted_reachable_mfas(graph, vertices) do
+  @spec sorted_reachable_mfas(Digraph.t(), [vertex], keyword) :: [mfa]
+  def sorted_reachable_mfas(graph, vertices, opts \\ []) do
     graph
-    |> reachable_mfas(vertices)
+    |> reachable_mfas(vertices, opts)
+    |> Enum.sort()
+  end
+
+  defp sorted_protocol_aware_reachable_mfas(graph, vertices) do
+    graph
+    |> protocol_aware_reachable_mfas(vertices)
     |> Enum.sort()
   end
 
@@ -1038,6 +1095,53 @@ defmodule Hologram.Compiler.CallGraph do
         _falback -> false
       end
     end)
+  end
+
+  defp protocol_function_vertex?({module, function, arity}) do
+    Reflection.protocol?(module) && {function, arity} in module.__protocol__(:functions)
+  end
+
+  defp protocol_function_vertex?(_vertex), do: false
+
+  defp protocol_impl_entry_vertices(reached_vertices) do
+    reachable_protocol_types = reachable_protocol_types(reached_vertices)
+
+    for {protocol, function, arity} <- reached_vertices,
+        protocol_function_vertex?({protocol, function, arity}),
+        impl <- Reflection.list_protocol_implementations(protocol),
+        protocol_impl_reachable?(impl, reachable_protocol_types),
+        entry_vertex <- [{impl, :__impl__, 1}, {impl, function, arity}] do
+      entry_vertex
+    end
+  end
+
+  defp protocol_impl_reachable?(impl, reachable_protocol_types) do
+    Reflection.has_function?(impl, :__impl__, 1) &&
+      MapSet.member?(reachable_protocol_types, impl.__impl__(:for))
+  end
+
+  defp reachable_protocol_types(reached_vertices) do
+    Enum.reduce(reached_vertices, MapSet.new(@built_in_protocol_types), fn
+      module, acc when is_atom(module) ->
+        maybe_put_struct_protocol_type(acc, module)
+
+      {module, :__struct__, arity}, acc when arity in [0, 1] ->
+        MapSet.put(acc, module)
+
+      {module, _function, _arity}, acc ->
+        maybe_put_struct_protocol_type(acc, module)
+
+      _vertex, acc ->
+        acc
+    end)
+  end
+
+  defp maybe_put_struct_protocol_type(types, module) do
+    if Reflection.has_struct?(module) do
+      MapSet.put(types, module)
+    else
+      types
+    end
   end
 
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do

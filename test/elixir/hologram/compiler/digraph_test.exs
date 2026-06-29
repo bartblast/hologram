@@ -507,6 +507,28 @@ defmodule Hologram.Compiler.DigraphTest do
       assert Enum.sort(result) == [:a, :b, :c]
     end
 
+    test "skips traversal of vertices in opaque_vertices MapSet" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:a, :d)
+        |> reachable([:a], opaque_vertices: MapSet.new([:b]))
+
+      assert Enum.sort(result) == [:a, :b, :d]
+    end
+
+    test "skips traversal of vertices matching the opaque_vertex? predicate" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:a, :d)
+        |> reachable([:a], opaque_vertex?: &(&1 == :b))
+
+      assert Enum.sort(result) == [:a, :b, :d]
+    end
+
     test "returns all vertices in a linear chain" do
       result =
         new()

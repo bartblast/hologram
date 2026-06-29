@@ -22,19 +22,24 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
   def run([dest_mfa_code]) do
     {dest_mfa, _binding} = Code.eval_string(dest_mfa_code)
 
-    graph =
+    call_graph =
       Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
-      |> CallGraph.get_graph()
 
-    Enum.each(CallGraph.list_runtime_entry_mfas(), fn entry_mfa ->
-      shortest_path = Digraph.shortest_path(graph, entry_mfa, dest_mfa)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
 
-      if shortest_path do
-        # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
-        IO.puts("\n#{inspect(entry_mfa)} -> #{inspect(dest_mfa)}\n#{inspect(shortest_path)}\n")
-      end
-    end)
+    if dest_mfa in runtime_mfas do
+      graph = CallGraph.get_graph(call_graph)
+
+      Enum.each(CallGraph.list_runtime_entry_mfas(), fn entry_mfa ->
+        shortest_path = Digraph.shortest_path(graph, entry_mfa, dest_mfa)
+
+        if shortest_path do
+          # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
+          IO.puts("\n#{inspect(entry_mfa)} -> #{inspect(dest_mfa)}\n#{inspect(shortest_path)}\n")
+        end
+      end)
+    end
 
     :ok
   end

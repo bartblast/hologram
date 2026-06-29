@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module12
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module13
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module14
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module15
@@ -905,6 +906,33 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
 
+    test "excludes protocol implementations whose concrete type is not reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> list_page_mfas(Module17)
+
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose concrete type is reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
+        |> list_page_mfas(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
       page_module_22_mfas: result
     } do
@@ -1056,6 +1084,13 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
+    end
+
+    test "excludes protocol implementations whose concrete type is not runtime reachable", %{
+      runtime_mfas: result
+    } do
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
     end
 
     test "results are deduped", %{runtime_mfas: result} do
