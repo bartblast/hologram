@@ -74,4 +74,14 @@ defmodule HologramFeatureTests.Events.OnceTest do
     |> assert_text(css("#reach_bottom_result"), "2")
     |> assert_text(css("#reach_once_result"), "1")
   end
+
+  feature "fires once when composed with debounce", %{session: session} do
+    session
+    |> visit(OncePage)
+    |> click(css("#debounce_button"))
+    |> click(css("#debounce_button"))
+    |> click(css("#debounce_button"))
+    # The debounced dispatch fires once after the burst settles, then once stops it.
+    |> assert_text(css("#debounce_result"), "1")
+  end
 end

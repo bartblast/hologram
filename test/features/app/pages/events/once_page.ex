@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.Events.OncePage do
   def init(_params, component, _server) do
     put_state(component,
       click_count: 0,
+      debounce_count: 0,
       reach_bottom_count: 0,
       reach_once_count: 0,
       reach_top_count: 0,
@@ -73,11 +74,21 @@ defmodule HologramFeatureTests.Events.OncePage do
     <p>
       Reach top: <strong id="reach_top_result"><code>{inspect(@reach_top_count)}</code></strong>
     </p>
+    <p>
+      <button $click.once.debounce(250)="record_debounce" id="debounce_button">Debounce</button>
+    </p>
+    <p>
+      Debounce: <strong id="debounce_result"><code>{inspect(@debounce_count)}</code></strong>
+    </p>
     """
   end
 
   def action(:record_click, _params, component) do
     put_state(component, :click_count, component.state.click_count + 1)
+  end
+
+  def action(:record_debounce, _params, component) do
+    put_state(component, :debounce_count, component.state.debounce_count + 1)
   end
 
   def action(:record_reach_bottom, _params, component) do
