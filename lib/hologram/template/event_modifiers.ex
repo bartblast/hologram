@@ -62,7 +62,7 @@ defmodule Hologram.Template.EventModifiers do
   @reach_events ["$reach_bottom", "$reach_left", "$reach_right", "$reach_top"]
 
   # Modifier types that may appear at most once on a binding - every type except key filters.
-  @single_valued_modifiers ~w(allow_default debounce prevent_default stop_propagation throttle within)a
+  @single_valued_modifiers ~w(allow_default debounce once prevent_default stop_propagation throttle within)a
 
   # A throttle modifier segment: "throttle(<digits>)". The captured group is validated as a
   # positive integer separately, so the error message can name the offending segment.
@@ -84,6 +84,7 @@ defmodule Hologram.Template.EventModifiers do
           optional(:allow_default) => true,
           optional(:debounce) => pos_integer,
           optional(:key) => list(list(String.t())),
+          optional(:once) => true,
           optional(:prevent_default) => true,
           optional(:stop_propagation) => true,
           optional(:throttle) => pos_integer,
@@ -97,6 +98,7 @@ defmodule Hologram.Template.EventModifiers do
           {:allow_default}
           | {:debounce, pos_integer}
           | {:key, list(String.t())}
+          | {:once}
           | {:prevent_default}
           | {:stop_propagation}
           | {:throttle, pos_integer}
@@ -119,6 +121,8 @@ defmodule Hologram.Template.EventModifiers do
     * `:debounce` - the debounce window in milliseconds, valid on any event
     * `:key` - the keyboard key filters as a list, each a list of the resolved modifier flags and
       the single matched key, valid only on keyboard events
+    * `:once` - `true` when the binding fires a single time then stops re-dispatching, valid on any
+      event
     * `:prevent_default` - `true` when the binding forces the framework's preventDefault, valid on
       any event
     * `:stop_propagation` - `true` when the binding stops the event from propagating past the
@@ -157,6 +161,7 @@ defmodule Hologram.Template.EventModifiers do
       {:within, distance}, acc -> Map.put(acc, :within, distance)
       {:stop_propagation}, acc -> Map.put(acc, :stop_propagation, true)
       {:prevent_default}, acc -> Map.put(acc, :prevent_default, true)
+      {:once}, acc -> Map.put(acc, :once, true)
       {:allow_default}, acc -> Map.put(acc, :allow_default, true)
     end)
     |> reverse_key_filters()
@@ -292,6 +297,8 @@ defmodule Hologram.Template.EventModifiers do
   defp parse_universal_modifier("allow_default"), do: {:allow_default}
 
   defp parse_universal_modifier("debounce"), do: {:debounce, @default_debounce_ms}
+
+  defp parse_universal_modifier("once"), do: {:once}
 
   defp parse_universal_modifier("prevent_default"), do: {:prevent_default}
 

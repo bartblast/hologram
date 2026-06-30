@@ -80,6 +80,7 @@ import EventListeners from "../../assets/js/event_listeners.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -1664,6 +1665,172 @@ describe("Renderer", () => {
               ]),
               defaultTarget,
             );
+
+            Hologram.handleUiEvent.restore();
+          });
+        });
+
+        describe("once", () => {
+          let clock;
+
+          beforeEach(() => {
+            clock = sinon.useFakeTimers();
+          });
+
+          afterEach(() => {
+            clock.restore();
+          });
+
+          const buildNode = (modifiers) =>
+            Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("button"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$click"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                  modifiers,
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+          it("dispatches the action only on the first event, then stops", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(Type.map([[Type.atom("once"), Type.boolean(true)]])),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            const stub = sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+
+            vdom.data.on.click({currentTarget: element});
+            vdom.data.on.click({currentTarget: element});
+
+            // handleUiEvent runs on both events, so a spent binding still applies preventDefault /
+            // stop_propagation - only the re-dispatch is suppressed.
+            sinon.assert.calledTwice(stub);
+            sinon.assert.calledOnce(dispatches[0]);
+            sinon.assert.notCalled(dispatches[1]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("stays armed when the first event's dispatch is ignored", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(Type.map([[Type.atom("once"), Type.boolean(true)]])),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatch = sinon.spy();
+            const stub = sinon.stub(Hologram, "handleUiEvent");
+            stub.onCall(0).returns(null);
+            stub.onCall(1).returns(dispatch);
+
+            const element = {};
+
+            // The first event is ignored (null dispatch), so once is not consumed.
+            vdom.data.on.click({currentTarget: element});
+            // The second event dispatches and spends the binding.
+            vdom.data.on.click({currentTarget: element});
+
+            sinon.assert.calledOnce(dispatch);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("fires once on the trailing edge when composed with debounce", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(
+                Type.map([
+                  [Type.atom("debounce"), Type.integer(250)],
+                  [Type.atom("once"), Type.boolean(true)],
+                ]),
+              ),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+
+            vdom.data.on.click({currentTarget: element});
+            vdom.data.on.click({currentTarget: element});
+            clock.tick(250);
+
+            // Trailing edge: only the last event in the burst dispatches.
+            sinon.assert.notCalled(dispatches[0]);
+            sinon.assert.calledOnce(dispatches[1]);
+
+            // A later event finds the binding spent, so nothing further is scheduled or dispatched.
+            vdom.data.on.click({currentTarget: element});
+            clock.tick(250);
+            assert.strictEqual(dispatches.length, 3);
+            sinon.assert.notCalled(dispatches[2]);
+
+            Hologram.handleUiEvent.restore();
+          });
+
+          it("fires once on the leading edge when composed with throttle", () => {
+            const vdom = Renderer.renderDom(
+              buildNode(
+                Type.map([
+                  [Type.atom("once"), Type.boolean(true)],
+                  [Type.atom("throttle"), Type.integer(100)],
+                ]),
+              ),
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            const dispatches = [];
+            sinon.stub(Hologram, "handleUiEvent").callsFake(() => {
+              const dispatch = sinon.spy();
+              dispatches.push(dispatch);
+              return dispatch;
+            });
+
+            const element = {};
+
+            // Leading edge dispatches and spends the binding.
+            vdom.data.on.click({currentTarget: element});
+            sinon.assert.calledOnce(dispatches[0]);
+
+            // A second event within the window finds the binding spent, so nothing is held.
+            vdom.data.on.click({currentTarget: element});
+            sinon.assert.notCalled(dispatches[1]);
+
+            // The window closes with nothing held, so the trailing edge never fires.
+            clock.tick(100);
+            sinon.assert.calledOnce(dispatches[0]);
+            sinon.assert.notCalled(dispatches[1]);
 
             Hologram.handleUiEvent.restore();
           });
@@ -5509,6 +5676,12 @@ describe("Renderer", () => {
       Renderer.listenerBindings = [];
     });
 
+    // The once tests below mark the real window, which is never collected, so the fired-state would
+    // otherwise persist into later tests. Reset it after each so the suite stays order-independent.
+    afterEach(() => {
+      Once.reset();
+    });
+
     it("renders nil and collects the binding scoped to the enclosing component", () => {
       // <window $key_down="my_action" />
       const actionSpecDom = Type.list([
@@ -5603,6 +5776,60 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(result, Type.nil());
       assert.equal(Renderer.listenerBindings.length, 0);
+    });
+
+    it("drops a binding whose once modifier has fired", () => {
+      // <window $key_down.once="my_action" />
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("window"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$key_down"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      // Before firing, the binding resolves into the desired set.
+      assert.equal(Renderer.resolveListenerBindings().length, 1);
+
+      // A window binding keys once on the window target and its push position.
+      const {target, slotKey} = Renderer.listenerBindings[0];
+      Once.markFired(target, slotKey);
+
+      // Now it is dropped, so reconcile detaches its real listener.
+      assert.equal(Renderer.resolveListenerBindings().length, 0);
+    });
+
+    it("keeps a non-once binding that reuses a spent once binding's slot", () => {
+      // A listener slot is positional across a render's listener bindings, so when the binding set
+      // changes a non-once binding can inherit the slot a spent once binding held. A throwaway
+      // stand-in for the shared window/document target keeps this fired-state from leaking to other
+      // tests; a prior render's spent once binding marked this (target, slot).
+      const target = {};
+      Once.markFired(target, 0);
+
+      // This render, a non-once binding takes the same slot on the same target. The drop is gated on
+      // the binding's own once flag, so the inherited fired-state must not suppress it.
+      Renderer.listenerBindings = [
+        {
+          target,
+          key: "bubble:keyup",
+          attach: () => {},
+          handler: () => {},
+          slotKey: 0,
+          once: false,
+        },
+      ];
+
+      assert.equal(Renderer.resolveListenerBindings().length, 1);
     });
   });
 
@@ -5765,6 +5992,53 @@ describe("Renderer", () => {
 
       Hologram.handleUiEvent.restore();
     });
+
+    it("with a once modifier fires once across repeated outside clicks, then re-arms on a re-created element", () => {
+      // <div $click_outside.once="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$click_outside"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      // Every click lands outside the bound element. once keys on the element, read live from `.elm`.
+      vdom.elm = {contains: () => false};
+
+      const dispatch = sinon.spy();
+      sinon.stub(Hologram, "handleUiEvent").returns(dispatch);
+
+      const handler = Renderer.listenerBindings[0].handler;
+
+      handler({target: {}});
+      handler({target: {}});
+      handler({target: {}});
+
+      // Spent after the first outside click; later ones are no-ops.
+      sinon.assert.calledOnce(dispatch);
+
+      // A re-created element is a new node with no fired-state, so the binding re-arms.
+      vdom.elm = {contains: () => false};
+      handler({target: {}});
+
+      sinon.assert.calledTwice(dispatch);
+
+      Hologram.handleUiEvent.restore();
+    });
   });
 
   describe("reach binding", () => {
@@ -5896,6 +6170,46 @@ describe("Renderer", () => {
 
       sinon.assert.calledOnceWithExactly(stub, container, "bottom", "200px");
     });
+
+    it("drops a binding whose once modifier has fired, then re-arms on a re-created element", () => {
+      // <div $reach_bottom.once="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$reach_bottom"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const container = {};
+      vdom.elm = container;
+
+      // Before firing, the binding resolves into the desired set.
+      assert.equal(Renderer.resolveReachBindings().length, 1);
+
+      // The reach handler keys once on the dispatched event's target, the container.
+      Once.markFired(container, 0);
+
+      // Now it is dropped, so reconcile detaches its scroll listener.
+      assert.equal(Renderer.resolveReachBindings().length, 0);
+
+      // A re-created element is a new node with no fired-state, so the binding re-arms.
+      vdom.elm = {};
+      assert.equal(Renderer.resolveReachBindings().length, 1);
+    });
   });
 
   describe("resize binding", () => {
@@ -6001,6 +6315,42 @@ describe("Renderer", () => {
       assert.equal(resolved[0].key, "resize-observer");
       assert.equal(resolved[0].handler, Renderer.resizeBindings[0].handler);
       assert.isFunction(resolved[0].attach);
+    });
+
+    it("drops a binding whose once modifier has fired", () => {
+      // <div $resize.once="my_action"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$resize"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const element = {};
+      vdom.elm = element;
+
+      // Before firing, the binding resolves into the desired set.
+      assert.equal(Renderer.resolveResizeBindings().length, 1);
+
+      // The resize handler keys once on the observed element.
+      Once.markFired(element, 0);
+
+      // Now it is dropped, so reconcile disconnects its observer.
+      assert.equal(Renderer.resolveResizeBindings().length, 0);
     });
 
     it("a <window> $resize stays a DOM-event listener binding, not an observer one", () => {

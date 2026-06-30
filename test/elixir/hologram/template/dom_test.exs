@@ -659,6 +659,33 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
+    test "non-keyboard event with a once modifier" do
+      # The boolean modifier's `true` value survives inspect -> code -> AST.for_code quoted, reaching
+      # the client as the atom true rather than a string.
+      # <div $click.once="my_value"></div>
+      tags = [
+        {:start_tag, {"div", [{"$click.once", [text: "my_value"]}]}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {:{}, [line: 1],
+                     [
+                       "$click",
+                       [text: "my_value"],
+                       {:%{}, [line: 1], [once: true]}
+                     ]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
     test "reach event with a px within modifier" do
       # <div $reach_bottom.within(200px)="my_value"></div>
       tags = [

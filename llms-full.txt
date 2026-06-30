@@ -1307,6 +1307,18 @@ Both tame high-frequency events, in opposite ways. `debounce` waits for activity
 
 In short, debounce fires once after activity stops, while throttle fires repeatedly at a capped rate during it.
 
+#### Firing Once
+
+Append `once` to fire a binding a single time, then stop. It suits one-shot interactions - a confirm or dismiss button, claiming an item, or lazy-loading the first time a scroll container is reached.
+
+```holo
+<button $click.once="confirm">Confirm</button>
+```
+
+It works on every event, including the window, document, resize, and reach events, and it combines with `debounce` and `throttle` - the single debounced or throttled dispatch fires, then the binding stops. A spent binding still handles the event as before - suppressing the native default and stopping propagation just as its modifiers do - and only stops dispatching the action.
+
+`once` is a precise guarantee, scoped to the binding's target. For an element binding the target is the element instance, so re-rendering keeps a fired binding spent however many times, and it re-arms only when the element is removed and re-added as a fresh DOM node. `$submit.once`, for example, stops a repeated click from double-submitting but comes back armed if the form is re-created. A `<window>` or `<document>` binding has no node to re-create - it keys on the global target, which lives for the whole page, so it fires once for the page and never re-arms. To get that same page-lifetime guarantee on an element, drive it from state: have the action record that it ran, then stop rendering or disable the control.
+
 #### Controlling the Native Default
 
 Hologram calls `preventDefault` by default only on `$submit` - so a bound form does not reload the page. Every other event is left alone, so clicks, typing, text selection, scrolling, and the rest of the browser's native behavior keep working. Two modifiers override this per binding: `allow_default` lets the native default through where Hologram would prevent it, and `prevent_default` forces `preventDefault` where Hologram would leave it alone.

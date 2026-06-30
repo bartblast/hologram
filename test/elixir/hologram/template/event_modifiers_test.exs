@@ -197,6 +197,26 @@ defmodule Hologram.Template.EventModifiersTest do
     end
   end
 
+  describe "parse/2 once modifier" do
+    test "on a non-keyboard event" do
+      assert parse("$click", ["once"]) == %{once: true}
+    end
+
+    test "on a keyboard event" do
+      assert parse("$key_down", ["once"]) == %{once: true}
+    end
+
+    test "on a reach event" do
+      assert parse("$reach_bottom", ["once"]) == %{once: true}
+    end
+
+    test "raises for more than one once modifier" do
+      assert_raise TemplateSyntaxError,
+                   "an event binding may include at most one once modifier",
+                   fn -> parse("$click", ["once", "once"]) end
+    end
+  end
+
   describe "parse/2 prevent_default modifier" do
     test "on a non-keyboard event" do
       assert parse("$click", ["prevent_default"]) == %{prevent_default: true}
@@ -354,6 +374,11 @@ defmodule Hologram.Template.EventModifiersTest do
     test "a key filter composes with another modifier" do
       assert parse("$key_down", ["enter", "debounce(200)"]) ==
                %{debounce: 200, key: [["enter"]]}
+    end
+
+    test "once composes with another modifier" do
+      assert parse("$submit", ["once", "debounce(250)"]) ==
+               %{debounce: 250, once: true}
     end
 
     test "prevent_default composes with another modifier" do

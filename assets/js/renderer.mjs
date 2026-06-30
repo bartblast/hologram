@@ -11,6 +11,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
+import Once from "./once.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -31,6 +32,12 @@ export default class Renderer {
   // resolveReachBindings turns it into a registry binding once `.elm` exists. renderPage() resets
   // this.
   static reachBindings = [];
+
+  // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
+  // An element's observer target is its live DOM node, which Snabbdom sets on the vnode only during
+  // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
+  // once `.elm` exists. renderPage() resets this.
+  static resizeBindings = [];
 
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
@@ -124,36 +131,58 @@ export default class Renderer {
     return htmlVnode;
   }
 
+  // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
+  // reconcile detaches its real listener through the same path that removes a vanished binding. The
+  // fired-state is keyed by the binding's target and slot, both carried on the binding. The drop is
+  // gated on the binding's own once flag: a listener slot is positional across this render's listener
+  // bindings, so a non-once binding can reuse a spent once binding's slot on the shared target, and
+  // the gate keeps it from inheriting that permanent fired-state.
+  static resolveListenerBindings() {
+    return $.listenerBindings.filter(
+      ({target, slotKey, once}) => !(once && Once.hasFired(target, slotKey)),
+    );
+  }
+
   // Resolves this render's deferred reach bindings into {target, key, attach, handler} registry
   // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The target
   // is the container itself, whose own scroll metrics the listener reads, so the registry keeps one
   // listener per container edge across renders rather than re-pointing it. Per-edge keys keep a
-  // container's bindings reconciling independently.
+  // container's bindings reconciling independently. A binding whose once modifier has fired is
+  // dropped, so reconcile detaches its scroll listener.
   static resolveReachBindings() {
-    return $.reachBindings.map(({vnode, edge, handler, within}) => {
-      const {key, attach} = EventListeners.scrollEdge(vnode.elm, edge, within);
+    return $.reachBindings
+      .filter(
+        ({vnode, slotKey, once}) =>
+          !(once && Once.hasFired(vnode.elm, slotKey)),
+      )
+      .map(({vnode, edge, handler, within}) => {
+        const {key, attach} = EventListeners.scrollEdge(
+          vnode.elm,
+          edge,
+          within,
+        );
 
-      return {target: vnode.elm, key, attach, handler};
-    });
+        return {target: vnode.elm, key, attach, handler};
+      });
   }
-
-  // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
-  // An element's observer target is its live DOM node, which Snabbdom sets on the vnode only during
-  // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
-  // once `.elm` exists. renderPage() resets this.
-  static resizeBindings = [];
 
   // Resolves this render's deferred resize bindings into {target, key, attach, handler} registry
   // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. The observer
   // target and its attach are built here from that element; a persistent element keeps the same
-  // `.elm`, so the registry keeps its observer across renders and only swaps the handler.
+  // `.elm`, so the registry keeps its observer across renders and only swaps the handler. A binding
+  // whose once modifier has fired is dropped, so reconcile disconnects its observer.
   static resolveResizeBindings() {
-    return $.resizeBindings.map(({vnode, handler}) => {
-      const element = vnode.elm;
-      const {key, attach} = EventListeners.resizeObserver(element);
+    return $.resizeBindings
+      .filter(
+        ({vnode, slotKey, once}) =>
+          !(once && Once.hasFired(vnode.elm, slotKey)),
+      )
+      .map(({vnode, handler}) => {
+        const element = vnode.elm;
+        const {key, attach} = EventListeners.resizeObserver(element);
 
-      return {target: element, key, attach, handler};
-    });
+        return {target: element, key, attach, handler};
+      });
   }
 
   static toBitstring(term) {
@@ -213,6 +242,7 @@ export default class Renderer {
 
   // Returns true when the modifiers map carries an allow_default modifier, which opts the binding
   // out of the framework's preventDefault.
+  // Deps: [:maps.is_key/2]
   static #allowDefaultFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
@@ -300,6 +330,7 @@ export default class Renderer {
     const allowDefault = $.#allowDefaultFromModifiers(modifiersDom);
     const debounceMs = $.#debounceMsFromModifiers(modifiersDom);
     const forcePreventDefault = $.#preventDefaultFromModifiers(modifiersDom);
+    const once = $.#onceFromModifiers(modifiersDom);
     const stopPropagation = $.#stopPropagationFromModifiers(modifiersDom);
     const throttleMs = $.#throttleMsFromModifiers(modifiersDom);
 
@@ -328,15 +359,32 @@ export default class Renderer {
 
       // The throttle target is read synchronously here - a DOM event nulls its currentTarget after
       // dispatch. Debounce and throttle are mutually exclusive (enforced at compile time), so at
-      // most one applies.
+      // most one applies. It doubles as the once key: the bound element for DOM and window/document,
+      // the observed element or reach container for the observer transports.
       const throttleTarget = getThrottleTarget(event);
 
+      // A spent once binding has already run preventDefault / stop_propagation above, so it only
+      // stops re-dispatching: return before routing the dispatch.
+      if (once && Once.hasFired(throttleTarget, slotKey)) {
+        return;
+      }
+
+      // Mark fired when the dispatch actually runs, not when the event arrives, so once is spent on
+      // the real fire: a debounce coalesces the burst into one trailing fire that spends it, and a
+      // throttle leading edge spends it before the next event so the trailing edge never fires.
+      const finalDispatch = once
+        ? () => {
+            Once.markFired(throttleTarget, slotKey);
+            dispatch();
+          }
+        : dispatch;
+
       if (debounceMs !== null) {
-        Debouncer.run(throttleTarget, slotKey, debounceMs, dispatch);
+        Debouncer.run(throttleTarget, slotKey, debounceMs, finalDispatch);
       } else if (throttleMs !== null) {
-        Throttler.run(throttleTarget, slotKey, throttleMs, dispatch);
+        Throttler.run(throttleTarget, slotKey, throttleMs, finalDispatch);
       } else {
-        dispatch();
+        finalDispatch();
       }
     };
   }
@@ -381,14 +429,17 @@ export default class Renderer {
   // live `.elm` at dispatch - Snabbdom sets it during patch, and the binding is only reconciled into
   // a real listener after that. The Hologram event type is the synthetic "click_outside" - the DSL
   // name unchanged, deliberately not run through #normalizeEventName, since there is no DOM event to
-  // map to.
+  // map to. A once modifier keys on the bound element (re-arming when it is re-created) and stays
+  // inert until then, like a DOM-element once binding - click_outside does not go through
+  // #buildEventHandler, so its once is wired here rather than inheriting the shared dispatch path.
   static #collectClickOutsideBindings(attrsDom, elementVnode, defaultTarget) {
-    attrsDom.data.forEach((attrDom) => {
+    attrsDom.data.forEach((attrDom, attrIndex) => {
       if (Bitstring.toText(attrDom.data[0]) !== "$click_outside") {
         return;
       }
 
       const operationSpecDom = attrDom.data[1];
+      const once = $.#onceFromModifiers(attrDom.data[2]);
 
       const handler = (event) => {
         if (elementVnode.elm.contains(event.target)) {
@@ -402,16 +453,39 @@ export default class Renderer {
           defaultTarget,
         );
 
-        if (dispatch !== null) {
-          dispatch();
+        if (dispatch === null) {
+          return;
         }
+
+        // once keys on the bound element and its attribute index, so it re-arms only when the
+        // element is re-created (a new node, a fresh fired-state) and stays spent across re-renders.
+        if (once && Once.hasFired(elementVnode.elm, attrIndex)) {
+          return;
+        }
+
+        if (once) {
+          Once.markFired(elementVnode.elm, attrIndex);
+        }
+
+        dispatch();
       };
 
       // Capture phase: Hologram renders synchronously inside the click handler, so a bubble-phase
       // listener installed while the opening click is still bubbling would fire for that very click
       // and self-dismiss. Capture sidesteps it - that phase has already passed by install time.
       const {key, attach} = EventListeners.domEvent(document, "click", true);
-      $.listenerBindings.push({target: document, key, attach, handler});
+
+      $.listenerBindings.push({
+        target: document,
+        key,
+        attach,
+        handler,
+        slotKey: $.listenerBindings.length,
+        // click_outside once is keyed on the bound element and torn down when that element is
+        // removed (its handler drops out of the shared document listener), not proactively filtered
+        // here - so resolveListenerBindings must never drop it for a reused positional slot.
+        once: false,
+      });
     });
   }
 
@@ -422,9 +496,11 @@ export default class Renderer {
   // no element tag name, so event-name mapping is skipped (passed null).
   static #collectListenerBindings(target, attrsDom, defaultTarget) {
     attrsDom.data.forEach((attrDom) => {
+      const slotKey = $.listenerBindings.length;
+
       const binding = $.#buildEventBinding(
         attrDom,
-        $.listenerBindings.length,
+        slotKey,
         null,
         {},
         defaultTarget,
@@ -441,6 +517,8 @@ export default class Renderer {
           key,
           attach,
           handler: binding.handler,
+          slotKey,
+          once: $.#onceFromModifiers(attrDom.data[2]),
         });
       }
     });
@@ -473,7 +551,14 @@ export default class Renderer {
         (event) => event.target,
       );
 
-      $.reachBindings.push({vnode: elementVnode, edge, handler, within});
+      $.reachBindings.push({
+        vnode: elementVnode,
+        edge,
+        handler,
+        within,
+        slotKey: attrIndex,
+        once: $.#onceFromModifiers(attrDom.data[2]),
+      });
     });
   }
 
@@ -498,7 +583,12 @@ export default class Renderer {
         (event) => event.target,
       );
 
-      $.resizeBindings.push({vnode: elementVnode, handler});
+      $.resizeBindings.push({
+        vnode: elementVnode,
+        handler,
+        slotKey: attrIndex,
+        once: $.#onceFromModifiers(attrDom.data[2]),
+      });
     });
   }
 
@@ -877,8 +967,22 @@ export default class Renderer {
     ]);
   }
 
+  // Returns true when the modifiers map carries a once modifier, which fires the binding a single
+  // time then stops re-dispatching.
+  // Deps: [:maps.is_key/2]
+  static #onceFromModifiers(modifiersDom) {
+    if (!modifiersDom) {
+      return false;
+    }
+
+    return Type.isTrue(
+      Erlang_Maps["is_key/2"](Type.atom("once"), modifiersDom),
+    );
+  }
+
   // Returns true when the modifiers map carries a prevent_default modifier, which forces the
   // framework's preventDefault even on events that allow the default by design.
+  // Deps: [:maps.is_key/2]
   static #preventDefaultFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
@@ -1367,6 +1471,7 @@ export default class Renderer {
 
   // Returns true when the modifiers map carries a stop_propagation modifier, which stops the
   // event from bubbling past the bound element.
+  // Deps: [:maps.is_key/2]
   static #stopPropagationFromModifiers(modifiersDom) {
     if (!modifiersDom) {
       return false;
