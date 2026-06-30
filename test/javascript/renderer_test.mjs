@@ -6343,24 +6343,14 @@ describe("Renderer", () => {
       const element = {};
       vdom.elm = element;
 
-      const originalResizeObserver = globalThis.ResizeObserver;
-      globalThis.ResizeObserver = class {
-        observe() {}
-        disconnect() {}
-      };
+      // Before firing, the binding resolves into the desired set.
+      assert.equal(Renderer.resolveResizeBindings().length, 1);
 
-      try {
-        // Before firing, the binding resolves into the desired set.
-        assert.equal(Renderer.resolveResizeBindings().length, 1);
+      // The resize handler keys once on the observed element.
+      Once.markFired(element, 0);
 
-        // The resize handler keys once on the observed element.
-        Once.markFired(element, 0);
-
-        // Now it is dropped, so reconcile disconnects its observer.
-        assert.equal(Renderer.resolveResizeBindings().length, 0);
-      } finally {
-        globalThis.ResizeObserver = originalResizeObserver;
-      }
+      // Now it is dropped, so reconcile disconnects its observer.
+      assert.equal(Renderer.resolveResizeBindings().length, 0);
     });
 
     it("a <window> $resize stays a DOM-event listener binding, not an observer one", () => {
