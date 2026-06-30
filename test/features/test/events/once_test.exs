@@ -7,8 +7,11 @@ defmodule HologramFeatureTests.Events.OnceTest do
     session
     |> visit(OncePage)
     |> click(css("#click_button"))
+    # The first click fires the action.
+    |> assert_text(css("#click_result"), "1")
     |> click(css("#click_button"))
     |> click(css("#click_button"))
+    # Later clicks are no-ops, so the count stays at 1.
     |> assert_text(css("#click_result"), "1")
   end
 
@@ -17,6 +20,8 @@ defmodule HologramFeatureTests.Events.OnceTest do
     session
     |> visit(OncePage)
     |> click(css("#rearm_button"))
+    # The first click fires the action.
+    |> assert_text(css("#rearm_result"), "1")
     # An unrelated re-render keeps the element in place, so the binding stays spent.
     |> click(css("#rerender_button"))
     |> click(css("#rearm_button"))
@@ -37,6 +42,8 @@ defmodule HologramFeatureTests.Events.OnceTest do
     document.getElementById('resize_plain_box').style.width = '150px';
     """)
     |> assert_text(css("#resize_plain_result"), "1")
+    # The first resize fires the once binding.
+    |> assert_text(css("#resize_once_result"), "1")
     |> execute_script("""
     document.getElementById('resize_once_box').style.width = '200px';
     document.getElementById('resize_plain_box').style.width = '200px';
@@ -57,6 +64,8 @@ defmodule HologramFeatureTests.Events.OnceTest do
     document.getElementById('reach_witness_box').scrollTop = 900;
     """)
     |> assert_text(css("#reach_bottom_result"), "1")
+    # The first reach fires the once binding.
+    |> assert_text(css("#reach_once_result"), "1")
     # Scroll both back to the top. Waiting for the witness's top reach proves a frame elapsed and
     # the witness's bottom edge-trigger reset, so the next scroll down can re-fire it.
     |> execute_script("""
@@ -90,8 +99,11 @@ defmodule HologramFeatureTests.Events.OnceTest do
     |> visit(OncePage)
     # Each trigger click lands outside the bound box, so it is an outside click for the box.
     |> click(css("#click_outside_trigger"))
+    # The first outside click fires the action.
+    |> assert_text(css("#click_outside_result"), "1")
     |> click(css("#click_outside_trigger"))
     |> click(css("#click_outside_trigger"))
+    # Later outside clicks are no-ops, so the count stays at 1.
     |> assert_text(css("#click_outside_result"), "1")
   end
 end
