@@ -214,6 +214,24 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the absolute path of the Hologram dependency directory.
+
+  Resolves through `Mix.Project.deps_paths/0`, which yields the correct
+  location for any dependency type (Hex, Git or path) in both single-app and
+  umbrella projects. Falls back to `<deps path>/hologram` when Hologram itself
+  is not among the current project's dependencies (e.g. inside the Hologram
+  repo itself).
+
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
+  """
+  @spec hologram_dep_dir() :: String.t()
+  def hologram_dep_dir do
+    fallback_dir = Path.join(Mix.Project.deps_path(), "hologram")
+    Map.get(Mix.Project.deps_paths(), :hologram, fallback_dir)
+  end
+
+  @doc """
   Returns the IR PLT dump file name.
   """
   @spec ir_plt_dump_file_name() :: String.t()

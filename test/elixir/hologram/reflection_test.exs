@@ -196,6 +196,10 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  test "hologram_dep_dir/0" do
+    assert hologram_dep_dir() == File.cwd!() <> "/deps/hologram"
+  end
+
   test "ir_plt_dump_file_name/0" do
     assert ir_plt_dump_file_name() == "ir.plt"
   end
