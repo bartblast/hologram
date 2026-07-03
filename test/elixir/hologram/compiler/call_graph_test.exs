@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Realtime
   alias Hologram.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
@@ -105,6 +106,53 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     graph = get_graph(call_graph)
     assert Digraph.vertices(graph) == [:vertex_3]
+  end
+
+  describe "broadcast_caller_protocol_dispatch_types/1" do
+    test "includes struct types reachable from broadcast_action callers" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
+        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module6, :my_fun, 0}, {Module7, :my_fun, 0})
+        |> Digraph.add_edge({Module7, :my_fun, 0}, Module12)
+
+      result = broadcast_caller_protocol_dispatch_types(graph)
+
+      assert Struct1 in result
+      assert Module12 in result
+    end
+
+    test "includes struct types reachable from broadcast_action_except callers" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action_except, 3})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
+        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 4})
+        |> Digraph.add_edge({Module6, :my_fun, 0}, Module12)
+
+      result = broadcast_caller_protocol_dispatch_types(graph)
+
+      assert Struct1 in result
+      assert Module12 in result
+    end
+
+    test "returns only built-in types when there are no broadcast callers" do
+      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
+
+      assert broadcast_caller_protocol_dispatch_types(graph) == protocol_dispatch_types([])
+    end
+
+    test "doesn't traverse through protocol function vertices" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
+
+      refute Struct1 in broadcast_caller_protocol_dispatch_types(graph)
+    end
   end
 
   describe "build/3" do

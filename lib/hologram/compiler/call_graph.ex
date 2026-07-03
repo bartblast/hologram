@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Realtime
   alias Hologram.Reflection
 
   defstruct pid: nil
@@ -16,6 +17,14 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
+
+  # Functions that broadcast action params from arbitrary server code to connected clients.
+  @broadcast_action_mfas [
+    {Realtime, :broadcast_action, 2},
+    {Realtime, :broadcast_action, 3},
+    {Realtime, :broadcast_action_except, 3},
+    {Realtime, :broadcast_action_except, 4}
+  ]
 
   # Types that consolidated protocols can dispatch on besides structs.
   @built_in_protocol_types [
@@ -388,6 +397,27 @@ defmodule Hologram.Compiler.CallGraph do
   def add_vertex(%{pid: pid} = call_graph, vertex) do
     Agent.cast(pid, &Digraph.add_vertex(&1, vertex))
     call_graph
+  end
+
+  @doc """
+  Returns the set of types that can appear at protocol dispatch in code of
+  functions that broadcast actions to connected clients, i.e. code reachable
+  from the callers of Hologram.Realtime.broadcast_action/2, broadcast_action/3,
+  broadcast_action_except/3, and broadcast_action_except/4.
+  Protocol function vertices are opaque during the traversal, so consolidated
+  dispatch edges don't make every loaded implementation's type count as reachable.
+  """
+  @spec broadcast_caller_protocol_dispatch_types(Digraph.t()) :: MapSet.t(module)
+  def broadcast_caller_protocol_dispatch_types(graph) do
+    caller_vertices =
+      for broadcast_mfa <- @broadcast_action_mfas,
+          {caller_vertex, _broadcast_mfa} <- Digraph.incoming_edges(graph, broadcast_mfa) do
+        caller_vertex
+      end
+
+    graph
+    |> Digraph.reachable(caller_vertices, opaque_vertex?: &protocol_function_mfa?/1)
+    |> protocol_dispatch_types()
   end
 
   @doc """
