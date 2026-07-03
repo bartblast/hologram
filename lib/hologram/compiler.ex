@@ -303,11 +303,17 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
-    project_node_modules_path = Path.join([Reflection.root_dir(), "assets", "node_modules"])
+    # Both the workspace root's and the OTP app's assets/node_modules go on
+    # NODE_PATH (identical in single-app projects, hence deduplicated).
+    # Non-existent dirs are silently ignored by Node.
+    workspace_and_otp_app_node_modules_paths =
+      [Reflection.root_dir(), Reflection.otp_app_dir()]
+      |> Enum.uniq()
+      |> Enum.map(&Path.join([&1, "assets", "node_modules"]))
 
     node_path =
       Enum.join(
-        [opts[:node_modules_path], project_node_modules_path],
+        [opts[:node_modules_path] | workspace_and_otp_app_node_modules_paths],
         PathUtils.env_path_separator()
       )
 
