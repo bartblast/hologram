@@ -650,6 +650,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_2/README.md
   """
   @spec list_page_mfas(t, module) :: [mfa]
   def list_page_mfas(call_graph, page_module) do
