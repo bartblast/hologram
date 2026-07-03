@@ -1,7 +1,8 @@
 # The scenarios on this page verify that protocol implementations ship for types
-# referenced only in server-executed code (init/3, command/3). Client-reachable
-# code on this page (template, actions) must not reference the struct fixtures,
-# otherwise the scenarios silently stop testing the server-side type harvest.
+# referenced only in server-executed code (init/3, command/3) or in action
+# broadcasting code. Client-reachable code on this page (template, actions) must
+# not reference the struct fixtures, otherwise the scenarios silently stop
+# testing the server-side type harvest.
 defmodule HologramFeatureTests.CallGraph.ServerCreatedStructsPage do
   use Hologram.Page
 
@@ -12,12 +13,16 @@ defmodule HologramFeatureTests.CallGraph.ServerCreatedStructsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
-  def init(_params, component, _server) do
-    put_state(component,
-      label: "initial",
-      struct_from_command: nil,
-      struct_from_init: %StructFixture3{name: "created in init"}
-    )
+  def init(_params, component, server) do
+    {
+      put_state(component,
+        label: "initial",
+        struct_from_broadcast: nil,
+        struct_from_command: nil,
+        struct_from_init: %StructFixture3{name: "created in init"}
+      ),
+      put_subscription(server, :server_created_structs)
+    }
   end
 
   def template do
@@ -30,6 +35,9 @@ defmodule HologramFeatureTests.CallGraph.ServerCreatedStructsPage do
       Label: <strong id="label">{@label}</strong>
     </p>
     <p>
+      Broadcast result: <strong id="broadcast-result">{@struct_from_broadcast}</strong>
+    </p>
+    <p>
       Command result: <strong id="command-result">{@struct_from_command}</strong>
     </p>
     <p>
@@ -40,6 +48,10 @@ defmodule HologramFeatureTests.CallGraph.ServerCreatedStructsPage do
 
   def action(:load_struct, _params, component) do
     put_command(component, :fetch_struct)
+  end
+
+  def action(:put_struct_from_broadcast, params, component) do
+    put_state(component, :struct_from_broadcast, params.struct)
   end
 
   def action(:put_struct_from_command, params, component) do

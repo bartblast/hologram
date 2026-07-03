@@ -2,6 +2,19 @@ defmodule HologramFeatureTests.ServerCreatedStructsTest do
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.CallGraph.ServerCreatedStructsPage
+  alias HologramFeatureTests.StructBroadcaster
+
+  @channel :server_created_structs
+
+  feature "struct created in broadcast params renders on the client", %{session: session} do
+    session = visit(session, ServerCreatedStructsPage)
+
+    wait_for_subscription(session, @channel)
+
+    StructBroadcaster.broadcast_struct(@channel)
+
+    assert_text(session, css("#broadcast-result"), "broadcast struct(created in broadcast)")
+  end
 
   feature "struct created in command renders on the client", %{session: session} do
     session
