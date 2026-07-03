@@ -1244,10 +1244,13 @@ defmodule Hologram.Compiler.CallGraph do
       |> protocol_dispatch_types()
       |> MapSet.union(extra_types)
 
+    # Implementation candidates are read from the dispatch edges added at build time
+    # (and refreshed on patch), which is much cheaper than listing implementations
+    # via reflection, since that scans BEAM files on disk.
     impl_entry_vertices =
-      for {protocol, function, arity} = vertex <- reached_vertices,
+      for {_protocol, function, arity} = vertex <- reached_vertices,
           protocol_function_mfa?(vertex),
-          impl <- Reflection.list_protocol_implementations(protocol),
+          {_source_vertex, {impl, :__impl__, 1}} <- Digraph.outgoing_edges(graph, vertex),
           protocol_implementation_reachable?(impl, types),
           entry_vertex <- [{impl, :__impl__, 1}, {impl, function, arity}],
           Digraph.has_vertex?(graph, entry_vertex),
