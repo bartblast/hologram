@@ -1954,27 +1954,6 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
-  describe "sorted_reachable_mfas/2" do
-    setup do
-      # Simple graph to verify sorting behavior.
-      # Reachability logic is tested in reachable_mfas/2 tests.
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge(:vertex_1, {Module7, :f7, 7})
-        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
-        |> Digraph.add_edge({Module3, :f3, 3}, {Module11, :f12, 12})
-
-      [graph: graph]
-    end
-
-    test "returns same results as reachable_mfas/2 but sorted", %{graph: graph} do
-      unsorted = reachable_mfas(graph, [:vertex_1])
-      sorted = sorted_reachable_mfas(graph, [:vertex_1])
-
-      assert sorted == Enum.sort(unsorted)
-    end
-  end
-
   test "sorted_vertices/1", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)

@@ -885,10 +885,10 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
-  # TODO: decide whether protocol_aware_reachable_mfas/3 can replace reachable_mfas/2
-  # and sorted_reachable_mfas/2 once they have no production callers left.
   @doc """
   Lists MFAs that are reachable from the given call graph vertices.
+  The traversal follows every edge, including consolidated protocol dispatch edges,
+  so all loaded implementations of a reached protocol are included.
   Unimplemented protocol implementations are excluded.
   """
   @spec reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
@@ -1031,18 +1031,6 @@ defmodule Hologram.Compiler.CallGraph do
   @spec sorted_edges(t) :: [edge]
   def sorted_edges(%{pid: pid}) do
     Agent.get(pid, &Digraph.sorted_edges/1, :infinity)
-  end
-
-  @doc """
-  Lists MFAs that are reachable from the given call graph vertices.
-  Unimplemented protocol implementations are excluded.
-  The MFAs returned are sorted.
-  """
-  @spec sorted_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
-  def sorted_reachable_mfas(graph, vertices) do
-    graph
-    |> reachable_mfas(vertices)
-    |> Enum.sort()
   end
 
   @doc """
