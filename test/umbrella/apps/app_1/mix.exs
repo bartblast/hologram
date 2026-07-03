@@ -17,7 +17,8 @@ defmodule App1.MixProject do
        ref: "2a78048b2005118dc2d887a9eb71994d6c899d7d"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
-      {:plug_cowboy, "~> 2.0"}
+      {:plug_cowboy, "~> 2.0"},
+      {:wallaby, "~> 0.30", only: :test}
     ]
   end
 
