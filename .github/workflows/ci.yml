@@ -349,12 +349,14 @@ jobs:
       # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
       - name: Check feature tests app retired Elixir deps
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        # TODO: Remove this allowlist wrapper and restore `run: mix hex.audit` once cowlib publishes
-        # a release fixing EEF-CVE-2026-43966 and EEF-CVE-2026-43969 (no patched version exists as of
-        # 2026-06-29). cowlib reaches the build only through the Wallaby test-server stack
-        # (plug_cowboy -> cowboy -> cowlib), and the MEDIUM advisory is already mitigated by cowboy
-        # 2.16.1's CR/LF header validation. The wrapper allowlists exactly those two IDs, so the
-        # audit still fails on every other advisory and on any retired package.
+        # TODO: Remove this allowlist wrapper and restore `run: mix hex.audit` once the EEF advisory
+        # database registers a cowlib version as patched for EEF-CVE-2026-43966 and
+        # EEF-CVE-2026-43969 (as of 2026-07-03 no version is registered as patched, so even
+        # cowlib 2.18.0 with its cow_http_struct_hd hardening is still flagged). cowlib reaches
+        # the build only through the Wallaby test-server stack (plug_cowboy -> cowboy -> cowlib),
+        # and the MEDIUM advisory is already mitigated by cowboy 2.16.1's CR/LF header validation.
+        # The wrapper allowlists exactly those two IDs, so the audit still fails on every other
+        # advisory and on any retired package.
         run: |
           output="$(mix hex.audit 2>&1)" && exit 0
           printf '%s\n' "$output"
