@@ -1,0 +1,21 @@
+# The directory Mix will write compiled artifacts to.
+/_build/
+
+# The directory Mix downloads your dependencies sources to.
+/deps/
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Temporary files, for example, from tests.
+/tmp/
+
+# Dialyzer PLTs.
+/priv/plts/*.plt
+/priv/plts/*.plt.hash
+
+# Node JS & npm.
+/assets/node_modules/
+
+# Hologram generated JavaScript bundles.
+/apps/*/priv/static/hologram/
