@@ -206,10 +206,8 @@ defmodule Hologram.RouterTest do
       assert conn.halted == true
       assert conn.state == :upgraded
 
-      # Note: In production, WebSocket upgrades should set status to 101 (Switching Protocols),
-      # but Plug.Adapters.Test.Conn.upgrade/3 doesn't simulate this HTTP protocol behavior.
-      # The :upgraded state confirms the upgrade was processed correctly in the test environment.
-      assert conn.status == nil
+      # Plug.Conn.upgrade_adapter/3 sets status to 101 (Switching Protocols) since plug 1.20.2.
+      assert conn.status == 101
     end
   end
 
