@@ -536,16 +536,21 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the absolute dir path of the project.
+  Returns the absolute path of the workspace root - the top of the codebase
+  checkout: the umbrella root in an umbrella project, the project root in a
+  single-app project.
 
-  ## Examples
+  Derived from `Mix.Project.deps_path/0`, so it assumes the deps dir sits
+  directly under the workspace root (Mix's default in every layout). A custom
+  external `:deps_path` or `MIX_DEPS_PATH` breaks this assumption and is not
+  supported.
 
-      iex> root_dir()
-      "/Users/bartblast/Projects/my_project"
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
   """
   @spec root_dir() :: String.t()
   def root_dir do
-    File.cwd!()
+    Path.dirname(Mix.Project.deps_path())
   end
 
   @doc """

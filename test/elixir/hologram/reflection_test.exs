@@ -605,8 +605,22 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "root_dir/0" do
-    assert root_dir() == File.cwd!()
+  describe "root_dir/0" do
+    test "single-app project" do
+      assert root_dir() == File.cwd!()
+    end
+
+    test "umbrella project child app" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      app_a_dir = Path.join(umbrella_dir, "apps/app_a")
+
+      result =
+        Mix.Project.in_project(:app_a, app_a_dir, fn _module ->
+          root_dir()
+        end)
+
+      assert result == umbrella_dir
+    end
   end
 
   test "source_path/1" do
