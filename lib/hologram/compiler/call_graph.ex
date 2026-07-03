@@ -723,11 +723,14 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_runtime_mfas(t) :: [mfa]
   def list_runtime_mfas(call_graph) do
     entry_mfas = list_runtime_entry_mfas()
+    graph = get_graph(call_graph)
 
-    call_graph
-    |> get_graph()
-    |> sorted_reachable_mfas(entry_mfas)
+    broadcast_caller_types = broadcast_caller_protocol_dispatch_types(graph)
+
+    graph
+    |> protocol_aware_reachable_mfas(entry_mfas, broadcast_caller_types)
     |> reject_hex_mfas()
+    |> Enum.sort()
   end
 
   @doc """

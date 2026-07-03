@@ -1260,6 +1260,39 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
 
+    test "excludes protocol implementations whose concrete type is not runtime reachable", %{
+      runtime_mfas: result
+    } do
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol dispatch helpers used by generic protocol functions", %{
+      runtime_mfas: result
+    } do
+      assert {String.Chars, :to_string, 1} in result
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
+    test "includes protocol implementations whose type is reachable from broadcast callers", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module12)
+        |> list_runtime_mfas()
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+
+      refute {Module13, :my_fun, 0} in result
+    end
+
     test "results are deduped", %{runtime_mfas: result} do
       assert result == Enum.uniq(result)
     end
