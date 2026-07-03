@@ -481,11 +481,19 @@ defmodule Hologram.Reflection do
   @doc """
   Returns the protocol module that the given module implements, or nil if it's not a protocol implementation.
   """
-  @spec protocol_impl(module) :: module | nil
-  def protocol_impl(module) do
+  @spec protocol_implementation(module) :: module | nil
+  def protocol_implementation(module) do
     if has_function?(module, :__impl__, 1) do
       module.__impl__(:protocol)
     end
+  end
+
+  @doc """
+  Returns true if the given module is a protocol implementation, or false otherwise.
+  """
+  @spec protocol_implementation?(module) :: boolean
+  def protocol_implementation?(module) do
+    has_function?(module, :__impl__, 1)
   end
 
   @doc """

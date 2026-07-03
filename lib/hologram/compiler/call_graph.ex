@@ -1091,7 +1091,7 @@ defmodule Hologram.Compiler.CallGraph do
   # which would re-introduce vertices that remove_module_vertices already cleaned up.
   defp refresh_protocol_dispatch_edges(call_graph, added_or_edited_modules) do
     added_or_edited_modules
-    |> Enum.map(&Reflection.protocol_impl/1)
+    |> Enum.map(&Reflection.protocol_implementation/1)
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
     |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
