@@ -647,6 +647,60 @@ defmodule Hologram.Compiler.DigraphTest do
 
       assert result == []
     end
+
+    test "skips traversal of vertices in opaque_vertices MapSet" do
+      # :a -> :b -> :c
+      # :b is in opaque_vertices, so :c should NOT be in the result
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([:a], opaque_vertices: MapSet.new([:b]))
+
+      assert Enum.sort(result) == [:a, :b]
+    end
+
+    test "still reaches successor through non-opaque path when opaque path also exists" do
+      # :start -> :opaque -> :dest  (blocked)
+      # :start -> :direct -> :dest  (not blocked)
+      # :dest should be in the result because of the non-opaque path
+      result =
+        new()
+        |> add_edge(:start, :opaque)
+        |> add_edge(:opaque, :dest)
+        |> add_edge(:start, :direct)
+        |> add_edge(:direct, :dest)
+        |> reachable([:start], opaque_vertices: MapSet.new([:opaque]))
+
+      assert Enum.sort(result) == [:dest, :direct, :opaque, :start]
+    end
+
+    test "blocks all successors behind an opaque vertex" do
+      # :start -> :opaque -> :succ_1
+      # :start -> :opaque -> :succ_2
+      # Neither successor should be in the result
+      result =
+        new()
+        |> add_edge(:start, :opaque)
+        |> add_edge(:opaque, :succ_1)
+        |> add_edge(:opaque, :succ_2)
+        |> reachable([:start], opaque_vertices: MapSet.new([:opaque]))
+
+      assert Enum.sort(result) == [:opaque, :start]
+    end
+
+    test "skips traversal of vertices matching the opaque_vertex? predicate" do
+      # {MyModule, :fun_a, 0} -> SomeModule -> {SomeModule, :fun_b, 1}
+      # {SomeModule, :fun_b, 1} should NOT be in the result because SomeModule's outgoing
+      # edges are not traversed
+      result =
+        new()
+        |> add_edge({MyModule, :fun_a, 0}, SomeModule)
+        |> add_edge(SomeModule, {SomeModule, :fun_b, 1})
+        |> reachable([{MyModule, :fun_a, 0}], opaque_vertex?: &is_atom/1)
+
+      assert Enum.sort(result) == [SomeModule, {MyModule, :fun_a, 0}]
+    end
   end
 
   describe "reaching/2" do

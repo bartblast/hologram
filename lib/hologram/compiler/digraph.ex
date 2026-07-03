@@ -178,9 +178,18 @@ defmodule Hologram.Compiler.Digraph do
   Uses breadth-first search to efficiently traverse the graph.
   If none of the starting vertices exist in the graph, returns an empty list.
   Non-existent starting vertices are ignored.
+
+  ## Options
+    * `:opaque_vertex?` - a one-arity function that receives a vertex and returns a boolean.
+      When it returns `true`, the vertex is included in the result but its outgoing edges
+      are not traversed. Defaults to `nil`.
+
+    * `:opaque_vertices` - a `MapSet` of vertices whose outgoing edges should not be
+      traversed. The vertices themselves are still included in the result when reached,
+      but the BFS does not follow their outgoing edges. Defaults to `nil`.
   """
-  @spec reachable(t, [vertex]) :: [vertex]
-  def reachable(graph, starting_vertices) do
+  @spec reachable(t, [vertex], keyword) :: [vertex]
+  def reachable(graph, starting_vertices, opts \\ []) do
     %Digraph{vertices: vertices, outgoing_edges: outgoing_edges} = graph
 
     existing_vertices = Enum.filter(starting_vertices, &Map.has_key?(vertices, &1))
@@ -193,7 +202,7 @@ defmodule Hologram.Compiler.Digraph do
       visited = MapSet.new(existing_vertices)
 
       queue
-      |> bfs_reachable(visited, outgoing_edges, [])
+      |> bfs_reachable(visited, outgoing_edges, opts)
       |> MapSet.to_list()
     end
   end
