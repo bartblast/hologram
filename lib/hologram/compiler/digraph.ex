@@ -174,6 +174,17 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Returns a list of all outgoing edges from the given vertex.
+  Each edge is represented as a tuple {source_vertex, target_vertex}.
+  """
+  @spec outgoing_edges(t, vertex) :: [edge]
+  def outgoing_edges(%Digraph{outgoing_edges: outgoing_edges_map}, vertex) do
+    outgoing_edges_map
+    |> Map.get(vertex, %{})
+    |> Enum.map(fn {target, _flag} -> {vertex, target} end)
+  end
+
+  @doc """
   Returns a list of all vertices reachable from the given list of starting vertices.
   Uses breadth-first search to efficiently traverse the graph.
   If none of the starting vertices exist in the graph, returns an empty list.

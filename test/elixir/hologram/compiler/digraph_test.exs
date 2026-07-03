@@ -461,6 +461,52 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "outgoing_edges/2" do
+    test "returns empty list when vertex doesn't exist" do
+      result = outgoing_edges(new(), :a)
+
+      assert result == []
+    end
+
+    test "returns empty list when vertex exists but has no edges" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> outgoing_edges(:a)
+
+      assert result == []
+    end
+
+    test "returns empty list when vertex has only incoming edges" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:c, :b)
+        |> outgoing_edges(:b)
+
+      assert result == []
+    end
+
+    test "returns outgoing edge when vertex has one outgoing edge" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> outgoing_edges(:a)
+
+      assert result == [{:a, :b}]
+    end
+
+    test "returns multiple outgoing edges when vertex has multiple outgoing edges" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> outgoing_edges(:a)
+
+      assert Enum.sort(result) == [{:a, :b}, {:a, :c}]
+    end
+  end
+
   describe "reachable/2" do
     test "handles empty starting vertices list" do
       result =
