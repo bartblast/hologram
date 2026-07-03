@@ -43,6 +43,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
@@ -3644,6 +3646,430 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              } = fun_def
+    end
+
+    # Original source:
+    #   defimpl Protocol1, for: Integer do
+    #     def my_fun(_data), do: :ok
+    #   end
+    #
+    # Expanded (Elixir >= 1.16):
+    #   def __impl__(:for), do: Integer
+    #   def __impl__(:protocol), do: Protocol1
+    #
+    # Expanded (Elixir < 1.16):
+    #   def __impl__(:for), do: Integer
+    #   def __impl__(:protocol), do: Protocol1
+    #   def __impl__(:target), do: Protocol1.Integer
+    test "__impl__/1 clauses have 'for' and 'protocol' module atoms in body",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
+
+      {for_clause, protocol_clause} =
+        if Version.match?(System.version(), ">= 1.16.0") do
+          assert [for_clause, protocol_clause] = fun_defs
+          {for_clause, protocol_clause}
+        else
+          assert [target_clause, for_clause, protocol_clause] = fun_defs
+
+          assert target_clause == %IR.FunctionDefinition{
+                   name: :__impl__,
+                   arity: 1,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [%IR.AtomType{value: :target}],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.AtomType{value: Protocol1.Integer}]
+                     }
+                   }
+                 }
+
+          {for_clause, protocol_clause}
+        end
+
+      assert for_clause == %IR.FunctionDefinition{
+               name: :__impl__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :for}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Integer}]
+                 }
+               }
+             }
+
+      assert protocol_clause == %IR.FunctionDefinition{
+               name: :__impl__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :protocol}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Protocol1}]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation):
+    #   def __protocol__(:module), do: Protocol1
+    #   def __protocol__(:functions), do: [my_fun: 1]
+    #   def __protocol__(:consolidated?), do: true
+    #   def __protocol__(:impls), do: {:consolidated, [Struct1, Integer]}
+    test "__protocol__/1 clauses have module atoms in body (protocol module and implementations)",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :__protocol__, 1)
+
+      assert [module_clause, functions_clause, consolidated_clause, impls_clause] = fun_defs
+
+      assert module_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :module}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Protocol1}]
+                 }
+               }
+             }
+
+      assert functions_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :functions}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.ListType{
+                       data: [
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: :my_fun},
+                             %IR.IntegerType{value: 1}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+
+      assert consolidated_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :consolidated?}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: true}]
+                 }
+               }
+             }
+
+      assert impls_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :impls}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :consolidated},
+                         %IR.ListType{
+                           data: [
+                             %IR.AtomType{value: Struct1},
+                             %IR.AtomType{value: Integer}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation):
+    #   def impl_for(%{__struct__: x}) when is_atom(x), do: struct_impl_for(x)
+    #   def impl_for(x) when is_integer(x), do: Protocol1.Integer
+    #   def impl_for(_), do: nil
+    test "impl_for/1 clauses have module atoms in body and struct dispatch calls struct_impl_for/1",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :impl_for, 1)
+
+      assert [struct_clause, integer_clause, catch_all_clause] = fun_defs
+
+      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
+      assert struct_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
+                     ]
+                   }
+                 ],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_atom,
+                     args: [%IR.Variable{name: :x, version: -1}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :struct_impl_for,
+                       args: [%IR.Variable{name: :x, version: -1}]
+                     }
+                   ]
+                 }
+               }
+             }
+
+      assert integer_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :x, version: -1}],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :x, version: -1}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: Protocol1.Integer}
+                   ]
+                 }
+               }
+             }
+
+      assert catch_all_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: nil}]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (Elixir >= 1.18):
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data, description: ""))
+    #       x -> x
+    #     end
+    #   end
+    #
+    # Expanded (Elixir < 1.18):
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data))
+    #       x -> x
+    #     end
+    #   end
+    test "impl_for!/1 body calls impl_for/1 and has protocol module atom in error path",
+         %{ir_plt: ir_plt} do
+      assert [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
+
+      exception_keyword_data =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :description},
+                %IR.StringType{value: ""}
+              ]
+            }
+          ]
+        else
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            }
+          ]
+        end
+
+      assert clause == %IR.FunctionDefinition{
+               name: :impl_for!,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :data, version: 0}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.LocalFunctionCall{
+                         function: :impl_for,
+                         args: [%IR.Variable{name: :data, version: 0}]
+                       },
+                       clauses: [
+                         %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 1},
+                           guards: [
+                             %IR.RemoteFunctionCall{
+                               module: %IR.AtomType{value: :erlang},
+                               function: :orelse,
+                               args: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: false}
+                                   ]
+                                 },
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: nil}
+                                   ]
+                                 }
+                               ]
+                             }
+                           ],
+                           body: %IR.Block{
+                             expressions: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.AtomType{value: :erlang},
+                                 function: :error,
+                                 args: [
+                                   %IR.RemoteFunctionCall{
+                                     module: %IR.AtomType{value: Protocol.UndefinedError},
+                                     function: :exception,
+                                     args: [
+                                       %IR.ListType{data: exception_keyword_data}
+                                     ]
+                                   }
+                                 ]
+                               }
+                             ]
+                           }
+                         },
+                         %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 2},
+                           guards: [],
+                           body: %IR.Block{
+                             expressions: [%IR.Variable{name: :x, version: 2}]
+                           }
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation, one clause per struct + catch-all):
+    #   defp struct_impl_for(Struct1), do: Protocol1.Struct1
+    #   defp struct_impl_for(_), do: nil
+    test "struct_impl_for/1 clauses have struct and implementation module atoms",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :struct_impl_for, 1)
+
+      assert [struct_1_clause, catch_all_clause] = fun_defs
+
+      assert struct_1_clause == %IR.FunctionDefinition{
+               name: :struct_impl_for,
+               arity: 1,
+               visibility: :private,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: Struct1}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: Module.safe_concat(Protocol1, Struct1)}
+                   ]
+                 }
+               }
+             }
+
+      assert catch_all_clause == %IR.FunctionDefinition{
+               name: :struct_impl_for,
+               arity: 1,
+               visibility: :private,
+               clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: nil}]
+                 }
+               }
+             }
     end
   end
 end
