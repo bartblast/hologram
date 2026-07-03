@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "decimal.js": "^10"
+  }
+}
