@@ -1388,6 +1388,50 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "protocol_dispatch_types/1" do
+    test "includes built-in protocol dispatch types" do
+      assert protocol_dispatch_types([]) ==
+               MapSet.new([
+                 Any,
+                 Atom,
+                 BitString,
+                 Float,
+                 Function,
+                 Integer,
+                 List,
+                 Map,
+                 PID,
+                 Port,
+                 Reference,
+                 Tuple
+               ])
+    end
+
+    test "includes struct modules among module vertices" do
+      assert Struct1 in protocol_dispatch_types([Struct1])
+    end
+
+    test "excludes non-struct modules among module vertices" do
+      refute Module1 in protocol_dispatch_types([Module1])
+    end
+
+    test "excludes non-alias atom vertices" do
+      refute :abc in protocol_dispatch_types([:abc])
+    end
+
+    test "includes modules of __struct__/0 MFAs" do
+      assert Struct1 in protocol_dispatch_types([{Struct1, :__struct__, 0}])
+    end
+
+    test "includes modules of __struct__/1 MFAs" do
+      assert Struct1 in protocol_dispatch_types([{Struct1, :__struct__, 1}])
+    end
+
+    test "excludes modules of MFAs other than __struct__/0 and __struct__/1" do
+      refute Struct1 in protocol_dispatch_types([{Struct1, :my_fun, 1}])
+    end
+  end
+
   test "put_graph", %{empty_call_graph: call_graph} do
     graph = Digraph.add_edge(Digraph.new(), :vertex_3, :vertex_4)
 
