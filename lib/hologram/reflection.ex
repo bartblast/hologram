@@ -439,6 +439,27 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the absolute path of the project OTP application's source directory.
+
+  In an umbrella this is the app's directory under the umbrella's apps path.
+  Otherwise it is the active Mix project's directory (which Mix keeps as the
+  current working directory).
+
+  Requires a Mix project context (compilation or Mix tasks in any Mix env) -
+  not callable inside a release, where Mix is unavailable.
+  """
+  @spec otp_app_dir() :: String.t()
+  def otp_app_dir do
+    case Mix.Project.apps_paths() do
+      nil ->
+        File.cwd!()
+
+      apps_paths ->
+        Path.expand(Map.fetch!(apps_paths, otp_app()))
+    end
+  end
+
+  @doc """
   Returns the absolute path of the priv dir of the project OTP application.
 
   Resolved through the code path (`:code.priv_dir/1`), so it points at the

@@ -501,6 +501,38 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "otp_app_dir/0" do
+    test "single-app project" do
+      assert otp_app_dir() == File.cwd!()
+    end
+
+    test "umbrella project root" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:app_a)
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app_dir()
+        end)
+
+      assert result == Path.join(umbrella_dir, "apps/app_a")
+
+      :application.unload(:app_a)
+    end
+
+    test "umbrella project child app" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      app_a_dir = Path.join(umbrella_dir, "apps/app_a")
+
+      result =
+        Mix.Project.in_project(:app_a, app_a_dir, fn _module ->
+          otp_app_dir()
+        end)
+
+      assert result == app_a_dir
+    end
+  end
+
   test "otp_app_priv_dir/0" do
     assert otp_app_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
   end
