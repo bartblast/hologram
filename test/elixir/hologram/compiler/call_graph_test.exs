@@ -1437,6 +1437,123 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "protocol_aware_reachable_mfas/3" do
+    test "includes implementations for built-in types when their protocol is reached", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {Protocol1, :my_fun, 1} in result
+      assert {Protocol1.Integer, :__impl__, 1} in result
+      assert {Protocol1.Integer, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is not reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations whose struct type is reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations whose struct type is in the extra types", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      extra_types = MapSet.new([Struct1])
+      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}], extra_types)
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "reaches fixpoint when implementation code makes further types reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
+        |> get_graph()
+
+      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "retains dispatch helper MFAs of reached protocols", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
+        |> get_graph()
+
+      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
+    test "excludes module vertices from the result", %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      refute Enum.any?(result, &is_atom/1)
+    end
+  end
+
   describe "protocol_dispatch_dependency_vertices/2" do
     test "retains dispatch helpers of reached protocol functions", %{
       full_call_graph: call_graph
