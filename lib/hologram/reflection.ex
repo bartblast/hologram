@@ -455,7 +455,9 @@ defmodule Hologram.Reflection do
         File.cwd!()
 
       apps_paths ->
-        Path.expand(Map.fetch!(apps_paths, otp_app()))
+        apps_paths
+        |> Map.fetch!(otp_app())
+        |> Path.expand()
     end
   end
 
