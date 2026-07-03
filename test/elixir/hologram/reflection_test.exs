@@ -424,7 +424,7 @@ defmodule Hologram.ReflectionTest do
     # Mix.Project.in_project/4 injects its app atom as the :app config default when it
     # serves a cached project, but a real umbrella root project has no :app - the
     # [app: nil] post-config forces that value in every load path.
-    test "umbrella project with a single client app" do
+    test "umbrella project with a single app depending on Hologram" do
       umbrella_dir = Path.join(@fixtures_dir, "umbrella")
       load_app_depending_on_hologram(:otp_app_fixture_a)
 
@@ -438,7 +438,7 @@ defmodule Hologram.ReflectionTest do
       :application.unload(:otp_app_fixture_a)
     end
 
-    test "umbrella project with multiple client apps, one owning a Phoenix endpoint" do
+    test "umbrella project with multiple apps depending on Hologram, one owning a Phoenix endpoint" do
       umbrella_dir = Path.join(@fixtures_dir, "umbrella")
       load_app_depending_on_hologram(:otp_app_fixture_b)
       load_app_depending_on_hologram(:otp_app_fixture_c)
@@ -456,7 +456,7 @@ defmodule Hologram.ReflectionTest do
       :application.unload(:otp_app_fixture_c)
     end
 
-    test "umbrella project with multiple client apps, none owning a Phoenix endpoint" do
+    test "umbrella project with multiple apps depending on Hologram, none owning a Phoenix endpoint" do
       umbrella_dir = Path.join(@fixtures_dir, "umbrella")
       load_app_depending_on_hologram(:otp_app_fixture_d)
       load_app_depending_on_hologram(:otp_app_fixture_e)
@@ -471,7 +471,7 @@ defmodule Hologram.ReflectionTest do
       :application.unload(:otp_app_fixture_e)
     end
 
-    test "umbrella project with multiple client apps owning Phoenix endpoints" do
+    test "umbrella project with multiple apps depending on Hologram, all owning Phoenix endpoints" do
       umbrella_dir = Path.join(@fixtures_dir, "umbrella")
       load_app_depending_on_hologram(:otp_app_fixture_f)
       load_app_depending_on_hologram(:otp_app_fixture_g)
@@ -490,7 +490,7 @@ defmodule Hologram.ReflectionTest do
       :application.unload(:otp_app_fixture_g)
     end
 
-    test "umbrella project with no client apps" do
+    test "umbrella project with no apps depending on Hologram" do
       umbrella_dir = Path.join(@fixtures_dir, "umbrella")
 
       assert_raise RuntimeError, ~r/no loaded application depends on :hologram/, fn ->
