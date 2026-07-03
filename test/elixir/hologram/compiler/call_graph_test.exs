@@ -14,6 +14,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module12
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module13
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module14
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module15
@@ -1599,6 +1600,52 @@ defmodule Hologram.Compiler.CallGraphTest do
     refute has_edge?(call_graph, :vertex_2, :vertex_3)
     refute has_edge?(call_graph, :vertex_3, :vertex_4)
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
+  end
+
+  describe "server_protocol_dispatch_types/2" do
+    test "includes struct types reachable from init/3" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
+
+      assert Struct1 in server_protocol_dispatch_types(graph, [Module2])
+    end
+
+    test "includes struct types reachable from command/3" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :command, 3}, {Struct1, :__struct__, 1})
+
+      assert Struct1 in server_protocol_dispatch_types(graph, [Module2])
+    end
+
+    test "harvests types from all given templatables" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
+        |> Digraph.add_edge({Module4, :command, 3}, Module12)
+
+      result = server_protocol_dispatch_types(graph, [Module2, Module4])
+
+      assert Struct1 in result
+      assert Module12 in result
+    end
+
+    test "returns only built-in types when init/3 and command/3 vertices don't exist" do
+      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
+
+      assert server_protocol_dispatch_types(graph, [Module2]) == protocol_dispatch_types([])
+    end
+
+    test "doesn't traverse through protocol function vertices" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, {Protocol1, :my_fun, 1})
+        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
+
+      refute Struct1 in server_protocol_dispatch_types(graph, [Module2])
+    end
   end
 
   test "sorted_edges/1", %{empty_call_graph: call_graph} do
