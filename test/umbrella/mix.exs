@@ -1,8 +1,15 @@
 defmodule HologramUmbrellaTests.MixProject do
   use Mix.Project
 
+  defp aliases do
+    [
+      f: ["format"]
+    ]
+  end
+
   def project do
     [
+      aliases: aliases(),
       apps_path: "apps",
       deps: deps(),
       dialyzer: [
