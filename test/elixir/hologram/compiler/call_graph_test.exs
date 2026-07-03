@@ -1039,6 +1039,74 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
 
+    test "excludes protocol implementations whose concrete type is not reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> list_page_mfas(Module17)
+
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose concrete type is reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
+        |> list_page_mfas(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose type is created only in server init", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :init, 3}, Module12)
+        |> list_page_mfas(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose type is created only in commands", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :command, 3}, Module12)
+        |> list_page_mfas(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "excludes MFAs reachable only from server-executed code", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, {Module13, :my_fun, 0})
+        |> add_edge({Module17, :command, 3}, {Module13, :my_fun, 0})
+        |> list_page_mfas(Module17)
+
+      refute {Module13, :my_fun, 0} in result
+    end
+
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
       page_module_22_mfas: result
     } do

@@ -688,8 +688,12 @@ defmodule Hologram.Compiler.CallGraph do
     entry_mfas = list_page_entry_mfas(page_module)
     graph = get_graph(call_graph)
 
+    initial_mfas = protocol_aware_reachable_mfas(graph, entry_mfas)
+    templatables = [page_module | extract_uniq_components(initial_mfas)]
+    server_types = server_protocol_dispatch_types(graph, templatables)
+
     graph
-    |> sorted_reachable_mfas(entry_mfas)
+    |> protocol_aware_reachable_mfas(entry_mfas, server_types)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
