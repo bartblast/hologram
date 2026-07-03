@@ -105,7 +105,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "build/3" do
-    test "atom type ir, which is not an alias", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is not an alias", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
       result = build(call_graph, ir, :vertex_1)
 
@@ -115,7 +115,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == []
     end
 
-    test "atom type ir, which as an alias of a non-existing module", %{
+    test "atom type IR, which as an alias of a non-existing module", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Aaa.Bbb}
@@ -127,7 +127,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == [{:vertex_1, Aaa.Bbb}]
     end
 
-    test "atom type ir, which is an alias of an existing non-templatable module", %{
+    test "atom type IR, which is an alias of an existing non-templatable module", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
@@ -139,7 +139,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == [{:vertex_1, Module1}]
     end
 
-    test "atom type ir, which is an alias of a page module", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is an alias of a page module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
       result = build(call_graph, ir, :vertex_1)
 
@@ -149,7 +149,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{:vertex_1, Module2}]
     end
 
-    test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is an alias of a layout module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
       result = build(call_graph, ir, :vertex_1)
 
@@ -159,7 +159,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{:vertex_1, Module3}]
     end
 
-    test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is an alias of a component module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
       result = build(call_graph, ir, :vertex_1)
 
@@ -252,7 +252,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{from_vertex, Module1}]
     end
 
-    test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
+    test "function definition IR, with outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
         arity: 2,
@@ -287,7 +287,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, without outbound vertices", %{empty_call_graph: call_graph} do
+    test "function definition IR, without outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
         arity: 2,
@@ -325,7 +325,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "local function call ir", %{empty_call_graph: call_graph} do
+    test "local function call IR", %{empty_call_graph: call_graph} do
       ir = %IR.LocalFunctionCall{
         function: :my_fun_2,
         args: [
@@ -375,7 +375,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir, regular module", %{empty_call_graph: call_graph} do
+    test "module definition IR, regular module", %{empty_call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
         module: %IR.AtomType{value: Module1},
         body: %IR.Block{
@@ -402,7 +402,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir, page module adds page-specific edges", %{
+    test "module definition IR, page module adds page-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_2_ir = IR.for_module(Module2)
@@ -417,7 +417,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module2, {Module2, :__route__, 0})
     end
 
-    test "module definition ir, component module adds component-specific edges", %{
+    test "module definition IR, component module adds component-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_4_ir = IR.for_module(Module4)
@@ -436,7 +436,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module4, {Module4, :template, 0})
     end
 
-    test "module definition ir, struct module adds struct-specific edges", %{
+    test "module definition IR, struct module adds struct-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_25_ir = IR.for_module(Module25)
@@ -451,7 +451,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module25, {Module25, :__struct__, 1})
     end
 
-    test "module definition ir, Ecto schema module adds Ecto schema-specific edges", %{
+    test "module definition IR, Ecto schema module adds Ecto schema-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_21_ir = IR.for_module(Module21)
@@ -468,7 +468,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module21, {Module21, :__schema__, 2})
     end
 
-    test "module definition ir, protocol module adds protocol-specific edges", %{
+    test "module definition IR, protocol module adds protocol-specific edges", %{
       empty_call_graph: call_graph
     } do
       string_chars_ir = IR.for_module(String.Chars)
@@ -494,7 +494,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              )
     end
 
-    test "remote function call ir, module field as an atom", %{empty_call_graph: call_graph} do
+    test "remote function call IR, module field as an atom", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Module5},
         function: :my_fun_2,
@@ -525,7 +525,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "remote function call ir, module field is a variable", %{empty_call_graph: call_graph} do
+    test "remote function call IR, module field is a variable", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.Variable{name: :my_var},
         function: :my_fun_2,
