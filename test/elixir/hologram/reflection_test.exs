@@ -476,10 +476,6 @@ defmodule Hologram.ReflectionTest do
     assert root_dir() == File.cwd!()
   end
 
-  test "root_priv_dir/0" do
-    assert root_priv_dir() == File.cwd!() <> "/priv/hologram"
-  end
-
   test "source_path/1" do
     assert source_path(__MODULE__) == __ENV__.file
   end

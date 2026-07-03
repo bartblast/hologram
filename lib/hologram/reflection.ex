@@ -538,19 +538,6 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Returns the absolute path of the project priv dir for Hologram.
-
-  ## Examples
-
-      iex> root_priv_dir()
-      "/Users/bartblast/Projects/my_project/priv/hologram"
-  """
-  @spec root_priv_dir() :: String.t()
-  def root_priv_dir do
-    Path.join([root_dir(), "priv", "hologram"])
-  end
-
-  @doc """
   Returns the file path of the given module's source code.
   """
   @spec source_path(module()) :: String.t()
