@@ -408,6 +408,14 @@ defmodule Hologram.ReflectionTest do
     assert otp_app() == :hologram
   end
 
+  test "otp_app_priv_dir/0" do
+    assert otp_app_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
+  end
+
+  test "otp_app_static_dir/0" do
+    assert otp_app_static_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
+  end
+
   describe "page?" do
     test "is a page module" do
       assert page?(Module2)
@@ -438,14 +446,6 @@ defmodule Hologram.ReflectionTest do
     test "there is no config entry for the given Phoenix endpoint module" do
       assert phoenix_endpoint() == nil
     end
-  end
-
-  test "release_priv_dir/0" do
-    assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
-  end
-
-  test "release_static_dir/0" do
-    assert release_static_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
   end
 
   describe "protocol?/1" do

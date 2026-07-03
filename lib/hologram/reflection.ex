@@ -445,6 +445,27 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the absolute path of the priv dir of the project OTP application.
+
+  Resolved through the code path (`:code.priv_dir/1`), so it points at the
+  build dir in Mix environments and at the release dir in releases.
+  """
+  @spec otp_app_priv_dir() :: String.t()
+  def otp_app_priv_dir do
+    otp_app()
+    |> :code.priv_dir()
+    |> to_string()
+  end
+
+  @doc """
+  Returns the absolute path of the static dir of the project OTP application.
+  """
+  @spec otp_app_static_dir() :: String.t()
+  def otp_app_static_dir do
+    Path.join(otp_app_priv_dir(), "static")
+  end
+
+  @doc """
   Returns true if the given term is a page module (a module that has a "use Hologram.Page" directive)
   Otherwise false is returned.
 
@@ -504,24 +525,6 @@ defmodule Hologram.Reflection do
     if has_function?(module, :__impl__, 1) do
       module.__impl__(:protocol)
     end
-  end
-
-  @doc """
-  Returns the release priv dir path.
-  """
-  @spec release_priv_dir() :: String.t()
-  def release_priv_dir do
-    otp_app()
-    |> :code.priv_dir()
-    |> to_string()
-  end
-
-  @doc """
-  Returns the release static dir path.
-  """
-  @spec release_static_dir() :: String.t()
-  def release_static_dir do
-    Path.join(release_priv_dir(), "static")
   end
 
   @doc """
