@@ -108,6 +108,44 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
+  describe "app_protocol_dispatch_types/1" do
+    test "includes types reachable from page client code" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph)
+    end
+
+    test "includes types created in server-executed code of pages" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph)
+    end
+
+    test "includes types created in server-executed code of components used by pages" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :template, 0}, {Module4, :template, 0})
+        |> Digraph.add_edge({Module4, :init, 3}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph)
+    end
+
+    test "includes types reachable from broadcast callers" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module13, :my_fun, 0}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph)
+    end
+
+    test "returns only built-in types for a graph without app type references" do
+      graph = Digraph.add_edge(Digraph.new(), {Module13, :my_fun, 0}, {Module5, :my_fun, 0})
+
+      assert app_protocol_dispatch_types(graph) == protocol_dispatch_types([])
+    end
+  end
+
   describe "broadcast_caller_protocol_dispatch_types/1" do
     test "includes struct types reachable from broadcast_action callers" do
       graph =
@@ -1275,6 +1313,33 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {String.Chars, :impl_for!, 1} in result
       assert {String.Chars, :struct_impl_for, 1} in result
       assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
+    test "includes protocol implementations whose type is used only by a page", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> list_runtime_mfas()
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose type is created only in a page's server init",
+         %{
+           full_call_graph: call_graph
+         } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, Module12)
+        |> list_runtime_mfas()
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
     end
 
     test "includes protocol implementations whose type is reachable from broadcast callers", %{

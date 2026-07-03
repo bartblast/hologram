@@ -400,6 +400,34 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the set of types that can appear at protocol dispatch anywhere in the
+  app: types reachable from the client code of all pages, types created in
+  server-executed code of pages and their components, and types reachable from
+  action broadcasting code.
+  """
+  @spec app_protocol_dispatch_types(Digraph.t()) :: MapSet.t(module)
+  def app_protocol_dispatch_types(graph) do
+    pages = Reflection.list_pages()
+    page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas/1)
+
+    page_vertices =
+      Digraph.reachable(graph, page_entry_mfas, opaque_vertex?: &protocol_function_mfa?/1)
+
+    components =
+      page_vertices
+      |> Enum.filter(&match?({_module, _function, _arity}, &1))
+      |> extract_uniq_components()
+
+    client_types = protocol_dispatch_types(page_vertices)
+    server_types = server_protocol_dispatch_types(graph, pages ++ components)
+    broadcast_types = broadcast_caller_protocol_dispatch_types(graph)
+
+    client_types
+    |> MapSet.union(server_types)
+    |> MapSet.union(broadcast_types)
+  end
+
+  @doc """
   Returns the set of types that can appear at protocol dispatch in code of
   functions that broadcast actions to connected clients, i.e. code reachable
   from the callers of Hologram.Realtime.broadcast_action/2, broadcast_action/3,
@@ -725,10 +753,10 @@ defmodule Hologram.Compiler.CallGraph do
     entry_mfas = list_runtime_entry_mfas()
     graph = get_graph(call_graph)
 
-    broadcast_caller_types = broadcast_caller_protocol_dispatch_types(graph)
+    app_types = app_protocol_dispatch_types(graph)
 
     graph
-    |> reachable_mfas(entry_mfas, broadcast_caller_types)
+    |> reachable_mfas(entry_mfas, app_types)
     |> reject_hex_mfas()
     |> Enum.sort()
   end
