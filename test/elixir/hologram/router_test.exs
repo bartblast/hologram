@@ -205,8 +205,6 @@ defmodule Hologram.RouterTest do
 
       assert conn.halted == true
       assert conn.state == :upgraded
-
-      # Plug.Conn.upgrade_adapter/3 sets status to 101 (Switching Protocols) since plug 1.20.2.
       assert conn.status == 101
     end
   end
