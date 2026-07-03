@@ -169,6 +169,89 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{:vertex_1, Module4}]
     end
 
+    test "atom type IR in __impl__/1 of a protocol implementation module", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars.URI, :__impl__, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in __protocol__/1 of a protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :__protocol__, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in impl_for/1 of a protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :impl_for, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in impl_for!/1 of a protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :impl_for!, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in struct_impl_for/1 of a protocol module", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :struct_impl_for, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in __impl__/1 of a module that is not a protocol implementation", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      from_vertex = {Module5, :__impl__, 1}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+      assert sorted_vertices(call_graph) == [Module1, from_vertex]
+      assert sorted_edges(call_graph) == [{from_vertex, Module1}]
+    end
+
+    test "atom type IR in a protocol function that is not generated dispatch metadata", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      from_vertex = {String.Chars, :to_string, 1}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+      assert sorted_vertices(call_graph) == [Module1, from_vertex]
+      assert sorted_edges(call_graph) == [{from_vertex, Module1}]
+    end
+
+    test "atom type IR in impl_for/1 of a non-protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      from_vertex = {Module5, :impl_for, 1}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+      assert sorted_vertices(call_graph) == [Module1, from_vertex]
+      assert sorted_edges(call_graph) == [{from_vertex, Module1}]
+    end
+
     test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
