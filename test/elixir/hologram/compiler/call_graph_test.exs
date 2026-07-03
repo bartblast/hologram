@@ -1538,123 +1538,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "protocol_aware_reachable_mfas/3" do
-    test "includes implementations for built-in types when their protocol is reached", %{
-      full_call_graph: full_call_graph
-    } do
-      graph =
-        full_call_graph
-        |> CallGraph.clone()
-        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
-        |> get_graph()
-
-      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
-
-      assert {Protocol1, :my_fun, 1} in result
-      assert {Protocol1.Integer, :__impl__, 1} in result
-      assert {Protocol1.Integer, :my_fun, 1} in result
-    end
-
-    test "excludes implementations whose struct type is not reachable", %{
-      full_call_graph: full_call_graph
-    } do
-      graph =
-        full_call_graph
-        |> CallGraph.clone()
-        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
-        |> get_graph()
-
-      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
-      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
-
-      refute {struct_1_impl, :__impl__, 1} in result
-      refute {struct_1_impl, :my_fun, 1} in result
-    end
-
-    test "includes implementations whose struct type is reachable", %{
-      full_call_graph: full_call_graph
-    } do
-      graph =
-        full_call_graph
-        |> CallGraph.clone()
-        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
-        |> add_edge({Module5, :my_fun, 0}, Struct1)
-        |> get_graph()
-
-      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
-      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
-
-      assert {struct_1_impl, :__impl__, 1} in result
-      assert {struct_1_impl, :my_fun, 1} in result
-    end
-
-    test "includes implementations whose struct type is in the extra types", %{
-      full_call_graph: full_call_graph
-    } do
-      graph =
-        full_call_graph
-        |> CallGraph.clone()
-        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
-        |> get_graph()
-
-      extra_types = MapSet.new([Struct1])
-      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}], extra_types)
-      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
-
-      assert {struct_1_impl, :__impl__, 1} in result
-      assert {struct_1_impl, :my_fun, 1} in result
-    end
-
-    test "reaches fixpoint when implementation code makes further types reachable", %{
-      full_call_graph: full_call_graph
-    } do
-      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
-
-      graph =
-        full_call_graph
-        |> CallGraph.clone()
-        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
-        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
-        |> add_edge({Module5, :my_fun, 0}, Struct1)
-        |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
-        |> get_graph()
-
-      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
-
-      assert {StringCharsModule12, :__impl__, 1} in result
-      assert {StringCharsModule12, :to_string, 1} in result
-    end
-
-    test "retains dispatch helper MFAs of reached protocols", %{
-      full_call_graph: full_call_graph
-    } do
-      graph =
-        full_call_graph
-        |> CallGraph.clone()
-        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
-        |> get_graph()
-
-      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
-
-      assert {String.Chars, :impl_for, 1} in result
-      assert {String.Chars, :impl_for!, 1} in result
-      assert {String.Chars, :struct_impl_for, 1} in result
-      assert {Protocol.UndefinedError, :exception, 1} in result
-    end
-
-    test "excludes module vertices from the result", %{full_call_graph: full_call_graph} do
-      graph =
-        full_call_graph
-        |> CallGraph.clone()
-        |> add_edge({Module5, :my_fun, 0}, Struct1)
-        |> get_graph()
-
-      result = protocol_aware_reachable_mfas(graph, [{Module5, :my_fun, 0}])
-
-      refute Enum.any?(result, &is_atom/1)
-    end
-  end
-
   describe "protocol_dispatch_dependency_vertices/2" do
     test "retains dispatch helpers of reached protocol functions", %{
       full_call_graph: call_graph
@@ -1736,67 +1619,120 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph) == graph
   end
 
-  describe "reachable_mfas/2" do
-    setup do
-      # 1
-      # ├─ {Module2, :f2, 2}
-      # │  ├─ 4
-      # │  │  ├─ {Module8, :f8, 8}
-      # │  │  ├─ 9
-      # │  ├─ {Module5, :f5, 5}
-      # │  │  ├─ 10
-      # │  │  ├─ 11
-      # ├─ {Module3, :f3, 3}
-      # │  ├─ 6
-      # │  │  ├─ {Module11, :f12, 12}
-      # │  │  ├─ 13
-      # │  ├─ {Module7, :f7, 7}
-      # │  │  ├─ 14
-      # │  │  ├─ {Module15, :f15, 15}
-      # |  |  |- {Collectable.Atom, :fca, 123}
+  describe "reachable_mfas/3" do
+    test "includes implementations for built-in types when their protocol is reached", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {Protocol1, :my_fun, 1} in result
+      assert {Protocol1.Integer, :__impl__, 1} in result
+      assert {Protocol1.Integer, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is not reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations whose struct type is reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations whose struct type is in the extra types", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      extra_types = MapSet.new([Struct1])
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}], extra_types)
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "reaches fixpoint when implementation code makes further types reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
       graph =
-        Digraph.new()
-        |> Digraph.add_edge(:vertex_1, {Module2, :f2, 2})
-        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
-        |> Digraph.add_edge({Module2, :f2, 2}, :vertex_4)
-        |> Digraph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
-        |> Digraph.add_edge({Module3, :f3, 3}, :vertex_6)
-        |> Digraph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
-        |> Digraph.add_edge(:vertex_4, {Module8, :f8, 8})
-        |> Digraph.add_edge(:vertex_4, :vertex_9)
-        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_10)
-        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_11)
-        |> Digraph.add_edge(:vertex_6, {Module11, :f12, 12})
-        |> Digraph.add_edge(:vertex_6, :vertex_13)
-        |> Digraph.add_edge({Module7, :f7, 7}, :vertex_14)
-        |> Digraph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
-        |> Digraph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
+        |> get_graph()
 
-      [graph: graph]
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "single MFA argument", %{graph: graph} do
-      result = reachable_mfas(graph, [{Module3, :f3, 3}])
+    test "retains dispatch helper MFAs of reached protocols", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
+        |> get_graph()
 
-      assert Enum.sort(result) == [
-               {Module11, :f12, 12},
-               {Module15, :f15, 15},
-               {Module3, :f3, 3},
-               {Module7, :f7, 7}
-             ]
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
     end
 
-    test "multiple MFAs argument", %{graph: graph} do
-      result = reachable_mfas(graph, [{Module5, :f5, 5}, {Module3, :f3, 3}])
+    test "excludes module vertices from the result", %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
 
-      assert Enum.sort(result) == [
-               {Module11, :f12, 12},
-               {Module15, :f15, 15},
-               {Module3, :f3, 3},
-               {Module5, :f5, 5},
-               {Module7, :f7, 7}
-             ]
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      refute Enum.any?(result, &is_atom/1)
     end
   end
 
@@ -1984,6 +1920,70 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert stop(call_graph) == :ok
     refute Process.alive?(pid)
+  end
+
+  describe "unbounded_reachable_mfas/2" do
+    setup do
+      # 1
+      # ├─ {Module2, :f2, 2}
+      # │  ├─ 4
+      # │  │  ├─ {Module8, :f8, 8}
+      # │  │  ├─ 9
+      # │  ├─ {Module5, :f5, 5}
+      # │  │  ├─ 10
+      # │  │  ├─ 11
+      # ├─ {Module3, :f3, 3}
+      # │  ├─ 6
+      # │  │  ├─ {Module11, :f12, 12}
+      # │  │  ├─ 13
+      # │  ├─ {Module7, :f7, 7}
+      # │  │  ├─ 14
+      # │  │  ├─ {Module15, :f15, 15}
+      # |  |  |- {Collectable.Atom, :fca, 123}
+
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge(:vertex_1, {Module2, :f2, 2})
+        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
+        |> Digraph.add_edge({Module2, :f2, 2}, :vertex_4)
+        |> Digraph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
+        |> Digraph.add_edge({Module3, :f3, 3}, :vertex_6)
+        |> Digraph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
+        |> Digraph.add_edge(:vertex_4, {Module8, :f8, 8})
+        |> Digraph.add_edge(:vertex_4, :vertex_9)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_10)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_11)
+        |> Digraph.add_edge(:vertex_6, {Module11, :f12, 12})
+        |> Digraph.add_edge(:vertex_6, :vertex_13)
+        |> Digraph.add_edge({Module7, :f7, 7}, :vertex_14)
+        |> Digraph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
+        |> Digraph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+
+      [graph: graph]
+    end
+
+    test "single MFA argument", %{graph: graph} do
+      result = unbounded_reachable_mfas(graph, [{Module3, :f3, 3}])
+
+      assert Enum.sort(result) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module7, :f7, 7}
+             ]
+    end
+
+    test "multiple MFAs argument", %{graph: graph} do
+      result = unbounded_reachable_mfas(graph, [{Module5, :f5, 5}, {Module3, :f3, 3}])
+
+      assert Enum.sort(result) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module5, :f5, 5},
+               {Module7, :f7, 7}
+             ]
+    end
   end
 
   test "vertices/1", %{empty_call_graph: call_graph} do

@@ -688,12 +688,12 @@ defmodule Hologram.Compiler.CallGraph do
     entry_mfas = list_page_entry_mfas(page_module)
     graph = get_graph(call_graph)
 
-    initial_mfas = protocol_aware_reachable_mfas(graph, entry_mfas)
+    initial_mfas = reachable_mfas(graph, entry_mfas)
     templatables = [page_module | extract_uniq_components(initial_mfas)]
     server_types = server_protocol_dispatch_types(graph, templatables)
 
     graph
-    |> protocol_aware_reachable_mfas(entry_mfas, server_types)
+    |> reachable_mfas(entry_mfas, server_types)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
@@ -728,7 +728,7 @@ defmodule Hologram.Compiler.CallGraph do
     broadcast_caller_types = broadcast_caller_protocol_dispatch_types(graph)
 
     graph
-    |> protocol_aware_reachable_mfas(entry_mfas, broadcast_caller_types)
+    |> reachable_mfas(entry_mfas, broadcast_caller_types)
     |> reject_hex_mfas()
     |> Enum.sort()
   end
@@ -814,28 +814,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists MFAs that are reachable from the given call graph vertices with bounded
-  protocol dispatch. Protocol function vertices are opaque during the traversal,
-  and a protocol implementation is entered only when its target type is in the
-  reachable type set: protocol_dispatch_types/1 of the reached vertices merged
-  with the given extra types. The traversal iterates until no new implementations
-  become reachable, since entered implementation code can make further types and
-  protocols reachable. Dispatch helper vertices are retained via
-  protocol_dispatch_dependency_vertices/2.
-  Unimplemented protocol implementations are excluded.
-  """
-  @spec protocol_aware_reachable_mfas(Digraph.t(), [vertex], MapSet.t(module)) :: [mfa]
-  def protocol_aware_reachable_mfas(graph, entry_vertices, extra_types \\ MapSet.new()) do
-    graph
-    |> protocol_aware_reachable_vertices(entry_vertices, extra_types, [])
-    |> Enum.filter(fn
-      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-      {module, _function, _arity} -> Reflection.module?(module)
-      _module_vertex -> false
-    end)
-  end
-
-  @doc """
   Returns the vertices needed by the dispatch mechanism of the protocol functions
   present among the given call graph vertices: the same-module dispatch helpers
   (e.g. impl_for/1, impl_for!/1, struct_impl_for/1) and their dependencies.
@@ -886,19 +864,28 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists MFAs that are reachable from the given call graph vertices.
-  The traversal follows every edge, including consolidated protocol dispatch edges,
-  so all loaded implementations of a reached protocol are included.
+  Lists MFAs that are reachable from the given call graph vertices with bounded
+  protocol dispatch. Protocol function vertices are opaque during the traversal,
+  and a protocol implementation is entered only when its target type is in the
+  reachable type set: protocol_dispatch_types/1 of the reached vertices merged
+  with the given extra types. The traversal iterates until no new implementations
+  become reachable, since entered implementation code can make further types and
+  protocols reachable. Dispatch helper vertices are retained via
+  protocol_dispatch_dependency_vertices/2.
   Unimplemented protocol implementations are excluded.
+  These are the semantics for computing what ships to the client for a concrete
+  app, whose code bounds the types that can occur at protocol dispatch. For
+  app-agnostic analyses, where any implementation could be exercised, see
+  unbounded_reachable_mfas/2.
   """
-  @spec reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
-  def reachable_mfas(graph, vertices) do
+  @spec reachable_mfas(Digraph.t(), [vertex], MapSet.t(module)) :: [mfa]
+  def reachable_mfas(graph, entry_vertices, extra_types \\ MapSet.new()) do
     graph
-    |> Digraph.reachable(vertices)
+    |> protocol_aware_reachable_vertices(entry_vertices, extra_types, [])
     |> Enum.filter(fn
       # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
       {module, _function, _arity} -> Reflection.module?(module)
-      _module -> false
+      _module_vertex -> false
     end)
   end
 
@@ -1078,6 +1065,28 @@ defmodule Hologram.Compiler.CallGraph do
   @spec stop(t) :: :ok
   def stop(%{pid: pid}) do
     Agent.stop(pid)
+  end
+
+  @doc """
+  Lists MFAs that are reachable from the given call graph vertices.
+  The traversal follows every edge, including consolidated protocol dispatch edges,
+  so all loaded implementations of a reached protocol are included, regardless of
+  whether their target types can occur.
+  Unimplemented protocol implementations are excluded.
+  These are the semantics for app-agnostic analyses, where no concrete app context
+  bounds the types that can occur at protocol dispatch, so any implementation could
+  be exercised. For computing what ships to the client for a concrete app, see
+  reachable_mfas/3.
+  """
+  @spec unbounded_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
+  def unbounded_reachable_mfas(graph, vertices) do
+    graph
+    |> Digraph.reachable(vertices)
+    |> Enum.filter(fn
+      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+      {module, _function, _arity} -> Reflection.module?(module)
+      _module_vertex -> false
+    end)
   end
 
   @doc """
