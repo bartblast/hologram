@@ -427,21 +427,15 @@ defmodule Hologram.Reflection do
 
   @doc """
   Returns the project OTP application name.
+
+  Resolved from the active Mix project when it defines an `:app`. Otherwise
+  (umbrella root, releases) it is identified among the loaded applications as
+  the one that depends on `:hologram`, disambiguated by Phoenix endpoint
+  ownership when several do.
   """
   @spec otp_app() :: atom
   def otp_app do
-    if Code.ensure_loaded?(Mix.Project) do
-      Mix.Project.config()[:app]
-    else
-      [project_app] =
-        for {app, _description, _vsn} <- Application.loaded_applications(),
-            deps = Application.spec(app)[:applications],
-            :hologram in deps do
-          app
-        end
-
-      project_app
-    end
+    otp_app_from_mix_project() || otp_app_from_loaded_apps()
   end
 
   @doc """
@@ -573,6 +567,17 @@ defmodule Hologram.Reflection do
     Path.join(root_dir(), "tmp")
   end
 
+  defp apps_depending_on_hologram do
+    apps =
+      for {app, _description, _version} <- Application.loaded_applications(),
+          deps = Application.spec(app)[:applications],
+          :hologram in deps do
+        app
+      end
+
+    Enum.sort(apps)
+  end
+
   defp include_app_elixir_modules(app, modules) do
     # Get modules from Application.spec (faster, but may miss newly compiled modules)
     spec_modules =
@@ -593,6 +598,37 @@ defmodule Hologram.Reflection do
 
     # Combine both sources and remove duplicates
     Enum.uniq(modules ++ spec_modules ++ ebin_modules)
+  end
+
+  defp otp_app_from_loaded_apps do
+    case apps_depending_on_hologram() do
+      [app] ->
+        app
+
+      [] ->
+        raise "Hologram could not determine the project OTP application: " <>
+                "no loaded application depends on :hologram."
+
+      apps ->
+        case Enum.filter(apps, &phoenix_endpoint_for_app/1) do
+          [app] ->
+            app
+
+          [] ->
+            raise "Hologram could not determine the project OTP application: " <>
+                    "multiple loaded applications depend on :hologram (#{inspect(apps)}), " <>
+                    "but none of them has a configured Phoenix endpoint."
+
+          endpoint_apps ->
+            raise "Hologram found multiple applications with configured Phoenix endpoints " <>
+                    "(#{inspect(endpoint_apps)}). Hologram supports one endpoint app " <>
+                    "per running BEAM instance."
+        end
+    end
+  end
+
+  defp otp_app_from_mix_project do
+    if Code.ensure_loaded?(Mix.Project), do: Mix.Project.config()[:app]
   end
 
   defp phoenix_endpoint?(module) do

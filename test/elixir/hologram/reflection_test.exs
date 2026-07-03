@@ -40,6 +40,18 @@ defmodule Hologram.ReflectionTest do
     module
   end
 
+  defp load_app_depending_on_hologram(app) do
+    spec =
+      {:application, app,
+       applications: [:hologram],
+       description: ~c"fixture",
+       modules: [],
+       registered: [],
+       vsn: ~c"0.0.0"}
+
+    :ok = :application.load(spec)
+  end
+
   describe "alias?/1" do
     test "atom which is an alias" do
       assert alias?(Calendar.ISO)
@@ -404,8 +416,89 @@ defmodule Hologram.ReflectionTest do
     assert module_name(Aaa.Bbb) == "Aaa.Bbb"
   end
 
-  test "otp_app/0" do
-    assert otp_app() == :hologram
+  describe "otp_app/0" do
+    test "single-app project" do
+      assert otp_app() == :hologram
+    end
+
+    # Mix.Project.in_project/4 injects its app atom as the :app config default when it
+    # serves a cached project, but a real umbrella root project has no :app - the
+    # [app: nil] post-config forces that value in every load path.
+    test "umbrella project with a single client app" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_a)
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+
+      assert result == :otp_app_fixture_a
+
+      :application.unload(:otp_app_fixture_a)
+    end
+
+    test "umbrella project with multiple client apps, one owning a Phoenix endpoint" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_b)
+      load_app_depending_on_hologram(:otp_app_fixture_c)
+      Application.put_env(:otp_app_fixture_c, Module7, [])
+
+      result =
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+
+      assert result == :otp_app_fixture_c
+
+      Application.delete_env(:otp_app_fixture_c, Module7)
+      :application.unload(:otp_app_fixture_b)
+      :application.unload(:otp_app_fixture_c)
+    end
+
+    test "umbrella project with multiple client apps, none owning a Phoenix endpoint" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_d)
+      load_app_depending_on_hologram(:otp_app_fixture_e)
+
+      assert_raise RuntimeError, ~r/none of them has a configured Phoenix endpoint/, fn ->
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+      end
+
+      :application.unload(:otp_app_fixture_d)
+      :application.unload(:otp_app_fixture_e)
+    end
+
+    test "umbrella project with multiple client apps owning Phoenix endpoints" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+      load_app_depending_on_hologram(:otp_app_fixture_f)
+      load_app_depending_on_hologram(:otp_app_fixture_g)
+      Application.put_env(:otp_app_fixture_f, Module7, [])
+      Application.put_env(:otp_app_fixture_g, Module7, [])
+
+      assert_raise RuntimeError, ~r/one endpoint app per running BEAM instance/, fn ->
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+      end
+
+      Application.delete_env(:otp_app_fixture_f, Module7)
+      Application.delete_env(:otp_app_fixture_g, Module7)
+      :application.unload(:otp_app_fixture_f)
+      :application.unload(:otp_app_fixture_g)
+    end
+
+    test "umbrella project with no client apps" do
+      umbrella_dir = Path.join(@fixtures_dir, "umbrella")
+
+      assert_raise RuntimeError, ~r/no loaded application depends on :hologram/, fn ->
+        Mix.Project.in_project(:umbrella_fixture, umbrella_dir, [app: nil], fn _module ->
+          otp_app()
+        end)
+      end
+    end
   end
 
   test "otp_app_priv_dir/0" do
