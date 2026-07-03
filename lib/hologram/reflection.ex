@@ -491,22 +491,13 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
-  Determines the app's Phoenix endpoint module.
+  Determines the project's Phoenix endpoint module - the module implementing
+  the `Phoenix.Endpoint` behaviour that is configured in the project OTP
+  application's environment.
   """
   @spec phoenix_endpoint :: module | nil
   def phoenix_endpoint do
-    modules = list_elixir_modules([otp_app()])
-
-    Enum.find(modules, fn module ->
-      has_phoenix_endpoint_behaviour? =
-        :attributes
-        |> module.module_info()
-        |> Keyword.get_values(:behaviour)
-        |> List.flatten()
-        |> Enum.member?(Phoenix.Endpoint)
-
-      has_phoenix_endpoint_behaviour? && Application.get_env(otp_app(), module)
-    end)
+    phoenix_endpoint_for_app(otp_app())
   end
 
   @doc """
@@ -602,5 +593,22 @@ defmodule Hologram.Reflection do
 
     # Combine both sources and remove duplicates
     Enum.uniq(modules ++ spec_modules ++ ebin_modules)
+  end
+
+  defp phoenix_endpoint?(module) do
+    elixir_module?(module) &&
+      :attributes
+      |> module.module_info()
+      |> Keyword.get_values(:behaviour)
+      |> List.flatten()
+      |> Enum.member?(Phoenix.Endpoint)
+  end
+
+  defp phoenix_endpoint_for_app(app) do
+    app
+    |> Application.get_all_env()
+    |> Enum.find_value(fn {key, value} ->
+      if value && phoenix_endpoint?(key), do: key
+    end)
   end
 end

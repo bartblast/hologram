@@ -446,6 +446,14 @@ defmodule Hologram.ReflectionTest do
     test "there is no config entry for the given Phoenix endpoint module" do
       assert phoenix_endpoint() == nil
     end
+
+    test "ignores config entries whose keys are not Phoenix endpoint modules" do
+      Application.put_env(:hologram, Module1, [])
+
+      assert phoenix_endpoint() == nil
+
+      Application.delete_env(:hologram, Module1)
+    end
   end
 
   describe "protocol?/1" do
