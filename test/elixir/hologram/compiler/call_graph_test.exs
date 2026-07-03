@@ -1691,9 +1691,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "includes struct types reachable from command/3" do
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge({Module2, :command, 3}, {Struct1, :__struct__, 1})
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Struct1, :__struct__, 1})
 
       assert Struct1 in server_protocol_dispatch_types(graph, [Module2])
     end
