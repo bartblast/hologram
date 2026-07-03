@@ -14,12 +14,20 @@ defmodule App1.MixProject do
       {:app_3, in_umbrella: true},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
-       ref: "2a78048b2005118dc2d887a9eb71994d6c899d7d"},
+       ref: "7864c370b7f3f21d26c973c975d422acf61438d7"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
       {:wallaby, "~> 0.30", only: :test}
     ]
+  end
+
+  defp elixirc_paths(:test) do
+    ["app", "lib", "test/support"]
+  end
+
+  defp elixirc_paths(_env) do
+    ["app", "lib"]
   end
 
   def project do
@@ -33,7 +41,7 @@ defmodule App1.MixProject do
       deps_path: "../../deps",
       elixir: "~> 1.0",
       elixirc_options: [warnings_as_errors: true],
-      elixirc_paths: ["app", "lib"],
+      elixirc_paths: elixirc_paths(Mix.env()),
       listeners: [Phoenix.CodeReloader],
       lockfile: "../../mix.lock",
       start_permanent: Mix.env() == :prod,
