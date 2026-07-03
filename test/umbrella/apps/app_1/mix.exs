@@ -11,6 +11,7 @@ defmodule App1.MixProject do
   defp deps do
     [
       {:app_2, in_umbrella: true},
+      {:app_3, in_umbrella: true},
       {:hologram,
        git: "https://github.com/bartblast/hologram.git",
        ref: "2a78048b2005118dc2d887a9eb71994d6c899d7d"},
