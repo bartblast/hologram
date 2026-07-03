@@ -807,6 +807,27 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the vertices needed by the dispatch mechanism of the protocol functions
+  present among the given call graph vertices: the same-module dispatch helpers
+  (e.g. impl_for/1, impl_for!/1, struct_impl_for/1) and their dependencies.
+  Protocol function vertices are opaque during the traversal, so consolidated
+  dispatch edges don't pull protocol implementations.
+  """
+  @spec protocol_dispatch_dependency_vertices(Digraph.t(), [vertex]) :: [vertex]
+  def protocol_dispatch_dependency_vertices(graph, vertices) do
+    helper_entry_vertices =
+      for vertex <- vertices,
+          protocol_function_mfa?(vertex),
+          {_source_vertex, target_vertex} <- Digraph.outgoing_edges(graph, vertex),
+          protocol_dispatch_helper_mfa?(vertex, target_vertex) do
+        target_vertex
+      end
+
+    Digraph.reachable(graph, helper_entry_vertices, opaque_vertex?: &protocol_function_mfa?/1)
+  end
+
+  # TODO: include types declared via the client-side MFA whitelisting feature once it exists.
+  @doc """
   Returns the set of types that can appear at protocol dispatch in the code
   represented by the given call graph vertices.
   The set includes the built-in protocol dispatch types, the struct modules among
@@ -1179,6 +1200,15 @@ defmodule Hologram.Compiler.CallGraph do
       types
     end
   end
+
+  defp protocol_dispatch_helper_mfa?(
+         {protocol, _function, _arity},
+         {protocol, _helper_function, _helper_arity} = target_vertex
+       ) do
+    !protocol_function_mfa?(target_vertex)
+  end
+
+  defp protocol_dispatch_helper_mfa?(_vertex, _target_vertex), do: false
 
   defp protocol_function_mfa?({module, function, arity}) do
     Reflection.protocol?(module) && {function, arity} in module.__protocol__(:functions)

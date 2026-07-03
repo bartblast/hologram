@@ -1437,6 +1437,36 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "protocol_dispatch_dependency_vertices/2" do
+    test "retains dispatch helpers of reached protocol functions", %{
+      full_call_graph: call_graph
+    } do
+      graph = get_graph(call_graph)
+      result = protocol_dispatch_dependency_vertices(graph, [{String.Chars, :to_string, 1}])
+
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
+    test "doesn't pull protocol implementations", %{full_call_graph: call_graph} do
+      graph = get_graph(call_graph)
+      result = protocol_dispatch_dependency_vertices(graph, [{String.Chars, :to_string, 1}])
+
+      refute {StringCharsModule12, :to_string, 1} in result
+      refute {String.Chars.URI, :to_string, 1} in result
+    end
+
+    test "returns empty list when no protocol function vertices are given", %{
+      full_call_graph: call_graph
+    } do
+      graph = get_graph(call_graph)
+
+      assert protocol_dispatch_dependency_vertices(graph, [{Module5, :my_fun, 0}]) == []
+    end
+  end
+
   describe "protocol_dispatch_types/1" do
     test "includes built-in protocol dispatch types" do
       assert protocol_dispatch_types([]) ==
