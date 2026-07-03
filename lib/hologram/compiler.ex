@@ -575,6 +575,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Keeps only those IR expressions that are function definitions of the given reachable MFAs.
+  For protocol modules, additionally drops the consolidated impl_for/1 and struct_impl_for/1
+  clauses that return implementations not included in the given reachable MFAs.
   """
   @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
   def prune_module_def(module_def_ir, reachable_mfas) do
@@ -586,13 +588,15 @@ defmodule Hologram.Compiler do
       |> MapSet.new()
 
     function_defs =
-      Enum.filter(module_def_ir.body.expressions, fn
+      module_def_ir.body.expressions
+      |> Enum.filter(fn
         %IR.FunctionDefinition{name: function, arity: arity} ->
           MapSet.member?(module_reachable_mfas, {module, function, arity})
 
         _fallback ->
           false
       end)
+      |> maybe_prune_protocol_dispatcher_function_defs(module, reachable_mfas)
 
     %IR.ModuleDefinition{
       module: module_def_ir.module,
@@ -665,6 +669,32 @@ defmodule Hologram.Compiler do
     |> CryptographicUtils.digest(:sha256, :binary)
   end
 
+  defp included_protocol_implementations(reachable_mfas, protocol) do
+    reachable_mfas
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Enum.filter(&(Reflection.protocol_implementation(&1) == protocol))
+    |> MapSet.new()
+  end
+
+  defp keep_protocol_dispatcher_function_def?(
+         %IR.FunctionDefinition{name: function, arity: 1, clause: clause},
+         protocol,
+         included_impls
+       )
+       when function in [:impl_for, :struct_impl_for] do
+    case clause do
+      %IR.FunctionClause{body: %IR.Block{expressions: [%IR.AtomType{value: value}]}} ->
+        Reflection.protocol_implementation(value) != protocol or
+          MapSet.member?(included_impls, value)
+
+      _clause ->
+        true
+    end
+  end
+
+  defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
+
   defp maybe_ensure_bundle_within_size_limit!(entry_name, bundle_path) do
     max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
 
@@ -683,6 +713,22 @@ defmodule Hologram.Compiler do
               config :hologram, max_bundle_size: 2 * 1024 * 1024\
           """
       end
+    end
+  end
+
+  # Consolidated protocol dispatchers list every loaded implementation. Keep only
+  # clauses for implementations that ship in the same bundle, so dispatch on other
+  # types falls through to the catch-all clause and raises Protocol.UndefinedError.
+  defp maybe_prune_protocol_dispatcher_function_defs(function_defs, module, reachable_mfas) do
+    if Reflection.protocol?(module) do
+      included_impls = included_protocol_implementations(reachable_mfas, module)
+
+      Enum.filter(
+        function_defs,
+        &keep_protocol_dispatcher_function_def?(&1, module, included_impls)
+      )
+    else
+      function_defs
     end
   end
 
@@ -720,10 +766,10 @@ defmodule Hologram.Compiler do
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
     |> Enum.sort()
-    |> TaskUtils.async_many(fn {module, module_mfas} ->
+    |> TaskUtils.async_many(fn {module, _module_mfas} ->
       ir_plt
       |> PLT.get!(module)
-      |> prune_module_def(module_mfas)
+      |> prune_module_def(mfas)
       |> Encoder.encode_ir(%Context{module: module, async_mfas: async_mfas})
     end)
     |> Task.await_many(:infinity)
