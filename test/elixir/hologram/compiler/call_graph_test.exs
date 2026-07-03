@@ -1358,6 +1358,29 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {Module13, :my_fun, 0} in result
     end
 
+    # Guards the type-bounded implementation inclusion in both directions: missing
+    # built-in type implementations would break rendering of primitives on every page,
+    # while any extra entry means implementations of unreachable types (and their
+    # dependency subtrees) are getting pulled into the runtime bundle again.
+    test "includes exactly the built-in type implementations of String.Chars", %{
+      runtime_mfas: result
+    } do
+      string_chars_impls =
+        result
+        |> Enum.map(fn {module, _function, _arity} -> module end)
+        |> Enum.uniq()
+        |> Enum.filter(&(Reflection.protocol_implementation(&1) == String.Chars))
+        |> Enum.sort()
+
+      assert string_chars_impls == [
+               String.Chars.Atom,
+               String.Chars.BitString,
+               String.Chars.Float,
+               String.Chars.Integer,
+               String.Chars.List
+             ]
+    end
+
     test "results are deduped", %{runtime_mfas: result} do
       assert result == Enum.uniq(result)
     end
