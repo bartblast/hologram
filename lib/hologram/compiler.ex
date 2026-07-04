@@ -362,7 +362,7 @@ defmodule Hologram.Compiler do
   @doc """
   Creates page bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_page_entry_files_4/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_5/README.md
   """
   @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
           list({module, T.file_path()})

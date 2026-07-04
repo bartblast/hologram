@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.18.2</td>
+    <td style="white-space: nowrap">1.20.0</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">27.2.4</td>
+    <td style="white-space: nowrap">29.0.1</td>
   </tr>
 </table>
 
@@ -56,27 +56,27 @@ Run Time
     <th>Name</th>
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Average</th>
-    <th style="text-align: right">Devitation</th>
+    <th style="text-align: right">Deviation</th>
     <th style="text-align: right">Median</th>
     <th style="text-align: right">99th&nbsp;%</th>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap; text-align: right">14.65 K</td>
-    <td style="white-space: nowrap; text-align: right">0.00007 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;163.27%</td>
-    <td style="white-space: nowrap; text-align: right">0.00006 s</td>
-    <td style="white-space: nowrap; text-align: right">0.00010 s</td>
+    <td style="white-space: nowrap; text-align: right">7.89 K</td>
+    <td style="white-space: nowrap; text-align: right">0.00013 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;25.41%</td>
+    <td style="white-space: nowrap; text-align: right">0.00012 s</td>
+    <td style="white-space: nowrap; text-align: right">0.00027 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
-    <td style="white-space: nowrap; text-align: right">0.00009 K</td>
-    <td style="white-space: nowrap; text-align: right">10.60 s</td>
+    <td style="white-space: nowrap; text-align: right">0.00010 K</td>
+    <td style="white-space: nowrap; text-align: right">9.87 s</td>
     <td style="white-space: nowrap; text-align: right">&plusmn;0.00%</td>
-    <td style="white-space: nowrap; text-align: right">10.60 s</td>
-    <td style="white-space: nowrap; text-align: right">10.60 s</td>
+    <td style="white-space: nowrap; text-align: right">9.87 s</td>
+    <td style="white-space: nowrap; text-align: right">9.87 s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap;text-align: right">14.65 K</td>
+    <td style="white-space: nowrap;text-align: right">7.89 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
-    <td style="white-space: nowrap; text-align: right">0.00009 K</td>
-    <td style="white-space: nowrap; text-align: right">155348.46x</td>
+    <td style="white-space: nowrap; text-align: right">0.00010 K</td>
+    <td style="white-space: nowrap; text-align: right">77876.59x</td>
   </tr>
 
 </table>

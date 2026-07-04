@@ -593,7 +593,7 @@ defmodule Hologram.CompilerTest do
   } do
     opts = [
       js_dir: @js_dir,
-      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_4"])
+      tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_5"])
     ]
 
     clean_dir(opts[:tmp_dir])

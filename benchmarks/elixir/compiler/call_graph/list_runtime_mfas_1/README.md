@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_runtime_mfas/1</td>
-    <td style="white-space: nowrap; text-align: right">59.16</td>
-    <td style="white-space: nowrap; text-align: right">16.90 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;24.53%</td>
-    <td style="white-space: nowrap; text-align: right">15.52 ms</td>
-    <td style="white-space: nowrap; text-align: right">24.81 ms</td>
+    <td style="white-space: nowrap; text-align: right">62.88</td>
+    <td style="white-space: nowrap; text-align: right">15.90 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;17.96%</td>
+    <td style="white-space: nowrap; text-align: right">14.43 ms</td>
+    <td style="white-space: nowrap; text-align: right">20.56 ms</td>
   </tr>
 
 </table>
