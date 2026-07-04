@@ -198,22 +198,32 @@ defmodule Hologram.Compiler.Digraph do
     * `:opaque_vertices` - a `MapSet` of vertices whose outgoing edges should not be
       traversed. The vertices themselves are still included in the result when reached,
       but the BFS does not follow their outgoing edges. Defaults to `nil`.
+
+    * `:visited_vertices` - a `MapSet` of vertices to treat as already visited. The BFS neither
+      expands nor returns them, so the result contains only newly reached vertices.
+      Defaults to an empty `MapSet`.
   """
   @spec reachable(t, [vertex], keyword) :: [vertex]
   def reachable(graph, starting_vertices, opts \\ []) do
     %Digraph{vertices: vertices, outgoing_edges: outgoing_edges} = graph
 
-    existing_vertices = Enum.filter(starting_vertices, &Map.has_key?(vertices, &1))
+    seed_vertices = opts[:visited_vertices] || MapSet.new()
+
+    existing_vertices =
+      Enum.filter(starting_vertices, fn vertex ->
+        Map.has_key?(vertices, vertex) && !MapSet.member?(seed_vertices, vertex)
+      end)
 
     if existing_vertices == [] do
       []
     else
       # BFS to find all reachable vertices
       queue = :queue.from_list(existing_vertices)
-      visited = MapSet.new(existing_vertices)
+      new_vertices = MapSet.new(existing_vertices)
+      visited = MapSet.union(seed_vertices, new_vertices)
 
       queue
-      |> bfs_reachable(visited, outgoing_edges, opts)
+      |> bfs_reachable(visited, new_vertices, outgoing_edges, opts)
       |> MapSet.to_list()
     end
   end
@@ -247,7 +257,7 @@ defmodule Hologram.Compiler.Digraph do
       visited = MapSet.new(existing_vertices)
 
       queue
-      |> bfs_reachable(visited, incoming_edges, opts)
+      |> bfs_reachable(visited, visited, incoming_edges, opts)
       |> MapSet.to_list()
     end
   end
@@ -473,7 +483,7 @@ defmodule Hologram.Compiler.Digraph do
   # BFS traversal for reachable vertices
   # credo:disable-for-lines:37 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
-  defp bfs_reachable(queue, visited, edges, opts) do
+  defp bfs_reachable(queue, visited, new_vertices, edges, opts) do
     case :queue.out(queue) do
       {{:value, current}, rest_queue} ->
         opaque_vertex? = opts[:opaque_vertex?]
@@ -484,30 +494,33 @@ defmodule Hologram.Compiler.Digraph do
             (opaque_vertices && MapSet.member?(opaque_vertices, current))
 
         if skip? do
-          bfs_reachable(rest_queue, visited, edges, opts)
+          bfs_reachable(rest_queue, visited, new_vertices, edges, opts)
         else
           # Get neighbors of current vertex
           neighbors = Map.get(edges, current, %{})
 
-          # Add unvisited neighbors to queue and visited set
-          {new_queue, new_visited} =
-            Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
-                                                             {acc_queue, acc_visited} ->
+          # Add unvisited neighbors to queue, visited set and new vertices set
+          {next_queue, next_visited, next_new_vertices} =
+            Enum.reduce(neighbors, {rest_queue, visited, new_vertices}, fn {neighbor, _flag},
+                                                                           {acc_queue,
+                                                                            acc_visited,
+                                                                            acc_new_vertices} ->
               if MapSet.member?(acc_visited, neighbor) do
-                {acc_queue, acc_visited}
+                {acc_queue, acc_visited, acc_new_vertices}
               else
                 {
                   :queue.in(neighbor, acc_queue),
-                  MapSet.put(acc_visited, neighbor)
+                  MapSet.put(acc_visited, neighbor),
+                  MapSet.put(acc_new_vertices, neighbor)
                 }
               end
             end)
 
-          bfs_reachable(new_queue, new_visited, edges, opts)
+          bfs_reachable(next_queue, next_visited, next_new_vertices, edges, opts)
         end
 
       {:empty, _queue} ->
-        visited
+        new_vertices
     end
   end
 

@@ -747,6 +747,44 @@ defmodule Hologram.Compiler.DigraphTest do
 
       assert Enum.sort(result) == [SomeModule, {MyModule, :fun_a, 0}]
     end
+
+    test "neither expands nor returns vertices in the visited MapSet" do
+      # :a -> :b -> :c
+      # :b is already visited, so neither :b nor :c should be in the result
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([:a], visited_vertices: MapSet.new([:b]))
+
+      assert result == [:a]
+    end
+
+    test "skips starting vertices in the visited MapSet" do
+      # :a -> :b
+      # :a is already visited, so nothing new is reached
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> reachable([:a], visited_vertices: MapSet.new([:a]))
+
+      assert result == []
+    end
+
+    test "still reaches successor through unvisited path when visited path also exists" do
+      # :start -> :visited -> :dest  (blocked)
+      # :start -> :fresh -> :dest    (not blocked)
+      # :dest should be in the result because of the unvisited path
+      result =
+        new()
+        |> add_edge(:start, :visited)
+        |> add_edge(:visited, :dest)
+        |> add_edge(:start, :fresh)
+        |> add_edge(:fresh, :dest)
+        |> reachable([:start], visited_vertices: MapSet.new([:visited]))
+
+      assert Enum.sort(result) == [:dest, :fresh, :start]
+    end
   end
 
   describe "reaching/2" do
