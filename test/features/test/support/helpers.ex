@@ -2,10 +2,9 @@ defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
-  import Hologram.Test.Helpers, only: [visit: 2, visit: 3]
+  import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
   alias Hologram.Realtime.SubscriptionRegistry
-  alias Hologram.Router
   alias Wallaby.Browser
   alias Wallaby.Element
   alias Wallaby.Query
@@ -85,16 +84,6 @@ defmodule HologramFeatureTests.Helpers do
       fun.()
       wait_for_js_error(session)
     end
-  end
-
-  def assert_page(session, page_module, params \\ [], opts \\ []) do
-    path = Router.Helpers.page_path(page_module, params)
-
-    session
-    |> wait_for_path(path)
-    |> wait_for_page_mounting(page_module, opts)
-    |> wait_for_ws_connection()
-    |> wait_for_sse_connection()
   end
 
   def assert_public_comment(session, comment) do
@@ -272,13 +261,6 @@ defmodule HologramFeatureTests.Helpers do
       {:error, false} ->
         false
     end
-  end
-
-  defp print_client_logs(session) do
-    script = "return sessionStorage.getItem('hologram_logs');"
-
-    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
-    Browser.execute_script(session, script, [], &IO.inspect/1)
   end
 
   @doc """
@@ -586,16 +568,6 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
-  defp maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page) do
-    if opts[:debug] do
-      IO.puts("----------")
-
-      IO.puts("mounted page: #{inspect(mounted_page)}, expected page: #{inspect(expected_page)}")
-
-      print_client_logs(session)
-    end
-  end
-
   defp subscription_count(channel, cid) do
     SubscriptionRegistry.ets_table_name()
     |> :ets.tab2list()
@@ -623,82 +595,6 @@ defmodule HologramFeatureTests.Helpers do
     else
       {:error, {:not_found, elements}}
     end
-  end
-
-  defp wait_for_page_mounting(
-         session,
-         expected_page,
-         opts,
-         start_time \\ nil
-       ) do
-    start_time = start_time || current_time()
-
-    callback = fn mounted_page ->
-      if mounted_page != inspect(expected_page) && !timed_out?(start_time) do
-        maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
-        :timer.sleep(100)
-        wait_for_page_mounting(session, expected_page, opts, start_time)
-      end
-    end
-
-    script = "return globalThis.Hologram?.['mountedPage'];"
-
-    Browser.execute_script(session, script, [], callback)
-  end
-
-  defp wait_for_path(session, path, start_time \\ nil) do
-    start_time = start_time || current_time()
-
-    if Browser.current_path(session) != path && !timed_out?(start_time) do
-      :timer.sleep(100)
-      wait_for_path(session, path, start_time)
-    end
-
-    session
-  end
-
-  defp wait_for_sse_connection(session, start_time \\ nil) do
-    start_time = start_time || current_time()
-
-    callback = fn connected? ->
-      cond do
-        connected? ->
-          :ok
-
-        timed_out?(start_time) ->
-          raise Wallaby.ExpectationNotMetError, "Timed out waiting for SSE connection"
-
-        true ->
-          :timer.sleep(100)
-          wait_for_sse_connection(session, start_time)
-      end
-    end
-
-    script = "return globalThis.Hologram?.['sseConnected?'];"
-
-    Browser.execute_script(session, script, [], callback)
-  end
-
-  defp wait_for_ws_connection(session, start_time \\ nil) do
-    start_time = start_time || current_time()
-
-    callback = fn connected? ->
-      cond do
-        connected? ->
-          :ok
-
-        timed_out?(start_time) ->
-          raise Wallaby.ExpectationNotMetError, "Timed out waiting for WS connection"
-
-        true ->
-          :timer.sleep(100)
-          wait_for_ws_connection(session, start_time)
-      end
-    end
-
-    script = "return globalThis.Hologram?.['wsConnected?'];"
-
-    Browser.execute_script(session, script, [], callback)
   end
 
   defp wait_for_js_error(session, start_time \\ nil) do

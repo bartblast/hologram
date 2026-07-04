@@ -13,7 +13,7 @@ defmodule HologramFeatureTests.TestCase do
 
       import Hologram.Commons.KernelUtils, only: [inspect: 1]
       import Hologram.Commons.TestUtils
-      import Hologram.Test.Helpers
+      import Hologram.Test.FeatureHelpers
       import HologramFeatureTests.Helpers
 
       import Wallaby.Browser,

@@ -5,7 +5,7 @@ defmodule App1.TestCase do
     quote do
       use Wallaby.Feature
 
-      import Hologram.Test.Helpers
+      import Hologram.Test.FeatureHelpers
       import Wallaby.Browser, except: [visit: 2]
       import Wallaby.Query
     end
