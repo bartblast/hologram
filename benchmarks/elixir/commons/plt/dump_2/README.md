@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.18.2</td>
+    <td style="white-space: nowrap">1.20.0</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">27.2.4</td>
+    <td style="white-space: nowrap">29.0.1</td>
   </tr>
 </table>
 
@@ -56,18 +56,18 @@ Run Time
     <th>Name</th>
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Average</th>
-    <th style="text-align: right">Devitation</th>
+    <th style="text-align: right">Deviation</th>
     <th style="text-align: right">Median</th>
     <th style="text-align: right">99th&nbsp;%</th>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">IR PLT</td>
-    <td style="white-space: nowrap; text-align: right">2.50</td>
-    <td style="white-space: nowrap; text-align: right">400.11 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.83%</td>
-    <td style="white-space: nowrap; text-align: right">392.32 ms</td>
-    <td style="white-space: nowrap; text-align: right">494.88 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.56</td>
+    <td style="white-space: nowrap; text-align: right">391.22 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.27%</td>
+    <td style="white-space: nowrap; text-align: right">388.10 ms</td>
+    <td style="white-space: nowrap; text-align: right">428.05 ms</td>
   </tr>
 
 </table>

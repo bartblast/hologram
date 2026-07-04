@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.18.2</td>
+    <td style="white-space: nowrap">1.20.0</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">27.2.4</td>
+    <td style="white-space: nowrap">29.0.1</td>
   </tr>
 </table>
 
@@ -56,27 +56,27 @@ Run Time
     <th>Name</th>
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Average</th>
-    <th style="text-align: right">Devitation</th>
+    <th style="text-align: right">Deviation</th>
     <th style="text-align: right">Median</th>
     <th style="text-align: right">99th&nbsp;%</th>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no load</td>
-    <td style="white-space: nowrap; text-align: right">104.17 K</td>
-    <td style="white-space: nowrap; text-align: right">9.60 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;61.59%</td>
-    <td style="white-space: nowrap; text-align: right">9.17 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">16.38 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">80.71 K</td>
+    <td style="white-space: nowrap; text-align: right">12.39 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;56.73%</td>
+    <td style="white-space: nowrap; text-align: right">12.13 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">19.79 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do load</td>
-    <td style="white-space: nowrap; text-align: right">2.15 K</td>
-    <td style="white-space: nowrap; text-align: right">464.57 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.56%</td>
-    <td style="white-space: nowrap; text-align: right">461.08 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">546.05 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">2.01 K</td>
+    <td style="white-space: nowrap; text-align: right">497.75 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;7.40%</td>
+    <td style="white-space: nowrap; text-align: right">491.17 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">606.45 &micro;s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no load</td>
-    <td style="white-space: nowrap;text-align: right">104.17 K</td>
+    <td style="white-space: nowrap;text-align: right">80.71 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do load</td>
-    <td style="white-space: nowrap; text-align: right">2.15 K</td>
-    <td style="white-space: nowrap; text-align: right">48.4x</td>
+    <td style="white-space: nowrap; text-align: right">2.01 K</td>
+    <td style="white-space: nowrap; text-align: right">40.17x</td>
   </tr>
 
 </table>
