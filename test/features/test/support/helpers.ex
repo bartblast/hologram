@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
+  import Hologram.Test.Helpers, only: [visit: 2, visit: 3]
 
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Router
@@ -417,20 +418,6 @@ defmodule HologramFeatureTests.Helpers do
     term
   end
 
-  def visit(session, path_or_url) when is_binary(path_or_url) do
-    Browser.visit(session, path_or_url)
-  end
-
-  def visit(session, page_module, params \\ []) do
-    path = Router.Helpers.page_path(page_module, params)
-
-    session
-    |> Browser.visit(path)
-    |> wait_for_page_mounting(page_module)
-    |> wait_for_ws_connection()
-    |> wait_for_sse_connection()
-  end
-
   @doc """
   Visits `page_module` in `session` as a second tab of `origin`'s Hologram
   session, by copying `origin`'s signed `phoenix_session` cookie into it.
@@ -641,7 +628,7 @@ defmodule HologramFeatureTests.Helpers do
   defp wait_for_page_mounting(
          session,
          expected_page,
-         opts \\ [],
+         opts,
          start_time \\ nil
        ) do
     start_time = start_time || current_time()

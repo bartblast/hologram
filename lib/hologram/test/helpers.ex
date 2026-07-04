@@ -14,6 +14,15 @@ defmodule Hologram.Test.Helpers do
   alias Wallaby.Browser
 
   @doc """
+  Visits the given path or URL in the session, without waiting for any
+  Hologram page mounting or server connections.
+  """
+  @spec visit(struct, String.t()) :: struct
+  def visit(session, path_or_url) when is_binary(path_or_url) do
+    Browser.visit(session, path_or_url)
+  end
+
+  @doc """
   Visits the page in the session and blocks until the Hologram client runtime
   has mounted it and established its server connections, so that subsequent
   interactions can't race the runtime's event listener attachment.
