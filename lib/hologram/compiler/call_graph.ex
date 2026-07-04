@@ -1025,13 +1025,16 @@ defmodule Hologram.Compiler.CallGraph do
   protocol dispatch types that can appear in its server-executed code (code
   reachable from its init/3 and command/3 callbacks) and the reflection MFAs
   reachable from its init/3.
-  Templatables are analyzed in parallel.
+  Templatables are analyzed sequentially, since spawning a task per templatable
+  would copy the whole graph into each task process, which costs far more than
+  the traversals themselves.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/server_callback_analysis_by_templatable_2/README.md
   """
   @spec server_callback_analysis_by_templatable(Digraph.t(), [module]) ::
           %{module => server_callback_analysis}
   def server_callback_analysis_by_templatable(graph, templatables) do
-    templatables
-    |> TaskUtils.async_many(fn templatable ->
+    Map.new(templatables, fn templatable ->
       analysis = %{
         dispatch_types: server_protocol_dispatch_types(graph, [templatable]),
         reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph)
@@ -1039,8 +1042,6 @@ defmodule Hologram.Compiler.CallGraph do
 
       {templatable, analysis}
     end)
-    |> Task.await_many(:infinity)
-    |> Map.new()
   end
 
   @doc """
