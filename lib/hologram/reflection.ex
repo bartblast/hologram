@@ -239,6 +239,8 @@ defmodule Hologram.Reflection do
 
   @doc """
   Lists Elixir modules which are Hologram components and that belong to any of the OTP apps in the project.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_components_0/README.md
   """
   @spec list_components() :: list(module)
   def list_components do
