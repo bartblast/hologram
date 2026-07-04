@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">IR PLT</td>
-    <td style="white-space: nowrap; text-align: right">2.60</td>
-    <td style="white-space: nowrap; text-align: right">385.14 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.47%</td>
-    <td style="white-space: nowrap; text-align: right">376.11 ms</td>
-    <td style="white-space: nowrap; text-align: right">433.83 ms</td>
+    <td style="white-space: nowrap; text-align: right">2.53</td>
+    <td style="white-space: nowrap; text-align: right">395.03 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.59%</td>
+    <td style="white-space: nowrap; text-align: right">390.59 ms</td>
+    <td style="white-space: nowrap; text-align: right">427.42 ms</td>
   </tr>
 
 </table>
