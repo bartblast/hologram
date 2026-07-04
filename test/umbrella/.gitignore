@@ -7,6 +7,9 @@
 # If the VM crashes, it generates a dump, let's ignore it too.
 erl_crash.dump
 
+# AI rules file generated transiently by the tooling tests.
+/AGENTS.md
+
 # Temporary files, for example, from tests.
 /apps/*/tmp/
 /tmp/
