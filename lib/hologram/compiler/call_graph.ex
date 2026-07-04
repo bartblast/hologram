@@ -1451,7 +1451,10 @@ defmodule Hologram.Compiler.CallGraph do
   # resulting state: the reached vertex set, the accumulated dispatch types, and the
   # implementation candidates whose target types are not reachable yet.
   defp start_reachable_state(graph, entry_vertices, extra_types) do
-    initial_types = MapSet.union(MapSet.new(@built_in_protocol_types), extra_types)
+    initial_types =
+      @built_in_protocol_types
+      |> MapSet.new()
+      |> MapSet.union(extra_types)
 
     state = %{
       reached_vertices: MapSet.new(),
