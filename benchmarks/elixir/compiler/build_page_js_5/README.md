@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.create_page_entry_files/4
+Hologram.Compiler.build_page_js/5
 
 ## System
 
@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.18.2</td>
+    <td style="white-space: nowrap">1.20.0</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">27.2.4</td>
+    <td style="white-space: nowrap">29.0.1</td>
   </tr>
 </table>
 
@@ -56,18 +56,18 @@ Run Time
     <th>Name</th>
     <th style="text-align: right">IPS</th>
     <th style="text-align: right">Average</th>
-    <th style="text-align: right">Devitation</th>
+    <th style="text-align: right">Deviation</th>
     <th style="text-align: right">Median</th>
     <th style="text-align: right">99th&nbsp;%</th>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">create_page_entry_files/4</td>
-    <td style="white-space: nowrap; text-align: right">1.61</td>
-    <td style="white-space: nowrap; text-align: right">622.23 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;0.50%</td>
-    <td style="white-space: nowrap; text-align: right">621.92 ms</td>
-    <td style="white-space: nowrap; text-align: right">628.08 ms</td>
+    <td style="white-space: nowrap">build_page_js/5</td>
+    <td style="white-space: nowrap; text-align: right">104.02</td>
+    <td style="white-space: nowrap; text-align: right">9.61 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;17.36%</td>
+    <td style="white-space: nowrap; text-align: right">10.93 ms</td>
+    <td style="white-space: nowrap; text-align: right">11.76 ms</td>
   </tr>
 
 </table>
