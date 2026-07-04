@@ -166,7 +166,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_page_js_4/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_5/README.md
   """
   @spec build_page_js(module, CallGraph.t(), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
   def build_page_js(page_module, call_graph, ir_plt, async_mfas, js_dir) do
@@ -384,7 +384,7 @@ defmodule Hologram.Compiler do
   @doc """
   Creates runtime bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file_3/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_4/README.md
   """
   @spec create_runtime_entry_file(list(mfa), PLT.t(), MapSet.t(mfa), T.opts()) :: T.file_path()
   def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts) do
