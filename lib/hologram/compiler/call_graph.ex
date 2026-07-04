@@ -417,6 +417,9 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec app_protocol_dispatch_types(Digraph.t(), [module]) :: MapSet.t(module)
   def app_protocol_dispatch_types(graph, pages) do
+    # Independent of the client and server traversal chain below, so it runs concurrently.
+    broadcast_types_task = Task.async(fn -> broadcast_caller_protocol_dispatch_types(graph) end)
+
     page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas/1)
 
     page_vertices =
@@ -429,7 +432,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     client_types = protocol_dispatch_types(page_vertices)
     server_types = server_protocol_dispatch_types(graph, pages ++ components)
-    broadcast_types = broadcast_caller_protocol_dispatch_types(graph)
+    broadcast_types = Task.await(broadcast_types_task, :infinity)
 
     client_types
     |> MapSet.union(server_types)
