@@ -166,11 +166,26 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_5/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_6/README.md
   """
-  @spec build_page_js(module, CallGraph.t(), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
-  def build_page_js(page_module, call_graph, ir_plt, async_mfas, js_dir) do
-    mfas = CallGraph.list_page_mfas(call_graph, page_module)
+  @spec build_page_js(
+          module,
+          CallGraph.t(),
+          PLT.t(),
+          MapSet.t(mfa),
+          %{module => CallGraph.server_callback_analysis()},
+          T.file_path()
+        ) :: String.t()
+  def build_page_js(
+        page_module,
+        call_graph,
+        ir_plt,
+        async_mfas,
+        server_callback_analysis_by_templatable,
+        js_dir
+      ) do
+    mfas =
+      CallGraph.list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
 
     %{imports: imports, bindings: bindings} = aggregate_js_imports(mfas)
 
@@ -367,13 +382,25 @@ defmodule Hologram.Compiler do
   @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
           list({module, T.file_path()})
   def create_page_entry_files(page_modules, call_graph, ir_plt, async_mfas, opts) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+
+    server_callback_analysis_by_templatable =
+      CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
     page_modules
     |> TaskUtils.async_many(fn page_module ->
       entry_name = Reflection.module_name(page_module)
 
       entry_file_path =
         page_module
-        |> build_page_js(call_graph, ir_plt, async_mfas, opts[:js_dir])
+        |> build_page_js(
+          call_graph,
+          ir_plt,
+          async_mfas,
+          server_callback_analysis_by_templatable,
+          opts[:js_dir]
+        )
         |> create_entry_file(entry_name, opts[:tmp_dir])
 
       {page_module, entry_file_path}

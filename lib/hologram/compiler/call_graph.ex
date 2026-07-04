@@ -714,22 +714,31 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns the sorted list of MFAs that are reachable by the given page.
+  Server dispatch types and reflection MFAs of the page's templatables are
+  looked up in the given precomputed server callback analysis.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_page_mfas_3/README.md
   """
-  @spec list_page_mfas(t, module) :: [mfa]
-  def list_page_mfas(call_graph, page_module) do
+  @spec list_page_mfas(t, module, %{module => server_callback_analysis}) :: [mfa]
+  def list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable) do
     entry_mfas = list_page_entry_mfas(page_module)
     graph = get_graph(call_graph)
 
     initial_mfas = reachable_mfas(graph, entry_mfas)
     templatables = [page_module | extract_uniq_components(initial_mfas)]
-    server_types = server_protocol_dispatch_types(graph, templatables)
+
+    server_types =
+      Enum.reduce(templatables, MapSet.new(), fn templatable, acc ->
+        MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
+      end)
 
     graph
     |> reachable_mfas(entry_mfas, server_types)
     |> reject_hex_mfas()
-    |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
+    |> add_reflection_mfas_reachable_from_server_inits(
+      page_module,
+      server_callback_analysis_by_templatable
+    )
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -1198,12 +1207,16 @@ defmodule Hologram.Compiler.CallGraph do
   # * __struct__/0
   # * __struct__/1
   # that are reachable from server inits (init/3) of the components used by the page.
-  defp add_reflection_mfas_reachable_from_server_inits(page_mfas, page_module, graph) do
+  defp add_reflection_mfas_reachable_from_server_inits(
+         page_mfas,
+         page_module,
+         server_callback_analysis_by_templatable
+       ) do
     templatables = [page_module | extract_uniq_components(page_mfas)]
 
     added_mfas =
-      Enum.reduce(templatables, [], fn templetable, acc ->
-        acc ++ list_reflection_mfas_reachable_from_server_init(templetable, graph)
+      Enum.flat_map(templatables, fn templatable ->
+        server_callback_analysis_by_templatable[templatable].reflection_mfas
       end)
 
     page_mfas ++ added_mfas

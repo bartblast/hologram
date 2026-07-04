@@ -52,6 +52,16 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   @tmp_dir Reflection.tmp_dir()
 
+  defp list_page_mfas_with_analysis(call_graph, page_module) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = [page_module | Reflection.list_components()]
+
+    server_callback_analysis_by_templatable =
+      server_callback_analysis_by_templatable(graph, templatables)
+
+    list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+  end
+
   setup_all do
     ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt)
@@ -978,13 +988,13 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
-  describe "list_page_mfas/2" do
+  describe "list_page_mfas/3" do
     setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
       page_module_22_mfas =
         full_call_graph
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
-        |> list_page_mfas(Module22)
+        |> list_page_mfas_with_analysis(Module22)
 
       [page_module_22_mfas: page_module_22_mfas]
     end
@@ -999,7 +1009,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(module_14_ir)
         |> build(module_15_ir)
         |> build(module_16_ir)
-        |> list_page_mfas(Module14)
+        |> list_page_mfas_with_analysis(Module14)
 
       assert result == [
                {Enum, :reverse, 1},
@@ -1029,7 +1039,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :action, 3}, {Hex, :start, 2})
         |> add_edge({Module17, :action, 3}, {Hex, :version, 0})
 
-      result = list_page_mfas(call_graph, Module17)
+      result = list_page_mfas_with_analysis(call_graph, Module17)
 
       assert {Module18, :my_fun_18, 2} in result
 
@@ -1046,7 +1056,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :action, 3}, {Hex.API, :request, 4})
         |> add_edge({Module17, :action, 3}, {Hex.Registry.Server, :versions, 2})
 
-      result = list_page_mfas(call_graph, Module17)
+      result = list_page_mfas_with_analysis(call_graph, Module17)
 
       assert {Module18, :my_fun_18, 2} in result
 
@@ -1060,7 +1070,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       result =
         start()
         |> build(module_17_ir)
-        |> list_page_mfas(Module17)
+        |> list_page_mfas_with_analysis(Module17)
 
       assert {Module18, :my_fun_18, 2} in result
 
@@ -1084,7 +1094,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         full_call_graph
         |> CallGraph.clone()
         |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
-        |> list_page_mfas(Module17)
+        |> list_page_mfas_with_analysis(Module17)
 
       refute {StringCharsModule12, :__impl__, 1} in result
       refute {StringCharsModule12, :to_string, 1} in result
@@ -1098,7 +1108,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
         |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
-        |> list_page_mfas(Module17)
+        |> list_page_mfas_with_analysis(Module17)
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
@@ -1112,7 +1122,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
         |> add_edge({Module17, :init, 3}, Module12)
-        |> list_page_mfas(Module17)
+        |> list_page_mfas_with_analysis(Module17)
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
@@ -1126,7 +1136,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
         |> add_edge({Module17, :command, 3}, Module12)
-        |> list_page_mfas(Module17)
+        |> list_page_mfas_with_analysis(Module17)
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
@@ -1140,7 +1150,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module17, :init, 3}, {Module13, :my_fun, 0})
         |> add_edge({Module17, :command, 3}, {Module13, :my_fun, 0})
-        |> list_page_mfas(Module17)
+        |> list_page_mfas_with_analysis(Module17)
 
       refute {Module13, :my_fun, 0} in result
     end
