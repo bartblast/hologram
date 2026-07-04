@@ -1922,6 +1922,58 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
   end
 
+  describe "server_callback_analysis_by_templatable/2" do
+    test "returns an entry for each given templatable" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
+        |> Digraph.add_edge({Module4, :command, 3}, Module12)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+
+      analyzed_templatables =
+        result
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert analyzed_templatables == [Module2, Module4]
+    end
+
+    test "harvests dispatch types from the templatable's own server entries only" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
+        |> Digraph.add_edge({Module4, :command, 3}, Module12)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+
+      assert Struct1 in result[Module2].dispatch_types
+      refute Module12 in result[Module2].dispatch_types
+
+      assert Module12 in result[Module4].dispatch_types
+      refute Struct1 in result[Module4].dispatch_types
+    end
+
+    test "collects reflection MFAs reachable from init/3" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Module5, :__schema__, 1})
+
+      result = server_callback_analysis_by_templatable(graph, [Module2])
+
+      assert result[Module2].reflection_mfas == [{Module5, :__schema__, 1}]
+    end
+
+    test "doesn't collect reflection MFAs reachable only from command/3" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Module5, :__schema__, 1})
+
+      result = server_callback_analysis_by_templatable(graph, [Module2])
+
+      assert result[Module2].reflection_mfas == []
+    end
+  end
+
   describe "server_protocol_dispatch_types/2" do
     test "includes struct types reachable from init/3" do
       graph =

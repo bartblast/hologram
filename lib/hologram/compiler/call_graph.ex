@@ -16,6 +16,12 @@ defmodule Hologram.Compiler.CallGraph do
   @type t :: %CallGraph{pid: pid}
 
   @type edge :: {vertex, vertex}
+
+  @type server_callback_analysis :: %{
+          dispatch_types: MapSet.t(module),
+          reflection_mfas: [mfa]
+        }
+
   @type vertex :: module | mfa
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
@@ -1017,6 +1023,29 @@ defmodule Hologram.Compiler.CallGraph do
   def remove_vertices(%{pid: pid} = call_graph, vertices) do
     Agent.cast(pid, &Digraph.remove_vertices(&1, vertices))
     call_graph
+  end
+
+  @doc """
+  Returns the server callback analysis of each given templatable module: the
+  protocol dispatch types that can appear in its server-executed code (code
+  reachable from its init/3 and command/3 callbacks) and the reflection MFAs
+  reachable from its init/3.
+  Templatables are analyzed in parallel.
+  """
+  @spec server_callback_analysis_by_templatable(Digraph.t(), [module]) ::
+          %{module => server_callback_analysis}
+  def server_callback_analysis_by_templatable(graph, templatables) do
+    templatables
+    |> TaskUtils.async_many(fn templatable ->
+      analysis = %{
+        dispatch_types: server_protocol_dispatch_types(graph, [templatable]),
+        reflection_mfas: list_reflection_mfas_reachable_from_server_init(templatable, graph)
+      }
+
+      {templatable, analysis}
+    end)
+    |> Task.await_many(:infinity)
+    |> Map.new()
   end
 
   @doc """
