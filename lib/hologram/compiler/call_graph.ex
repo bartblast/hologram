@@ -410,14 +410,13 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the set of types that can appear at protocol dispatch anywhere in the
-  app: types reachable from the client code of all pages, types created in
-  server-executed code of pages and their components, and types reachable from
-  action broadcasting code.
+  Returns the set of types that can appear at protocol dispatch anywhere in an
+  app with the given pages: types reachable from the client code of the pages,
+  types created in server-executed code of the pages and their components, and
+  types reachable from action broadcasting code.
   """
-  @spec app_protocol_dispatch_types(Digraph.t()) :: MapSet.t(module)
-  def app_protocol_dispatch_types(graph) do
-    pages = Reflection.list_pages()
+  @spec app_protocol_dispatch_types(Digraph.t(), [module]) :: MapSet.t(module)
+  def app_protocol_dispatch_types(graph, pages) do
     page_entry_mfas = Enum.flat_map(pages, &list_page_entry_mfas/1)
 
     page_vertices =
@@ -766,16 +765,16 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists MFAs required by the runtime JS script.
+  Lists MFAs required by the runtime JS script of an app with the given pages.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/list_runtime_mfas_1/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/call_graph/list_runtime_mfas_2/README.md
   """
-  @spec list_runtime_mfas(t) :: [mfa]
-  def list_runtime_mfas(call_graph) do
+  @spec list_runtime_mfas(t, [module]) :: [mfa]
+  def list_runtime_mfas(call_graph, pages) do
     entry_mfas = list_runtime_entry_mfas()
     graph = get_graph(call_graph)
 
-    app_types = app_protocol_dispatch_types(graph)
+    app_types = app_protocol_dispatch_types(graph, pages)
 
     graph
     |> reachable_mfas(entry_mfas, app_types)

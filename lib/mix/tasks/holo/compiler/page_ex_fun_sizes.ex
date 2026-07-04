@@ -94,7 +94,7 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
   end
 
   defp remove_runtime_mfas(call_graph) do
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
     CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
   end
 

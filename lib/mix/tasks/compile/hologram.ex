@@ -118,14 +118,14 @@ defmodule Mix.Tasks.Compile.Hologram do
         # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
         |> CallGraph.remove_manually_ported_mfas()
 
-      runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
-
-      runtime_entry_file_path =
-        Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
-
       page_modules = Reflection.list_pages()
 
       Compiler.validate_page_modules(page_modules)
+
+      runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime, page_modules)
+
+      runtime_entry_file_path =
+        Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts)
 
       call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 

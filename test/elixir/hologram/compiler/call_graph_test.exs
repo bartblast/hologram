@@ -65,7 +65,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   setup_all do
     ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt)
-    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph)
+    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph, Reflection.list_pages())
 
     [
       full_call_graph: full_call_graph,
@@ -118,17 +118,17 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
-  describe "app_protocol_dispatch_types/1" do
+  describe "app_protocol_dispatch_types/2" do
     test "includes types reachable from page client code" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph)
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
     end
 
     test "includes types created in server-executed code of pages" do
       graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph)
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
     end
 
     test "includes types created in server-executed code of components used by pages" do
@@ -137,7 +137,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module2, :template, 0}, {Module4, :template, 0})
         |> Digraph.add_edge({Module4, :init, 3}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph)
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
     end
 
     test "includes types reachable from broadcast callers" do
@@ -146,13 +146,14 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> Digraph.add_edge({Module13, :my_fun, 0}, Struct1)
 
-      assert Struct1 in app_protocol_dispatch_types(graph)
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
     end
 
     test "returns only built-in types for a graph without app type references" do
       graph = Digraph.add_edge(Digraph.new(), {Module13, :my_fun, 0}, {Module5, :my_fun, 0})
 
-      assert app_protocol_dispatch_types(graph) == protocol_dispatch_types([])
+      assert app_protocol_dispatch_types(graph, Reflection.list_pages()) ==
+               protocol_dispatch_types([])
     end
   end
 
@@ -1251,9 +1252,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end
 
-  describe "list_runtime_mfas/1" do
+  describe "list_runtime_mfas/2" do
     setup %{full_call_graph: call_graph} do
-      [runtime_mfas: list_runtime_mfas(call_graph)]
+      [runtime_mfas: list_runtime_mfas(call_graph, Reflection.list_pages())]
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
@@ -1277,7 +1278,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
       |> add_edge({Enum, :into, 2}, {:non_existing_module_fixture, :dummy_function_4, 4})
 
-      result = list_runtime_mfas(call_graph_clone)
+      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
 
       assert {Calendar.ISO, :dummy_function_1, 1} in result
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
@@ -1292,7 +1293,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex, :start, 2})
       |> add_edge({Enum, :into, 2}, {Hex, :version, 0})
 
-      result = list_runtime_mfas(call_graph_clone)
+      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
 
       assert {Enum, :into, 2} in result
 
@@ -1307,7 +1308,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex.API, :request, 4})
       |> add_edge({Enum, :into, 2}, {Hex.Registry.Server, :versions, 2})
 
-      result = list_runtime_mfas(call_graph_clone)
+      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
 
       assert {Enum, :into, 2} in result
 
@@ -1355,7 +1356,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         call_graph
         |> CallGraph.clone()
         |> add_edge({Module17, :template, 0}, Module12)
-        |> list_runtime_mfas()
+        |> list_runtime_mfas(Reflection.list_pages())
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
@@ -1369,7 +1370,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         call_graph
         |> CallGraph.clone()
         |> add_edge({Module17, :init, 3}, Module12)
-        |> list_runtime_mfas()
+        |> list_runtime_mfas(Reflection.list_pages())
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
@@ -1383,7 +1384,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> CallGraph.clone()
         |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
         |> add_edge({Module13, :my_fun, 0}, Module12)
-        |> list_runtime_mfas()
+        |> list_runtime_mfas(Reflection.list_pages())
 
       assert {StringCharsModule12, :__impl__, 1} in result
       assert {StringCharsModule12, :to_string, 1} in result
@@ -1918,7 +1919,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "remove_runtime_mfas!/2", %{ir_plt: ir_plt} do
     call_graph = Compiler.build_call_graph(ir_plt)
-    runtime_mfas = list_runtime_mfas(call_graph)
+    runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
 
     CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 

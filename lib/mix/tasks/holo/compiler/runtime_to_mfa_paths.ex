@@ -14,6 +14,7 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
+  alias Hologram.Reflection
 
   @requirements ["app.config"]
 
@@ -23,7 +24,7 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
     {dest_mfa, _binding} = Code.eval_string(dest_mfa_code)
 
     call_graph = CallGraph.remove_manually_ported_mfas(Compiler.build_call_graph())
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
 
     if dest_mfa in runtime_mfas do
       print_runtime_mfa_paths(call_graph, dest_mfa)

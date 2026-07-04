@@ -60,7 +60,7 @@ defmodule Hologram.CompilerTest do
     [
       call_graph: call_graph,
       ir_plt: ir_plt,
-      runtime_mfas: CallGraph.list_runtime_mfas(call_graph)
+      runtime_mfas: CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
     ]
   end
 
