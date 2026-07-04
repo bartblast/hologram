@@ -1804,6 +1804,24 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {StringCharsModule12, :to_string, 1} in result
     end
 
+    test "includes an implementation reached both directly and via dispatch exactly once", %{
+      full_call_graph: full_call_graph
+    } do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, {struct_1_impl, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert Enum.count(result, &(&1 == {struct_1_impl, :my_fun, 1})) == 1
+    end
+
     test "retains dispatch helper MFAs of reached protocols", %{
       full_call_graph: full_call_graph
     } do
