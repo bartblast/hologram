@@ -903,19 +903,6 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
-  defp put_protocol_dispatch_types(types, vertices) do
-    Enum.reduce(vertices, types, fn
-      module, acc when is_atom(module) ->
-        maybe_put_struct_type(acc, module)
-
-      {module, :__struct__, arity}, acc when arity in [0, 1] ->
-        MapSet.put(acc, module)
-
-      _vertex, acc ->
-        acc
-    end)
-  end
-
   @doc """
   Lists MFAs that are reachable from the given call graph vertices with bounded
   protocol dispatch. Protocol function vertices are opaque during the traversal,
@@ -939,17 +926,6 @@ defmodule Hologram.Compiler.CallGraph do
       # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
       {module, _function, _arity} -> Reflection.module?(module)
       _module_vertex -> false
-    end)
-  end
-
-  defp reject_hex_mfas(mfas) do
-    Enum.reject(mfas, fn {module, _function, _arity} ->
-      module_str = to_string(module)
-
-      module_str == "Elixir.Hex" ||
-        String.starts_with?(module_str, "Elixir.Hex.") ||
-        String.starts_with?(module_str, "Elixir.Inspect.Hex.") ||
-        String.starts_with?(module_str, "Elixir.String.Chars.Hex.")
     end)
   end
 
@@ -1417,6 +1393,19 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp protocol_metadata_mfa?(_vertex), do: false
 
+  defp put_protocol_dispatch_types(types, vertices) do
+    Enum.reduce(vertices, types, fn
+      module, acc when is_atom(module) ->
+        maybe_put_struct_type(acc, module)
+
+      {module, :__struct__, arity}, acc when arity in [0, 1] ->
+        MapSet.put(acc, module)
+
+      _vertex, acc ->
+        acc
+    end)
+  end
+
   # When modules that are protocol implementations are added or edited, the protocol
   # module itself (e.g. Enumerable) is unchanged and not re-processed by patch. Its
   # dispatch edges remain stale. This function re-runs add_protocol_call_graph_edges
@@ -1429,6 +1418,17 @@ defmodule Hologram.Compiler.CallGraph do
     |> Enum.reject(&is_nil/1)
     |> Enum.uniq()
     |> Enum.each(&add_protocol_call_graph_edges(call_graph, &1))
+  end
+
+  defp reject_hex_mfas(mfas) do
+    Enum.reject(mfas, fn {module, _function, _arity} ->
+      module_str = to_string(module)
+
+      module_str == "Elixir.Hex" ||
+        String.starts_with?(module_str, "Elixir.Hex.") ||
+        String.starts_with?(module_str, "Elixir.Inspect.Hex.") ||
+        String.starts_with?(module_str, "Elixir.String.Chars.Hex.")
+    end)
   end
 
   defp remove_module_vertices(call_graph, module) do
