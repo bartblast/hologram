@@ -238,6 +238,14 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists Elixir modules which are Hologram components and that belong to any of the OTP apps in the project.
+  """
+  @spec list_components() :: list(module)
+  def list_components do
+    Enum.filter(list_elixir_modules(), &component?/1)
+  end
+
+  @doc """
   Lists modules by scanning BEAM files in the given OTP app's ebin directory.
   This is useful for detecting newly compiled modules that haven't been added to
   Application.spec yet during development.

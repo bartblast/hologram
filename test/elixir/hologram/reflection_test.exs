@@ -204,6 +204,16 @@ defmodule Hologram.ReflectionTest do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
+  test "list_components/0" do
+    result = list_components()
+
+    assert Hologram.Test.Fixtures.Compiler.CallGraph.Module3 in result
+    assert Module3 in result
+
+    refute Hologram.Compiler.Context in result
+    refute Module2 in result
+  end
+
   describe "list_ebin_modules/1" do
     test "OTP app has ebin dir" do
       result = list_ebin_modules(:websock_adapter)
