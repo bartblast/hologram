@@ -1142,6 +1142,29 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {StringCharsModule12, :to_string, 1} in result
     end
 
+    test "includes protocol implementations unlocked transitively by server-created types", %{
+      full_call_graph: full_call_graph
+    } do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      # Struct1 is created only in server init, its Protocol1 implementation code
+      # creates Module12, and Module12's String.Chars implementation must follow
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :init, 3}, Struct1)
+        |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
     test "excludes MFAs reachable only from server-executed code", %{
       full_call_graph: full_call_graph
     } do

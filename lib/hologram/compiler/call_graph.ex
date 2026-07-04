@@ -26,7 +26,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   # A literal empty `MapSet.new()` in the initial state reads as concrete and won't unify
   # with the opaque `MapSet.t()` inferred for the state fields.
-  @dialyzer {:no_opaque, {:protocol_aware_reachable_vertices, 3}}
+  @dialyzer {:no_opaque, {:start_reachable_state, 3}}
 
   # Functions that broadcast action params from arbitrary server code to connected clients.
   @broadcast_action_mfas [
@@ -728,7 +728,8 @@ defmodule Hologram.Compiler.CallGraph do
     entry_mfas = list_page_entry_mfas(page_module)
     graph = get_graph(call_graph)
 
-    initial_mfas = reachable_mfas(graph, entry_mfas)
+    initial_state = start_reachable_state(graph, entry_mfas, MapSet.new())
+    initial_mfas = Enum.filter(initial_state.reached_vertices, &is_tuple/1)
     templatables = [page_module | extract_uniq_components(initial_mfas)]
 
     server_types =
@@ -736,8 +737,10 @@ defmodule Hologram.Compiler.CallGraph do
         MapSet.union(acc, server_callback_analysis_by_templatable[templatable].dispatch_types)
       end)
 
+    final_state = expand_reachable_state_with_types(graph, initial_state, server_types)
+
     graph
-    |> reachable_mfas(entry_mfas, server_types)
+    |> finalize_reachable_mfas(final_state)
     |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(
       page_module,
@@ -920,13 +923,8 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec reachable_mfas(Digraph.t(), [vertex], MapSet.t(module)) :: [mfa]
   def reachable_mfas(graph, entry_vertices, extra_types \\ MapSet.new()) do
-    graph
-    |> protocol_aware_reachable_vertices(entry_vertices, extra_types)
-    |> Enum.filter(fn
-      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-      {module, _function, _arity} -> Reflection.module?(module)
-      _module_vertex -> false
-    end)
+    state = start_reachable_state(graph, entry_vertices, extra_types)
+    finalize_reachable_mfas(graph, state)
   end
 
   @doc """
@@ -1222,18 +1220,8 @@ defmodule Hologram.Compiler.CallGraph do
     reached_vertices = MapSet.union(state.reached_vertices, MapSet.new(new_vertices))
     types = put_protocol_dispatch_types(state.types, new_vertices)
 
-    candidates = extract_impl_candidates(graph, new_vertices) ++ state.pending_impl_candidates
-
-    {ready_candidates, pending_impl_candidates} =
-      Enum.split_with(candidates, fn {impl, _impl_entry_vertices} ->
-        protocol_implementation_reachable?(impl, types)
-      end)
-
-    impl_entry_vertices =
-      ready_candidates
-      |> Enum.flat_map(fn {_impl, impl_entry_vertices} -> impl_entry_vertices end)
-      |> Enum.reject(&MapSet.member?(reached_vertices, &1))
-      |> Enum.uniq()
+    pending_impl_candidates =
+      extract_impl_candidates(graph, new_vertices) ++ state.pending_impl_candidates
 
     new_state = %{
       state
@@ -1242,11 +1230,14 @@ defmodule Hologram.Compiler.CallGraph do
         pending_impl_candidates: pending_impl_candidates
     }
 
-    if impl_entry_vertices == [] do
-      new_state
-    else
-      expand_reachable_state(graph, new_state, impl_entry_vertices)
-    end
+    promote_pending_impl_candidates(graph, new_state)
+  end
+
+  # Resumes the fixpoint from the given state with additional dispatch types,
+  # reaching exactly the vertices a from-scratch run with those types would reach.
+  defp expand_reachable_state_with_types(graph, state, extra_types) do
+    new_state = %{state | types: MapSet.union(state.types, extra_types)}
+    promote_pending_impl_candidates(graph, new_state)
   end
 
   # Implementation candidates are read from the dispatch edges added at build time
@@ -1271,6 +1262,19 @@ defmodule Hologram.Compiler.CallGraph do
     |> Enum.map(fn {module, _function, _arity} -> module end)
     |> Enum.uniq()
     |> Enum.filter(&Reflection.component?/1)
+  end
+
+  defp finalize_reachable_mfas(graph, state) do
+    reached_vertices = MapSet.to_list(state.reached_vertices)
+    helper_vertices = protocol_dispatch_dependency_vertices(graph, reached_vertices)
+
+    vertices = Enum.uniq(reached_vertices ++ helper_vertices)
+
+    Enum.filter(vertices, fn
+      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+      {module, _function, _arity} -> Reflection.module?(module)
+      _module_vertex -> false
+    end)
   end
 
   defp incoming_edges(%{pid: pid}, vertex) do
@@ -1343,21 +1347,27 @@ defmodule Hologram.Compiler.CallGraph do
     end
   end
 
-  defp protocol_aware_reachable_vertices(graph, entry_vertices, extra_types) do
-    initial_types = MapSet.union(MapSet.new(@built_in_protocol_types), extra_types)
+  # Moves pending implementation candidates whose target type has become reachable
+  # into the traversal, continuing rounds until none are promotable.
+  defp promote_pending_impl_candidates(graph, state) do
+    {ready_candidates, pending_impl_candidates} =
+      Enum.split_with(state.pending_impl_candidates, fn {impl, _impl_entry_vertices} ->
+        protocol_implementation_reachable?(impl, state.types)
+      end)
 
-    state = %{
-      reached_vertices: MapSet.new(),
-      types: initial_types,
-      pending_impl_candidates: []
-    }
+    impl_entry_vertices =
+      ready_candidates
+      |> Enum.flat_map(fn {_impl, impl_entry_vertices} -> impl_entry_vertices end)
+      |> Enum.reject(&MapSet.member?(state.reached_vertices, &1))
+      |> Enum.uniq()
 
-    final_state = expand_reachable_state(graph, state, entry_vertices)
+    new_state = %{state | pending_impl_candidates: pending_impl_candidates}
 
-    reached_vertices = MapSet.to_list(final_state.reached_vertices)
-    helper_vertices = protocol_dispatch_dependency_vertices(graph, reached_vertices)
-
-    Enum.uniq(reached_vertices ++ helper_vertices)
+    if impl_entry_vertices == [] do
+      new_state
+    else
+      expand_reachable_state(graph, new_state, impl_entry_vertices)
+    end
   end
 
   defp protocol_dispatch_helper_mfa?(
@@ -1433,5 +1443,20 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp remove_module_vertices(call_graph, module) do
     remove_vertices(call_graph, module_vertices(call_graph, module))
+  end
+
+  # Runs the protocol-aware fixpoint from the given entry vertices and returns the
+  # resulting state: the reached vertex set, the accumulated dispatch types, and the
+  # implementation candidates whose target types are not reachable yet.
+  defp start_reachable_state(graph, entry_vertices, extra_types) do
+    initial_types = MapSet.union(MapSet.new(@built_in_protocol_types), extra_types)
+
+    state = %{
+      reached_vertices: MapSet.new(),
+      types: initial_types,
+      pending_impl_candidates: []
+    }
+
+    expand_reachable_state(graph, state, entry_vertices)
   end
 end
