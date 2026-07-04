@@ -434,3 +434,187 @@ jobs:
         with:
           name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/features/tmp/screenshots
+
+  umbrella_tests:
+    runs-on: ubuntu-latest
+    name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    defaults:
+      run:
+        working-directory: test/umbrella
+    strategy:
+      fail-fast: false
+      # Specify the Elixir and OTP versions to use when building
+      # and running the workflow steps.
+      matrix:
+        elixir:
+          # Run umbrella tests on latest pinned stable Elixir version only
+          - "1.20.0"
+        otp:
+          # Run umbrella tests on latest pinned stable OTP version only
+          - "29.0"
+        node:
+          # Run umbrella tests on latest LTS version only.
+          # Must match .tool-versions for dev/prod/CI parity.
+          - "24.13.0"
+    env:
+      IS_HIGHEST_MATRIX_COMBINATION: "true"
+    steps:
+      # Step: Setup Elixir + Erlang/OTP image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Step: Setup Node.js.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      ### UMBRELLA TESTS APP CHECKS ###
+
+      # Step: Define how to cache the umbrella tests app Elixir dependencies.
+      - name: Cache umbrella tests app Elixir deps
+        id: cache-umbrella-tests-app-elixir-deps
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-umbrella-tests-app-elixir-deps
+        with:
+          path: test/umbrella/deps
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+
+      # Step: Define how to cache the umbrella tests app Elixir build.
+      - name: Cache umbrella tests app Elixir build
+        id: cache-umbrella-tests-app-elixir-build
+        uses: actions/cache@v6
+        env:
+          cache-name: cache-umbrella-tests-app-elixir-build
+        with:
+          path: test/umbrella/_build
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+
+      # Step: Download umbrella tests app Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download umbrella tests app Elixir deps
+        uses: nick-fields/retry@v4
+        with:
+          # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
+          command: cd test/umbrella && mix deps.get
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Download umbrella tests app JavaScript dependencies.
+      - name: Download umbrella tests app JavaScript deps
+        uses: nick-fields/retry@v4
+        with:
+          command: cd test/umbrella/assets && npm clean-install
+          shell: bash
+          timeout_minutes: 3
+          max_attempts: 10
+
+      # Step: Compile the umbrella tests app project treating any warnings as errors.
+      - name: Check umbrella tests app project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if umbrella tests app mix.lock has any unused dependencies.
+      - name: Check umbrella tests app unused Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix deps.unlock --check-unused
+
+      # Step: Check if there are any umbrella tests app Elixir dependencies which have been marked as retired.
+      - name: Check umbrella tests app retired Elixir deps
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        # TODO: Remove this allowlist wrapper and restore `run: mix hex.audit` once the EEF advisory
+        # database registers a cowlib version as patched for EEF-CVE-2026-43966 and
+        # EEF-CVE-2026-43969 (as of 2026-07-03 no version is registered as patched, so even
+        # cowlib 2.18.0 with its cow_http_struct_hd hardening is still flagged). cowlib reaches
+        # the build only through the Wallaby test-server stack (plug_cowboy -> cowboy -> cowlib),
+        # and the MEDIUM advisory is already mitigated by cowboy 2.16.1's CR/LF header validation.
+        # The wrapper allowlists exactly those two IDs, so the audit still fails on every other
+        # advisory and on any retired package.
+        run: |
+          output="$(mix hex.audit 2>&1)" && exit 0
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -qiE 'retired'; then
+            echo "::error::hex.audit reported a retired package"
+            exit 1
+          fi
+          unexpected="$(printf '%s\n' "$output" | grep -E '\((LOW|MEDIUM|HIGH|CRITICAL)\)' | grep -vE 'EEF-CVE-2026-4396[69]' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::hex.audit reported advisories beyond the allowlisted cowlib CVEs"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+          echo "Only the allowlisted cowlib advisories present - passing."
+
+      # Step: Check that the umbrella tests app Elixir code has already been formatted.
+      - name: Check umbrella tests app Elixir code formatted
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix format --check-formatted
+
+      # Step: Run umbrella tests app Elixir static code analysis with Credo.
+      - name: Run umbrella tests app Elixir static code analysis with Credo
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix credo --strict
+
+      # Step: Restore umbrella tests app Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore umbrella tests app Dialyzer PLT cache
+        id: restore-umbrella-tests-app-dialyzer-plt-cache
+        uses: actions/cache/restore@v6
+        with:
+          key: |
+            dialyzer-plt-umbrella-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+          path: |
+            test/umbrella/priv/plts
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+
+      # Step: Create umbrella tests app Dialyzer PLTs if no cache was found.
+      - name: Create umbrella tests app Dialyzer PLTs
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-umbrella-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        run: mix dialyzer --plt
+
+      # Step: Save umbrella tests app Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save umbrella tests app Dialyzer PLT cache
+        id: save-umbrella-tests-app-dialyzer-plt-cache
+        uses: actions/cache/save@v6
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-umbrella-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+        with:
+          key: |
+            dialyzer-plt-umbrella-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/umbrella/mix.lock') }}
+          path: |
+            test/umbrella/priv/plts
+
+      # Step: Run umbrella tests app Elixir static code analysis with Dialyzer.
+      - name: Run umbrella tests app Elixir static code analysis with Dialyzer
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix dialyzer --format github
+
+      # Step: Check that all umbrella tests app test scripts have valid file names.
+      - name: Check umbrella tests app test file names
+        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+        run: mix holo.test.check_file_names apps/app_1/test
+
+      # Step: Execute umbrella tests app Elixir tests.
+      - name: Run umbrella tests app Elixir tests
+        run: mix test --warnings-as-errors
+
+      # Step: Archive the browser screenshots of tests that failed.
+      - name: Archive fail screenshots
+        # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
+        if: success() || failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: umbrella-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/umbrella/tmp/screenshots
