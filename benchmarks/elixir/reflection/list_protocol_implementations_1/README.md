@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_protocol_implementations/1</td>
-    <td style="white-space: nowrap; text-align: right">232.06</td>
-    <td style="white-space: nowrap; text-align: right">4.31 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;6.36%</td>
-    <td style="white-space: nowrap; text-align: right">4.28 ms</td>
-    <td style="white-space: nowrap; text-align: right">5.23 ms</td>
+    <td style="white-space: nowrap; text-align: right">255.47</td>
+    <td style="white-space: nowrap; text-align: right">3.91 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.46%</td>
+    <td style="white-space: nowrap; text-align: right">3.89 ms</td>
+    <td style="white-space: nowrap; text-align: right">4.55 ms</td>
   </tr>
 
 </table>

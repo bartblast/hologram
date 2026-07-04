@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">validate_page_modules/1</td>
-    <td style="white-space: nowrap; text-align: right">121.10 K</td>
-    <td style="white-space: nowrap; text-align: right">8.26 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;102.72%</td>
-    <td style="white-space: nowrap; text-align: right">8.17 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">9.46 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">124.62 K</td>
+    <td style="white-space: nowrap; text-align: right">8.02 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;82.26%</td>
+    <td style="white-space: nowrap; text-align: right">7.96 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">8.88 &micro;s</td>
   </tr>
 
 </table>
