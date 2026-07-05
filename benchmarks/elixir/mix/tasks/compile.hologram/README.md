@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap; text-align: right">49.54 K</td>
-    <td style="white-space: nowrap; text-align: right">20.19 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;35.07%</td>
-    <td style="white-space: nowrap; text-align: right">18.54 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">43.27 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">0.46</td>
+    <td style="white-space: nowrap; text-align: right">2.19 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.88%</td>
+    <td style="white-space: nowrap; text-align: right">2.20 s</td>
+    <td style="white-space: nowrap; text-align: right">2.27 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
-    <td style="white-space: nowrap; text-align: right">30.15 K</td>
-    <td style="white-space: nowrap; text-align: right">33.17 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;21.68%</td>
-    <td style="white-space: nowrap; text-align: right">31.21 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">54.12 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">0.21</td>
+    <td style="white-space: nowrap; text-align: right">4.72 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;0.15%</td>
+    <td style="white-space: nowrap; text-align: right">4.72 s</td>
+    <td style="white-space: nowrap; text-align: right">4.73 s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap;text-align: right">49.54 K</td>
+    <td style="white-space: nowrap;text-align: right">0.46</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
-    <td style="white-space: nowrap; text-align: right">30.15 K</td>
-    <td style="white-space: nowrap; text-align: right">1.64x</td>
+    <td style="white-space: nowrap; text-align: right">0.21</td>
+    <td style="white-space: nowrap; text-align: right">2.16x</td>
   </tr>
 
 </table>
