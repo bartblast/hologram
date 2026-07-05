@@ -69,6 +69,14 @@ defmodule Hologram.MixProject do
       {:file_system, "~> 1.0"},
       {:gproc, "~> 1.0"},
       {:html_entities, "~> 0.5"},
+      # Pin Wallaby's transitive HTTP client to httpoison 2.x so hackney stays on the 1.x
+      # line. httpoison 3.x pulls hackney 4.x, which requires the quic NIF (OTP 26+) and
+      # breaks the OTP 24/25 legs of the test matrix. Wallaby is a compile/Dialyzer-only
+      # dependency here (runtime: false), so the newest hackney buys nothing - it only has
+      # to compile across the whole OTP matrix.
+      # TODO: Drop this pin and let httpoison/hackney resolve to their newest majors once
+      # the test matrix no longer builds on OTP 24 and 25.
+      {:httpoison, "~> 2.0", only: [:dev, :test], runtime: false},
       {:interceptor, "~> 0.5"},
       {:jason, "~> 1.0"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
