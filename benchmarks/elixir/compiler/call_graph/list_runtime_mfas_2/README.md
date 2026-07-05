@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.CallGraph.list_runtime_mfas/1
+Hologram.Compiler.CallGraph.list_runtime_mfas/2
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">list_runtime_mfas/1</td>
-    <td style="white-space: nowrap; text-align: right">22.15</td>
-    <td style="white-space: nowrap; text-align: right">45.15 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.04%</td>
-    <td style="white-space: nowrap; text-align: right">44.46 ms</td>
-    <td style="white-space: nowrap; text-align: right">53.67 ms</td>
+    <td style="white-space: nowrap">list_runtime_mfas/2</td>
+    <td style="white-space: nowrap; text-align: right">29.27</td>
+    <td style="white-space: nowrap; text-align: right">34.16 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;8.20%</td>
+    <td style="white-space: nowrap; text-align: right">32.56 ms</td>
+    <td style="white-space: nowrap; text-align: right">40.07 ms</td>
   </tr>
 
 </table>
