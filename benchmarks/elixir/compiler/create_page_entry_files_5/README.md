@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">create_page_entry_files/5</td>
-    <td style="white-space: nowrap; text-align: right">1.05</td>
-    <td style="white-space: nowrap; text-align: right">949.73 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;2.89%</td>
-    <td style="white-space: nowrap; text-align: right">941.21 ms</td>
-    <td style="white-space: nowrap; text-align: right">1014.11 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.97</td>
+    <td style="white-space: nowrap; text-align: right">1.03 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.87%</td>
+    <td style="white-space: nowrap; text-align: right">1.03 s</td>
+    <td style="white-space: nowrap; text-align: right">1.08 s</td>
   </tr>
 
 </table>

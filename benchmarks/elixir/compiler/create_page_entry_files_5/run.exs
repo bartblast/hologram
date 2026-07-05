@@ -12,7 +12,12 @@ Benchee.run(
   before_scenario: fn _input ->
     ir_plt = Compiler.build_ir_plt()
     call_graph = Compiler.build_call_graph(ir_plt)
+
+    # Must be computed before remove_manually_ported_mfas/1 strips the Task.await/1 vertex.
     async_mfas = CallGraph.list_async_mfas(call_graph)
+
+    CallGraph.remove_manually_ported_mfas(call_graph)
+
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
