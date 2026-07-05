@@ -72,8 +72,8 @@ defmodule Hologram.Test.FeatureHelpers do
 
   defp maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page) do
     if opts[:debug] do
+      # credo:disable-for-lines:2 Credo.Check.Refactor.IoPuts
       IO.puts("----------")
-
       IO.puts("mounted page: #{inspect(mounted_page)}, expected page: #{inspect(expected_page)}")
 
       print_client_logs(session)
