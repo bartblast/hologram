@@ -11,6 +11,7 @@
           ~r"/deps/",
           ~r"/node_modules/",
           "test/features/",
+          "test/elixir/support/fixtures/live_reload/umbrella",
           "test/elixir/support/fixtures/compiler/normalizer/module_7.ex",
           "test/elixir/support/fixtures/compiler/normalizer/module_8.ex"
         ]

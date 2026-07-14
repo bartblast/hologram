@@ -75,7 +75,7 @@ defmodule Hologram.LiveReload do
 
   @doc """
   Reloads the application after a file change by recompiling Elixir code,
-  recompiling Hologram components, reloading Hologram runtime, and 
+  recompiling Hologram components, reloading Hologram runtime, and
   broadcasting reload notifications to connected clients.
 
   If code reloading fails, broadcasts a compilation error instead.
@@ -96,14 +96,38 @@ defmodule Hologram.LiveReload do
   @doc """
   Returns the list of directories that are watched for file changes.
 
-  The directories are determined by the project's `:elixirc_paths` configuration
-  and are converted to absolute paths based on the project root directory.
+  In a single-app project the directories are the project's own
+  `:elixirc_paths`, joined to the project root.
+
+  In an umbrella project they are the union of every child app's
+  `:elixirc_paths`, joined to that child app's directory - so changes in any
+  child app trigger a reload.
   """
   @spec watched_dirs :: [String.t()]
   def watched_dirs do
-    root_dir = Reflection.root_dir()
-    compiled_paths = Mix.Project.get().project()[:elixirc_paths]
-    Enum.map(compiled_paths, &Path.join(root_dir, &1))
+    case Mix.Project.apps_paths() do
+      nil ->
+        root_dir = Reflection.root_dir()
+        compiled_paths = Mix.Project.get().project()[:elixirc_paths] || ["lib"]
+        Enum.map(compiled_paths, &Path.join(root_dir, &1))
+
+      apps_paths ->
+        # `Mix.Project.apps_paths/0` returns paths relative to the umbrella
+        # root (the current cwd while it's the active project). Expand here so
+        # the watcher gets absolute paths regardless of cwd at watch time.
+        Enum.flat_map(apps_paths, fn {app, app_path} ->
+          abs_app_path = Path.expand(app_path)
+          compiled_paths = traverse_path_in_project(app, abs_app_path)
+
+          Enum.map(compiled_paths, &Path.join(abs_app_path, &1))
+        end)
+    end
+  end
+
+  defp traverse_path_in_project(app, abs_app_path) do
+    Mix.Project.in_project(app, abs_app_path, fn _module ->
+      Mix.Project.config()[:elixirc_paths] || ["lib"]
+    end)
   end
 
   @doc """
