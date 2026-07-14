@@ -1,4 +1,7 @@
-defmodule HologramFeatureTests.CallGraph.StructsPage do
+# The scenarios on this page verify that struct support ships for types referenced
+# in client-reachable code - the struct fixtures are created in actions, which is
+# the counterpart of the server-side type harvest covered by ServerCreatedStructsPage.
+defmodule HologramFeatureTests.CallGraph.ClientCreatedStructsPage do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
@@ -6,7 +9,7 @@ defmodule HologramFeatureTests.CallGraph.StructsPage do
 
   alias HologramFeatureTests.StructFixture1
 
-  route "/call-graph/structs"
+  route "/call-graph/client-created-structs"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

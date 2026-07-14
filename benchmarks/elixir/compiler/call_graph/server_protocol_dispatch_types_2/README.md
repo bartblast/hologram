@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.build_page_js/5
+Hologram.Compiler.CallGraph.server_protocol_dispatch_types/2
 
 ## System
 
@@ -62,12 +62,43 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">build_page_js/5</td>
-    <td style="white-space: nowrap; text-align: right">104.02</td>
-    <td style="white-space: nowrap; text-align: right">9.61 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;17.36%</td>
-    <td style="white-space: nowrap; text-align: right">10.93 ms</td>
-    <td style="white-space: nowrap; text-align: right">11.76 ms</td>
+    <td style="white-space: nowrap">1 templatable</td>
+    <td style="white-space: nowrap; text-align: right">4.27 K</td>
+    <td style="white-space: nowrap; text-align: right">234.04 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;13.34%</td>
+    <td style="white-space: nowrap; text-align: right">230.25 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">292.67 &micro;s</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">all templatables</td>
+    <td style="white-space: nowrap; text-align: right">3.53 K</td>
+    <td style="white-space: nowrap; text-align: right">283.01 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;14.04%</td>
+    <td style="white-space: nowrap; text-align: right">277.25 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">354.29 &micro;s</td>
+  </tr>
+
+</table>
+
+
+Run Time Comparison
+
+<table style="width: 1%">
+  <tr>
+    <th>Name</th>
+    <th style="text-align: right">IPS</th>
+    <th style="text-align: right">Slower</th>
+  <tr>
+    <td style="white-space: nowrap">1 templatable</td>
+    <td style="white-space: nowrap;text-align: right">4.27 K</td>
+    <td>&nbsp;</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">all templatables</td>
+    <td style="white-space: nowrap; text-align: right">3.53 K</td>
+    <td style="white-space: nowrap; text-align: right">1.21x</td>
   </tr>
 
 </table>

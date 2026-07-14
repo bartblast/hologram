@@ -345,7 +345,10 @@ Hologram automatically analyzes your code and:
 
 1. Determines which parts should run on the client vs server
 2. Compiles necessary Elixir code to JavaScript for browser execution
-3. Sets up all required client-server communication
+3. Ships only the code and protocol implementations your app can actually reach, keeping client bundles small
+4. Sets up all required client-server communication
+
+Protocol implementations are included by type reachability. A struct's implementations (e.g. `String.Chars`) ship to the browser when the compiler finds the struct type in client-reachable code, in server-executed `init` or command code, or in action broadcasting code - not merely because a dependency defines them. If a type is resolved dynamically at runtime (for example from a string or external data), reference its struct module anywhere in client-reachable code to include its implementations.
 
 #### Client-Side State
 

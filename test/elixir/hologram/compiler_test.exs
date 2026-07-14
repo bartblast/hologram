@@ -5,7 +5,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Context
   alias Hologram.Compiler.Digraph
+  alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
@@ -58,7 +60,7 @@ defmodule Hologram.CompilerTest do
     [
       call_graph: call_graph,
       ir_plt: ir_plt,
-      runtime_mfas: CallGraph.list_runtime_mfas(call_graph)
+      runtime_mfas: CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
     ]
   end
 
@@ -159,18 +161,39 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_page_js/5" do
+  describe "build_page_js/6" do
     setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
       call_graph_without_runtime_mfas =
         call_graph
         |> CallGraph.clone()
         |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
-      [call_graph: call_graph_without_runtime_mfas]
+      graph = CallGraph.get_graph(call_graph_without_runtime_mfas)
+      templatables = Reflection.list_pages() ++ Reflection.list_components()
+
+      server_callback_analysis_by_templatable =
+        CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
+      [
+        call_graph: call_graph_without_runtime_mfas,
+        server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+      ]
     end
 
-    test "has both Erlang and Elixir function defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module24, call_graph, ir_plt, MapSet.new(), @js_dir)
+    test "has both Erlang and Elixir function defs", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+    } do
+      result =
+        build_page_js(
+          Module24,
+          call_graph,
+          ir_plt,
+          MapSet.new(),
+          server_callback_analysis_by_templatable,
+          @js_dir
+        )
 
       js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -181,8 +204,20 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(result, js_fragment_3)
     end
 
-    test "has only Elixir defs", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module25, call_graph, ir_plt, MapSet.new(), @js_dir)
+    test "has only Elixir defs", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+    } do
+      result =
+        build_page_js(
+          Module25,
+          call_graph,
+          ir_plt,
+          MapSet.new(),
+          server_callback_analysis_by_templatable,
+          @js_dir
+        )
 
       js_fragment_1 = ~s/globalThis.Hologram.pageReachableFunctionDefs/
       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -193,15 +228,40 @@ defmodule Hologram.CompilerTest do
       refute String.contains?(result, js_fragment_3)
     end
 
-    test "no JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module11, call_graph, ir_plt, MapSet.new(), @js_dir)
+    test "no JS imports", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+    } do
+      result =
+        build_page_js(
+          Module11,
+          call_graph,
+          ir_plt,
+          MapSet.new(),
+          server_callback_analysis_by_templatable,
+          @js_dir
+        )
 
       refute String.contains?(result, "import {")
       refute String.contains?(result, "registerJsBindings")
     end
 
-    test "single JS import", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module19, call_graph, ir_plt, MapSet.new(), @js_dir)
+    test "single JS import", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+    } do
+      result =
+        build_page_js(
+          Module19,
+          call_graph,
+          ir_plt,
+          MapSet.new(),
+          server_callback_analysis_by_templatable,
+          @js_dir
+        )
+
       js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
 
       assert length(Regex.scan(~r/import \{/, result)) == 1
@@ -215,8 +275,21 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    test "multiple JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module21, call_graph, ir_plt, MapSet.new(), @js_dir)
+    test "multiple JS imports", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+    } do
+      result =
+        build_page_js(
+          Module21,
+          call_graph,
+          ir_plt,
+          MapSet.new(),
+          server_callback_analysis_by_templatable,
+          @js_dir
+        )
+
       js_fixture_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
 
       assert length(Regex.scan(~r/import \{/, result)) == 2
@@ -231,8 +304,21 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    test "multiple modules with JS imports", %{call_graph: call_graph, ir_plt: ir_plt} do
-      result = build_page_js(Module23, call_graph, ir_plt, MapSet.new(), @js_dir)
+    test "multiple modules with JS imports", %{
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      server_callback_analysis_by_templatable: server_callback_analysis_by_templatable
+    } do
+      result =
+        build_page_js(
+          Module23,
+          call_graph,
+          ir_plt,
+          MapSet.new(),
+          server_callback_analysis_by_templatable,
+          @js_dir
+        )
+
       js_fixture_1_path = Path.join([@fixtures_dir, "compiler", "js_fixture_1.mjs"])
       js_fixture_2_path = Path.join([@fixtures_dir, "compiler", "js_fixture_2.mjs"])
 
@@ -350,6 +436,18 @@ defmodule Hologram.CompilerTest do
              js,
              ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
            )
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("String.Chars", "to_string", 1, "public"/
+           )
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
+           )
+
+    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
 
     assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
 
@@ -1117,6 +1215,36 @@ defmodule Hologram.CompilerTest do
                ]
              }
            }
+  end
+
+  test "prune_module_def/2 prunes protocol dispatcher clauses to included implementations" do
+    reachable_mfas = [
+      {String.Chars, :impl_for, 1},
+      {String.Chars, :impl_for!, 1},
+      {String.Chars, :struct_impl_for, 1},
+      {String.Chars, :to_string, 1},
+      {String.Chars.Atom, :__impl__, 1},
+      {String.Chars.Atom, :to_string, 1},
+      {String.Chars.URI, :__impl__, 1},
+      {String.Chars.URI, :to_string, 1}
+    ]
+
+    js =
+      String.Chars
+      |> IR.for_module()
+      |> prune_module_def(reachable_mfas)
+      |> Encoder.encode_ir(%Context{module: String.Chars, async_mfas: MapSet.new()})
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("String.Chars", "impl_for!", 1, "public"/
+           )
+
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.Atom")/)
+    assert String.contains?(js, ~s/Type.atom("Elixir.String.Chars.URI")/)
+
+    refute String.contains?(js, "Elixir.String.Chars.Version")
+    refute String.contains?(js, "Hologram.Test.Fixtures.Compiler.CallGraph.Module12")
   end
 
   describe "validate_page_modules/1" do

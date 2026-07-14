@@ -63,29 +63,29 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">dump dir exists, dump file exists</td>
-    <td style="white-space: nowrap; text-align: right">22.04</td>
-    <td style="white-space: nowrap; text-align: right">45.38 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.96%</td>
-    <td style="white-space: nowrap; text-align: right">44.95 ms</td>
-    <td style="white-space: nowrap; text-align: right">67.85 ms</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">dump dir doesn't exists</td>
-    <td style="white-space: nowrap; text-align: right">21.93</td>
-    <td style="white-space: nowrap; text-align: right">45.60 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;6.56%</td>
-    <td style="white-space: nowrap; text-align: right">45.15 ms</td>
-    <td style="white-space: nowrap; text-align: right">68.75 ms</td>
+    <td style="white-space: nowrap; text-align: right">21.96</td>
+    <td style="white-space: nowrap; text-align: right">45.53 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.70%</td>
+    <td style="white-space: nowrap; text-align: right">44.92 ms</td>
+    <td style="white-space: nowrap; text-align: right">58.26 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">dump dir exists, dump file doesn't exist</td>
-    <td style="white-space: nowrap; text-align: right">21.76</td>
-    <td style="white-space: nowrap; text-align: right">45.95 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.31%</td>
-    <td style="white-space: nowrap; text-align: right">45.71 ms</td>
-    <td style="white-space: nowrap; text-align: right">58.50 ms</td>
+    <td style="white-space: nowrap; text-align: right">21.84</td>
+    <td style="white-space: nowrap; text-align: right">45.78 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.01%</td>
+    <td style="white-space: nowrap; text-align: right">45.60 ms</td>
+    <td style="white-space: nowrap; text-align: right">55.75 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">dump dir doesn't exists</td>
+    <td style="white-space: nowrap; text-align: right">21.80</td>
+    <td style="white-space: nowrap; text-align: right">45.88 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.55%</td>
+    <td style="white-space: nowrap; text-align: right">45.38 ms</td>
+    <td style="white-space: nowrap; text-align: right">60.87 ms</td>
   </tr>
 
 </table>
@@ -100,19 +100,19 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">dump dir exists, dump file exists</td>
-    <td style="white-space: nowrap;text-align: right">22.04</td>
+    <td style="white-space: nowrap;text-align: right">21.96</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">dump dir doesn't exists</td>
-    <td style="white-space: nowrap; text-align: right">21.93</td>
-    <td style="white-space: nowrap; text-align: right">1.0x</td>
+    <td style="white-space: nowrap">dump dir exists, dump file doesn't exist</td>
+    <td style="white-space: nowrap; text-align: right">21.84</td>
+    <td style="white-space: nowrap; text-align: right">1.01x</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">dump dir exists, dump file doesn't exist</td>
-    <td style="white-space: nowrap; text-align: right">21.76</td>
+    <td style="white-space: nowrap">dump dir doesn't exists</td>
+    <td style="white-space: nowrap; text-align: right">21.80</td>
     <td style="white-space: nowrap; text-align: right">1.01x</td>
   </tr>
 

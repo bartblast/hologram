@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">remove_manually_ported_mfas/1</td>
-    <td style="white-space: nowrap; text-align: right">1.11 M</td>
-    <td style="white-space: nowrap; text-align: right">901.73 ns</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;56.24%</td>
-    <td style="white-space: nowrap; text-align: right">750 ns</td>
-    <td style="white-space: nowrap; text-align: right">2528.14 ns</td>
+    <td style="white-space: nowrap; text-align: right">31.92</td>
+    <td style="white-space: nowrap; text-align: right">31.33 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.32%</td>
+    <td style="white-space: nowrap; text-align: right">31.22 ms</td>
+    <td style="white-space: nowrap; text-align: right">32.15 ms</td>
   </tr>
 
 </table>

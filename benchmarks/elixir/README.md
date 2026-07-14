@@ -1,12 +1,12 @@
 # Elixir Benchmarks
 
-Last run: 2026-07-04 11:37:20 UTC
+Last run: 2026-07-05 11:29:48 UTC
 
 ## Summary
 
-Total benchmarks: 30
+Total benchmarks: 34
 
-Successful: 30\
+Successful: 34\
 Warnings: 0\
 Failed: 0
 
@@ -16,7 +16,7 @@ Failed: 0
 
 ```
 Name             ips        average  deviation         median         99th %
-IR PLT          2.60      385.14 ms     ±4.47%      376.11 ms      433.83 ms
+IR PLT          2.54      393.93 ms     ±3.22%      390.90 ms      420.89 ms
 ```
 
 
@@ -24,7 +24,7 @@ IR PLT          2.60      385.14 ms     ±4.47%      376.11 ms      433.83 ms
 
 ```
 Name                         ips        average  deviation         median         99th %
-build_call_graph/1          4.08      245.15 ms     ±6.50%      241.12 ms      303.20 ms
+build_call_graph/1          3.86      259.15 ms     ±8.54%      257.50 ms      337.47 ms
 ```
 
 
@@ -32,7 +32,7 @@ build_call_graph/1          4.08      245.15 ms     ±6.50%      241.12 ms      
 
 ```
 Name                     ips        average  deviation         median         99th %
-build_ir_plt/0          2.14      466.58 ms     ±1.15%      465.52 ms      478.81 ms
+build_ir_plt/0          2.11      473.87 ms     ±1.43%      471.78 ms      490.38 ms
 ```
 
 
@@ -40,15 +40,15 @@ build_ir_plt/0          2.14      466.58 ms     ±1.15%      465.52 ms      478.
 
 ```
 Name                                 ips        average  deviation         median         99th %
-build_module_digest_plt!/0          4.30      232.66 ms     ±3.81%      232.27 ms      250.36 ms
+build_module_digest_plt!/0          4.11      243.05 ms     ±3.98%      244.90 ms      260.85 ms
 ```
 
 
-### ✅ compiler » build_page_js_5
+### ✅ compiler » build_page_js_6
 
 ```
 Name                      ips        average  deviation         median         99th %
-build_page_js/5        104.02        9.61 ms    ±17.36%       10.93 ms       11.76 ms
+build_page_js/6         70.82       14.12 ms    ±14.38%       14.67 ms       17.32 ms
 ```
 
 
@@ -56,7 +56,7 @@ build_page_js/5        104.02        9.61 ms    ±17.36%       10.93 ms       11
 
 ```
 Name               ips        average  deviation         median         99th %
-bundle/2          4.71      212.47 ms     ±3.36%      211.33 ms      240.36 ms
+bundle/2          4.59      218.01 ms     ±1.91%      217.77 ms      233.56 ms
 ```
 
 
@@ -64,7 +64,7 @@ bundle/2          4.71      212.47 ms     ±3.36%      211.33 ms      240.36 ms
 
 ```
 Name              ips        average  deviation         median         99th %
-clone/1         46.51       21.50 ms    ±12.69%       19.76 ms       26.00 ms
+clone/1         46.76       21.38 ms    ±15.40%       19.13 ms       26.67 ms
 ```
 
 
@@ -72,22 +72,30 @@ clone/1         46.51       21.50 ms    ±12.69%       19.76 ms       26.00 ms
 
 ```
 Name                                               ips        average  deviation         median         99th %
-dump dir exists, dump file exists                22.04       45.38 ms     ±5.96%       44.95 ms       67.85 ms
-dump dir doesn't exists                          21.93       45.60 ms     ±6.56%       45.15 ms       68.75 ms
-dump dir exists, dump file doesn't exist         21.76       45.95 ms     ±3.31%       45.71 ms       58.50 ms
+dump dir exists, dump file exists                21.96       45.53 ms     ±4.70%       44.92 ms       58.26 ms
+dump dir exists, dump file doesn't exist         21.84       45.78 ms     ±3.01%       45.60 ms       55.75 ms
+dump dir doesn't exists                          21.80       45.88 ms     ±4.55%       45.38 ms       60.87 ms
 
 Comparison: 
-dump dir exists, dump file exists                22.04
-dump dir doesn't exists                          21.93 - 1.00x slower +0.22 ms
-dump dir exists, dump file doesn't exist         21.76 - 1.01x slower +0.57 ms
+dump dir exists, dump file exists                21.96
+dump dir exists, dump file doesn't exist         21.84 - 1.01x slower +0.25 ms
+dump dir doesn't exists                          21.80 - 1.01x slower +0.34 ms
 ```
 
 
-### ✅ compiler » call_graph » list_runtime_mfas_1
+### ✅ compiler » call_graph » list_page_mfas_3
+
+```
+Name                       ips        average  deviation         median         99th %
+list_page_mfas/3         69.52       14.38 ms    ±22.22%       12.88 ms       20.19 ms
+```
+
+
+### ✅ compiler » call_graph » list_runtime_mfas_2
 
 ```
 Name                          ips        average  deviation         median         99th %
-list_runtime_mfas/1         62.88       15.90 ms    ±17.96%       14.43 ms       20.56 ms
+list_runtime_mfas/2         29.27       34.16 ms     ±8.20%       32.56 ms       40.07 ms
 ```
 
 
@@ -95,32 +103,32 @@ list_runtime_mfas/1         62.88       15.90 ms    ±17.96%       14.43 ms     
 
 ```
 Name                                         ips        average  deviation         median         99th %
-no module changes                      129032.75     0.00775 ms    ±20.30%     0.00729 ms      0.0153 ms
-1 module added                           2311.25        0.43 ms     ±6.60%        0.43 ms        0.49 ms
-1 module removed                           80.47       12.43 ms    ±25.31%       13.63 ms       16.05 ms
-1 module edited                            74.77       13.37 ms    ±31.34%       14.89 ms       17.45 ms
-1 added, 1 removed, 1 edited               67.03       14.92 ms    ±17.91%       15.01 ms       18.75 ms
-3 added, 3 removed, 3 edited               43.44       23.02 ms    ±14.21%       23.42 ms       27.42 ms
-10 added, 10 removed, 10 edited            22.85       43.76 ms     ±6.85%       43.98 ms       49.40 ms
-1% added, 1% removed, 1% edited            13.62       73.45 ms     ±6.04%       74.18 ms       82.63 ms
-100% modules added                          4.17      240.04 ms     ±3.68%      239.14 ms      254.60 ms
-100% modules removed                        0.72     1387.87 ms     ±0.65%     1387.13 ms     1398.38 ms
-33% added, 33% removed, 34% edited          0.63     1575.84 ms     ±2.95%     1566.98 ms     1643.63 ms
-100% modules edited                         0.28     3632.66 ms     ±0.31%     3634.82 ms     3642.58 ms
+no module changes                      134873.72     0.00741 ms    ±15.69%     0.00717 ms      0.0110 ms
+1 module added                           2228.84        0.45 ms     ±6.57%        0.44 ms        0.53 ms
+1 module removed                           64.72       15.45 ms    ±26.78%       16.61 ms       19.30 ms
+1 added, 1 removed, 1 edited               60.94       16.41 ms    ±24.42%       17.64 ms       21.32 ms
+1 module edited                            59.26       16.88 ms    ±23.42%       17.88 ms       21.07 ms
+3 added, 3 removed, 3 edited               39.26       25.47 ms    ±12.74%       25.84 ms       30.60 ms
+10 added, 10 removed, 10 edited            19.88       50.31 ms    ±16.17%       49.37 ms       87.29 ms
+1% added, 1% removed, 1% edited            12.83       77.92 ms     ±7.12%       79.42 ms       89.02 ms
+100% modules added                          4.18      239.34 ms     ±4.37%      240.10 ms      269.94 ms
+100% modules removed                        0.70     1431.30 ms     ±0.71%     1433.59 ms     1443.93 ms
+33% added, 33% removed, 34% edited          0.62     1608.84 ms     ±3.50%     1616.60 ms     1675.54 ms
+100% modules edited                         0.24     4118.13 ms     ±2.54%     4159.59 ms     4195.52 ms
 
 Comparison: 
-no module changes                      129032.75
-1 module added                           2311.25 - 55.83x slower +0.42 ms
-1 module removed                           80.47 - 1603.40x slower +12.42 ms
-1 module edited                            74.77 - 1725.73x slower +13.37 ms
-1 added, 1 removed, 1 edited               67.03 - 1924.98x slower +14.91 ms
-3 added, 3 removed, 3 edited               43.44 - 2970.50x slower +23.01 ms
-10 added, 10 removed, 10 edited            22.85 - 5646.12x slower +43.75 ms
-1% added, 1% removed, 1% edited            13.62 - 9477.09x slower +73.44 ms
-100% modules added                          4.17 - 30972.96x slower +240.03 ms
-100% modules removed                        0.72 - 179081.09x slower +1387.87 ms
-33% added, 33% removed, 34% edited          0.63 - 203334.56x slower +1575.83 ms
-100% modules edited                         0.28 - 468732.60x slower +3632.66 ms
+no module changes                      134873.72
+1 module added                           2228.84 - 60.51x slower +0.44 ms
+1 module removed                           64.72 - 2083.95x slower +15.44 ms
+1 added, 1 removed, 1 edited               60.94 - 2213.26x slower +16.40 ms
+1 module edited                            59.26 - 2276.14x slower +16.87 ms
+3 added, 3 removed, 3 edited               39.26 - 3435.16x slower +25.46 ms
+10 added, 10 removed, 10 edited            19.88 - 6785.82x slower +50.31 ms
+1% added, 1% removed, 1% edited            12.83 - 10509.10x slower +77.91 ms
+100% modules added                          4.18 - 32280.21x slower +239.33 ms
+100% modules removed                        0.70 - 193044.97x slower +1431.29 ms
+33% added, 33% removed, 34% edited          0.62 - 216989.93x slower +1608.83 ms
+100% modules edited                         0.24 - 555427.27x slower +4118.12 ms
 ```
 
 
@@ -128,7 +136,7 @@ no module changes                      129032.75
 
 ```
 Name                                    ips        average  deviation         median         99th %
-remove_manually_ported_mfas/1        1.11 M      901.73 ns    ±56.24%         750 ns     2528.14 ns
+remove_manually_ported_mfas/1         31.92       31.33 ms     ±1.32%       31.22 ms       32.15 ms
 ```
 
 
@@ -136,7 +144,7 @@ remove_manually_ported_mfas/1        1.11 M      901.73 ns    ±56.24%         7
 
 ```
 Name                             ips        average  deviation         median         99th %
-remove_runtime_mfas!/2       20.60 K       48.55 μs     ±3.77%       48.56 μs       57.03 μs
+remove_runtime_mfas!/2       73.88 K       13.54 μs     ±8.92%       13.33 μs       20.29 μs
 ```
 
 
@@ -144,20 +152,41 @@ remove_runtime_mfas!/2       20.60 K       48.55 μs     ±3.77%       48.56 μs
 
 ```
 Name                  ips        average  deviation         median         99th %
-2 vertices         1.60 M      626.35 ns    ±70.15%         584 ns     2492.86 ns
-4 vertices         1.15 M      867.02 ns    ±40.40%         792 ns     2063.68 ns
-8 vertices         1.02 M      981.95 ns    ±29.87%         958 ns     2266.12 ns
-16 vertices        0.79 M     1261.71 ns    ±29.81%        1250 ns     2858.90 ns
-32 vertices        0.48 M     2104.55 ns    ±85.52%        2041 ns     4288.16 ns
-1 vertex        0.00005 M 20805842.02 ns     ±1.44% 20644685.40 ns 21533733.30 ns
+2 vertices      1153.16 K        0.87 μs    ±47.37%        0.71 μs        2.77 μs
+1 vertex        1035.38 K        0.97 μs    ±45.55%        0.83 μs        2.63 μs
+4 vertices       856.69 K        1.17 μs    ±38.94%        1.04 μs        2.86 μs
+8 vertices       722.18 K        1.38 μs    ±66.46%        1.21 μs        3.17 μs
+16 vertices      621.99 K        1.61 μs    ±26.78%        1.50 μs        3.48 μs
+32 vertices      403.09 K        2.48 μs    ±17.96%        2.33 μs        4.49 μs
 
 Comparison: 
-2 vertices         1.60 M
-4 vertices         1.15 M - 1.38x slower +240.67 ns
-8 vertices         1.02 M - 1.57x slower +355.60 ns
-16 vertices        0.79 M - 2.01x slower +635.36 ns
-32 vertices        0.48 M - 3.36x slower +1478.20 ns
-1 vertex        0.00005 M - 33217.59x slower +20805215.67 ns
+2 vertices      1153.16 K
+1 vertex        1035.38 K - 1.11x slower +0.0986 μs
+4 vertices       856.69 K - 1.35x slower +0.30 μs
+8 vertices       722.18 K - 1.60x slower +0.52 μs
+16 vertices      621.99 K - 1.85x slower +0.74 μs
+32 vertices      403.09 K - 2.86x slower +1.61 μs
+```
+
+
+### ✅ compiler » call_graph » server_callback_analysis_by_templatable_2
+
+```
+Name                                                ips        average  deviation         median         99th %
+server_callback_analysis_by_templatable/2        7.59 K      131.78 μs    ±12.63%      129.33 μs      158.87 μs
+```
+
+
+### ✅ compiler » call_graph » server_protocol_dispatch_types_2
+
+```
+Name                       ips        average  deviation         median         99th %
+1 templatable           4.27 K      234.04 μs    ±13.34%      230.25 μs      292.67 μs
+all templatables        3.53 K      283.01 μs    ±14.04%      277.25 μs      354.29 μs
+
+Comparison: 
+1 templatable           4.27 K
+all templatables        3.53 K - 1.21x slower +48.96 μs
 ```
 
 
@@ -165,7 +194,7 @@ Comparison:
 
 ```
 Name                                ips        average  deviation         median         99th %
-create_page_entry_files/5          1.46      683.81 ms     ±0.40%      683.82 ms      689.59 ms
+create_page_entry_files/5          1.05      949.73 ms     ±2.89%      941.21 ms     1014.11 ms
 ```
 
 
@@ -173,7 +202,7 @@ create_page_entry_files/5          1.46      683.81 ms     ±0.40%      683.82 m
 
 ```
 Name                                  ips        average  deviation         median         99th %
-create_runtime_entry_file/4         11.10       90.06 ms     ±2.91%       90.24 ms       96.18 ms
+create_runtime_entry_file/4         26.28       38.05 ms    ±10.77%       37.67 ms       51.59 ms
 ```
 
 
@@ -181,32 +210,32 @@ create_runtime_entry_file/4         11.10       90.06 ms     ±2.91%       90.24
 
 ```
 Name                                         ips        average  deviation         median         99th %
-100% modules removed                      4.47 K      223.68 μs     ±5.25%      221.58 μs      255.12 μs
-100% modules added                        3.70 K      270.58 μs     ±7.89%      259.67 μs      364.17 μs
-33% added, 33% removed, 34% edited        2.74 K      364.83 μs     ±8.52%      363.37 μs      461.17 μs
-1 module added                            1.82 K      548.79 μs     ±3.62%      543.08 μs      628.12 μs
-3 added, 3 removed, 3 edited              1.82 K      549.45 μs     ±3.71%      542.79 μs      621.58 μs
-1% added, 1% removed, 1% edited           1.79 K      558.91 μs     ±4.50%      559.46 μs      644.04 μs
-1 added, 1 removed, 1 edited              1.77 K      564.61 μs     ±2.96%      563.88 μs      623.16 μs
-no module changes                         1.77 K      565.23 μs     ±2.85%      564.41 μs      623.05 μs
-1 module removed                          1.77 K      566.57 μs     ±3.24%      565.13 μs      635.20 μs
-1 module edited                           1.76 K      566.71 μs     ±2.94%      565.75 μs      626.86 μs
-10 added, 10 removed, 10 edited           1.75 K      571.36 μs     ±5.43%      564.25 μs      657.75 μs
-100% modules edited                       1.73 K      578.33 μs     ±6.18%      564.67 μs      712.67 μs
+100% modules removed                      4.38 K      228.42 μs     ±4.93%      226.46 μs      260.13 μs
+100% modules added                        3.45 K      289.46 μs    ±39.02%      268.33 μs      443.12 μs
+33% added, 33% removed, 34% edited        2.65 K      377.79 μs     ±8.42%      373.96 μs      488.15 μs
+10 added, 10 removed, 10 edited           1.71 K      584.17 μs     ±3.88%      579.66 μs      670.54 μs
+no module changes                         1.70 K      588.18 μs     ±3.17%      585.55 μs      649.35 μs
+3 added, 3 removed, 3 edited              1.69 K      593.18 μs     ±4.06%      590.17 μs      680.46 μs
+100% modules edited                       1.67 K      597.66 μs     ±8.51%      582.17 μs      758.03 μs
+1% added, 1% removed, 1% edited           1.66 K      602.28 μs     ±6.15%      585.92 μs      725.35 μs
+1 added, 1 removed, 1 edited              1.62 K      618.24 μs    ±12.12%      611.63 μs      794.26 μs
+1 module added                            1.62 K      618.56 μs     ±6.44%      609.21 μs      751.41 μs
+1 module edited                           1.60 K      625.70 μs    ±19.66%      615.75 μs      743.88 μs
+1 module removed                          1.59 K      627.23 μs     ±7.44%      618.17 μs      780.64 μs
 
 Comparison: 
-100% modules removed                      4.47 K
-100% modules added                        3.70 K - 1.21x slower +46.89 μs
-33% added, 33% removed, 34% edited        2.74 K - 1.63x slower +141.15 μs
-1 module added                            1.82 K - 2.45x slower +325.11 μs
-3 added, 3 removed, 3 edited              1.82 K - 2.46x slower +325.76 μs
-1% added, 1% removed, 1% edited           1.79 K - 2.50x slower +335.23 μs
-1 added, 1 removed, 1 edited              1.77 K - 2.52x slower +340.93 μs
-no module changes                         1.77 K - 2.53x slower +341.54 μs
-1 module removed                          1.77 K - 2.53x slower +342.88 μs
-1 module edited                           1.76 K - 2.53x slower +343.02 μs
-10 added, 10 removed, 10 edited           1.75 K - 2.55x slower +347.68 μs
-100% modules edited                       1.73 K - 2.59x slower +354.65 μs
+100% modules removed                      4.38 K
+100% modules added                        3.45 K - 1.27x slower +61.05 μs
+33% added, 33% removed, 34% edited        2.65 K - 1.65x slower +149.37 μs
+10 added, 10 removed, 10 edited           1.71 K - 2.56x slower +355.76 μs
+no module changes                         1.70 K - 2.58x slower +359.76 μs
+3 added, 3 removed, 3 edited              1.69 K - 2.60x slower +364.76 μs
+100% modules edited                       1.67 K - 2.62x slower +369.25 μs
+1% added, 1% removed, 1% edited           1.66 K - 2.64x slower +373.86 μs
+1 added, 1 removed, 1 edited              1.62 K - 2.71x slower +389.82 μs
+1 module added                            1.62 K - 2.71x slower +390.14 μs
+1 module edited                           1.60 K - 2.74x slower +397.28 μs
+1 module removed                          1.59 K - 2.75x slower +398.82 μs
 ```
 
 
@@ -214,12 +243,12 @@ no module changes                         1.77 K - 2.53x slower +341.54 μs
 
 ```
 Name                 ips        average  deviation         median         99th %
-no install        7.89 K      0.00013 s    ±25.41%      0.00012 s      0.00027 s
-do install     0.00010 K         9.87 s     ±0.00%         9.87 s         9.87 s
+no install        8.11 K      0.00012 s    ±22.19%      0.00013 s      0.00021 s
+do install     0.00011 K         9.40 s    ±12.37%         9.40 s        10.22 s
 
 Comparison: 
-no install        7.89 K
-do install     0.00010 K - 77876.59x slower +9.87 s
+no install        8.11 K
+do install     0.00011 K - 76151.71x slower +9.40 s
 ```
 
 
@@ -227,12 +256,12 @@ do install     0.00010 K - 77876.59x slower +9.87 s
 
 ```
 Name              ips        average  deviation         median         99th %
-no load      198.07 K     0.00505 ms   ±133.47%     0.00475 ms     0.00938 ms
-do load      0.0137 K       72.87 ms     ±1.62%       72.40 ms       77.47 ms
+no load      178.71 K     0.00560 ms   ±469.89%     0.00483 ms      0.0138 ms
+do load      0.0119 K       83.75 ms     ±2.20%       83.81 ms       89.06 ms
 
 Comparison: 
-no load      198.07 K
-do load      0.0137 K - 14432.57x slower +72.86 ms
+no load      178.71 K
+do load      0.0119 K - 14967.81x slower +83.75 ms
 ```
 
 
@@ -240,12 +269,12 @@ do load      0.0137 K - 14432.57x slower +72.86 ms
 
 ```
 Name              ips        average  deviation         median         99th %
-no load      104.51 K     0.00957 ms    ±51.28%     0.00925 ms      0.0144 ms
-do load     0.00198 K      505.68 ms     ±1.23%      502.99 ms      519.03 ms
+no load      108.48 K     0.00922 ms    ±61.68%     0.00879 ms      0.0155 ms
+do load     0.00189 K      529.68 ms     ±2.43%      523.88 ms      559.45 ms
 
 Comparison: 
-no load      104.51 K
-do load     0.00198 K - 52847.49x slower +505.67 ms
+no load      108.48 K
+do load     0.00189 K - 57460.24x slower +529.67 ms
 ```
 
 
@@ -253,12 +282,12 @@ do load     0.00198 K - 52847.49x slower +505.67 ms
 
 ```
 Name              ips        average  deviation         median         99th %
-no load      103.18 K        9.69 μs    ±53.82%        9.38 μs       14.54 μs
-do load        2.14 K      466.93 μs     ±3.27%      467.50 μs      513.04 μs
+no load      106.22 K        9.41 μs    ±65.54%        8.96 μs       16.17 μs
+do load        2.04 K      490.99 μs     ±8.28%      484.08 μs      673.91 μs
 
 Comparison: 
-no load      103.18 K
-do load        2.14 K - 48.18x slower +457.23 μs
+no load      106.22 K
+do load        2.04 K - 52.15x slower +481.57 μs
 ```
 
 
@@ -266,7 +295,7 @@ do load        2.14 K - 48.18x slower +457.23 μs
 
 ```
 Name                              ips        average  deviation         median         99th %
-validate_page_modules/1      124.62 K        8.02 μs    ±82.26%        7.96 μs        8.88 μs
+validate_page_modules/1      120.03 K        8.33 μs    ±76.52%        8.25 μs        9.04 μs
 ```
 
 
@@ -274,12 +303,12 @@ validate_page_modules/1      124.62 K        8.02 μs    ±82.26%        7.96 μ
 
 ```
 Name                ips        average  deviation         median         99th %
-has cache       49.54 K       20.19 μs    ±35.07%       18.54 μs       43.27 μs
-no cache        30.15 K       33.17 μs    ±21.68%       31.21 μs       54.12 μs
+has cache       40.40 K       24.76 μs    ±59.81%       20.25 μs       87.83 μs
+no cache        29.13 K       34.33 μs    ±28.31%       31.63 μs       60.15 μs
 
 Comparison: 
-has cache       49.54 K
-no cache        30.15 K - 1.64x slower +12.98 μs
+has cache       40.40 K
+no cache        29.13 K - 1.39x slower +9.58 μs
 ```
 
 
@@ -287,16 +316,16 @@ no cache        30.15 K - 1.64x slower +12.98 μs
 
 ```
 Name                       ips        average  deviation         median         99th %
-is not atom            29.81 M       33.55 ns    ±57.90%          42 ns          42 ns
-is atom                12.35 M       80.95 ns  ±9719.36%          42 ns          84 ns
-is Erlang module       11.27 M       88.70 ns  ±9103.90%          42 ns         167 ns
-is Elixir module        9.38 M      106.62 ns  ±6272.66%          83 ns         125 ns
+is not atom           167.43 M        5.97 ns  ±5481.69%        4.20 ns        8.40 ns
+is atom                12.26 M       81.57 ns  ±9576.14%          42 ns          84 ns
+is Erlang module       11.97 M       83.52 ns  ±9762.90%          42 ns          84 ns
+is Elixir module        9.23 M      108.37 ns  ±6252.78%          83 ns         125 ns
 
 Comparison: 
-is not atom            29.81 M
-is atom                12.35 M - 2.41x slower +47.41 ns
-is Erlang module       11.27 M - 2.64x slower +55.15 ns
-is Elixir module        9.38 M - 3.18x slower +73.07 ns
+is not atom           167.43 M
+is atom                12.26 M - 13.66x slower +75.60 ns
+is Erlang module       11.97 M - 13.98x slower +77.55 ns
+is Elixir module        9.23 M - 18.14x slower +102.40 ns
 ```
 
 
@@ -304,16 +333,16 @@ is Elixir module        9.38 M - 3.18x slower +73.07 ns
 
 ```
 Name                       ips        average  deviation         median         99th %
-is not atom           173.21 M        5.77 ns  ±4811.92%        4.20 ns        8.40 ns
-is Elixir module       17.24 M       58.02 ns  ±7452.04%          42 ns          84 ns
-is Erlang module       16.27 M       61.47 ns  ±7168.22%          42 ns          84 ns
-is atom               0.0801 M    12476.72 ns    ±45.09%       12250 ns       17666 ns
+is not atom           161.16 M        6.21 ns  ±4643.90%        4.20 ns        8.40 ns
+is Elixir module       16.45 M       60.80 ns  ±6920.87%          42 ns          84 ns
+is Erlang module       15.65 M       63.89 ns  ±6310.69%          42 ns          84 ns
+is atom               0.0721 M    13861.22 ns    ±51.99%       13166 ns       21209 ns
 
 Comparison: 
-is not atom           173.21 M
-is Elixir module       17.24 M - 10.05x slower +52.25 ns
-is Erlang module       16.27 M - 10.65x slower +55.70 ns
-is atom               0.0801 M - 2161.10x slower +12470.94 ns
+is not atom           161.16 M
+is Elixir module       16.45 M - 9.80x slower +54.60 ns
+is Erlang module       15.65 M - 10.30x slower +57.68 ns
+is atom               0.0721 M - 2233.84x slower +13855.02 ns
 ```
 
 
@@ -321,7 +350,7 @@ is atom               0.0801 M - 2161.10x slower +12470.94 ns
 
 ```
 Name                      ips        average  deviation         median         99th %
-has_function?/3       15.72 M       63.63 ns  ±9807.15%          42 ns          84 ns
+has_function?/3       15.48 M       64.60 ns  ±9222.34%          42 ns          84 ns
 ```
 
 
@@ -329,7 +358,15 @@ has_function?/3       15.72 M       63.63 ns  ±9807.15%          42 ns         
 
 ```
 Name                    ips        average  deviation         median         99th %
-has_struct?/1       12.38 M       80.75 ns  ±5641.20%          83 ns          84 ns
+has_struct?/1       12.50 M       79.99 ns  ±5484.05%          83 ns          84 ns
+```
+
+
+### ✅ reflection » list_components_0
+
+```
+Name                        ips        average  deviation         median         99th %
+list_components/0         52.34       19.10 ms     ±6.92%       19.23 ms       21.79 ms
 ```
 
 
@@ -337,7 +374,7 @@ has_struct?/1       12.38 M       80.75 ns  ±5641.20%          83 ns          8
 
 ```
 Name                            ips        average  deviation         median         99th %
-list_elixir_modules/0         54.62       18.31 ms     ±7.64%       18.80 ms       20.66 ms
+list_elixir_modules/0         52.85       18.92 ms     ±6.79%       18.75 ms       21.74 ms
 ```
 
 
@@ -345,7 +382,7 @@ list_elixir_modules/0         54.62       18.31 ms     ±7.64%       18.80 ms   
 
 ```
 Name                   ips        average  deviation         median         99th %
-list_pages/0         53.62       18.65 ms     ±6.78%       18.90 ms       21.13 ms
+list_pages/0         52.73       18.96 ms     ±7.65%       18.37 ms       21.73 ms
 ```
 
 
@@ -353,7 +390,7 @@ list_pages/0         53.62       18.65 ms     ±6.78%       18.90 ms       21.13
 
 ```
 Name                                      ips        average  deviation         median         99th %
-list_protocol_implementations/1        255.47        3.91 ms     ±3.46%        3.89 ms        4.55 ms
+list_protocol_implementations/1        238.67        4.19 ms     ±5.38%        4.13 ms        5.09 ms
 ```
 
 
@@ -361,15 +398,15 @@ list_protocol_implementations/1        255.47        3.91 ms     ±3.46%        
 
 ```
 Name                       ips        average  deviation         median         99th %
-is not atom           276.41 M        3.62 ns   ±163.15%        3.58 ns        3.75 ns
-is Elixir module       22.61 M       44.22 ns  ±1792.83%          42 ns          42 ns
-is Erlang module       22.46 M       44.53 ns  ±1796.78%          42 ns          42 ns
-is atom               0.0789 M    12681.77 ns    ±45.69%       12459 ns       18250 ns
+is not atom            27.55 M       36.30 ns    ±63.54%          42 ns          42 ns
+is Elixir module       22.08 M       45.29 ns  ±1827.01%          42 ns          42 ns
+is Erlang module       22.02 M       45.41 ns  ±1833.99%          42 ns          42 ns
+is atom               0.0751 M    13315.43 ns    ±52.14%       12750 ns       20291 ns
 
 Comparison: 
-is not atom           276.41 M
-is Elixir module       22.61 M - 12.22x slower +40.60 ns
-is Erlang module       22.46 M - 12.31x slower +40.91 ns
-is atom               0.0789 M - 3505.40x slower +12678.15 ns
+is not atom            27.55 M
+is Elixir module       22.08 M - 1.25x slower +8.99 ns
+is Erlang module       22.02 M - 1.25x slower +9.11 ns
+is atom               0.0751 M - 366.84x slower +13279.13 ns
 ```
 
