@@ -9,11 +9,13 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
+  alias Hologram.Realtime
   alias Hologram.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module12
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module13
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module14
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module15
@@ -43,15 +45,27 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module7
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
   @tmp_dir Reflection.tmp_dir()
 
+  defp list_page_mfas_with_analysis(call_graph, page_module) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = [page_module | Reflection.list_components()]
+
+    server_callback_analysis_by_templatable =
+      server_callback_analysis_by_templatable(graph, templatables)
+
+    list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
+  end
+
   setup_all do
     ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt)
-    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph)
+    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph, Reflection.list_pages())
 
     [
       full_call_graph: full_call_graph,
@@ -104,8 +118,94 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Digraph.vertices(graph) == [:vertex_3]
   end
 
+  describe "app_protocol_dispatch_types/2" do
+    test "includes types reachable from page client code" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :template, 0}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+    end
+
+    test "includes types created in server-executed code of pages" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :init, 3}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+    end
+
+    test "includes types created in server-executed code of components used by pages" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :template, 0}, {Module4, :template, 0})
+        |> Digraph.add_edge({Module4, :init, 3}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+    end
+
+    test "includes types reachable from broadcast callers" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module13, :my_fun, 0}, Struct1)
+
+      assert Struct1 in app_protocol_dispatch_types(graph, Reflection.list_pages())
+    end
+
+    test "returns only built-in types for a graph without app type references" do
+      graph = Digraph.add_edge(Digraph.new(), {Module13, :my_fun, 0}, {Module5, :my_fun, 0})
+
+      assert app_protocol_dispatch_types(graph, Reflection.list_pages()) ==
+               protocol_dispatch_types([])
+    end
+  end
+
+  describe "broadcast_caller_protocol_dispatch_types/1" do
+    test "includes struct types reachable from broadcast_action callers" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 2})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
+        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module6, :my_fun, 0}, {Module7, :my_fun, 0})
+        |> Digraph.add_edge({Module7, :my_fun, 0}, Module12)
+
+      result = broadcast_caller_protocol_dispatch_types(graph)
+
+      assert Struct1 in result
+      assert Module12 in result
+    end
+
+    test "includes struct types reachable from broadcast_action_except callers" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action_except, 3})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
+        |> Digraph.add_edge({Module6, :my_fun, 0}, {Realtime, :broadcast_action_except, 4})
+        |> Digraph.add_edge({Module6, :my_fun, 0}, Module12)
+
+      result = broadcast_caller_protocol_dispatch_types(graph)
+
+      assert Struct1 in result
+      assert Module12 in result
+    end
+
+    test "returns only built-in types when there are no broadcast callers" do
+      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
+
+      assert broadcast_caller_protocol_dispatch_types(graph) == protocol_dispatch_types([])
+    end
+
+    test "doesn't traverse through protocol function vertices" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
+
+      refute Struct1 in broadcast_caller_protocol_dispatch_types(graph)
+    end
+  end
+
   describe "build/3" do
-    test "atom type ir, which is not an alias", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is not an alias", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
       result = build(call_graph, ir, :vertex_1)
 
@@ -115,7 +215,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == []
     end
 
-    test "atom type ir, which as an alias of a non-existing module", %{
+    test "atom type IR, which as an alias of a non-existing module", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Aaa.Bbb}
@@ -127,7 +227,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == [{:vertex_1, Aaa.Bbb}]
     end
 
-    test "atom type ir, which is an alias of an existing non-templatable module", %{
+    test "atom type IR, which is an alias of an existing non-templatable module", %{
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
@@ -139,7 +239,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == [{:vertex_1, Module1}]
     end
 
-    test "atom type ir, which is an alias of a page module", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is an alias of a page module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
       result = build(call_graph, ir, :vertex_1)
 
@@ -149,7 +249,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{:vertex_1, Module2}]
     end
 
-    test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is an alias of a layout module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
       result = build(call_graph, ir, :vertex_1)
 
@@ -159,7 +259,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{:vertex_1, Module3}]
     end
 
-    test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
+    test "atom type IR, which is an alias of a component module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
       result = build(call_graph, ir, :vertex_1)
 
@@ -169,7 +269,90 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == [{:vertex_1, Module4}]
     end
 
-    test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
+    test "atom type IR in __impl__/1 of a protocol implementation module", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars.URI, :__impl__, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in __protocol__/1 of a protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :__protocol__, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in impl_for/1 of a protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :impl_for, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in impl_for!/1 of a protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :impl_for!, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in struct_impl_for/1 of a protocol module", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      result = build(call_graph, ir, {String.Chars, :struct_impl_for, 1})
+
+      assert result == call_graph
+      assert vertices(call_graph) == []
+      assert edges(call_graph) == []
+    end
+
+    test "atom type IR in __impl__/1 of a module that is not a protocol implementation", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      from_vertex = {Module5, :__impl__, 1}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+      assert sorted_vertices(call_graph) == [Module1, from_vertex]
+      assert sorted_edges(call_graph) == [{from_vertex, Module1}]
+    end
+
+    test "atom type IR in a protocol function that is not generated dispatch metadata", %{
+      empty_call_graph: call_graph
+    } do
+      ir = %IR.AtomType{value: Module1}
+      from_vertex = {String.Chars, :to_string, 1}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+      assert sorted_vertices(call_graph) == [Module1, from_vertex]
+      assert sorted_edges(call_graph) == [{from_vertex, Module1}]
+    end
+
+    test "atom type IR in impl_for/1 of a non-protocol module", %{empty_call_graph: call_graph} do
+      ir = %IR.AtomType{value: Module1}
+      from_vertex = {Module5, :impl_for, 1}
+      result = build(call_graph, ir, from_vertex)
+
+      assert result == call_graph
+      assert sorted_vertices(call_graph) == [Module1, from_vertex]
+      assert sorted_edges(call_graph) == [{from_vertex, Module1}]
+    end
+
+    test "function definition IR, with outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
         arity: 2,
@@ -204,7 +387,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, without outbound vertices", %{empty_call_graph: call_graph} do
+    test "function definition IR, without outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
         arity: 2,
@@ -242,7 +425,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "local function call ir", %{empty_call_graph: call_graph} do
+    test "local function call IR", %{empty_call_graph: call_graph} do
       ir = %IR.LocalFunctionCall{
         function: :my_fun_2,
         args: [
@@ -292,7 +475,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir, regular module", %{empty_call_graph: call_graph} do
+    test "module definition IR, regular module", %{empty_call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
         module: %IR.AtomType{value: Module1},
         body: %IR.Block{
@@ -319,7 +502,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir, page module adds page-specific edges", %{
+    test "module definition IR, page module adds page-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_2_ir = IR.for_module(Module2)
@@ -334,7 +517,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module2, {Module2, :__route__, 0})
     end
 
-    test "module definition ir, component module adds component-specific edges", %{
+    test "module definition IR, component module adds component-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_4_ir = IR.for_module(Module4)
@@ -353,7 +536,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module4, {Module4, :template, 0})
     end
 
-    test "module definition ir, struct module adds struct-specific edges", %{
+    test "module definition IR, struct module adds struct-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_25_ir = IR.for_module(Module25)
@@ -368,7 +551,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module25, {Module25, :__struct__, 1})
     end
 
-    test "module definition ir, Ecto schema module adds Ecto schema-specific edges", %{
+    test "module definition IR, Ecto schema module adds Ecto schema-specific edges", %{
       empty_call_graph: call_graph
     } do
       module_21_ir = IR.for_module(Module21)
@@ -385,7 +568,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module21, {Module21, :__schema__, 2})
     end
 
-    test "module definition ir, protocol module adds protocol-specific edges", %{
+    test "module definition IR, protocol module adds protocol-specific edges", %{
       empty_call_graph: call_graph
     } do
       string_chars_ir = IR.for_module(String.Chars)
@@ -411,7 +594,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              )
     end
 
-    test "remote function call ir, module field as an atom", %{empty_call_graph: call_graph} do
+    test "remote function call IR, module field as an atom", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Module5},
         function: :my_fun_2,
@@ -442,7 +625,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "remote function call ir, module field is a variable", %{empty_call_graph: call_graph} do
+    test "remote function call IR, module field is a variable", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.Variable{name: :my_var},
         function: :my_fun_2,
@@ -806,13 +989,13 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
-  describe "list_page_mfas/2" do
+  describe "list_page_mfas/3" do
     setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
       page_module_22_mfas =
         full_call_graph
         |> CallGraph.clone()
         |> remove_runtime_mfas!(runtime_mfas)
-        |> list_page_mfas(Module22)
+        |> list_page_mfas_with_analysis(Module22)
 
       [page_module_22_mfas: page_module_22_mfas]
     end
@@ -827,7 +1010,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> build(module_14_ir)
         |> build(module_15_ir)
         |> build(module_16_ir)
-        |> list_page_mfas(Module14)
+        |> list_page_mfas_with_analysis(Module14)
 
       assert result == [
                {Enum, :reverse, 1},
@@ -857,7 +1040,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :action, 3}, {Hex, :start, 2})
         |> add_edge({Module17, :action, 3}, {Hex, :version, 0})
 
-      result = list_page_mfas(call_graph, Module17)
+      result = list_page_mfas_with_analysis(call_graph, Module17)
 
       assert {Module18, :my_fun_18, 2} in result
 
@@ -874,7 +1057,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> add_edge({Module17, :action, 3}, {Hex.API, :request, 4})
         |> add_edge({Module17, :action, 3}, {Hex.Registry.Server, :versions, 2})
 
-      result = list_page_mfas(call_graph, Module17)
+      result = list_page_mfas_with_analysis(call_graph, Module17)
 
       assert {Module18, :my_fun_18, 2} in result
 
@@ -888,7 +1071,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       result =
         start()
         |> build(module_17_ir)
-        |> list_page_mfas(Module17)
+        |> list_page_mfas_with_analysis(Module17)
 
       assert {Module18, :my_fun_18, 2} in result
 
@@ -903,6 +1086,97 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
+    end
+
+    test "excludes protocol implementations whose concrete type is not reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> list_page_mfas_with_analysis(Module17)
+
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose concrete type is reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :template, 0}, {Module12, :__struct__, 1})
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose type is created only in server init", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :init, 3}, Module12)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose type is created only in commands", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :command, 3}, Module12)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations unlocked transitively by server-created types", %{
+      full_call_graph: full_call_graph
+    } do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      # Struct1 is created only in server init, its Protocol1 implementation code
+      # creates Module12, and Module12's String.Chars implementation must follow
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module17, :template, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module17, :init, 3}, Struct1)
+        |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
+        |> list_page_mfas_with_analysis(Module17)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "excludes MFAs reachable only from server-executed code", %{
+      full_call_graph: full_call_graph
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, {Module13, :my_fun, 0})
+        |> add_edge({Module17, :command, 3}, {Module13, :my_fun, 0})
+        |> list_page_mfas_with_analysis(Module17)
+
+      refute {Module13, :my_fun, 0} in result
     end
 
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
@@ -978,9 +1252,9 @@ defmodule Hologram.Compiler.CallGraphTest do
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end
 
-  describe "list_runtime_mfas/1" do
+  describe "list_runtime_mfas/2" do
     setup %{full_call_graph: call_graph} do
-      [runtime_mfas: list_runtime_mfas(call_graph)]
+      [runtime_mfas: list_runtime_mfas(call_graph, Reflection.list_pages())]
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
@@ -1004,7 +1278,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
       |> add_edge({Enum, :into, 2}, {:non_existing_module_fixture, :dummy_function_4, 4})
 
-      result = list_runtime_mfas(call_graph_clone)
+      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
 
       assert {Calendar.ISO, :dummy_function_1, 1} in result
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
@@ -1019,7 +1293,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex, :start, 2})
       |> add_edge({Enum, :into, 2}, {Hex, :version, 0})
 
-      result = list_runtime_mfas(call_graph_clone)
+      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
 
       assert {Enum, :into, 2} in result
 
@@ -1034,7 +1308,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       |> add_edge({Enum, :into, 2}, {Hex.API, :request, 4})
       |> add_edge({Enum, :into, 2}, {Hex.Registry.Server, :versions, 2})
 
-      result = list_runtime_mfas(call_graph_clone)
+      result = list_runtime_mfas(call_graph_clone, Reflection.list_pages())
 
       assert {Enum, :into, 2} in result
 
@@ -1056,6 +1330,89 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
+    end
+
+    test "excludes protocol implementations whose concrete type is not runtime reachable", %{
+      runtime_mfas: result
+    } do
+      refute {StringCharsModule12, :__impl__, 1} in result
+      refute {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol dispatch helpers used by generic protocol functions", %{
+      runtime_mfas: result
+    } do
+      assert {String.Chars, :to_string, 1} in result
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
+    test "includes protocol implementations whose type is used only by a page", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :template, 0}, Module12)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose type is created only in a page's server init",
+         %{
+           full_call_graph: call_graph
+         } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module17, :init, 3}, Module12)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+    end
+
+    test "includes protocol implementations whose type is reachable from broadcast callers", %{
+      full_call_graph: call_graph
+    } do
+      result =
+        call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module13, :my_fun, 0}, {Realtime, :broadcast_action, 3})
+        |> add_edge({Module13, :my_fun, 0}, Module12)
+        |> list_runtime_mfas(Reflection.list_pages())
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
+
+      refute {Module13, :my_fun, 0} in result
+    end
+
+    # Guards the type-bounded implementation inclusion in both directions: missing
+    # built-in type implementations would break rendering of primitives on every page,
+    # while any extra entry means implementations of unreachable types (and their
+    # dependency subtrees) are getting pulled into the runtime bundle again.
+    test "includes exactly the built-in type implementations of String.Chars", %{
+      runtime_mfas: result
+    } do
+      string_chars_impls =
+        result
+        |> Enum.map(fn {module, _function, _arity} -> module end)
+        |> Enum.uniq()
+        |> Enum.filter(&(Reflection.protocol_implementation(&1) == String.Chars))
+        |> Enum.sort()
+
+      assert string_chars_impls == [
+               String.Chars.Atom,
+               String.Chars.BitString,
+               String.Chars.Float,
+               String.Chars.Integer,
+               String.Chars.List
+             ]
     end
 
     test "results are deduped", %{runtime_mfas: result} do
@@ -1303,6 +1660,80 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  describe "protocol_dispatch_dependency_vertices/2" do
+    test "retains dispatch helpers of reached protocol functions", %{
+      full_call_graph: call_graph
+    } do
+      graph = get_graph(call_graph)
+      result = protocol_dispatch_dependency_vertices(graph, [{String.Chars, :to_string, 1}])
+
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
+    test "doesn't pull protocol implementations", %{full_call_graph: call_graph} do
+      graph = get_graph(call_graph)
+      result = protocol_dispatch_dependency_vertices(graph, [{String.Chars, :to_string, 1}])
+
+      refute {StringCharsModule12, :to_string, 1} in result
+      refute {String.Chars.URI, :to_string, 1} in result
+    end
+
+    test "returns empty list when no protocol function vertices are given", %{
+      full_call_graph: call_graph
+    } do
+      graph = get_graph(call_graph)
+
+      assert protocol_dispatch_dependency_vertices(graph, [{Module5, :my_fun, 0}]) == []
+    end
+  end
+
+  describe "protocol_dispatch_types/1" do
+    test "includes built-in protocol dispatch types" do
+      assert protocol_dispatch_types([]) ==
+               MapSet.new([
+                 Any,
+                 Atom,
+                 BitString,
+                 Float,
+                 Function,
+                 Integer,
+                 List,
+                 Map,
+                 PID,
+                 Port,
+                 Reference,
+                 Tuple
+               ])
+    end
+
+    test "includes struct modules among module vertices" do
+      assert Struct1 in protocol_dispatch_types([Struct1])
+    end
+
+    test "excludes non-struct modules among module vertices" do
+      refute Module1 in protocol_dispatch_types([Module1])
+    end
+
+    test "excludes non-alias atom vertices" do
+      refute :abc in protocol_dispatch_types([:abc])
+    end
+
+    test "includes modules of __struct__/0 MFAs" do
+      assert Struct1 in protocol_dispatch_types([{Struct1, :__struct__, 0}])
+    end
+
+    test "includes modules of __struct__/1 MFAs" do
+      assert Struct1 in protocol_dispatch_types([{Struct1, :__struct__, 1}])
+    end
+
+    test "excludes modules of MFAs other than __struct__/0 and __struct__/1" do
+      refute Struct1 in protocol_dispatch_types([{Struct1, :my_fun, 1}])
+    end
+  end
+
   test "put_graph", %{empty_call_graph: call_graph} do
     graph = Digraph.add_edge(Digraph.new(), :vertex_3, :vertex_4)
 
@@ -1310,67 +1741,138 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph) == graph
   end
 
-  describe "reachable_mfas/2" do
-    setup do
-      # 1
-      # ├─ {Module2, :f2, 2}
-      # │  ├─ 4
-      # │  │  ├─ {Module8, :f8, 8}
-      # │  │  ├─ 9
-      # │  ├─ {Module5, :f5, 5}
-      # │  │  ├─ 10
-      # │  │  ├─ 11
-      # ├─ {Module3, :f3, 3}
-      # │  ├─ 6
-      # │  │  ├─ {Module11, :f12, 12}
-      # │  │  ├─ 13
-      # │  ├─ {Module7, :f7, 7}
-      # │  │  ├─ 14
-      # │  │  ├─ {Module15, :f15, 15}
-      # |  |  |- {Collectable.Atom, :fca, 123}
+  describe "reachable_mfas/3" do
+    test "includes implementations for built-in types when their protocol is reached", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {Protocol1, :my_fun, 1} in result
+      assert {Protocol1.Integer, :__impl__, 1} in result
+      assert {Protocol1.Integer, :my_fun, 1} in result
+    end
+
+    test "excludes implementations whose struct type is not reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      refute {struct_1_impl, :__impl__, 1} in result
+      refute {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations whose struct type is reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "includes implementations whose struct type is in the extra types", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> get_graph()
+
+      extra_types = MapSet.new([Struct1])
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}], extra_types)
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
+
+      assert {struct_1_impl, :__impl__, 1} in result
+      assert {struct_1_impl, :my_fun, 1} in result
+    end
+
+    test "reaches fixpoint when implementation code makes further types reachable", %{
+      full_call_graph: full_call_graph
+    } do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
       graph =
-        Digraph.new()
-        |> Digraph.add_edge(:vertex_1, {Module2, :f2, 2})
-        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
-        |> Digraph.add_edge({Module2, :f2, 2}, :vertex_4)
-        |> Digraph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
-        |> Digraph.add_edge({Module3, :f3, 3}, :vertex_6)
-        |> Digraph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
-        |> Digraph.add_edge(:vertex_4, {Module8, :f8, 8})
-        |> Digraph.add_edge(:vertex_4, :vertex_9)
-        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_10)
-        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_11)
-        |> Digraph.add_edge(:vertex_6, {Module11, :f12, 12})
-        |> Digraph.add_edge(:vertex_6, :vertex_13)
-        |> Digraph.add_edge({Module7, :f7, 7}, :vertex_14)
-        |> Digraph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
-        |> Digraph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> add_edge({struct_1_impl, :my_fun, 1}, Module12)
+        |> get_graph()
 
-      [graph: graph]
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {StringCharsModule12, :__impl__, 1} in result
+      assert {StringCharsModule12, :to_string, 1} in result
     end
 
-    test "single MFA argument", %{graph: graph} do
-      result = reachable_mfas(graph, [{Module3, :f3, 3}])
+    test "includes an implementation reached both directly and via dispatch exactly once", %{
+      full_call_graph: full_call_graph
+    } do
+      struct_1_impl = Module.safe_concat(Protocol1, Struct1)
 
-      assert Enum.sort(result) == [
-               {Module11, :f12, 12},
-               {Module15, :f15, 15},
-               {Module3, :f3, 3},
-               {Module7, :f7, 7}
-             ]
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {Protocol1, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, {struct_1_impl, :my_fun, 1})
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert Enum.count(result, &(&1 == {struct_1_impl, :my_fun, 1})) == 1
     end
 
-    test "multiple MFAs argument", %{graph: graph} do
-      result = reachable_mfas(graph, [{Module5, :f5, 5}, {Module3, :f3, 3}])
+    test "retains dispatch helper MFAs of reached protocols", %{
+      full_call_graph: full_call_graph
+    } do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, {String.Chars, :to_string, 1})
+        |> get_graph()
 
-      assert Enum.sort(result) == [
-               {Module11, :f12, 12},
-               {Module15, :f15, 15},
-               {Module3, :f3, 3},
-               {Module5, :f5, 5},
-               {Module7, :f7, 7}
-             ]
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      assert {String.Chars, :impl_for, 1} in result
+      assert {String.Chars, :impl_for!, 1} in result
+      assert {String.Chars, :struct_impl_for, 1} in result
+      assert {Protocol.UndefinedError, :exception, 1} in result
+    end
+
+    test "excludes module vertices from the result", %{full_call_graph: full_call_graph} do
+      graph =
+        full_call_graph
+        |> CallGraph.clone()
+        |> add_edge({Module5, :my_fun, 0}, Struct1)
+        |> get_graph()
+
+      result = reachable_mfas(graph, [{Module5, :my_fun, 0}])
+
+      refute Enum.any?(result, &is_atom/1)
     end
   end
 
@@ -1417,7 +1919,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "remove_runtime_mfas!/2", %{ir_plt: ir_plt} do
     call_graph = Compiler.build_call_graph(ir_plt)
-    runtime_mfas = list_runtime_mfas(call_graph)
+    runtime_mfas = list_runtime_mfas(call_graph, Reflection.list_pages())
 
     CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 
@@ -1472,6 +1974,102 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
   end
 
+  describe "server_callback_analysis_by_templatable/2" do
+    test "returns an entry for each given templatable" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
+        |> Digraph.add_edge({Module4, :command, 3}, Module12)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+
+      analyzed_templatables =
+        result
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert analyzed_templatables == [Module2, Module4]
+    end
+
+    test "harvests dispatch types from the templatable's own server entries only" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
+        |> Digraph.add_edge({Module4, :command, 3}, Module12)
+
+      result = server_callback_analysis_by_templatable(graph, [Module2, Module4])
+
+      assert Struct1 in result[Module2].dispatch_types
+      refute Module12 in result[Module2].dispatch_types
+
+      assert Module12 in result[Module4].dispatch_types
+      refute Struct1 in result[Module4].dispatch_types
+    end
+
+    test "collects reflection MFAs reachable from init/3" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, {Module5, :__schema__, 1})
+
+      result = server_callback_analysis_by_templatable(graph, [Module2])
+
+      assert result[Module2].reflection_mfas == [{Module5, :__schema__, 1}]
+    end
+
+    test "doesn't collect reflection MFAs reachable only from command/3" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Module5, :__schema__, 1})
+
+      result = server_callback_analysis_by_templatable(graph, [Module2])
+
+      assert result[Module2].reflection_mfas == []
+    end
+  end
+
+  describe "server_protocol_dispatch_types/2" do
+    test "includes struct types reachable from init/3" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, {Module5, :my_fun, 0})
+        |> Digraph.add_edge({Module5, :my_fun, 0}, Struct1)
+
+      assert Struct1 in server_protocol_dispatch_types(graph, [Module2])
+    end
+
+    test "includes struct types reachable from command/3" do
+      graph = Digraph.add_edge(Digraph.new(), {Module2, :command, 3}, {Struct1, :__struct__, 1})
+
+      assert Struct1 in server_protocol_dispatch_types(graph, [Module2])
+    end
+
+    test "harvests types from all given templatables" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, Struct1)
+        |> Digraph.add_edge({Module4, :command, 3}, Module12)
+
+      result = server_protocol_dispatch_types(graph, [Module2, Module4])
+
+      assert Struct1 in result
+      assert Module12 in result
+    end
+
+    test "returns only built-in types when init/3 and command/3 vertices don't exist" do
+      graph = Digraph.add_edge(Digraph.new(), {Module5, :my_fun, 0}, Struct1)
+
+      assert server_protocol_dispatch_types(graph, [Module2]) == protocol_dispatch_types([])
+    end
+
+    test "doesn't traverse through protocol function vertices" do
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge({Module2, :init, 3}, {Protocol1, :my_fun, 1})
+        |> Digraph.add_edge({Protocol1, :my_fun, 1}, Struct1)
+
+      refute Struct1 in server_protocol_dispatch_types(graph, [Module2])
+    end
+  end
+
   test "sorted_edges/1", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
@@ -1482,27 +2080,6 @@ defmodule Hologram.Compiler.CallGraphTest do
              {:vertex_2, :vertex_3},
              {:vertex_4, :vertex_5}
            ]
-  end
-
-  describe "sorted_reachable_mfas/2" do
-    setup do
-      # Simple graph to verify sorting behavior.
-      # Reachability logic is tested in reachable_mfas/2 tests.
-      graph =
-        Digraph.new()
-        |> Digraph.add_edge(:vertex_1, {Module7, :f7, 7})
-        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
-        |> Digraph.add_edge({Module3, :f3, 3}, {Module11, :f12, 12})
-
-      [graph: graph]
-    end
-
-    test "returns same results as reachable_mfas/2 but sorted", %{graph: graph} do
-      unsorted = reachable_mfas(graph, [:vertex_1])
-      sorted = sorted_reachable_mfas(graph, [:vertex_1])
-
-      assert sorted == Enum.sort(unsorted)
-    end
   end
 
   test "sorted_vertices/1", %{empty_call_graph: call_graph} do
@@ -1535,6 +2112,70 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert stop(call_graph) == :ok
     refute Process.alive?(pid)
+  end
+
+  describe "unbounded_reachable_mfas/2" do
+    setup do
+      # 1
+      # ├─ {Module2, :f2, 2}
+      # │  ├─ 4
+      # │  │  ├─ {Module8, :f8, 8}
+      # │  │  ├─ 9
+      # │  ├─ {Module5, :f5, 5}
+      # │  │  ├─ 10
+      # │  │  ├─ 11
+      # ├─ {Module3, :f3, 3}
+      # │  ├─ 6
+      # │  │  ├─ {Module11, :f12, 12}
+      # │  │  ├─ 13
+      # │  ├─ {Module7, :f7, 7}
+      # │  │  ├─ 14
+      # │  │  ├─ {Module15, :f15, 15}
+      # |  |  |- {Collectable.Atom, :fca, 123}
+
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge(:vertex_1, {Module2, :f2, 2})
+        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
+        |> Digraph.add_edge({Module2, :f2, 2}, :vertex_4)
+        |> Digraph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
+        |> Digraph.add_edge({Module3, :f3, 3}, :vertex_6)
+        |> Digraph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
+        |> Digraph.add_edge(:vertex_4, {Module8, :f8, 8})
+        |> Digraph.add_edge(:vertex_4, :vertex_9)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_10)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_11)
+        |> Digraph.add_edge(:vertex_6, {Module11, :f12, 12})
+        |> Digraph.add_edge(:vertex_6, :vertex_13)
+        |> Digraph.add_edge({Module7, :f7, 7}, :vertex_14)
+        |> Digraph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
+        |> Digraph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+
+      [graph: graph]
+    end
+
+    test "single MFA argument", %{graph: graph} do
+      result = unbounded_reachable_mfas(graph, [{Module3, :f3, 3}])
+
+      assert Enum.sort(result) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module7, :f7, 7}
+             ]
+    end
+
+    test "multiple MFAs argument", %{graph: graph} do
+      result = unbounded_reachable_mfas(graph, [{Module5, :f5, 5}, {Module3, :f3, 3}])
+
+      assert Enum.sort(result) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module5, :f5, 5},
+               {Module7, :f7, 7}
+             ]
+    end
   end
 
   test "vertices/1", %{empty_call_graph: call_graph} do
@@ -3561,6 +4202,430 @@ defmodule Hologram.Compiler.CallGraphTest do
                  }
                }
              } = fun_def
+    end
+
+    # Original source:
+    #   defimpl Protocol1, for: Integer do
+    #     def my_fun(_data), do: :ok
+    #   end
+    #
+    # Expanded (Elixir >= 1.16):
+    #   def __impl__(:for), do: Integer
+    #   def __impl__(:protocol), do: Protocol1
+    #
+    # Expanded (Elixir < 1.16):
+    #   def __impl__(:for), do: Integer
+    #   def __impl__(:protocol), do: Protocol1
+    #   def __impl__(:target), do: Protocol1.Integer
+    test "__impl__/1 clauses have 'for' and 'protocol' module atoms in body",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1.Integer, :__impl__, 1)
+
+      {for_clause, protocol_clause} =
+        if Version.match?(System.version(), ">= 1.16.0") do
+          assert [for_clause, protocol_clause] = fun_defs
+          {for_clause, protocol_clause}
+        else
+          assert [target_clause, for_clause, protocol_clause] = fun_defs
+
+          assert target_clause == %IR.FunctionDefinition{
+                   name: :__impl__,
+                   arity: 1,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [%IR.AtomType{value: :target}],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.AtomType{value: Protocol1.Integer}]
+                     }
+                   }
+                 }
+
+          {for_clause, protocol_clause}
+        end
+
+      assert for_clause == %IR.FunctionDefinition{
+               name: :__impl__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :for}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Integer}]
+                 }
+               }
+             }
+
+      assert protocol_clause == %IR.FunctionDefinition{
+               name: :__impl__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :protocol}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Protocol1}]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation):
+    #   def __protocol__(:module), do: Protocol1
+    #   def __protocol__(:functions), do: [my_fun: 1]
+    #   def __protocol__(:consolidated?), do: true
+    #   def __protocol__(:impls), do: {:consolidated, [Struct1, Integer]}
+    test "__protocol__/1 clauses have module atoms in body (protocol module and implementations)",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :__protocol__, 1)
+
+      assert [module_clause, functions_clause, consolidated_clause, impls_clause] = fun_defs
+
+      assert module_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :module}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: Protocol1}]
+                 }
+               }
+             }
+
+      assert functions_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :functions}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.ListType{
+                       data: [
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: :my_fun},
+                             %IR.IntegerType{value: 1}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+
+      assert consolidated_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :consolidated?}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: true}]
+                 }
+               }
+             }
+
+      assert impls_clause == %IR.FunctionDefinition{
+               name: :__protocol__,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: :impls}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :consolidated},
+                         %IR.ListType{
+                           data: [
+                             %IR.AtomType{value: Struct1},
+                             %IR.AtomType{value: Integer}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation):
+    #   def impl_for(%{__struct__: x}) when is_atom(x), do: struct_impl_for(x)
+    #   def impl_for(x) when is_integer(x), do: Protocol1.Integer
+    #   def impl_for(_), do: nil
+    test "impl_for/1 clauses have module atoms in body and struct dispatch calls struct_impl_for/1",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :impl_for, 1)
+
+      assert [struct_clause, integer_clause, catch_all_clause] = fun_defs
+
+      # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
+      assert struct_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{
+                     data: [
+                       {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: -1}}
+                     ]
+                   }
+                 ],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_atom,
+                     args: [%IR.Variable{name: :x, version: -1}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.LocalFunctionCall{
+                       function: :struct_impl_for,
+                       args: [%IR.Variable{name: :x, version: -1}]
+                     }
+                   ]
+                 }
+               }
+             }
+
+      assert integer_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :x, version: -1}],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :x, version: -1}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: Protocol1.Integer}
+                   ]
+                 }
+               }
+             }
+
+      assert catch_all_clause == %IR.FunctionDefinition{
+               name: :impl_for,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: nil}]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (Elixir >= 1.18):
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data, description: ""))
+    #       x -> x
+    #     end
+    #   end
+    #
+    # Expanded (Elixir < 1.18):
+    #   def impl_for!(data) do
+    #     case impl_for(data) do
+    #       x when x == false or x == nil ->
+    #         :erlang.error(Protocol.UndefinedError.exception(
+    #           protocol: Protocol1, value: data))
+    #       x -> x
+    #     end
+    #   end
+    test "impl_for!/1 body calls impl_for/1 and has protocol module atom in error path",
+         %{ir_plt: ir_plt} do
+      assert [clause] = find_fun_defs(ir_plt, Protocol1, :impl_for!, 1)
+
+      exception_keyword_data =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :description},
+                %IR.StringType{value: ""}
+              ]
+            }
+          ]
+        else
+          [
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :protocol},
+                %IR.AtomType{value: Protocol1}
+              ]
+            },
+            %IR.TupleType{
+              data: [
+                %IR.AtomType{value: :value},
+                %IR.Variable{name: :data, version: 0}
+              ]
+            }
+          ]
+        end
+
+      assert clause == %IR.FunctionDefinition{
+               name: :impl_for!,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :data, version: 0}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Case{
+                       condition: %IR.LocalFunctionCall{
+                         function: :impl_for,
+                         args: [%IR.Variable{name: :data, version: 0}]
+                       },
+                       clauses: [
+                         %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 1},
+                           guards: [
+                             %IR.RemoteFunctionCall{
+                               module: %IR.AtomType{value: :erlang},
+                               function: :orelse,
+                               args: [
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: false}
+                                   ]
+                                 },
+                                 %IR.RemoteFunctionCall{
+                                   module: %IR.AtomType{value: :erlang},
+                                   function: :"=:=",
+                                   args: [
+                                     %IR.Variable{name: :x, version: 1},
+                                     %IR.AtomType{value: nil}
+                                   ]
+                                 }
+                               ]
+                             }
+                           ],
+                           body: %IR.Block{
+                             expressions: [
+                               %IR.RemoteFunctionCall{
+                                 module: %IR.AtomType{value: :erlang},
+                                 function: :error,
+                                 args: [
+                                   %IR.RemoteFunctionCall{
+                                     module: %IR.AtomType{value: Protocol.UndefinedError},
+                                     function: :exception,
+                                     args: [
+                                       %IR.ListType{data: exception_keyword_data}
+                                     ]
+                                   }
+                                 ]
+                               }
+                             ]
+                           }
+                         },
+                         %IR.Clause{
+                           match: %IR.Variable{name: :x, version: 2},
+                           guards: [],
+                           body: %IR.Block{
+                             expressions: [%IR.Variable{name: :x, version: 2}]
+                           }
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               }
+             }
+    end
+
+    # Original source:
+    #   defprotocol Protocol1 do
+    #     def my_fun(data)
+    #   end
+    #
+    # Expanded (after consolidation, one clause per struct + catch-all):
+    #   defp struct_impl_for(Struct1), do: Protocol1.Struct1
+    #   defp struct_impl_for(_), do: nil
+    test "struct_impl_for/1 clauses have struct and implementation module atoms",
+         %{ir_plt: ir_plt} do
+      fun_defs = find_fun_defs(ir_plt, Protocol1, :struct_impl_for, 1)
+
+      assert [struct_1_clause, catch_all_clause] = fun_defs
+
+      assert struct_1_clause == %IR.FunctionDefinition{
+               name: :struct_impl_for,
+               arity: 1,
+               visibility: :private,
+               clause: %IR.FunctionClause{
+                 params: [%IR.AtomType{value: Struct1}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.AtomType{value: Module.safe_concat(Protocol1, Struct1)}
+                   ]
+                 }
+               }
+             }
+
+      assert catch_all_clause == %IR.FunctionDefinition{
+               name: :struct_impl_for,
+               arity: 1,
+               visibility: :private,
+               clause: %IR.FunctionClause{
+                 params: [%IR.MatchPlaceholder{}],
+                 guards: [],
+                 body: %IR.Block{
+                   expressions: [%IR.AtomType{value: nil}]
+                 }
+               }
+             }
     end
   end
 end

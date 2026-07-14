@@ -461,6 +461,52 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "outgoing_edges/2" do
+    test "returns empty list when vertex doesn't exist" do
+      result = outgoing_edges(new(), :a)
+
+      assert result == []
+    end
+
+    test "returns empty list when vertex exists but has no edges" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> outgoing_edges(:a)
+
+      assert result == []
+    end
+
+    test "returns empty list when vertex has only incoming edges" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:c, :b)
+        |> outgoing_edges(:b)
+
+      assert result == []
+    end
+
+    test "returns outgoing edge when vertex has one outgoing edge" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> outgoing_edges(:a)
+
+      assert result == [{:a, :b}]
+    end
+
+    test "returns multiple outgoing edges when vertex has multiple outgoing edges" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> outgoing_edges(:a)
+
+      assert Enum.sort(result) == [{:a, :b}, {:a, :c}]
+    end
+  end
+
   describe "reachable/2" do
     test "handles empty starting vertices list" do
       result =
@@ -646,6 +692,98 @@ defmodule Hologram.Compiler.DigraphTest do
         |> reachable([:nonexistent, :also_nonexistent])
 
       assert result == []
+    end
+
+    test "skips traversal of vertices in opaque_vertices MapSet" do
+      # :a -> :b -> :c
+      # :b is in opaque_vertices, so :c should NOT be in the result
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([:a], opaque_vertices: MapSet.new([:b]))
+
+      assert Enum.sort(result) == [:a, :b]
+    end
+
+    test "still reaches successor through non-opaque path when opaque path also exists" do
+      # :start -> :opaque -> :dest  (blocked)
+      # :start -> :direct -> :dest  (not blocked)
+      # :dest should be in the result because of the non-opaque path
+      result =
+        new()
+        |> add_edge(:start, :opaque)
+        |> add_edge(:opaque, :dest)
+        |> add_edge(:start, :direct)
+        |> add_edge(:direct, :dest)
+        |> reachable([:start], opaque_vertices: MapSet.new([:opaque]))
+
+      assert Enum.sort(result) == [:dest, :direct, :opaque, :start]
+    end
+
+    test "blocks all successors behind an opaque vertex" do
+      # :start -> :opaque -> :succ_1
+      # :start -> :opaque -> :succ_2
+      # Neither successor should be in the result
+      result =
+        new()
+        |> add_edge(:start, :opaque)
+        |> add_edge(:opaque, :succ_1)
+        |> add_edge(:opaque, :succ_2)
+        |> reachable([:start], opaque_vertices: MapSet.new([:opaque]))
+
+      assert Enum.sort(result) == [:opaque, :start]
+    end
+
+    test "skips traversal of vertices matching the opaque_vertex? predicate" do
+      # {MyModule, :fun_a, 0} -> SomeModule -> {SomeModule, :fun_b, 1}
+      # {SomeModule, :fun_b, 1} should NOT be in the result because SomeModule's outgoing
+      # edges are not traversed
+      result =
+        new()
+        |> add_edge({MyModule, :fun_a, 0}, SomeModule)
+        |> add_edge(SomeModule, {SomeModule, :fun_b, 1})
+        |> reachable([{MyModule, :fun_a, 0}], opaque_vertex?: &is_atom/1)
+
+      assert Enum.sort(result) == [SomeModule, {MyModule, :fun_a, 0}]
+    end
+
+    test "neither expands nor returns vertices in the visited MapSet" do
+      # :a -> :b -> :c
+      # :b is already visited, so neither :b nor :c should be in the result
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([:a], visited_vertices: MapSet.new([:b]))
+
+      assert result == [:a]
+    end
+
+    test "skips starting vertices in the visited MapSet" do
+      # :a -> :b
+      # :a is already visited, so nothing new is reached
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> reachable([:a], visited_vertices: MapSet.new([:a]))
+
+      assert result == []
+    end
+
+    test "still reaches successor through unvisited path when visited path also exists" do
+      # :start -> :visited -> :dest  (blocked)
+      # :start -> :fresh -> :dest    (not blocked)
+      # :dest should be in the result because of the unvisited path
+      result =
+        new()
+        |> add_edge(:start, :visited)
+        |> add_edge(:visited, :dest)
+        |> add_edge(:start, :fresh)
+        |> add_edge(:fresh, :dest)
+        |> reachable([:start], visited_vertices: MapSet.new([:visited]))
+
+      assert Enum.sort(result) == [:dest, :fresh, :start]
     end
   end
 

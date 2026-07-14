@@ -1,5 +1,6 @@
 alias Hologram.Compiler
 alias Hologram.Compiler.CallGraph
+alias Hologram.Reflection
 
 Benchee.run(
   %{
@@ -9,7 +10,7 @@ Benchee.run(
        end,
        before_scenario: fn _input ->
          call_graph = Compiler.build_call_graph()
-         runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
+         runtime_mfas = CallGraph.list_runtime_mfas(call_graph, Reflection.list_pages())
 
          {call_graph, runtime_mfas}
        end,

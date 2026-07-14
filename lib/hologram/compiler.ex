@@ -166,11 +166,26 @@ defmodule Hologram.Compiler do
   @doc """
   Builds JavaScript code for the given Hologram page.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_page_js_4/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_js_6/README.md
   """
-  @spec build_page_js(module, CallGraph.t(), PLT.t(), MapSet.t(mfa), T.file_path()) :: String.t()
-  def build_page_js(page_module, call_graph, ir_plt, async_mfas, js_dir) do
-    mfas = CallGraph.list_page_mfas(call_graph, page_module)
+  @spec build_page_js(
+          module,
+          CallGraph.t(),
+          PLT.t(),
+          MapSet.t(mfa),
+          %{module => CallGraph.server_callback_analysis()},
+          T.file_path()
+        ) :: String.t()
+  def build_page_js(
+        page_module,
+        call_graph,
+        ir_plt,
+        async_mfas,
+        server_callback_analysis_by_templatable,
+        js_dir
+      ) do
+    mfas =
+      CallGraph.list_page_mfas(call_graph, page_module, server_callback_analysis_by_templatable)
 
     %{imports: imports, bindings: bindings} = aggregate_js_imports(mfas)
 
@@ -362,18 +377,30 @@ defmodule Hologram.Compiler do
   @doc """
   Creates page bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_page_entry_files_4/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_5/README.md
   """
   @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), MapSet.t(mfa), T.opts()) ::
           list({module, T.file_path()})
   def create_page_entry_files(page_modules, call_graph, ir_plt, async_mfas, opts) do
+    graph = CallGraph.get_graph(call_graph)
+    templatables = page_modules ++ Reflection.list_components()
+
+    server_callback_analysis_by_templatable =
+      CallGraph.server_callback_analysis_by_templatable(graph, templatables)
+
     page_modules
     |> TaskUtils.async_many(fn page_module ->
       entry_name = Reflection.module_name(page_module)
 
       entry_file_path =
         page_module
-        |> build_page_js(call_graph, ir_plt, async_mfas, opts[:js_dir])
+        |> build_page_js(
+          call_graph,
+          ir_plt,
+          async_mfas,
+          server_callback_analysis_by_templatable,
+          opts[:js_dir]
+        )
         |> create_entry_file(entry_name, opts[:tmp_dir])
 
       {page_module, entry_file_path}
@@ -384,7 +411,7 @@ defmodule Hologram.Compiler do
   @doc """
   Creates runtime bundle entry file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file_3/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_runtime_entry_file_4/README.md
   """
   @spec create_runtime_entry_file(list(mfa), PLT.t(), MapSet.t(mfa), T.opts()) :: T.file_path()
   def create_runtime_entry_file(runtime_mfas, ir_plt, async_mfas, opts) do
@@ -575,6 +602,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Keeps only those IR expressions that are function definitions of the given reachable MFAs.
+  For protocol modules, additionally drops the consolidated impl_for/1 and struct_impl_for/1
+  clauses that return implementations not included in the given reachable MFAs.
   """
   @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
   def prune_module_def(module_def_ir, reachable_mfas) do
@@ -586,13 +615,15 @@ defmodule Hologram.Compiler do
       |> MapSet.new()
 
     function_defs =
-      Enum.filter(module_def_ir.body.expressions, fn
+      module_def_ir.body.expressions
+      |> Enum.filter(fn
         %IR.FunctionDefinition{name: function, arity: arity} ->
           MapSet.member?(module_reachable_mfas, {module, function, arity})
 
         _fallback ->
           false
       end)
+      |> maybe_prune_protocol_dispatcher_function_defs(module, reachable_mfas)
 
     %IR.ModuleDefinition{
       module: module_def_ir.module,
@@ -665,6 +696,32 @@ defmodule Hologram.Compiler do
     |> CryptographicUtils.digest(:sha256, :binary)
   end
 
+  defp included_protocol_implementations(reachable_mfas, protocol) do
+    reachable_mfas
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Enum.filter(&(Reflection.protocol_implementation(&1) == protocol))
+    |> MapSet.new()
+  end
+
+  defp keep_protocol_dispatcher_function_def?(
+         %IR.FunctionDefinition{name: function, arity: 1, clause: clause},
+         protocol,
+         included_impls
+       )
+       when function in [:impl_for, :struct_impl_for] do
+    case clause do
+      %IR.FunctionClause{body: %IR.Block{expressions: [%IR.AtomType{value: value}]}} ->
+        Reflection.protocol_implementation(value) != protocol or
+          MapSet.member?(included_impls, value)
+
+      _clause ->
+        true
+    end
+  end
+
+  defp keep_protocol_dispatcher_function_def?(_function_def, _protocol, _included_impls), do: true
+
   defp maybe_ensure_bundle_within_size_limit!(entry_name, bundle_path) do
     max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
 
@@ -683,6 +740,22 @@ defmodule Hologram.Compiler do
               config :hologram, max_bundle_size: 2 * 1024 * 1024\
           """
       end
+    end
+  end
+
+  # Consolidated protocol dispatchers list every loaded implementation. Keep only
+  # clauses for implementations that ship in the same bundle, so dispatch on other
+  # types falls through to the catch-all clause and raises Protocol.UndefinedError.
+  defp maybe_prune_protocol_dispatcher_function_defs(function_defs, module, reachable_mfas) do
+    if Reflection.protocol?(module) do
+      included_impls = included_protocol_implementations(reachable_mfas, module)
+
+      Enum.filter(
+        function_defs,
+        &keep_protocol_dispatcher_function_def?(&1, module, included_impls)
+      )
+    else
+      function_defs
     end
   end
 
@@ -720,10 +793,10 @@ defmodule Hologram.Compiler do
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
     |> Enum.sort()
-    |> TaskUtils.async_many(fn {module, module_mfas} ->
+    |> TaskUtils.async_many(fn {module, _module_mfas} ->
       ir_plt
       |> PLT.get!(module)
-      |> prune_module_def(module_mfas)
+      |> prune_module_def(mfas)
       |> Encoder.encode_ir(%Context{module: module, async_mfas: async_mfas})
     end)
     |> Task.await_many(:infinity)

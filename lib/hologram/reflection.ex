@@ -238,6 +238,16 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists Elixir modules which are Hologram components and that belong to any of the OTP apps in the project.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/reflection/list_components_0/README.md
+  """
+  @spec list_components() :: list(module)
+  def list_components do
+    Enum.filter(list_elixir_modules(), &component?/1)
+  end
+
+  @doc """
   Lists modules by scanning BEAM files in the given OTP app's ebin directory.
   This is useful for detecting newly compiled modules that haven't been added to
   Application.spec yet during development.
@@ -481,11 +491,19 @@ defmodule Hologram.Reflection do
   @doc """
   Returns the protocol module that the given module implements, or nil if it's not a protocol implementation.
   """
-  @spec protocol_impl(module) :: module | nil
-  def protocol_impl(module) do
+  @spec protocol_implementation(module) :: module | nil
+  def protocol_implementation(module) do
     if has_function?(module, :__impl__, 1) do
       module.__impl__(:protocol)
     end
+  end
+
+  @doc """
+  Returns true if the given module is a protocol implementation, or false otherwise.
+  """
+  @spec protocol_implementation?(module) :: boolean
+  def protocol_implementation?(module) do
+    has_function?(module, :__impl__, 1)
   end
 
   @doc """
