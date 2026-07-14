@@ -113,6 +113,29 @@ describe("Utils", () => {
     });
   });
 
+  describe("randomUUID()", () => {
+    const uuidV4Regex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+    it("delegates to crypto.randomUUID() when available", () => {
+      const result = Utils.randomUUID();
+
+      assert.match(result, uuidV4Regex);
+    });
+
+    it("falls back to a generated UUID when crypto.randomUUID() is unavailable", () => {
+      const original = crypto.randomUUID;
+      crypto.randomUUID = undefined;
+
+      try {
+        const result = Utils.randomUUID();
+        assert.match(result, uuidV4Regex);
+      } finally {
+        crypto.randomUUID = original;
+      }
+    });
+  });
+
   it("randomUint32()", () => {
     const result = Utils.randomUint32();
 
