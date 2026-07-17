@@ -50,29 +50,6 @@ export default class Utils {
     }
   }
 
-  static randomUUID() {
-    // crypto.randomUUID() is only exposed in secure contexts (HTTPS or
-    // localhost). When the app is served over plain HTTP from another hostname
-    // (e.g. a LAN IP) it is unavailable, so fall back to generating an RFC 4122
-    // version 4 UUID from crypto.getRandomValues(), which is not gated on
-    // secure contexts and is still cryptographically strong.
-    if (typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-
-    const bytes = crypto.getRandomValues(new Uint8Array(16));
-
-    // Set the version (4) and variant (RFC 4122) bits.
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-    const hex = Array.from(bytes, (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
-
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  }
-
   static randomUint32() {
     return (Math.random() * 0x100000000) >>> 0;
   }
@@ -94,5 +71,31 @@ export default class Utils {
     // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
     // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
     return {...obj};
+  }
+
+  static uuidv7() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+
+    const unixMs = Date.now();
+
+    bytes[0] = Math.floor(unixMs / 2 ** 40) % 256;
+    bytes[1] = Math.floor(unixMs / 2 ** 32) % 256;
+    bytes[2] = Math.floor(unixMs / 2 ** 24) % 256;
+    bytes[3] = Math.floor(unixMs / 2 ** 16) % 256;
+    bytes[4] = Math.floor(unixMs / 2 ** 8) % 256;
+    bytes[5] = unixMs % 256;
+
+    // Version 7 in the high nibble, keeping 4 random bits in the low nibble
+    bytes[6] = 0x70 | (bytes[6] & 0x0f);
+
+    // Variant 0b10 in the two high bits, keeping 6 random bits
+    bytes[8] = 0x80 | (bytes[8] & 0x3f);
+
+    const hex = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 }

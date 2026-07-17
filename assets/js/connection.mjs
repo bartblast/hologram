@@ -242,7 +242,7 @@ export default class Connection {
     {onSuccess, onError, onTimeout, timeout = $.REQUEST_TIMEOUT} = {},
   ) {
     return new Promise((resolve, reject) => {
-      const correlationId = Utils.randomUUID();
+      const correlationId = Utils.uuidv7();
 
       const timerId = setTimeout(() => {
         $.pendingRequests.delete(correlationId);

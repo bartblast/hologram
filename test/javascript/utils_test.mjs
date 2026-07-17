@@ -113,29 +113,6 @@ describe("Utils", () => {
     });
   });
 
-  describe("randomUUID()", () => {
-    const uuidV4Regex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-
-    it("delegates to crypto.randomUUID() when available", () => {
-      const result = Utils.randomUUID();
-
-      assert.match(result, uuidV4Regex);
-    });
-
-    it("falls back to a generated UUID when crypto.randomUUID() is unavailable", () => {
-      const original = crypto.randomUUID;
-      crypto.randomUUID = undefined;
-
-      try {
-        const result = Utils.randomUUID();
-        assert.match(result, uuidV4Regex);
-      } finally {
-        crypto.randomUUID = original;
-      }
-    });
-  });
-
   it("randomUint32()", () => {
     const result = Utils.randomUint32();
 
@@ -182,5 +159,35 @@ describe("Utils", () => {
 
     assert.deepStrictEqual(obj, {a: 1, b: {c: 30, d: 4}});
     assert.deepStrictEqual(clone, {a: 10, b: {c: 30, d: 4}});
+  });
+
+  // IMPORTANT!
+  // Each test in this describe block has a related Elixir test in test/elixir/hologram/entity_test.exs (describe "generate_id/0")
+  // Always update both together.
+  describe("uuidv7()", () => {
+    it("returns a version 7 UUID string", () => {
+      assert.match(
+        Utils.uuidv7(),
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    });
+
+    it("returns a different UUID on each call", () => {
+      assert.notEqual(Utils.uuidv7(), Utils.uuidv7());
+    });
+
+    it("embeds the number of milliseconds since the Unix epoch in the leading bits", () => {
+      const unixMsBefore = Date.now();
+      const uuid = Utils.uuidv7();
+      const unixMsAfter = Date.now();
+
+      const embeddedUnixMs = parseInt(
+        uuid.replaceAll("-", "").slice(0, 12),
+        16,
+      );
+
+      assert.isAtLeast(embeddedUnixMs, unixMsBefore);
+      assert.isAtMost(embeddedUnixMs, unixMsAfter);
+    });
   });
 });
