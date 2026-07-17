@@ -3,6 +3,8 @@ defmodule Hologram.Entity do
   alias Hologram.Compiler.AST
   alias Hologram.Entity
 
+  @engine_attrs [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+
   @reserved_names [:created_at, :id, :updated_at]
 
   @valid_attr_opts [:default, :optional, :values]
@@ -36,12 +38,20 @@ defmodule Hologram.Entity do
   end
 
   defmacro __before_compile__(_env) do
+    engine_attrs = Macro.escape(@engine_attrs)
+
     quote do
       @doc """
       Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
       """
       @spec __attrs__() :: list({atom, atom, keyword})
       def __attrs__, do: Enum.sort(@__attrs__)
+
+      @doc """
+      Returns the list of engine attribute definitions present on every entity type, sorted by attribute name.
+      """
+      @spec __engine_attrs__() :: list({atom, atom, keyword})
+      def __engine_attrs__, do: unquote(engine_attrs)
 
       @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
