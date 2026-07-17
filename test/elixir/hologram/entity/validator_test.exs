@@ -180,6 +180,33 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "accepts nil default for optional attribute" do
+      defmodule InlineEntityFixture18 do
+        use Hologram.Entity
+
+        attr :status, :enum, values: [:a, :b], default: nil, optional: true
+        attr :title, :string, default: nil, optional: true
+      end
+
+      assert InlineEntityFixture18.__attrs__() == [
+               {:status, :enum, [values: [:a, :b], default: nil, optional: true]},
+               {:title, :string, [default: nil, optional: true]}
+             ]
+    end
+
+    test "rejects nil default for non-optional attribute" do
+      expected_msg =
+        "invalid default value nil for enum attribute :status in Hologram.Entity.ValidatorTest.InlineEntityFixture19 - the default value must be one of the declared values or nil when the attribute is optional"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture19 do
+          use Hologram.Entity
+
+          attr :status, :enum, values: [:a, :b], default: nil
+        end
+      end
+    end
+
     test "rejects default violating type value constraints" do
       expected_msg =
         "invalid default value 9223372036854775808 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture17 - the default value must match the attribute type :integer"
@@ -224,7 +251,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects enum attribute without values option" do
       expected_msg =
-        "missing values option for enum attribute :status in Hologram.Entity.ValidatorTest.InlineEntityFixture7 - enum attributes require a values option with a non-empty list of unique atoms"
+        "missing values option for enum attribute :status in Hologram.Entity.ValidatorTest.InlineEntityFixture7 - enum attributes require a values option with a non-empty list of unique non-nil atoms"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture7 do
@@ -237,7 +264,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects enum default outside declared values" do
       expected_msg =
-        "invalid default value :c for enum attribute :status in Hologram.Entity.ValidatorTest.InlineEntityFixture14 - the default value must be one of the declared values"
+        "invalid default value :c for enum attribute :status in Hologram.Entity.ValidatorTest.InlineEntityFixture14 - the default value must be one of the declared values or nil when the attribute is optional"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture14 do
@@ -249,13 +276,13 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "rejects invalid enum values option" do
-      invalid_values = [[], [:a, :a], ["x", "y"], :not_a_list]
+      invalid_values = [[], [:a, :a], [:a, nil], ["x", "y"], :not_a_list]
 
       for {values, index} <- Enum.with_index(invalid_values) do
         module_name = "Hologram.Entity.ValidatorTest.InvalidEnumValues#{index}"
 
         expected_msg =
-          "invalid values option #{inspect(values)} for enum attribute :status in #{module_name} - the values option must be a non-empty list of unique atoms"
+          "invalid values option #{inspect(values)} for enum attribute :status in #{module_name} - the values option must be a non-empty list of unique non-nil atoms"
 
         code = """
         defmodule #{module_name} do

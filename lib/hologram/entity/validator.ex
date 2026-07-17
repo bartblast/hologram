@@ -147,7 +147,7 @@ defmodule Hologram.Entity.Validator do
       :error ->
         raise Hologram.CompileError,
           message:
-            "missing values option for enum attribute #{inspect(name)} in #{inspect(module)} - enum attributes require a values option with a non-empty list of unique atoms"
+            "missing values option for enum attribute #{inspect(name)} in #{inspect(module)} - enum attributes require a values option with a non-empty list of unique non-nil atoms"
     end
   end
 
@@ -178,12 +178,10 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_default_value!(module, name, :enum, opts, value) do
-    values = Keyword.fetch!(opts, :values)
-
-    if value not in values do
+    if not attr_value_valid?(value, :enum, opts) do
       raise Hologram.CompileError,
         message:
-          "invalid default value #{inspect(value)} for enum attribute #{inspect(name)} in #{inspect(module)} - the default value must be one of the declared values"
+          "invalid default value #{inspect(value)} for enum attribute #{inspect(name)} in #{inspect(module)} - the default value must be one of the declared values or nil when the attribute is optional"
     end
   end
 
@@ -197,13 +195,14 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_enum_values!(module, name, values) do
     valid =
-      is_list(values) and values != [] and Enum.all?(values, &is_atom/1) and
+      is_list(values) and values != [] and
+        Enum.all?(values, &(is_atom(&1) and not is_nil(&1))) and
         values == Enum.uniq(values)
 
     if not valid do
       raise Hologram.CompileError,
         message:
-          "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique atoms"
+          "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique non-nil atoms"
     end
   end
 
