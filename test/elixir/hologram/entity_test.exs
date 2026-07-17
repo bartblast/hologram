@@ -74,6 +74,35 @@ defmodule Hologram.EntityTest do
       end
     end
 
+    test "rejects duplicate attribute name" do
+      expected_msg =
+        "duplicate name :title used for attribute in Hologram.EntityTest.InlineEntityFixture3 - attribute and relationship names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture3 do
+          use Hologram.Entity
+
+          attr :title, :string
+          attr :title, :integer
+        end
+      end
+    end
+
+    test "rejects attribute name already used by relationship" do
+      expected_msg =
+        "duplicate name :owner used for attribute in Hologram.EntityTest.InlineEntityFixture4 - attribute and relationship names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture4 do
+          use Hologram.Entity
+
+          relationship :owner, Module1
+
+          attr :owner, :string
+        end
+      end
+    end
+
     test "rejects reserved engine attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -96,6 +125,35 @@ defmodule Hologram.EntityTest do
   end
 
   describe "relationship/3" do
+    test "rejects duplicate relationship name" do
+      expected_msg =
+        "duplicate name :owner used for relationship in Hologram.EntityTest.InlineEntityFixture5 - attribute and relationship names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture5 do
+          use Hologram.Entity
+
+          relationship :owner, Module1
+          relationship :owner, Module2
+        end
+      end
+    end
+
+    test "rejects relationship name already used by attribute" do
+      expected_msg =
+        "duplicate name :title used for relationship in Hologram.EntityTest.InlineEntityFixture6 - attribute and relationship names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture6 do
+          use Hologram.Entity
+
+          attr :title, :string
+
+          relationship :title, Module1
+        end
+      end
+    end
+
     test "rejects reserved engine attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =

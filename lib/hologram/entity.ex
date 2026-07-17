@@ -52,10 +52,8 @@ defmodule Hologram.Entity do
   """
   @spec attr(atom, atom, T.opts()) :: Macro.t()
   defmacro attr(name, type, opts \\ []) do
-    validate_attr_name!(__CALLER__.module, name)
-    validate_attr_type!(__CALLER__.module, name, type)
-
     quote do
+      Entity.validate_attr!(__MODULE__, unquote(name), unquote(type), unquote(opts))
       Module.put_attribute(__MODULE__, :__attrs__, {unquote(name), unquote(type), unquote(opts)})
     end
   end
@@ -66,9 +64,9 @@ defmodule Hologram.Entity do
   """
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do
-    validate_relationship_name!(__CALLER__.module, name)
-
     quote do
+      Entity.validate_relationship!(__MODULE__, unquote(name), unquote(type), unquote(opts))
+
       Module.put_attribute(
         __MODULE__,
         :__relationships__,
@@ -93,6 +91,21 @@ defmodule Hologram.Entity do
     end
   end
 
+  @doc false
+  @spec validate_attr!(module, atom, any, T.opts()) :: :ok
+  def validate_attr!(module, name, type, _opts) do
+    validate_attr_name!(module, name)
+    validate_attr_type!(module, name, type)
+    :ok
+  end
+
+  @doc false
+  @spec validate_relationship!(module, atom, any, T.opts()) :: :ok
+  def validate_relationship!(module, name, _type, _opts) do
+    validate_relationship_name!(module, name)
+    :ok
+  end
+
   defp validate_attr_name!(module, name) do
     validate_declaration_name!(module, "attribute", name)
   end
@@ -103,7 +116,7 @@ defmodule Hologram.Entity do
 
       raise Hologram.CompileError,
         message:
-          "invalid type #{Macro.to_string(type)} for attribute #{inspect(name)} in #{inspect(module)} - valid attribute types are: #{valid_types}"
+          "invalid type #{inspect(type)} for attribute #{inspect(name)} in #{inspect(module)} - valid attribute types are: #{valid_types}"
     end
   end
 
@@ -114,6 +127,21 @@ defmodule Hologram.Entity do
       raise Hologram.CompileError,
         message:
           "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - engine attributes #{reserved_names} are managed automatically and can't be declared"
+    end
+
+    validate_name_uniqueness!(module, kind, name)
+  end
+
+  defp validate_name_uniqueness!(module, kind, name) do
+    declarations =
+      Module.get_attribute(module, :__attrs__) ++ Module.get_attribute(module, :__relationships__)
+
+    declared_names = Enum.map(declarations, fn {declared_name, _type, _opts} -> declared_name end)
+
+    if name in declared_names do
+      raise Hologram.CompileError,
+        message:
+          "duplicate name #{inspect(name)} used for #{kind} in #{inspect(module)} - attribute and relationship names share one namespace and must be unique"
     end
   end
 
