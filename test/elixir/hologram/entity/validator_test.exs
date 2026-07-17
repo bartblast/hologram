@@ -353,6 +353,35 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects invalid relationship type shape" do
+      invalid_types = [
+        ":string",
+        "\"Task\"",
+        "5",
+        "[]",
+        "[Hologram.Test.Fixtures.Entity.Module1, Hologram.Test.Fixtures.Entity.Module2]"
+      ]
+
+      for {type_code, index} <- Enum.with_index(invalid_types) do
+        module_name = "Hologram.Entity.ValidatorTest.InvalidRelationshipType#{index}"
+
+        {type_value, _binding} = Code.eval_string(type_code)
+
+        expected_msg =
+          "invalid type #{inspect(type_value)} for relationship :owner in #{module_name} - the relationship type must be an entity type module (to-one) or a one-element list wrapping an entity type module (to-many)"
+
+        code = """
+        defmodule #{module_name} do
+          use Hologram.Entity
+
+          relationship :owner, #{type_code}
+        end
+        """
+
+        assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+
     test "rejects unknown relationship option" do
       expected_msg =
         "unknown option :default for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture12 - valid relationship options are: :optional"

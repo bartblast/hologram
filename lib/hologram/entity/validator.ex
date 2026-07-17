@@ -2,6 +2,7 @@ defmodule Hologram.Entity.Validator do
   @moduledoc false
 
   alias Hologram.Commons.Types, as: T
+  alias Hologram.Reflection
 
   # Postgres int8 column bounds
   @max_integer 9_223_372_036_854_775_807
@@ -82,11 +83,13 @@ defmodule Hologram.Entity.Validator do
 
   @doc """
   Validates the given relationship declaration at compile time.
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, options).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type shape, options).
+  The type is checked for shape only (an entity type module or a one-element list wrapping one) - whether it names an actual entity type module is not verified here, because the target module may not be compiled yet while the declaring module's body is executing.
   """
   @spec validate_relationship!(module, atom, any, T.opts()) :: :ok
-  def validate_relationship!(module, name, _type, opts) do
+  def validate_relationship!(module, name, type, opts) do
     validate_relationship_name!(module, name)
+    validate_relationship_type!(module, name, type)
     validate_relationship_opts!(module, name, opts)
     :ok
   end
@@ -112,6 +115,12 @@ defmodule Hologram.Entity.Validator do
   defp default_matches_type?(:integer, value), do: is_integer(value)
 
   defp default_matches_type?(:string, value), do: is_binary(value)
+
+  defp relationship_type_valid?(type) when is_atom(type), do: Reflection.alias?(type)
+
+  defp relationship_type_valid?([type]), do: Reflection.alias?(type)
+
+  defp relationship_type_valid?(_type), do: false
 
   defp validate_attr_default!(module, name, type, opts) do
     case Keyword.fetch(opts, :default) do
@@ -248,5 +257,13 @@ defmodule Hologram.Entity.Validator do
   defp validate_relationship_opts!(module, name, opts) do
     validate_known_opts!(module, "relationship", name, opts, @valid_relationship_opts)
     validate_optional_opt!(module, "relationship", name, opts)
+  end
+
+  defp validate_relationship_type!(module, name, type) do
+    if not relationship_type_valid?(type) do
+      raise Hologram.CompileError,
+        message:
+          "invalid type #{inspect(type)} for relationship #{inspect(name)} in #{inspect(module)} - the relationship type must be an entity type module (to-one) or a one-element list wrapping an entity type module (to-many)"
+    end
   end
 end
