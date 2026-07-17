@@ -5,7 +5,11 @@ defmodule Hologram.Entity do
 
   @reserved_names [:created_at, :id, :updated_at]
 
+  @valid_attr_opts [:default, :optional, :values]
+
   @valid_attr_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
+
+  @valid_relationship_opts [:optional]
 
   defmacro __using__(_opts) do
     [
@@ -96,19 +100,26 @@ defmodule Hologram.Entity do
   def validate_attr!(module, name, type, opts) do
     validate_attr_name!(module, name)
     validate_attr_type!(module, name, type)
+    validate_attr_opts!(module, name, opts)
     validate_attr_values!(module, name, type, opts)
     :ok
   end
 
   @doc false
   @spec validate_relationship!(module, atom, any, T.opts()) :: :ok
-  def validate_relationship!(module, name, _type, _opts) do
+  def validate_relationship!(module, name, _type, opts) do
     validate_relationship_name!(module, name)
+    validate_relationship_opts!(module, name, opts)
     :ok
   end
 
   defp validate_attr_name!(module, name) do
     validate_declaration_name!(module, "attribute", name)
+  end
+
+  defp validate_attr_opts!(module, name, opts) do
+    validate_known_opts!(module, "attribute", name, opts, @valid_attr_opts)
+    validate_optional_opt!(module, "attribute", name, opts)
   end
 
   defp validate_attr_type!(module, name, type) do
@@ -165,6 +176,18 @@ defmodule Hologram.Entity do
     end
   end
 
+  defp validate_known_opts!(module, kind, name, opts, valid_opts) do
+    Enum.each(opts, fn {key, _value} ->
+      if key not in valid_opts do
+        valid_opts_list = Enum.map_join(valid_opts, ", ", &inspect/1)
+
+        raise Hologram.CompileError,
+          message:
+            "unknown option #{inspect(key)} for #{kind} #{inspect(name)} in #{inspect(module)} - valid #{kind} options are: #{valid_opts_list}"
+      end
+    end)
+  end
+
   defp validate_name_uniqueness!(module, kind, name) do
     declarations =
       Module.get_attribute(module, :__attrs__) ++ Module.get_attribute(module, :__relationships__)
@@ -178,7 +201,24 @@ defmodule Hologram.Entity do
     end
   end
 
+  defp validate_optional_opt!(module, kind, name, opts) do
+    case Keyword.fetch(opts, :optional) do
+      {:ok, value} when not is_boolean(value) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid optional option #{inspect(value)} for #{kind} #{inspect(name)} in #{inspect(module)} - the optional option must be true or false"
+
+      _fetch_result ->
+        :ok
+    end
+  end
+
   defp validate_relationship_name!(module, name) do
     validate_declaration_name!(module, "relationship", name)
+  end
+
+  defp validate_relationship_opts!(module, name, opts) do
+    validate_known_opts!(module, "relationship", name, opts, @valid_relationship_opts)
+    validate_optional_opt!(module, "relationship", name, opts)
   end
 end

@@ -61,6 +61,19 @@ defmodule Hologram.EntityTest do
       end
     end
 
+    test "rejects unknown attribute option" do
+      expected_msg =
+        "unknown option :require for attribute :title in Hologram.EntityTest.InlineEntityFixture10 - valid attribute options are: :default, :optional, :values"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture10 do
+          use Hologram.Entity
+
+          attr :title, :string, require: true
+        end
+      end
+    end
+
     test "rejects unknown attribute type" do
       expected_msg =
         "invalid type :text for attribute :title in Hologram.EntityTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string"
@@ -150,6 +163,19 @@ defmodule Hologram.EntityTest do
       end
     end
 
+    test "rejects non-boolean optional option" do
+      expected_msg =
+        "invalid optional option :yes for attribute :title in Hologram.EntityTest.InlineEntityFixture9 - the optional option must be true or false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture9 do
+          use Hologram.Entity
+
+          attr :title, :string, optional: :yes
+        end
+      end
+    end
+
     test "rejects reserved engine attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -201,6 +227,19 @@ defmodule Hologram.EntityTest do
       end
     end
 
+    test "rejects non-boolean optional option" do
+      expected_msg =
+        "invalid optional option 1 for relationship :owner in Hologram.EntityTest.InlineEntityFixture11 - the optional option must be true or false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture11 do
+          use Hologram.Entity
+
+          relationship :owner, Module1, optional: 1
+        end
+      end
+    end
+
     test "rejects reserved engine attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -218,6 +257,19 @@ defmodule Hologram.EntityTest do
         """
 
         assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+
+    test "rejects unknown relationship option" do
+      expected_msg =
+        "unknown option :default for relationship :owner in Hologram.EntityTest.InlineEntityFixture12 - valid relationship options are: :optional"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture12 do
+          use Hologram.Entity
+
+          relationship :owner, Module1, default: nil
+        end
       end
     end
   end
