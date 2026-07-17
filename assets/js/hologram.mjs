@@ -311,7 +311,7 @@ export default class Hologram {
   // Made public to make tests easier
   static async loadNewPage(pagePath, html) {
     await $.#savePageSnapshot();
-    $.#historyId = Utils.randomUUID();
+    $.#historyId = Utils.uuidv7();
 
     window.requestAnimationFrame(() => {
       Hologram.#patchPage(html);
@@ -689,7 +689,7 @@ export default class Hologram {
 
   static #ensureDomNodeHasHologramId(eventNode) {
     if (typeof eventNode.__hologramId__ === "undefined") {
-      eventNode.__hologramId__ = Utils.randomUUID();
+      eventNode.__hologramId__ = Utils.uuidv7();
     }
   }
 
@@ -889,7 +889,7 @@ export default class Hologram {
         $.#restorePageSnapshot(pageSnapshot);
       }
     } else {
-      $.#historyId = Utils.randomUUID();
+      $.#historyId = Utils.uuidv7();
       history.replaceState($.#historyId, null, window.location.pathname);
     }
 
