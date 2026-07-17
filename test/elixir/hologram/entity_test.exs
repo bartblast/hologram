@@ -43,7 +43,7 @@ defmodule Hologram.EntityTest do
       assert Module4.__attrs__() == [
                {:a, :date, []},
                {:b, :datetime, []},
-               {:c, :enum, [values: [:x, :y]]},
+               {:c, :enum, [values: [:x, :y], default: :x]},
                {:d, :float, []}
              ]
     end
@@ -100,6 +100,19 @@ defmodule Hologram.EntityTest do
       end
     end
 
+    test "rejects default not matching attribute type" do
+      expected_msg =
+        "invalid default value 5 for attribute :title in Hologram.EntityTest.InlineEntityFixture13 - the default value must match the attribute type :string"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture13 do
+          use Hologram.Entity
+
+          attr :title, :string, default: 5
+        end
+      end
+    end
+
     test "rejects duplicate attribute name" do
       expected_msg =
         "duplicate name :title used for attribute in Hologram.EntityTest.InlineEntityFixture3 - attribute and relationship names share one namespace and must be unique"
@@ -138,6 +151,19 @@ defmodule Hologram.EntityTest do
           use Hologram.Entity
 
           attr :status, :enum
+        end
+      end
+    end
+
+    test "rejects enum default outside declared values" do
+      expected_msg =
+        "invalid default value :c for enum attribute :status in Hologram.EntityTest.InlineEntityFixture14 - the default value must be one of the declared values"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture14 do
+          use Hologram.Entity
+
+          attr :status, :enum, values: [:a, :b], default: :c
         end
       end
     end

@@ -102,6 +102,7 @@ defmodule Hologram.Entity do
     validate_attr_type!(module, name, type)
     validate_attr_opts!(module, name, opts)
     validate_attr_values!(module, name, type, opts)
+    validate_attr_default!(module, name, type, opts)
     :ok
   end
 
@@ -111,6 +112,28 @@ defmodule Hologram.Entity do
     validate_relationship_name!(module, name)
     validate_relationship_opts!(module, name, opts)
     :ok
+  end
+
+  defp default_matches_type?(:boolean, value), do: is_boolean(value)
+
+  defp default_matches_type?(:date, value), do: is_struct(value, Date)
+
+  defp default_matches_type?(:datetime, value), do: is_struct(value, DateTime)
+
+  defp default_matches_type?(:float, value), do: is_float(value)
+
+  defp default_matches_type?(:integer, value), do: is_integer(value)
+
+  defp default_matches_type?(:string, value), do: is_binary(value)
+
+  defp validate_attr_default!(module, name, type, opts) do
+    case Keyword.fetch(opts, :default) do
+      {:ok, value} ->
+        validate_default_value!(module, name, type, opts, value)
+
+      :error ->
+        :ok
+    end
   end
 
   defp validate_attr_name!(module, name) do
@@ -162,6 +185,24 @@ defmodule Hologram.Entity do
     end
 
     validate_name_uniqueness!(module, kind, name)
+  end
+
+  defp validate_default_value!(module, name, :enum, opts, value) do
+    values = Keyword.fetch!(opts, :values)
+
+    if value not in values do
+      raise Hologram.CompileError,
+        message:
+          "invalid default value #{inspect(value)} for enum attribute #{inspect(name)} in #{inspect(module)} - the default value must be one of the declared values"
+    end
+  end
+
+  defp validate_default_value!(module, name, type, _opts, value) do
+    if not default_matches_type?(type, value) do
+      raise Hologram.CompileError,
+        message:
+          "invalid default value #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the default value must match the attribute type #{inspect(type)}"
+    end
   end
 
   defp validate_enum_values!(module, name, values) do

@@ -4,6 +4,6 @@ defmodule Hologram.Test.Fixtures.Entity.Module4 do
 
   attr :a, :date
   attr :b, :datetime
-  attr :c, :enum, values: [:x, :y]
+  attr :c, :enum, values: [:x, :y], default: :x
   attr :d, :float
 end
