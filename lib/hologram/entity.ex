@@ -60,8 +60,12 @@ defmodule Hologram.Entity do
   @spec attr(atom, atom, T.opts()) :: Macro.t()
   defmacro attr(name, type, opts \\ []) do
     quote do
-      Validator.validate_attr!(__MODULE__, unquote(name), unquote(type), unquote(opts))
-      Module.put_attribute(__MODULE__, :__attrs__, {unquote(name), unquote(type), unquote(opts)})
+      name = unquote(name)
+      type = unquote(type)
+      opts = unquote(opts)
+
+      Validator.validate_attr!(__MODULE__, name, type, opts)
+      Module.put_attribute(__MODULE__, :__attrs__, {name, type, opts})
     end
   end
 
@@ -72,13 +76,12 @@ defmodule Hologram.Entity do
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do
     quote do
-      Validator.validate_relationship!(__MODULE__, unquote(name), unquote(type), unquote(opts))
+      name = unquote(name)
+      type = unquote(type)
+      opts = unquote(opts)
 
-      Module.put_attribute(
-        __MODULE__,
-        :__relationships__,
-        {unquote(name), unquote(type), unquote(opts)}
-      )
+      Validator.validate_relationship!(__MODULE__, name, type, opts)
+      Module.put_attribute(__MODULE__, :__relationships__, {name, type, opts})
     end
   end
 
