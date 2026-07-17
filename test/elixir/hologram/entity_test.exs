@@ -64,6 +64,9 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  # IMPORTANT!
+  # Each test in this describe block has a related JavaScript test in test/javascript/utils_test.mjs (describe "uuidv7()")
+  # Always update both together.
   describe "generate_id/0" do
     test "returns a version 7 UUID string" do
       assert generate_id() =~
