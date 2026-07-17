@@ -172,6 +172,12 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_declaration_name!(module, kind, name) do
+    if not is_atom(name) do
+      raise Hologram.CompileError,
+        message:
+          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
+    end
+
     if name in @reserved_names do
       reserved_names = Enum.map_join(@reserved_names, ", ", &inspect/1)
 

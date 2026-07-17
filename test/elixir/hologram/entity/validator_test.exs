@@ -269,6 +269,19 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects non-atom attribute name" do
+      expected_msg =
+        "invalid name \"title\" used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture15 - declaration names must be atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture15 do
+          use Hologram.Entity
+
+          attr "title", :string
+        end
+      end
+    end
+
     test "rejects reserved engine attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -329,6 +342,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           relationship :owner, Module1, optional: 1
+        end
+      end
+    end
+
+    test "rejects non-atom relationship name" do
+      expected_msg =
+        "invalid name \"owner\" used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture16 - declaration names must be atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture16 do
+          use Hologram.Entity
+
+          relationship "owner", Module1
         end
       end
     end
