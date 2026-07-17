@@ -3,6 +3,8 @@ defmodule Hologram.Entity do
   alias Hologram.Compiler.AST
   alias Hologram.Entity
 
+  @reserved_names [:created_at, :id, :updated_at]
+
   @valid_attr_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
 
   defmacro __using__(_opts) do
@@ -50,6 +52,7 @@ defmodule Hologram.Entity do
   """
   @spec attr(atom, atom, T.opts()) :: Macro.t()
   defmacro attr(name, type, opts \\ []) do
+    validate_attr_name!(__CALLER__.module, name)
     validate_attr_type!(__CALLER__.module, name, type)
 
     quote do
@@ -63,6 +66,8 @@ defmodule Hologram.Entity do
   """
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do
+    validate_relationship_name!(__CALLER__.module, name)
+
     quote do
       Module.put_attribute(
         __MODULE__,
@@ -88,6 +93,10 @@ defmodule Hologram.Entity do
     end
   end
 
+  defp validate_attr_name!(module, name) do
+    validate_declaration_name!(module, "attribute", name)
+  end
+
   defp validate_attr_type!(module, name, type) do
     if type not in @valid_attr_types do
       valid_types = Enum.map_join(@valid_attr_types, ", ", &inspect/1)
@@ -96,5 +105,19 @@ defmodule Hologram.Entity do
         message:
           "invalid type #{Macro.to_string(type)} for attribute #{inspect(name)} in #{inspect(module)} - valid attribute types are: #{valid_types}"
     end
+  end
+
+  defp validate_declaration_name!(module, kind, name) do
+    if name in @reserved_names do
+      reserved_names = Enum.map_join(@reserved_names, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - engine attributes #{reserved_names} are managed automatically and can't be declared"
+    end
+  end
+
+  defp validate_relationship_name!(module, name) do
+    validate_declaration_name!(module, "relationship", name)
   end
 end

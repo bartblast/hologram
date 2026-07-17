@@ -73,5 +73,47 @@ defmodule Hologram.EntityTest do
         end
       end
     end
+
+    test "rejects reserved engine attribute names" do
+      for reserved_name <- [:created_at, :id, :updated_at] do
+        module_name =
+          "Hologram.EntityTest.ReservedAttr#{Macro.camelize(to_string(reserved_name))}"
+
+        expected_msg =
+          "reserved name #{inspect(reserved_name)} used for attribute in #{module_name} - engine attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+
+        code = """
+        defmodule #{module_name} do
+          use Hologram.Entity
+
+          attr :#{reserved_name}, :string
+        end
+        """
+
+        assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+  end
+
+  describe "relationship/3" do
+    test "rejects reserved engine attribute names" do
+      for reserved_name <- [:created_at, :id, :updated_at] do
+        module_name =
+          "Hologram.EntityTest.ReservedRelationship#{Macro.camelize(to_string(reserved_name))}"
+
+        expected_msg =
+          "reserved name #{inspect(reserved_name)} used for relationship in #{module_name} - engine attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+
+        code = """
+        defmodule #{module_name} do
+          use Hologram.Entity
+
+          relationship :#{reserved_name}, Hologram.Test.Fixtures.Entity.Module1
+        end
+        """
+
+        assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
   end
 end
