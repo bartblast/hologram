@@ -24,6 +24,20 @@ defmodule Hologram.EntityTest do
     assert Module1.__is_hologram_entity__()
   end
 
+  describe "__relationships__/0" do
+    test "returns empty list for entity type with no relationship declarations" do
+      assert Module1.__relationships__() == []
+    end
+
+    test "returns relationship definitions sorted by name regardless of declaration order" do
+      assert Module3.__relationships__() == [
+               {:a, [Module2], []},
+               {:b, Module2, [optional: true]},
+               {:c, Module1, []}
+             ]
+    end
+  end
+
   describe "attr/3" do
     test "accepts all valid attribute types" do
       assert Module4.__attrs__() == [
@@ -58,20 +72,6 @@ defmodule Hologram.EntityTest do
           attr :happened_at, DateTime
         end
       end
-    end
-  end
-
-  describe "__relationships__/0" do
-    test "returns empty list for entity type with no relationship declarations" do
-      assert Module1.__relationships__() == []
-    end
-
-    test "returns relationship definitions sorted by name regardless of declaration order" do
-      assert Module3.__relationships__() == [
-               {:a, [Module2], []},
-               {:b, Module2, [optional: true]},
-               {:c, Module1, []}
-             ]
     end
   end
 end
