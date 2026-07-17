@@ -3,6 +3,8 @@ defmodule Hologram.Entity do
   alias Hologram.Compiler.AST
   alias Hologram.Entity
 
+  @valid_attr_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
+
   defmacro __using__(_opts) do
     [
       quote do
@@ -48,6 +50,8 @@ defmodule Hologram.Entity do
   """
   @spec attr(atom, atom, T.opts()) :: Macro.t()
   defmacro attr(name, type, opts \\ []) do
+    validate_attr_type!(__CALLER__.module, name, type)
+
     quote do
       Module.put_attribute(__MODULE__, :__attrs__, {unquote(name), unquote(type), unquote(opts)})
     end
@@ -81,6 +85,16 @@ defmodule Hologram.Entity do
   def register_relationships_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__relationships__, accumulate: true)
+    end
+  end
+
+  defp validate_attr_type!(module, name, type) do
+    if type not in @valid_attr_types do
+      valid_types = Enum.map_join(@valid_attr_types, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "invalid type #{Macro.to_string(type)} for attribute #{inspect(name)} in #{inspect(module)} - valid attribute types are: #{valid_types}"
     end
   end
 end
