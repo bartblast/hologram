@@ -48,6 +48,19 @@ defmodule Hologram.EntityTest do
              ]
     end
 
+    test "rejects values option on non-enum attribute" do
+      expected_msg =
+        "values option not allowed for attribute :title in Hologram.EntityTest.InlineEntityFixture8 - the values option applies only to enum attributes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture8 do
+          use Hologram.Entity
+
+          attr :title, :string, values: [:a, :b]
+        end
+      end
+    end
+
     test "rejects unknown attribute type" do
       expected_msg =
         "invalid type :text for attribute :title in Hologram.EntityTest.InlineEntityFixture1 - valid attribute types are: :boolean, :date, :datetime, :enum, :float, :integer, :string"
@@ -100,6 +113,40 @@ defmodule Hologram.EntityTest do
 
           attr :owner, :string
         end
+      end
+    end
+
+    test "rejects enum attribute without values option" do
+      expected_msg =
+        "missing values option for enum attribute :status in Hologram.EntityTest.InlineEntityFixture7 - enum attributes require a values option with a non-empty list of unique atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture7 do
+          use Hologram.Entity
+
+          attr :status, :enum
+        end
+      end
+    end
+
+    test "rejects invalid enum values option" do
+      invalid_values = [[], [:a, :a], ["x", "y"], :not_a_list]
+
+      for {values, index} <- Enum.with_index(invalid_values) do
+        module_name = "Hologram.EntityTest.InvalidEnumValues#{index}"
+
+        expected_msg =
+          "invalid values option #{inspect(values)} for enum attribute :status in #{module_name} - the values option must be a non-empty list of unique atoms"
+
+        code = """
+        defmodule #{module_name} do
+          use Hologram.Entity
+
+          attr :status, :enum, values: #{inspect(values)}
+        end
+        """
+
+        assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
       end
     end
 

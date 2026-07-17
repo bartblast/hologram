@@ -93,9 +93,10 @@ defmodule Hologram.Entity do
 
   @doc false
   @spec validate_attr!(module, atom, any, T.opts()) :: :ok
-  def validate_attr!(module, name, type, _opts) do
+  def validate_attr!(module, name, type, opts) do
     validate_attr_name!(module, name)
     validate_attr_type!(module, name, type)
+    validate_attr_values!(module, name, type, opts)
     :ok
   end
 
@@ -120,6 +121,26 @@ defmodule Hologram.Entity do
     end
   end
 
+  defp validate_attr_values!(module, name, :enum, opts) do
+    case Keyword.fetch(opts, :values) do
+      {:ok, values} ->
+        validate_enum_values!(module, name, values)
+
+      :error ->
+        raise Hologram.CompileError,
+          message:
+            "missing values option for enum attribute #{inspect(name)} in #{inspect(module)} - enum attributes require a values option with a non-empty list of unique atoms"
+    end
+  end
+
+  defp validate_attr_values!(module, name, _type, opts) do
+    if Keyword.has_key?(opts, :values) do
+      raise Hologram.CompileError,
+        message:
+          "values option not allowed for attribute #{inspect(name)} in #{inspect(module)} - the values option applies only to enum attributes"
+    end
+  end
+
   defp validate_declaration_name!(module, kind, name) do
     if name in @reserved_names do
       reserved_names = Enum.map_join(@reserved_names, ", ", &inspect/1)
@@ -130,6 +151,18 @@ defmodule Hologram.Entity do
     end
 
     validate_name_uniqueness!(module, kind, name)
+  end
+
+  defp validate_enum_values!(module, name, values) do
+    valid =
+      is_list(values) and values != [] and Enum.all?(values, &is_atom/1) and
+        values == Enum.uniq(values)
+
+    if not valid do
+      raise Hologram.CompileError,
+        message:
+          "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique atoms"
+    end
   end
 
   defp validate_name_uniqueness!(module, kind, name) do
