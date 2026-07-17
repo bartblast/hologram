@@ -125,6 +125,7 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_attr_opts!(module, name, opts) do
+    validate_opts_shape!(module, "attribute", name, opts)
     validate_known_opts!(module, "attribute", name, opts, @valid_attr_opts)
     validate_optional_opt!(module, "attribute", name, opts)
   end
@@ -243,11 +244,20 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  defp validate_opts_shape!(module, kind, name, opts) do
+    if not Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          "invalid options #{inspect(opts)} for #{kind} #{inspect(name)} in #{inspect(module)} - options must be a keyword list"
+    end
+  end
+
   defp validate_relationship_name!(module, name) do
     validate_declaration_name!(module, "relationship", name)
   end
 
   defp validate_relationship_opts!(module, name, opts) do
+    validate_opts_shape!(module, "relationship", name, opts)
     validate_known_opts!(module, "relationship", name, opts, @valid_relationship_opts)
     validate_optional_opt!(module, "relationship", name, opts)
   end

@@ -322,6 +322,19 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects non-keyword options" do
+      expected_msg =
+        "invalid options %{optional: true} for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture20 - options must be a keyword list"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture20 do
+          use Hologram.Entity
+
+          attr :title, :string, %{optional: true}
+        end
+      end
+    end
+
     test "rejects reserved engine attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -395,6 +408,19 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           relationship "owner", Module1
+        end
+      end
+    end
+
+    test "rejects non-keyword options" do
+      expected_msg =
+        "invalid options [:optional] for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture21 - options must be a keyword list"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture21 do
+          use Hologram.Entity
+
+          relationship :owner, Module1, [:optional]
         end
       end
     end
