@@ -89,6 +89,23 @@ defmodule Hologram.Entity do
     end
   end
 
+  @doc """
+  Generates a new entity id - a UUIDv7 string built from the number of milliseconds since the Unix epoch (1970-01-01 UTC, 48 bits) followed by random bits (74 bits).
+  Entity ids come only from this function, on the server and on the client alike.
+  """
+  @spec generate_id() :: String.t()
+  def generate_id do
+    unix_ms = System.system_time(:millisecond)
+    <<rand_a::12, rand_b::62, _discarded::6>> = :crypto.strong_rand_bytes(10)
+
+    uuid = <<unix_ms::48, 7::4, rand_a::12, 2::2, rand_b::62>>
+
+    <<part_1::binary-size(8), part_2::binary-size(4), part_3::binary-size(4),
+      part_4::binary-size(4), part_5::binary-size(12)>> = Base.encode16(uuid, case: :lower)
+
+    "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
+  end
+
   @doc false
   @spec register_attrs_accumulator() :: AST.t()
   def register_attrs_accumulator do
