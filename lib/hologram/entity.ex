@@ -2,16 +2,9 @@ defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Entity
+  alias Hologram.Entity.Validator
 
   @engine_attrs [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
-
-  @reserved_names [:created_at, :id, :updated_at]
-
-  @valid_attr_opts [:default, :optional, :values]
-
-  @valid_attr_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
-
-  @valid_relationship_opts [:optional]
 
   defmacro __using__(_opts) do
     [
@@ -67,7 +60,7 @@ defmodule Hologram.Entity do
   @spec attr(atom, atom, T.opts()) :: Macro.t()
   defmacro attr(name, type, opts \\ []) do
     quote do
-      Entity.validate_attr!(__MODULE__, unquote(name), unquote(type), unquote(opts))
+      Validator.validate_attr!(__MODULE__, unquote(name), unquote(type), unquote(opts))
       Module.put_attribute(__MODULE__, :__attrs__, {unquote(name), unquote(type), unquote(opts)})
     end
   end
@@ -79,7 +72,7 @@ defmodule Hologram.Entity do
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do
     quote do
-      Entity.validate_relationship!(__MODULE__, unquote(name), unquote(type), unquote(opts))
+      Validator.validate_relationship!(__MODULE__, unquote(name), unquote(type), unquote(opts))
 
       Module.put_attribute(
         __MODULE__,
@@ -120,173 +113,5 @@ defmodule Hologram.Entity do
     quote do
       Module.register_attribute(__MODULE__, :__relationships__, accumulate: true)
     end
-  end
-
-  @doc false
-  @spec validate_attr!(module, atom, any, T.opts()) :: :ok
-  def validate_attr!(module, name, type, opts) do
-    validate_attr_name!(module, name)
-    validate_attr_type!(module, name, type)
-    validate_attr_opts!(module, name, opts)
-    validate_attr_values!(module, name, type, opts)
-    validate_attr_default!(module, name, type, opts)
-    :ok
-  end
-
-  @doc false
-  @spec validate_relationship!(module, atom, any, T.opts()) :: :ok
-  def validate_relationship!(module, name, _type, opts) do
-    validate_relationship_name!(module, name)
-    validate_relationship_opts!(module, name, opts)
-    :ok
-  end
-
-  defp default_matches_type?(:boolean, value), do: is_boolean(value)
-
-  defp default_matches_type?(:date, value), do: is_struct(value, Date)
-
-  defp default_matches_type?(:datetime, value), do: is_struct(value, DateTime)
-
-  defp default_matches_type?(:float, value), do: is_float(value)
-
-  defp default_matches_type?(:integer, value), do: is_integer(value)
-
-  defp default_matches_type?(:string, value), do: is_binary(value)
-
-  defp validate_attr_default!(module, name, type, opts) do
-    case Keyword.fetch(opts, :default) do
-      {:ok, value} ->
-        validate_default_value!(module, name, type, opts, value)
-
-      :error ->
-        :ok
-    end
-  end
-
-  defp validate_attr_name!(module, name) do
-    validate_declaration_name!(module, "attribute", name)
-  end
-
-  defp validate_attr_opts!(module, name, opts) do
-    validate_known_opts!(module, "attribute", name, opts, @valid_attr_opts)
-    validate_optional_opt!(module, "attribute", name, opts)
-  end
-
-  defp validate_attr_type!(module, name, type) do
-    if type not in @valid_attr_types do
-      valid_types = Enum.map_join(@valid_attr_types, ", ", &inspect/1)
-
-      raise Hologram.CompileError,
-        message:
-          "invalid type #{inspect(type)} for attribute #{inspect(name)} in #{inspect(module)} - valid attribute types are: #{valid_types}"
-    end
-  end
-
-  defp validate_attr_values!(module, name, :enum, opts) do
-    case Keyword.fetch(opts, :values) do
-      {:ok, values} ->
-        validate_enum_values!(module, name, values)
-
-      :error ->
-        raise Hologram.CompileError,
-          message:
-            "missing values option for enum attribute #{inspect(name)} in #{inspect(module)} - enum attributes require a values option with a non-empty list of unique atoms"
-    end
-  end
-
-  defp validate_attr_values!(module, name, _type, opts) do
-    if Keyword.has_key?(opts, :values) do
-      raise Hologram.CompileError,
-        message:
-          "values option not allowed for attribute #{inspect(name)} in #{inspect(module)} - the values option applies only to enum attributes"
-    end
-  end
-
-  defp validate_declaration_name!(module, kind, name) do
-    if name in @reserved_names do
-      reserved_names = Enum.map_join(@reserved_names, ", ", &inspect/1)
-
-      raise Hologram.CompileError,
-        message:
-          "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - engine attributes #{reserved_names} are managed automatically and can't be declared"
-    end
-
-    validate_name_uniqueness!(module, kind, name)
-  end
-
-  defp validate_default_value!(module, name, :enum, opts, value) do
-    values = Keyword.fetch!(opts, :values)
-
-    if value not in values do
-      raise Hologram.CompileError,
-        message:
-          "invalid default value #{inspect(value)} for enum attribute #{inspect(name)} in #{inspect(module)} - the default value must be one of the declared values"
-    end
-  end
-
-  defp validate_default_value!(module, name, type, _opts, value) do
-    if not default_matches_type?(type, value) do
-      raise Hologram.CompileError,
-        message:
-          "invalid default value #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the default value must match the attribute type #{inspect(type)}"
-    end
-  end
-
-  defp validate_enum_values!(module, name, values) do
-    valid =
-      is_list(values) and values != [] and Enum.all?(values, &is_atom/1) and
-        values == Enum.uniq(values)
-
-    if not valid do
-      raise Hologram.CompileError,
-        message:
-          "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique atoms"
-    end
-  end
-
-  defp validate_known_opts!(module, kind, name, opts, valid_opts) do
-    Enum.each(opts, fn {key, _value} ->
-      if key not in valid_opts do
-        valid_opts_list = Enum.map_join(valid_opts, ", ", &inspect/1)
-
-        raise Hologram.CompileError,
-          message:
-            "unknown option #{inspect(key)} for #{kind} #{inspect(name)} in #{inspect(module)} - valid #{kind} options are: #{valid_opts_list}"
-      end
-    end)
-  end
-
-  defp validate_name_uniqueness!(module, kind, name) do
-    declarations =
-      Module.get_attribute(module, :__attrs__) ++ Module.get_attribute(module, :__relationships__)
-
-    declared_names = Enum.map(declarations, fn {declared_name, _type, _opts} -> declared_name end)
-
-    if name in declared_names do
-      raise Hologram.CompileError,
-        message:
-          "duplicate name #{inspect(name)} used for #{kind} in #{inspect(module)} - attribute and relationship names share one namespace and must be unique"
-    end
-  end
-
-  defp validate_optional_opt!(module, kind, name, opts) do
-    case Keyword.fetch(opts, :optional) do
-      {:ok, value} when not is_boolean(value) ->
-        raise Hologram.CompileError,
-          message:
-            "invalid optional option #{inspect(value)} for #{kind} #{inspect(name)} in #{inspect(module)} - the optional option must be true or false"
-
-      _fetch_result ->
-        :ok
-    end
-  end
-
-  defp validate_relationship_name!(module, name) do
-    validate_declaration_name!(module, "relationship", name)
-  end
-
-  defp validate_relationship_opts!(module, name, opts) do
-    validate_known_opts!(module, "relationship", name, opts, @valid_relationship_opts)
-    validate_optional_opt!(module, "relationship", name, opts)
   end
 end
