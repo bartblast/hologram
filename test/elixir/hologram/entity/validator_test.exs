@@ -180,6 +180,19 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects default violating type value constraints" do
+      expected_msg =
+        "invalid default value 9223372036854775808 for attribute :count in Hologram.Entity.ValidatorTest.InlineEntityFixture17 - the default value must match the attribute type :integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture17 do
+          use Hologram.Entity
+
+          attr :count, :integer, default: 9_223_372_036_854_775_808
+        end
+      end
+    end
+
     test "rejects duplicate attribute name" do
       expected_msg =
         "duplicate name :title used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture3 - attribute and relationship names share one namespace and must be unique"

@@ -104,18 +104,6 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp default_matches_type?(:boolean, value), do: is_boolean(value)
-
-  defp default_matches_type?(:date, value), do: is_struct(value, Date)
-
-  defp default_matches_type?(:datetime, value), do: is_struct(value, DateTime)
-
-  defp default_matches_type?(:float, value), do: is_float(value)
-
-  defp default_matches_type?(:integer, value), do: is_integer(value)
-
-  defp default_matches_type?(:string, value), do: is_binary(value)
-
   defp relationship_type_valid?(type) when is_atom(type), do: Reflection.alias?(type)
 
   defp relationship_type_valid?([type]), do: Reflection.alias?(type)
@@ -199,8 +187,8 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_default_value!(module, name, type, _opts, value) do
-    if not default_matches_type?(type, value) do
+  defp validate_default_value!(module, name, type, opts, value) do
+    if not attr_value_valid?(value, type, opts) do
       raise Hologram.CompileError,
         message:
           "invalid default value #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the default value must match the attribute type #{inspect(type)}"
