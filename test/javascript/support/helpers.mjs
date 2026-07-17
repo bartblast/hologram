@@ -401,6 +401,16 @@ export function putState(component, state) {
   return Erlang_Maps["put/3"](Type.atom("state"), newState, component);
 }
 
+export function refuteBoxedStrictEqual(left, right) {
+  if (Interpreter.isStrictlyEqual(left, right)) {
+    const inspectLeft = Interpreter.inspect(left);
+    const inspectRight = Interpreter.inspect(right);
+    const failMessage = `expected (boxed) ${inspectLeft} to not strictly equal (boxed) ${inspectRight}`;
+
+    assert.fail(failMessage);
+  }
+}
+
 export function registerWebApis() {
   const {window} = new JSDOM("", {url: "http://localhost"});
 
