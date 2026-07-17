@@ -5,6 +5,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module4
 
   describe "attr_value_valid?/3" do
     test "validates :boolean values" do
@@ -69,6 +70,47 @@ defmodule Hologram.Entity.ValidatorTest do
       refute attr_value_valid?(nil, :string)
       refute attr_value_valid?(nil, :string, optional: false)
       assert attr_value_valid?(nil, :enum, optional: true, values: [:done, :todo])
+    end
+  end
+
+  describe "validate/2" do
+    test "returns :ok for complete valid data" do
+      assert validate(Module2, %{a: true, b: 1, c: "x"}) == :ok
+    end
+
+    test "returns :ok when optional attributes are absent" do
+      assert validate(Module2, %{a: false, c: "x"}) == :ok
+    end
+
+    test "returns :ok for entity type with no declared attributes and empty data" do
+      assert validate(Module1, %{}) == :ok
+    end
+
+    test "passes declaration options through to value validation" do
+      data = %{a: ~D[2026-07-17], b: ~U[2026-07-17 12:00:00Z], c: :x, d: 1.5}
+
+      assert validate(Module4, data) == :ok
+    end
+
+    test "reports missing non-optional attributes regardless of declared defaults" do
+      assert validate(Module2, %{b: 1}) == {:error, [{:a, :missing}, {:c, :missing}]}
+    end
+
+    test "reports invalid attribute values" do
+      assert validate(Module2, %{a: 5, c: "x"}) == {:error, [{:a, :invalid}]}
+    end
+
+    test "reports nil for non-optional attribute as invalid" do
+      assert validate(Module2, %{a: true, b: nil, c: nil}) == {:error, [{:c, :invalid}]}
+    end
+
+    test "reports unknown keys" do
+      assert validate(Module2, %{a: true, c: "x", e: 1}) == {:error, [{:e, :unknown}]}
+    end
+
+    test "accumulates all errors sorted by name" do
+      assert validate(Module2, %{b: "nope", e: 1}) ==
+               {:error, [{:a, :missing}, {:b, :invalid}, {:c, :missing}, {:e, :unknown}]}
     end
   end
 

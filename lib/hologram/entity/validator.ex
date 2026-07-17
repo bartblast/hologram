@@ -42,6 +42,31 @@ defmodule Hologram.Entity.Validator do
   def attr_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
 
   @doc """
+  Validates the given data map against the given entity type's declared attributes.
+  Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} tuples with reason being :invalid, :missing or :unknown.
+  A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
+  An absent optional attribute is valid.
+  """
+  @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom})}
+  def validate(entity_type, data) do
+    attrs = entity_type.__attrs__()
+    attr_names = Enum.map(attrs, fn {name, _type, _opts} -> name end)
+
+    unknown_errors =
+      data
+      |> Map.keys()
+      |> Enum.reject(&(&1 in attr_names))
+      |> Enum.map(&{&1, :unknown})
+
+    attr_errors = Enum.flat_map(attrs, &attr_data_errors(data, &1))
+
+    case Enum.sort(unknown_errors ++ attr_errors) do
+      [] -> :ok
+      errors -> {:error, errors}
+    end
+  end
+
+  @doc """
   Validates the given attribute declaration at compile time.
   Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type, options, enum values, default).
   """
@@ -64,6 +89,16 @@ defmodule Hologram.Entity.Validator do
     validate_relationship_name!(module, name)
     validate_relationship_opts!(module, name, opts)
     :ok
+  end
+
+  defp attr_data_errors(data, {name, type, opts}) do
+    case Map.fetch(data, name) do
+      {:ok, value} ->
+        if attr_value_valid?(value, type, opts), do: [], else: [{name, :invalid}]
+
+      :error ->
+        if Keyword.get(opts, :optional) == true, do: [], else: [{name, :missing}]
+    end
   end
 
   defp default_matches_type?(:boolean, value), do: is_boolean(value)
