@@ -34,10 +34,13 @@ defmodule Hologram.Entity do
     ]
   end
 
-  defmacro __before_compile__(_env) do
+  defmacro __before_compile__(env) do
     system_attributes = Macro.escape(@system_attributes)
+    struct_fields = struct_fields(env.module)
 
     quote do
+      defstruct unquote(struct_fields)
+
       @doc """
       Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
       """
@@ -120,5 +123,24 @@ defmodule Hologram.Entity do
     quote do
       Module.register_attribute(__MODULE__, :__relationships__, accumulate: true)
     end
+  end
+
+  @doc false
+  @spec struct_fields(module) :: list(atom)
+  def struct_fields(module) do
+    system_attribute_names = Enum.map(@system_attributes, fn {name, _type, _opts} -> name end)
+
+    attribute_names =
+      module
+      |> Module.get_attribute(:__attributes__)
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+
+    to_one_relationship_names =
+      module
+      |> Module.get_attribute(:__relationships__)
+      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+
+    Enum.sort(system_attribute_names ++ attribute_names ++ to_one_relationship_names)
   end
 end

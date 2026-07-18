@@ -53,6 +53,38 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__struct__/0" do
+    test "defines only system attribute fields for entity type with no declarations" do
+      field_names =
+        %Module1{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert field_names == [:created_at, :id, :updated_at]
+    end
+
+    test "includes declared attribute fields" do
+      field_names =
+        %Module2{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert field_names == [:a, :b, :c, :created_at, :id, :updated_at]
+    end
+
+    test "includes to-one relationship fields and excludes to-many relationship fields" do
+      field_names =
+        %Module3{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert field_names == [:b, :c, :created_at, :id, :updated_at]
+    end
+  end
+
   describe "attribute/3" do
     test "accepts all valid attribute types" do
       assert Module4.__attributes__() == [
