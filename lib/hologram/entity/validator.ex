@@ -172,7 +172,7 @@ defmodule Hologram.Entity.Validator do
 
       raise Hologram.CompileError,
         message:
-          "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - engine attributes #{reserved_names} are managed automatically and can't be declared"
+          "reserved name #{inspect(name)} used for #{kind} in #{inspect(module)} - system attributes #{reserved_names} are managed automatically and can't be declared"
     end
 
     validate_name_uniqueness!(module, kind, name)

@@ -22,16 +22,16 @@ defmodule Hologram.EntityTest do
     end
   end
 
-  describe "__engine_attrs__/0" do
-    test "returns engine attribute definitions sorted by name on every entity type" do
+  describe "__system_attributes__/0" do
+    test "returns system attribute definitions sorted by name on every entity type" do
       expected = [
         {:created_at, :datetime, []},
         {:id, :uuid, []},
         {:updated_at, :datetime, []}
       ]
 
-      assert Module1.__engine_attrs__() == expected
-      assert Module2.__engine_attrs__() == expected
+      assert Module1.__system_attributes__() == expected
+      assert Module2.__system_attributes__() == expected
     end
   end
 

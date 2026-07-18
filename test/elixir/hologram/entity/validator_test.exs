@@ -335,13 +335,13 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects reserved engine attribute names" do
+    test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
           "Hologram.Entity.ValidatorTest.ReservedAttr#{Macro.camelize(to_string(reserved_name))}"
 
         expected_msg =
-          "reserved name #{inspect(reserved_name)} used for attribute in #{module_name} - engine attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+          "reserved name #{inspect(reserved_name)} used for attribute in #{module_name} - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
 
         code = """
         defmodule #{module_name} do
@@ -425,13 +425,13 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects reserved engine attribute names" do
+    test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
           "Hologram.Entity.ValidatorTest.ReservedRelationship#{Macro.camelize(to_string(reserved_name))}"
 
         expected_msg =
-          "reserved name #{inspect(reserved_name)} used for relationship in #{module_name} - engine attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+          "reserved name #{inspect(reserved_name)} used for relationship in #{module_name} - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
 
         code = """
         defmodule #{module_name} do
