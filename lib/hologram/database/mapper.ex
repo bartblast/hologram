@@ -9,6 +9,58 @@ defmodule Hologram.Database.Mapper do
   @max_identifier_bytes 63
 
   @doc """
+  Returns the column definitions derived from the given entity type module, in physical order:
+  id, declared attributes sorted by name, to-one relationship references sorted by name,
+  system timestamps.
+
+  Each definition is a map with :name (column name string), :type (the logical attribute type,
+  as consumed by the codec), :sql_type (the DDL type fragment - a derived per-attribute enum
+  type name for :enum attributes), :null (true only for optional declarations), :references
+  (the referenced table name for to-one relationship columns, nil otherwise), and :source
+  (:system, or the declaration the column is derived from). To-many relationships derive no
+  columns - they live in join tables.
+
+  Raises Hologram.CompileError when two declarations derive the same column name (an attribute
+  named x_id collides with a to-one relationship named x).
+  """
+  @spec columns(module) :: list(%{atom => any})
+  def columns(entity_type) do
+    table_name = table_name(entity_type)
+
+    attribute_columns =
+      Enum.map(entity_type.__attributes__(), fn {name, type, opts} ->
+        %{
+          name: Atom.to_string(name),
+          type: type,
+          sql_type: sql_type(type, table_name, name),
+          null: Keyword.get(opts, :optional) == true,
+          references: nil,
+          source: {:attribute, name}
+        }
+      end)
+
+    to_one_columns =
+      entity_type.__relationships__()
+      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+      |> Enum.map(fn {name, target, opts} ->
+        %{
+          name: fit_identifier("#{name}_id"),
+          type: :uuid,
+          sql_type: "uuid",
+          null: Keyword.get(opts, :optional) == true,
+          references: table_name(target),
+          source: {:relationship, name}
+        }
+      end)
+
+    columns = [id_column() | attribute_columns] ++ to_one_columns ++ timestamp_columns()
+
+    validate_column_names!(entity_type, columns)
+
+    columns
+  end
+
+  @doc """
   Returns the given identifier wrapped in double quotes, with embedded double quotes escaped.
   Emitted SQL always quotes identifiers, so no derived name can ever clash with a reserved word.
   """
@@ -86,7 +138,65 @@ defmodule Hologram.Database.Mapper do
     end
   end
 
+  defp id_column do
+    %{name: "id", type: :uuid, sql_type: "uuid", null: false, references: nil, source: :system}
+  end
+
+  defp sql_type(:boolean, _table_name, _name), do: "boolean"
+
+  defp sql_type(:date, _table_name, _name), do: "date"
+
+  defp sql_type(:datetime, _table_name, _name), do: "timestamptz"
+
+  defp sql_type(:enum, table_name, name), do: fit_identifier("#{table_name}_#{name}_$enum")
+
+  defp sql_type(:float, _table_name, _name), do: "float8"
+
+  defp sql_type(:integer, _table_name, _name), do: "int8"
+
+  defp sql_type(:string, _table_name, _name), do: ~s(text COLLATE "C")
+
   defp strip_root([root | [_head | _tail] = remainder], root), do: remainder
 
   defp strip_root(segments, _root), do: segments
+
+  defp timestamp_columns do
+    Enum.map(["created_at", "updated_at"], fn name ->
+      %{
+        name: name,
+        type: :datetime,
+        sql_type: "timestamptz",
+        null: false,
+        references: nil,
+        source: :system
+      }
+    end)
+  end
+
+  defp validate_column_names!(entity_type, columns) do
+    collisions =
+      columns
+      |> Enum.group_by(& &1.name)
+      |> Enum.filter(fn {_name, group} -> length(group) > 1 end)
+      |> Enum.sort()
+
+    if collisions != [] do
+      descriptions =
+        Enum.map_join(collisions, "\n", fn {name, group} ->
+          sources =
+            Enum.map_join(group, ", ", fn column ->
+              {kind, declaration_name} = column.source
+              "#{kind} #{inspect(declaration_name)}"
+            end)
+
+          "  * column \"#{name}\" is derived from #{sources}"
+        end)
+
+      raise Hologram.CompileError,
+        message:
+          "colliding column names in #{inspect(entity_type)} - rename the declarations so that every derived column name is unique:\n#{descriptions}"
+    end
+
+    :ok
+  end
 end
