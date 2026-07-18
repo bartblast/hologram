@@ -1,10 +1,11 @@
 defmodule Hologram.Database.Codec do
   @moduledoc false
 
-  # Translates values between the Elixir terms held by entity structs and the terms
-  # the Postgres driver exchanges, per attribute type.
-  # decode/2 and encode/2 are inverses - their round-trip is the per-type contract.
-
+  @doc """
+  Translates a value received from the Postgres driver into the Elixir term held by entity structs, per attribute type.
+  nil stays nil, :enum text becomes an existing atom, :uuid 16-byte binaries become canonical lowercase uuid strings - values of the other admitted types pass through unchanged.
+  The inverse of encode/2 - the round-trip is the per-type contract.
+  """
   @spec decode(any, atom) :: any
   def decode(value, type)
 
@@ -31,6 +32,11 @@ defmodule Hologram.Database.Codec do
     "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
   end
 
+  @doc """
+  Translates an Elixir term held by entity structs into the value the Postgres driver exchanges, per attribute type.
+  nil stays nil, :datetime values are normalized to their UTC representation, :enum atoms become strings, :uuid strings become 16-byte binaries - values of the other admitted types pass through unchanged.
+  The inverse of decode/2 - the round-trip is the per-type contract.
+  """
   @spec encode(any, atom) :: any
   def encode(value, type)
 
