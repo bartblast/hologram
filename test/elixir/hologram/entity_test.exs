@@ -1,7 +1,7 @@
 defmodule Hologram.EntityTest do
   use Hologram.Test.BasicCase, async: true
 
-  import Hologram.Entity, only: [generate_id: 0]
+  import Hologram.Entity
 
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -122,6 +122,44 @@ defmodule Hologram.EntityTest do
 
       assert embedded_unix_ms >= unix_ms_before
       assert embedded_unix_ms <= unix_ms_after
+    end
+  end
+
+  describe "new/2" do
+    test "returns a struct of the given entity type with a generated id and nil system timestamps" do
+      entity = new(Module1)
+
+      assert is_struct(entity, Module1)
+
+      assert entity.id =~
+               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+      assert entity.created_at == nil
+      assert entity.updated_at == nil
+    end
+
+    test "applies declared defaults to absent attributes" do
+      entity = new(Module2)
+
+      assert entity.a == false
+      assert entity.b == nil
+      assert entity.c == nil
+    end
+
+    test "keeps given attribute values over declared defaults" do
+      assert new(Module2, %{a: true}).a == true
+    end
+
+    test "sets given attribute values" do
+      assert new(Module2, %{c: "text_1"}).c == "text_1"
+    end
+
+    test "keeps a given id" do
+      assert new(Module2, %{id: "id_1"}).id == "id_1"
+    end
+
+    test "sets given to-one relationship references" do
+      assert new(Module3, %{c: "id_2"}).c == "id_2"
     end
   end
 end

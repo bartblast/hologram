@@ -109,6 +109,25 @@ defmodule Hologram.Entity do
     "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
   end
 
+  @doc """
+  Builds a new entity struct of the given entity type from the given values.
+  The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
+  """
+  @spec new(module, %{optional(atom) => any}) :: struct
+  def new(entity_type, values \\ %{}) do
+    declared_defaults =
+      entity_type.__attributes__()
+      |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
+      |> Map.new(fn {name, _type, opts} -> {name, Keyword.fetch!(opts, :default)} end)
+
+    fields =
+      declared_defaults
+      |> Map.put(:id, generate_id())
+      |> Map.merge(values)
+
+    struct!(entity_type, fields)
+  end
+
   @doc false
   @spec register_attributes_accumulator() :: AST.t()
   def register_attributes_accumulator do
