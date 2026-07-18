@@ -3,10 +3,10 @@ defmodule Hologram.Database.Mapper do
 
   alias Hologram.Reflection
 
+  @hash_bytes 8
+
   # PostgreSQL truncates identifiers to 63 bytes - derived identifiers must never rely on that.
   @max_identifier_bytes 63
-
-  @hash_bytes 8
 
   @doc """
   Returns the given identifier wrapped in double quotes, with embedded double quotes escaped.
