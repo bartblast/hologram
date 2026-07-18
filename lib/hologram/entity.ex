@@ -110,10 +110,10 @@ defmodule Hologram.Entity do
   end
 
   @doc """
-  Builds a new entity struct of the given entity type from the given values.
+  Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
   The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
   """
-  @spec new(module, %{optional(atom) => any}) :: struct
+  @spec new(module, %{optional(atom) => any} | keyword) :: struct
   def new(entity_type, values \\ %{}) do
     declared_defaults =
       entity_type.__attributes__()
@@ -123,7 +123,7 @@ defmodule Hologram.Entity do
     fields =
       declared_defaults
       |> Map.put(:id, generate_id())
-      |> Map.merge(values)
+      |> Map.merge(Map.new(values))
 
     struct!(entity_type, fields)
   end

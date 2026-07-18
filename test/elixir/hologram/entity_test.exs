@@ -150,8 +150,12 @@ defmodule Hologram.EntityTest do
       assert new(Module2, %{a: true}).a == true
     end
 
-    test "sets given attribute values" do
+    test "accepts values as a map" do
       assert new(Module2, %{c: "text_1"}).c == "text_1"
+    end
+
+    test "accepts values as a keyword list" do
+      assert new(Module2, c: "text_2").c == "text_2"
     end
 
     test "keeps a given id" do
