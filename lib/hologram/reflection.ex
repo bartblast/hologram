@@ -157,6 +157,23 @@ defmodule Hologram.Reflection do
   def elixir_module?(_term), do: false
 
   @doc """
+  Returns true if the given term is an entity type module (a module that has a "use Hologram.Entity" directive).
+  Otherwise false is returned.
+
+  ## Examples
+
+      iex> entity?(MyEntity)
+      true
+
+      iex> entity?(Hologram.Reflection)
+      false
+  """
+  @spec entity?(term) :: boolean
+  def entity?(term) do
+    elixir_module?(term) && has_function?(term, :__is_hologram_entity__, 0)
+  end
+
+  @doc """
   Returns true if the given term is an existing Erlang module, or false otherwise.
 
   An Erlang module is detected by the absence of the `__info__/1` function that the
@@ -296,6 +313,14 @@ defmodule Hologram.Reflection do
     |> Enum.reduce([], &include_app_elixir_modules/2)
     |> Enum.filter(&elixir_module?/1)
     |> Kernel.--(@ignored_modules)
+  end
+
+  @doc """
+  Lists Elixir modules which are Hologram entity types and that belong to any of the OTP apps in the project.
+  """
+  @spec list_entities() :: list(module)
+  def list_entities do
+    Enum.filter(list_elixir_modules(), &entity?/1)
   end
 
   @doc """
