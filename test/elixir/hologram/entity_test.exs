@@ -8,13 +8,13 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
 
-  describe "__attrs__/0" do
+  describe "__attributes__/0" do
     test "returns empty list for entity type with no attribute declarations" do
-      assert Module1.__attrs__() == []
+      assert Module1.__attributes__() == []
     end
 
     test "returns attribute definitions sorted by name regardless of declaration order" do
-      assert Module2.__attrs__() == [
+      assert Module2.__attributes__() == [
                {:a, :boolean, [default: false]},
                {:b, :integer, [optional: true]},
                {:c, :string, []}
@@ -53,9 +53,9 @@ defmodule Hologram.EntityTest do
     end
   end
 
-  describe "attr/3" do
+  describe "attribute/3" do
     test "accepts all valid attribute types" do
-      assert Module4.__attrs__() == [
+      assert Module4.__attributes__() == [
                {:a, :date, []},
                {:b, :datetime, []},
                {:c, :enum, [values: [:x, :y], default: :x]},

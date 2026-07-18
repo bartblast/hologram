@@ -10,7 +10,7 @@ defmodule Hologram.Entity do
     [
       quote do
         import Hologram.Entity,
-          only: [attr: 2, attr: 3, relationship: 2, relationship: 3]
+          only: [attribute: 2, attribute: 3, relationship: 2, relationship: 3]
 
         @before_compile Entity
 
@@ -25,7 +25,7 @@ defmodule Hologram.Entity do
         @spec __is_hologram_entity__() :: boolean
         def __is_hologram_entity__, do: true
       end,
-      register_attrs_accumulator(),
+      register_attributes_accumulator(),
       register_relationships_accumulator()
     ]
   end
@@ -37,8 +37,8 @@ defmodule Hologram.Entity do
       @doc """
       Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
       """
-      @spec __attrs__() :: list({atom, atom, keyword})
-      def __attrs__, do: Enum.sort(@__attrs__)
+      @spec __attributes__() :: list({atom, atom, keyword})
+      def __attributes__, do: Enum.sort(@__attributes__)
 
       @doc """
       Returns the list of engine attribute definitions present on every entity type, sorted by attribute name.
@@ -55,17 +55,17 @@ defmodule Hologram.Entity do
   end
 
   @doc """
-  Accumulates the given attribute definition in __attrs__ module attribute.
+  Accumulates the given attribute definition in __attributes__ module attribute.
   """
-  @spec attr(atom, atom, T.opts()) :: Macro.t()
-  defmacro attr(name, type, opts \\ []) do
+  @spec attribute(atom, atom, T.opts()) :: Macro.t()
+  defmacro attribute(name, type, opts \\ []) do
     quote do
       name = unquote(name)
       type = unquote(type)
       opts = unquote(opts)
 
       Validator.validate_attr!(__MODULE__, name, type, opts)
-      Module.put_attribute(__MODULE__, :__attrs__, {name, type, opts})
+      Module.put_attribute(__MODULE__, :__attributes__, {name, type, opts})
     end
   end
 
@@ -103,10 +103,10 @@ defmodule Hologram.Entity do
   end
 
   @doc false
-  @spec register_attrs_accumulator() :: AST.t()
-  def register_attrs_accumulator do
+  @spec register_attributes_accumulator() :: AST.t()
+  def register_attributes_accumulator do
     quote do
-      Module.register_attribute(__MODULE__, :__attrs__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__attributes__, accumulate: true)
     end
   end
 

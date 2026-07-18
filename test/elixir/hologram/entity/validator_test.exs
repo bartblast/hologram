@@ -123,7 +123,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture8 do
           use Hologram.Entity
 
-          attr :title, :string, values: [:a, :b]
+          attribute :title, :string, values: [:a, :b]
         end
       end
     end
@@ -136,7 +136,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture10 do
           use Hologram.Entity
 
-          attr :title, :string, require: true
+          attribute :title, :string, require: true
         end
       end
     end
@@ -149,7 +149,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture1 do
           use Hologram.Entity
 
-          attr :title, :text
+          attribute :title, :text
         end
       end
     end
@@ -162,7 +162,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture2 do
           use Hologram.Entity
 
-          attr :happened_at, DateTime
+          attribute :happened_at, DateTime
         end
       end
     end
@@ -175,7 +175,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture13 do
           use Hologram.Entity
 
-          attr :title, :string, default: 5
+          attribute :title, :string, default: 5
         end
       end
     end
@@ -184,11 +184,11 @@ defmodule Hologram.Entity.ValidatorTest do
       defmodule InlineEntityFixture18 do
         use Hologram.Entity
 
-        attr :status, :enum, values: [:a, :b], default: nil, optional: true
-        attr :title, :string, default: nil, optional: true
+        attribute :status, :enum, values: [:a, :b], default: nil, optional: true
+        attribute :title, :string, default: nil, optional: true
       end
 
-      assert InlineEntityFixture18.__attrs__() == [
+      assert InlineEntityFixture18.__attributes__() == [
                {:status, :enum, [values: [:a, :b], default: nil, optional: true]},
                {:title, :string, [default: nil, optional: true]}
              ]
@@ -202,7 +202,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture19 do
           use Hologram.Entity
 
-          attr :status, :enum, values: [:a, :b], default: nil
+          attribute :status, :enum, values: [:a, :b], default: nil
         end
       end
     end
@@ -215,7 +215,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture17 do
           use Hologram.Entity
 
-          attr :count, :integer, default: 9_223_372_036_854_775_808
+          attribute :count, :integer, default: 9_223_372_036_854_775_808
         end
       end
     end
@@ -228,8 +228,8 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture3 do
           use Hologram.Entity
 
-          attr :title, :string
-          attr :title, :integer
+          attribute :title, :string
+          attribute :title, :integer
         end
       end
     end
@@ -244,7 +244,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
           relationship :owner, Module1
 
-          attr :owner, :string
+          attribute :owner, :string
         end
       end
     end
@@ -257,7 +257,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture7 do
           use Hologram.Entity
 
-          attr :status, :enum
+          attribute :status, :enum
         end
       end
     end
@@ -270,7 +270,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture14 do
           use Hologram.Entity
 
-          attr :status, :enum, values: [:a, :b], default: :c
+          attribute :status, :enum, values: [:a, :b], default: :c
         end
       end
     end
@@ -288,7 +288,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule #{module_name} do
           use Hologram.Entity
 
-          attr :status, :enum, values: #{inspect(values)}
+          attribute :status, :enum, values: #{inspect(values)}
         end
         """
 
@@ -304,7 +304,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture9 do
           use Hologram.Entity
 
-          attr :title, :string, optional: :yes
+          attribute :title, :string, optional: :yes
         end
       end
     end
@@ -317,7 +317,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture15 do
           use Hologram.Entity
 
-          attr "title", :string
+          attribute "title", :string
         end
       end
     end
@@ -330,7 +330,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture20 do
           use Hologram.Entity
 
-          attr :title, :string, %{optional: true}
+          attribute :title, :string, %{optional: true}
         end
       end
     end
@@ -347,7 +347,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule #{module_name} do
           use Hologram.Entity
 
-          attr :#{reserved_name}, :string
+          attribute :#{reserved_name}, :string
         end
         """
 
@@ -379,7 +379,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture6 do
           use Hologram.Entity
 
-          attr :title, :string
+          attribute :title, :string
 
           relationship :title, Module1
         end

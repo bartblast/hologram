@@ -50,7 +50,7 @@ defmodule Hologram.Entity.Validator do
   """
   @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom})}
   def validate(entity_type, data) do
-    attrs = entity_type.__attrs__()
+    attrs = entity_type.__attributes__()
     attr_names = Enum.map(attrs, fn {name, _type, _opts} -> name end)
 
     unknown_errors =
@@ -221,7 +221,8 @@ defmodule Hologram.Entity.Validator do
 
   defp validate_name_uniqueness!(module, kind, name) do
     declarations =
-      Module.get_attribute(module, :__attrs__) ++ Module.get_attribute(module, :__relationships__)
+      Module.get_attribute(module, :__attributes__) ++
+        Module.get_attribute(module, :__relationships__)
 
     declared_names = Enum.map(declarations, fn {declared_name, _type, _opts} -> declared_name end)
 
