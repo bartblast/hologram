@@ -5,6 +5,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
 
   describe "attribute_value_valid?/3" do
@@ -352,6 +353,68 @@ defmodule Hologram.Entity.ValidatorTest do
         """
 
         assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+  end
+
+  describe "validate_model!/1" do
+    test "returns :ok for empty model" do
+      assert validate_model!([]) == :ok
+    end
+
+    test "returns :ok when every relationship target is an entity type module" do
+      assert validate_model!([Module1, Module2, Module3]) == :ok
+    end
+
+    test "rejects a relationship targeting a non-entity module" do
+      defmodule InlineEntityFixture22 do
+        use Hologram.Entity
+
+        relationship :owner, Hologram.Reflection
+      end
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture22 targets Hologram.Reflection, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture22])
+      end
+    end
+
+    test "rejects a relationship targeting a nonexistent module" do
+      defmodule InlineEntityFixture23 do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture23 targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture23])
+      end
+    end
+
+    test "collects all violations across the model and raises once" do
+      defmodule InlineEntityFixture24 do
+        use Hologram.Entity
+
+        relationship :a, Hologram.Reflection
+      end
+
+      defmodule InlineEntityFixture25 do
+        use Hologram.Entity
+
+        relationship :b, [NonExistent.Module]
+        relationship :c, Module2
+      end
+
+      expected_msg =
+        "invalid data model:\n  * relationship :a in Hologram.Entity.ValidatorTest.InlineEntityFixture24 targets Hologram.Reflection, which is not an entity type module\n  * relationship :b in Hologram.Entity.ValidatorTest.InlineEntityFixture25 targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture24, InlineEntityFixture25])
       end
     end
   end

@@ -82,7 +82,33 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Validates the given data model as a whole, taking the list of all compiled entity type modules.
+
+  Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module.
+  This check is possible only after all entity type modules are compiled - relationship declarations verify the type shape alone, because the target module may not be compiled yet while the declaring module's body is executing.
+  """
+  @spec validate_model!(list(module)) :: :ok
+  def validate_model!(entity_types) do
+    violations =
+      entity_types
+      |> Enum.flat_map(&relationship_target_violations/1)
+      |> Enum.sort()
+
+    if violations != [] do
+      descriptions =
+        Enum.map_join(violations, "\n", fn {entity_type, name, target} ->
+          "  * relationship #{inspect(name)} in #{inspect(entity_type)} targets #{inspect(target)}, which is not an entity type module"
+        end)
+
+      raise Hologram.CompileError, message: "invalid data model:\n#{descriptions}"
+    end
+
+    :ok
+  end
+
+  @doc """
   Validates the given relationship declaration at compile time.
+
   Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type shape, options).
   The type is checked for shape only (an entity type module or a one-element list wrapping one) - whether it names an actual entity type module is not verified here, because the target module may not be compiled yet while the declaring module's body is executing.
   """
@@ -102,6 +128,17 @@ defmodule Hologram.Entity.Validator do
       :error ->
         if Keyword.get(opts, :optional) == true, do: [], else: [{name, :missing}]
     end
+  end
+
+  defp relationship_target([target]), do: target
+
+  defp relationship_target(target), do: target
+
+  defp relationship_target_violations(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.map(fn {name, type, _opts} -> {name, relationship_target(type)} end)
+    |> Enum.reject(fn {_name, target} -> Reflection.entity?(target) end)
+    |> Enum.map(fn {name, target} -> {entity_type, name, target} end)
   end
 
   defp relationship_type_valid?(type) when is_atom(type), do: Reflection.alias?(type)
