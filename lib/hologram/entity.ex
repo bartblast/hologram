@@ -48,16 +48,16 @@ defmodule Hologram.Entity do
       def __attributes__, do: Enum.sort(@__attributes__)
 
       @doc """
-      Returns the list of system attribute definitions present on every entity type, sorted by attribute name.
-      """
-      @spec __system_attributes__() :: list({atom, atom, keyword})
-      def __system_attributes__, do: unquote(system_attributes)
-
-      @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
       def __relationships__, do: Enum.sort(@__relationships__)
+
+      @doc """
+      Returns the list of system attribute definitions present on every entity type, sorted by attribute name.
+      """
+      @spec __system_attributes__() :: list({atom, atom, keyword})
+      def __system_attributes__, do: unquote(system_attributes)
     end
   end
 

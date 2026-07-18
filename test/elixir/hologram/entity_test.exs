@@ -22,19 +22,6 @@ defmodule Hologram.EntityTest do
     end
   end
 
-  describe "__system_attributes__/0" do
-    test "returns system attribute definitions sorted by name on every entity type" do
-      expected = [
-        {:created_at, :datetime, []},
-        {:id, :uuid, []},
-        {:updated_at, :datetime, []}
-      ]
-
-      assert Module1.__system_attributes__() == expected
-      assert Module2.__system_attributes__() == expected
-    end
-  end
-
   test "__is_hologram_entity__/0" do
     assert Module1.__is_hologram_entity__()
   end
@@ -82,6 +69,19 @@ defmodule Hologram.EntityTest do
         |> Enum.sort()
 
       assert field_names == [:b, :c, :created_at, :id, :updated_at]
+    end
+  end
+
+  describe "__system_attributes__/0" do
+    test "returns system attribute definitions sorted by name on every entity type" do
+      expected = [
+        {:created_at, :datetime, []},
+        {:id, :uuid, []},
+        {:updated_at, :datetime, []}
+      ]
+
+      assert Module1.__system_attributes__() == expected
+      assert Module2.__system_attributes__() == expected
     end
   end
 
