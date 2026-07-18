@@ -298,6 +298,29 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert run(opts) == :ok
     end
+
+    test "validates the data model even when compilation is skipped", %{opts: opts} do
+      System.delete_env("HOLOGRAM_START")
+
+      defmodule InvalidEntityFixture do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      # Register a fake loaded OTP app whose spec lists the invalid entity type module,
+      # so that data model discovery picks it up.
+      fixture_app = :hologram_invalid_entity_fixture_app
+      :ok = :application.load({:application, fixture_app, [modules: [InvalidEntityFixture]]})
+      on_exit(fn -> :application.unload(fixture_app) end)
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.InvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        run(opts)
+      end
+    end
   end
 
   test "compilation artifacts", %{opts: initial_opts} do

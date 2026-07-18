@@ -24,6 +24,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Entity.Validator
   alias Hologram.Reflection
 
   @ls_build_dirs [".elixir_ls", ".elixir-tools", ".expert", ".lexical"]
@@ -40,6 +41,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   @impl Mix.Task.Compiler
   def run(opts) do
     opts = Keyword.merge(build_default_opts(), opts)
+
+    # Positioned before the skip guards - the cheap whole-model checks must run on every
+    # invocation (including dev/test and language-server builds), while only the expensive
+    # bundle build stays behind them.
+    validate_data_model!()
 
     cond do
       opts[:force?] -> compile_with_lock(opts)
@@ -221,6 +227,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp remove_unreadable_lock_file(lock_path) do
     Logger.info("Hologram: removing unreadable lock file")
     File.rm(lock_path)
+  end
+
+  defp validate_data_model! do
+    Validator.validate_model!(Reflection.list_entities())
   end
 
   defp validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str) do
