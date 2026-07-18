@@ -10,9 +10,9 @@ defmodule Hologram.Entity.Validator do
 
   @reserved_names [:created_at, :id, :updated_at]
 
-  @valid_attr_opts [:default, :optional, :values]
+  @valid_attribute_opts [:default, :optional, :values]
 
-  @valid_attr_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
+  @valid_attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string]
 
   @valid_relationship_opts [:optional]
 
@@ -20,27 +20,27 @@ defmodule Hologram.Entity.Validator do
   Returns true if the given value is a valid value for the given attribute type and declaration options, or false otherwise.
   A nil value is valid only when the optional option is true.
   """
-  @spec attr_value_valid?(any, atom, T.opts()) :: boolean
-  def attr_value_valid?(value, type, opts \\ [])
+  @spec attribute_value_valid?(any, atom, T.opts()) :: boolean
+  def attribute_value_valid?(value, type, opts \\ [])
 
-  def attr_value_valid?(nil, _type, opts), do: Keyword.get(opts, :optional) == true
+  def attribute_value_valid?(nil, _type, opts), do: Keyword.get(opts, :optional) == true
 
-  def attr_value_valid?(value, :boolean, _opts), do: is_boolean(value)
+  def attribute_value_valid?(value, :boolean, _opts), do: is_boolean(value)
 
-  def attr_value_valid?(value, :date, _opts), do: is_struct(value, Date)
+  def attribute_value_valid?(value, :date, _opts), do: is_struct(value, Date)
 
-  def attr_value_valid?(value, :datetime, _opts), do: is_struct(value, DateTime)
+  def attribute_value_valid?(value, :datetime, _opts), do: is_struct(value, DateTime)
 
-  def attr_value_valid?(value, :enum, opts),
+  def attribute_value_valid?(value, :enum, opts),
     do: is_atom(value) and value in Keyword.fetch!(opts, :values)
 
-  def attr_value_valid?(value, :float, _opts), do: is_float(value)
+  def attribute_value_valid?(value, :float, _opts), do: is_float(value)
 
-  def attr_value_valid?(value, :integer, _opts) do
+  def attribute_value_valid?(value, :integer, _opts) do
     is_integer(value) and value >= @min_integer and value <= @max_integer
   end
 
-  def attr_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
+  def attribute_value_valid?(value, :string, _opts), do: is_binary(value) and String.valid?(value)
 
   @doc """
   Validates the given data map against the given entity type's declared attributes.
@@ -50,18 +50,18 @@ defmodule Hologram.Entity.Validator do
   """
   @spec validate(module, %{atom => any}) :: :ok | {:error, list({atom, atom})}
   def validate(entity_type, data) do
-    attrs = entity_type.__attributes__()
-    attr_names = Enum.map(attrs, fn {name, _type, _opts} -> name end)
+    attributes = entity_type.__attributes__()
+    attribute_names = Enum.map(attributes, fn {name, _type, _opts} -> name end)
 
     unknown_errors =
       data
       |> Map.keys()
-      |> Enum.reject(&(&1 in attr_names))
+      |> Enum.reject(&(&1 in attribute_names))
       |> Enum.map(&{&1, :unknown})
 
-    attr_errors = Enum.flat_map(attrs, &attr_data_errors(data, &1))
+    attribute_errors = Enum.flat_map(attributes, &attribute_data_errors(data, &1))
 
-    case Enum.sort(unknown_errors ++ attr_errors) do
+    case Enum.sort(unknown_errors ++ attribute_errors) do
       [] -> :ok
       errors -> {:error, errors}
     end
@@ -71,13 +71,13 @@ defmodule Hologram.Entity.Validator do
   Validates the given attribute declaration at compile time.
   Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type, options, enum values, default).
   """
-  @spec validate_attr!(module, atom, any, T.opts()) :: :ok
-  def validate_attr!(module, name, type, opts) do
-    validate_attr_name!(module, name)
-    validate_attr_type!(module, name, type)
-    validate_attr_opts!(module, name, opts)
-    validate_attr_values!(module, name, type, opts)
-    validate_attr_default!(module, name, type, opts)
+  @spec validate_attribute!(module, atom, any, T.opts()) :: :ok
+  def validate_attribute!(module, name, type, opts) do
+    validate_attribute_name!(module, name)
+    validate_attribute_type!(module, name, type)
+    validate_attribute_opts!(module, name, opts)
+    validate_attribute_values!(module, name, type, opts)
+    validate_attribute_default!(module, name, type, opts)
     :ok
   end
 
@@ -94,10 +94,10 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
-  defp attr_data_errors(data, {name, type, opts}) do
+  defp attribute_data_errors(data, {name, type, opts}) do
     case Map.fetch(data, name) do
       {:ok, value} ->
-        if attr_value_valid?(value, type, opts), do: [], else: [{name, :invalid}]
+        if attribute_value_valid?(value, type, opts), do: [], else: [{name, :invalid}]
 
       :error ->
         if Keyword.get(opts, :optional) == true, do: [], else: [{name, :missing}]
@@ -110,7 +110,7 @@ defmodule Hologram.Entity.Validator do
 
   defp relationship_type_valid?(_type), do: false
 
-  defp validate_attr_default!(module, name, type, opts) do
+  defp validate_attribute_default!(module, name, type, opts) do
     case Keyword.fetch(opts, :default) do
       {:ok, value} ->
         validate_default_value!(module, name, type, opts, value)
@@ -120,19 +120,19 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_attr_name!(module, name) do
+  defp validate_attribute_name!(module, name) do
     validate_declaration_name!(module, "attribute", name)
   end
 
-  defp validate_attr_opts!(module, name, opts) do
+  defp validate_attribute_opts!(module, name, opts) do
     validate_opts_shape!(module, "attribute", name, opts)
-    validate_known_opts!(module, "attribute", name, opts, @valid_attr_opts)
+    validate_known_opts!(module, "attribute", name, opts, @valid_attribute_opts)
     validate_optional_opt!(module, "attribute", name, opts)
   end
 
-  defp validate_attr_type!(module, name, type) do
-    if type not in @valid_attr_types do
-      valid_types = Enum.map_join(@valid_attr_types, ", ", &inspect/1)
+  defp validate_attribute_type!(module, name, type) do
+    if type not in @valid_attribute_types do
+      valid_types = Enum.map_join(@valid_attribute_types, ", ", &inspect/1)
 
       raise Hologram.CompileError,
         message:
@@ -140,7 +140,7 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_attr_values!(module, name, :enum, opts) do
+  defp validate_attribute_values!(module, name, :enum, opts) do
     case Keyword.fetch(opts, :values) do
       {:ok, values} ->
         validate_enum_values!(module, name, values)
@@ -152,7 +152,7 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_attr_values!(module, name, _type, opts) do
+  defp validate_attribute_values!(module, name, _type, opts) do
     if Keyword.has_key?(opts, :values) do
       raise Hologram.CompileError,
         message:
@@ -179,7 +179,7 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_default_value!(module, name, :enum, opts, value) do
-    if not attr_value_valid?(value, :enum, opts) do
+    if not attribute_value_valid?(value, :enum, opts) do
       raise Hologram.CompileError,
         message:
           "invalid default value #{inspect(value)} for enum attribute #{inspect(name)} in #{inspect(module)} - the default value must be one of the declared values or nil when the attribute is optional"
@@ -187,7 +187,7 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_default_value!(module, name, type, opts, value) do
-    if not attr_value_valid?(value, type, opts) do
+    if not attribute_value_valid?(value, type, opts) do
       raise Hologram.CompileError,
         message:
           "invalid default value #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the default value must match the attribute type #{inspect(type)}"

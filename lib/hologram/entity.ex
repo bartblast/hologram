@@ -64,7 +64,7 @@ defmodule Hologram.Entity do
       type = unquote(type)
       opts = unquote(opts)
 
-      Validator.validate_attr!(__MODULE__, name, type, opts)
+      Validator.validate_attribute!(__MODULE__, name, type, opts)
       Module.put_attribute(__MODULE__, :__attributes__, {name, type, opts})
     end
   end
