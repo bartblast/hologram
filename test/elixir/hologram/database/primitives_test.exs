@@ -138,6 +138,37 @@ defmodule Hologram.Database.PrimitivesTest do
     end
   end
 
+  describe "delete_relationship/4" do
+    test "deletes an edge from the join table" do
+      required_target = create(Entity.new(Module1))
+      source_entity = create(Entity.new(Module3, c: required_target.id))
+      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert delete_relationship(Module3, source_entity.id, :a, target_entity.id) == :ok
+
+      assert count_edges(source_entity, target_entity) == 0
+    end
+
+    test "deleting an absent edge is a no-op" do
+      required_target = create(Entity.new(Module1))
+      source_entity = create(Entity.new(Module3, c: required_target.id))
+      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      assert delete_relationship(Module3, source_entity.id, :a, target_entity.id) == :ok
+    end
+
+    test "raises when the relationship is not a declared to-many relationship" do
+      expected_msg =
+        "invalid relationship for Hologram.Test.Fixtures.Entity.Module3 - :b is not a declared to-many relationship"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        delete_relationship(Module3, Entity.generate_id(), :b, Entity.generate_id())
+      end
+    end
+  end
+
   describe "get/2" do
     test "returns the entity with values decoded back into their logical types" do
       entity = Entity.new(Module4, a: ~D[2026-07-19], b: DateTime.utc_now(:microsecond), d: 1.5)

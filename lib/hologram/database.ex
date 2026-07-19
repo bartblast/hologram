@@ -79,6 +79,27 @@ defmodule Hologram.Database do
   end
 
   @doc """
+  Deletes the (source, target) edge from the given to-many relationship of the entity
+  with the given id. Idempotent - deleting an absent edge is a no-op. Returns :ok.
+  Naming anything but a declared to-many relationship raises ArgumentError.
+  """
+  @spec delete_relationship(module, String.t(), atom, String.t()) :: :ok
+  def delete_relationship(entity_type, id, relationship_name, target_id) do
+    join_table = fetch_join_table!(entity_type, relationship_name)
+
+    statement =
+      ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1 AND "target_id" = $2|
+
+    encoded_id = Codec.encode(id, :uuid)
+    encoded_target_id = Codec.encode(target_id, :uuid)
+
+    case query(statement, [encoded_id, encoded_target_id]) do
+      {:ok, _result} -> :ok
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc """
   Marks the calling process as running inside an externally managed transaction (the test
   sandbox): queries route to the pool as usual, transaction/2 emulates the outermost
   transaction with a savepoint instead of issuing BEGIN/COMMIT, and rollback/1 rolls back
