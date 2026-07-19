@@ -219,7 +219,8 @@ defmodule Hologram.Database do
         Codec.encode(value, columns_by_field[name].type)
       end)
 
-    encoded_updated_at = Codec.encode(DateTime.utc_now(:microsecond), :datetime)
+    updated_at = DateTime.utc_now(:microsecond)
+    encoded_updated_at = Codec.encode(updated_at, :datetime)
     encoded_id = Codec.encode(id, :uuid)
 
     case query(statement, changed_values ++ [encoded_updated_at, encoded_id]) do

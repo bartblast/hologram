@@ -71,13 +71,14 @@ defmodule Hologram.DatabaseTest do
     end
 
     test "rollback in a joined transaction aborts the whole flat transaction" do
-      {result, inserted_id} =
+      result =
         transaction(fn ->
           {:ok, %Postgrex.Result{rows: [[id]]}} = query(@insert_returning_id_sql)
           Process.put(:inserted_id, id)
           transaction(fn -> rollback(:aborted) end)
         end)
-        |> then(&{&1, Process.get(:inserted_id)})
+
+      inserted_id = Process.get(:inserted_id)
 
       assert result == {:error, :aborted}
       assert count_by_id(inserted_id) == 0
