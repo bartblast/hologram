@@ -49,6 +49,10 @@ defmodule Hologram.Test.DatabaseCase do
       {:sandbox_ready, ^owner_pid} -> :ok
     end
 
+    # Route the gateway's transaction machinery through the sandbox: transaction/2
+    # emulates the outermost transaction with a savepoint instead of BEGIN/COMMIT.
+    Database.enter_sandbox()
+
     on_exit(fn ->
       send(owner_pid, {:rollback, self()})
 
