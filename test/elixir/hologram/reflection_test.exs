@@ -242,8 +242,8 @@ defmodule Hologram.ReflectionTest do
       assert Enum.sort(result) == expected_modules
     end
 
-    test "OTP app doesn't have ebin dir" do
-      assert list_ebin_modules(:ssl) == []
+    test "OTP app is not on the code path" do
+      assert list_ebin_modules(:nonexistent_app) == []
     end
   end
 
