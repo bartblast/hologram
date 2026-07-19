@@ -13,6 +13,10 @@ System.put_env(
   "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
 )
 
+# Boot the test database: server connectivity check (fail fast with instructions), database
+# creation when absent, fixture schema layout recreation.
+Hologram.Test.DatabaseBootstrap.run!()
+
 # Skip tests that don't work reliably on either OS type
 exclude_opts =
   case :os.type() do
@@ -21,6 +25,11 @@ exclude_opts =
   end
 
 ExUnit.start(exclude: exclude_opts)
+
+# Boot the database gateway for the whole suite with a per-process ownership pool, so that
+# every test process transparently gets its own connection. Positioned after ExUnit.start,
+# because environment detection recognizes the test env by the running ExUnit server.
+{:ok, _database_pid} = Hologram.Database.start_link(pool: DBConnection.Ownership)
 
 Mox.defmock(AssetManifestCacheMock, for: AssetManifestCache)
 Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMock)

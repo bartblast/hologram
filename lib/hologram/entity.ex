@@ -4,13 +4,17 @@ defmodule Hologram.Entity do
   alias Hologram.Entity
   alias Hologram.Entity.Validator
 
-  @engine_attrs [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
+  @system_attributes [
+    {:created_at, :datetime, []},
+    {:id, :uuid, []},
+    {:updated_at, :datetime, []}
+  ]
 
   defmacro __using__(_opts) do
     [
       quote do
         import Hologram.Entity,
-          only: [attr: 2, attr: 3, relationship: 2, relationship: 3]
+          only: [attribute: 2, attribute: 3, relationship: 2, relationship: 3]
 
         @before_compile Entity
 
@@ -25,47 +29,54 @@ defmodule Hologram.Entity do
         @spec __is_hologram_entity__() :: boolean
         def __is_hologram_entity__, do: true
       end,
-      register_attrs_accumulator(),
+      register_attributes_accumulator(),
       register_relationships_accumulator()
     ]
   end
 
-  defmacro __before_compile__(_env) do
-    engine_attrs = Macro.escape(@engine_attrs)
+  defmacro __before_compile__(env) do
+    system_attributes =
+      @system_attributes
+      |> Enum.sort()
+      |> Macro.escape()
+
+    struct_fields = struct_fields(env.module)
 
     quote do
+      defstruct unquote(struct_fields)
+
       @doc """
       Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
       """
-      @spec __attrs__() :: list({atom, atom, keyword})
-      def __attrs__, do: Enum.sort(@__attrs__)
-
-      @doc """
-      Returns the list of engine attribute definitions present on every entity type, sorted by attribute name.
-      """
-      @spec __engine_attrs__() :: list({atom, atom, keyword})
-      def __engine_attrs__, do: unquote(engine_attrs)
+      @spec __attributes__() :: list({atom, atom, keyword})
+      def __attributes__, do: Enum.sort(@__attributes__)
 
       @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
       def __relationships__, do: Enum.sort(@__relationships__)
+
+      @doc """
+      Returns the list of system attribute definitions present on every entity type, sorted by attribute name.
+      """
+      @spec __system_attributes__() :: list({atom, atom, keyword})
+      def __system_attributes__, do: unquote(system_attributes)
     end
   end
 
   @doc """
-  Accumulates the given attribute definition in __attrs__ module attribute.
+  Accumulates the given attribute definition in __attributes__ module attribute.
   """
-  @spec attr(atom, atom, T.opts()) :: Macro.t()
-  defmacro attr(name, type, opts \\ []) do
+  @spec attribute(atom, atom, T.opts()) :: Macro.t()
+  defmacro attribute(name, type, opts \\ []) do
     quote do
       name = unquote(name)
       type = unquote(type)
       opts = unquote(opts)
 
-      Validator.validate_attr!(__MODULE__, name, type, opts)
-      Module.put_attribute(__MODULE__, :__attrs__, {name, type, opts})
+      Validator.validate_attribute!(__MODULE__, name, type, opts)
+      Module.put_attribute(__MODULE__, :__attributes__, {name, type, opts})
     end
   end
 
@@ -102,11 +113,30 @@ defmodule Hologram.Entity do
     "#{part_1}-#{part_2}-#{part_3}-#{part_4}-#{part_5}"
   end
 
+  @doc """
+  Builds a new entity struct of the given entity type from the given values (a map or a keyword list).
+  The id is generated unless provided, declared attribute defaults are applied to absent attributes, and system timestamps are nil.
+  """
+  @spec new(module, %{optional(atom) => any} | keyword) :: struct
+  def new(entity_type, values \\ %{}) do
+    declared_defaults =
+      entity_type.__attributes__()
+      |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
+      |> Map.new(fn {name, _type, opts} -> {name, Keyword.fetch!(opts, :default)} end)
+
+    fields =
+      declared_defaults
+      |> Map.put(:id, generate_id())
+      |> Map.merge(Map.new(values))
+
+    struct!(entity_type, fields)
+  end
+
   @doc false
-  @spec register_attrs_accumulator() :: AST.t()
-  def register_attrs_accumulator do
+  @spec register_attributes_accumulator() :: AST.t()
+  def register_attributes_accumulator do
     quote do
-      Module.register_attribute(__MODULE__, :__attrs__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__attributes__, accumulate: true)
     end
   end
 
@@ -116,5 +146,24 @@ defmodule Hologram.Entity do
     quote do
       Module.register_attribute(__MODULE__, :__relationships__, accumulate: true)
     end
+  end
+
+  @doc false
+  @spec struct_fields(module) :: list(atom)
+  def struct_fields(module) do
+    system_attribute_names = Enum.map(@system_attributes, fn {name, _type, _opts} -> name end)
+
+    attribute_names =
+      module
+      |> Module.get_attribute(:__attributes__)
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+
+    to_one_relationship_names =
+      module
+      |> Module.get_attribute(:__relationships__)
+      |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+
+    Enum.sort(system_attribute_names ++ attribute_names ++ to_one_relationship_names)
   end
 end

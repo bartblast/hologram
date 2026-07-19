@@ -2,7 +2,7 @@
 defmodule Hologram.Test.Fixtures.Entity.Module2 do
   use Hologram.Entity
 
-  attr :c, :string
-  attr :a, :boolean, default: false
-  attr :b, :integer, optional: true
+  attribute :c, :string
+  attribute :a, :boolean, default: false
+  attribute :b, :integer, optional: true
 end

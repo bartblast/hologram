@@ -4,8 +4,8 @@ exported_locals_without_parens = [
   prop: 3,
 
   # Hologram.Entity
-  attr: 2,
-  attr: 3,
+  attribute: 2,
+  attribute: 3,
   relationship: 2,
   relationship: 3,
 

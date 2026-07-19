@@ -2,6 +2,7 @@ defmodule Hologram.ReflectionTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Reflection
 
+  alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Reflection.Module1
   alias Hologram.Test.Fixtures.Reflection.Module2
   alias Hologram.Test.Fixtures.Reflection.Module3
@@ -146,6 +147,20 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "entity?" do
+    test "is an entity type module" do
+      assert entity?(Entity.Module1)
+    end
+
+    test "is not a module" do
+      refute entity?(123)
+    end
+
+    test "is not an entity type module" do
+      refute entity?(__MODULE__)
+    end
+  end
+
   describe "erlang_module?" do
     test "existing Elixir module" do
       refute erlang_module?(Calendar.ISO)
@@ -227,8 +242,8 @@ defmodule Hologram.ReflectionTest do
       assert Enum.sort(result) == expected_modules
     end
 
-    test "OTP app doesn't have ebin dir" do
-      assert list_ebin_modules(:ssl) == []
+    test "OTP app is not on the code path" do
+      assert list_ebin_modules(:nonexistent_app) == []
     end
   end
 
@@ -327,6 +342,16 @@ defmodule Hologram.ReflectionTest do
         :code.delete(module_name)
       end
     end
+  end
+
+  test "list_entities/0" do
+    result = list_entities()
+
+    assert Entity.Module1 in result
+    assert Entity.Module3 in result
+
+    refute Hologram.Compiler.Context in result
+    refute Module2 in result
   end
 
   test "list_loaded_otp_apps/0" do

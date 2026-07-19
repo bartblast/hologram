@@ -5,71 +5,72 @@ defmodule Hologram.Entity.ValidatorTest do
 
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
 
-  describe "attr_value_valid?/3" do
+  describe "attribute_value_valid?/3" do
     test "validates :boolean values" do
-      assert attr_value_valid?(true, :boolean)
-      assert attr_value_valid?(false, :boolean)
-      refute attr_value_valid?("true", :boolean)
-      refute attr_value_valid?(1, :boolean)
+      assert attribute_value_valid?(true, :boolean)
+      assert attribute_value_valid?(false, :boolean)
+      refute attribute_value_valid?("true", :boolean)
+      refute attribute_value_valid?(1, :boolean)
     end
 
     test "validates :date values" do
-      assert attr_value_valid?(~D[2026-07-17], :date)
-      refute attr_value_valid?("2026-07-17", :date)
-      refute attr_value_valid?(~N[2026-07-17 12:00:00], :date)
-      refute attr_value_valid?(~U[2026-07-17 12:00:00Z], :date)
+      assert attribute_value_valid?(~D[2026-07-17], :date)
+      refute attribute_value_valid?("2026-07-17", :date)
+      refute attribute_value_valid?(~N[2026-07-17 12:00:00], :date)
+      refute attribute_value_valid?(~U[2026-07-17 12:00:00Z], :date)
     end
 
     test "validates :datetime values" do
-      assert attr_value_valid?(~U[2026-07-17 12:00:00Z], :datetime)
-      refute attr_value_valid?(~N[2026-07-17 12:00:00], :datetime)
-      refute attr_value_valid?(~D[2026-07-17], :datetime)
-      refute attr_value_valid?("2026-07-17T12:00:00Z", :datetime)
+      assert attribute_value_valid?(~U[2026-07-17 12:00:00Z], :datetime)
+      refute attribute_value_valid?(~N[2026-07-17 12:00:00], :datetime)
+      refute attribute_value_valid?(~D[2026-07-17], :datetime)
+      refute attribute_value_valid?("2026-07-17T12:00:00Z", :datetime)
     end
 
     test "accepts :datetime values in any time zone representation" do
       shifted_datetime = %{~U[2026-07-17 12:00:00Z] | time_zone: "Europe/Warsaw"}
 
-      assert attr_value_valid?(shifted_datetime, :datetime)
+      assert attribute_value_valid?(shifted_datetime, :datetime)
     end
 
     test "validates :enum values against the declared value set" do
-      assert attr_value_valid?(:done, :enum, values: [:done, :todo])
-      refute attr_value_valid?(:cancelled, :enum, values: [:done, :todo])
-      refute attr_value_valid?("done", :enum, values: [:done, :todo])
+      assert attribute_value_valid?(:done, :enum, values: [:done, :todo])
+      refute attribute_value_valid?(:cancelled, :enum, values: [:done, :todo])
+      refute attribute_value_valid?("done", :enum, values: [:done, :todo])
     end
 
     test "validates :float values" do
-      assert attr_value_valid?(1.5, :float)
-      assert attr_value_valid?(-0.0, :float)
-      refute attr_value_valid?(1, :float)
-      refute attr_value_valid?("1.5", :float)
+      assert attribute_value_valid?(1.5, :float)
+      assert attribute_value_valid?(-0.0, :float)
+      refute attribute_value_valid?(1, :float)
+      refute attribute_value_valid?("1.5", :float)
     end
 
     test "validates :integer values within Postgres int8 bounds" do
-      assert attr_value_valid?(5, :integer)
-      assert attr_value_valid?(-9_223_372_036_854_775_808, :integer)
-      assert attr_value_valid?(9_223_372_036_854_775_807, :integer)
-      refute attr_value_valid?(-9_223_372_036_854_775_809, :integer)
-      refute attr_value_valid?(9_223_372_036_854_775_808, :integer)
-      refute attr_value_valid?(1.0, :integer)
+      assert attribute_value_valid?(5, :integer)
+      assert attribute_value_valid?(-9_223_372_036_854_775_808, :integer)
+      assert attribute_value_valid?(9_223_372_036_854_775_807, :integer)
+      refute attribute_value_valid?(-9_223_372_036_854_775_809, :integer)
+      refute attribute_value_valid?(9_223_372_036_854_775_808, :integer)
+      refute attribute_value_valid?(1.0, :integer)
     end
 
     test "validates :string values" do
-      assert attr_value_valid?("abc", :string)
-      assert attr_value_valid?("", :string)
-      refute attr_value_valid?(<<255>>, :string)
-      refute attr_value_valid?(5, :string)
-      refute attr_value_valid?(:abc, :string)
+      assert attribute_value_valid?("abc", :string)
+      assert attribute_value_valid?("", :string)
+      refute attribute_value_valid?(<<255>>, :string)
+      refute attribute_value_valid?(5, :string)
+      refute attribute_value_valid?(:abc, :string)
     end
 
     test "accepts nil only when the optional option is true" do
-      assert attr_value_valid?(nil, :string, optional: true)
-      refute attr_value_valid?(nil, :string)
-      refute attr_value_valid?(nil, :string, optional: false)
-      assert attr_value_valid?(nil, :enum, optional: true, values: [:done, :todo])
+      assert attribute_value_valid?(nil, :string, optional: true)
+      refute attribute_value_valid?(nil, :string)
+      refute attribute_value_valid?(nil, :string, optional: false)
+      assert attribute_value_valid?(nil, :enum, optional: true, values: [:done, :todo])
     end
   end
 
@@ -114,7 +115,7 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
-  describe "validate_attr!/4" do
+  describe "validate_attribute!/4" do
     test "rejects values option on non-enum attribute" do
       expected_msg =
         "values option not allowed for attribute :title in Hologram.Entity.ValidatorTest.InlineEntityFixture8 - the values option applies only to enum attributes"
@@ -123,7 +124,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture8 do
           use Hologram.Entity
 
-          attr :title, :string, values: [:a, :b]
+          attribute :title, :string, values: [:a, :b]
         end
       end
     end
@@ -136,7 +137,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture10 do
           use Hologram.Entity
 
-          attr :title, :string, require: true
+          attribute :title, :string, require: true
         end
       end
     end
@@ -149,7 +150,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture1 do
           use Hologram.Entity
 
-          attr :title, :text
+          attribute :title, :text
         end
       end
     end
@@ -162,7 +163,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture2 do
           use Hologram.Entity
 
-          attr :happened_at, DateTime
+          attribute :happened_at, DateTime
         end
       end
     end
@@ -175,7 +176,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture13 do
           use Hologram.Entity
 
-          attr :title, :string, default: 5
+          attribute :title, :string, default: 5
         end
       end
     end
@@ -184,11 +185,11 @@ defmodule Hologram.Entity.ValidatorTest do
       defmodule InlineEntityFixture18 do
         use Hologram.Entity
 
-        attr :status, :enum, values: [:a, :b], default: nil, optional: true
-        attr :title, :string, default: nil, optional: true
+        attribute :status, :enum, values: [:a, :b], default: nil, optional: true
+        attribute :title, :string, default: nil, optional: true
       end
 
-      assert InlineEntityFixture18.__attrs__() == [
+      assert InlineEntityFixture18.__attributes__() == [
                {:status, :enum, [values: [:a, :b], default: nil, optional: true]},
                {:title, :string, [default: nil, optional: true]}
              ]
@@ -202,7 +203,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture19 do
           use Hologram.Entity
 
-          attr :status, :enum, values: [:a, :b], default: nil
+          attribute :status, :enum, values: [:a, :b], default: nil
         end
       end
     end
@@ -215,7 +216,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture17 do
           use Hologram.Entity
 
-          attr :count, :integer, default: 9_223_372_036_854_775_808
+          attribute :count, :integer, default: 9_223_372_036_854_775_808
         end
       end
     end
@@ -228,8 +229,8 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture3 do
           use Hologram.Entity
 
-          attr :title, :string
-          attr :title, :integer
+          attribute :title, :string
+          attribute :title, :integer
         end
       end
     end
@@ -244,7 +245,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
           relationship :owner, Module1
 
-          attr :owner, :string
+          attribute :owner, :string
         end
       end
     end
@@ -257,7 +258,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture7 do
           use Hologram.Entity
 
-          attr :status, :enum
+          attribute :status, :enum
         end
       end
     end
@@ -270,7 +271,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture14 do
           use Hologram.Entity
 
-          attr :status, :enum, values: [:a, :b], default: :c
+          attribute :status, :enum, values: [:a, :b], default: :c
         end
       end
     end
@@ -288,7 +289,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule #{module_name} do
           use Hologram.Entity
 
-          attr :status, :enum, values: #{inspect(values)}
+          attribute :status, :enum, values: #{inspect(values)}
         end
         """
 
@@ -304,7 +305,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture9 do
           use Hologram.Entity
 
-          attr :title, :string, optional: :yes
+          attribute :title, :string, optional: :yes
         end
       end
     end
@@ -317,7 +318,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture15 do
           use Hologram.Entity
 
-          attr "title", :string
+          attribute "title", :string
         end
       end
     end
@@ -330,28 +331,90 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture20 do
           use Hologram.Entity
 
-          attr :title, :string, %{optional: true}
+          attribute :title, :string, %{optional: true}
         end
       end
     end
 
-    test "rejects reserved engine attribute names" do
+    test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
           "Hologram.Entity.ValidatorTest.ReservedAttr#{Macro.camelize(to_string(reserved_name))}"
 
         expected_msg =
-          "reserved name #{inspect(reserved_name)} used for attribute in #{module_name} - engine attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+          "reserved name #{inspect(reserved_name)} used for attribute in #{module_name} - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
 
         code = """
         defmodule #{module_name} do
           use Hologram.Entity
 
-          attr :#{reserved_name}, :string
+          attribute :#{reserved_name}, :string
         end
         """
 
         assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+  end
+
+  describe "validate_model!/1" do
+    test "returns :ok for empty model" do
+      assert validate_model!([]) == :ok
+    end
+
+    test "returns :ok when every relationship target is an entity type module" do
+      assert validate_model!([Module1, Module2, Module3]) == :ok
+    end
+
+    test "rejects a relationship targeting a non-entity module" do
+      defmodule InlineEntityFixture22 do
+        use Hologram.Entity
+
+        relationship :owner, Hologram.Reflection
+      end
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture22 targets Hologram.Reflection, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture22])
+      end
+    end
+
+    test "rejects a relationship targeting a nonexistent module" do
+      defmodule InlineEntityFixture23 do
+        use Hologram.Entity
+
+        relationship :owner, NonExistent.Module
+      end
+
+      expected_msg =
+        "invalid data model:\n  * relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture23 targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture23])
+      end
+    end
+
+    test "collects all violations across the model and raises once" do
+      defmodule InlineEntityFixture24 do
+        use Hologram.Entity
+
+        relationship :a, Hologram.Reflection
+      end
+
+      defmodule InlineEntityFixture25 do
+        use Hologram.Entity
+
+        relationship :b, [NonExistent.Module]
+        relationship :c, Module2
+      end
+
+      expected_msg =
+        "invalid data model:\n  * relationship :a in Hologram.Entity.ValidatorTest.InlineEntityFixture24 targets Hologram.Reflection, which is not an entity type module\n  * relationship :b in Hologram.Entity.ValidatorTest.InlineEntityFixture25 targets NonExistent.Module, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture24, InlineEntityFixture25])
       end
     end
   end
@@ -379,7 +442,7 @@ defmodule Hologram.Entity.ValidatorTest do
         defmodule InlineEntityFixture6 do
           use Hologram.Entity
 
-          attr :title, :string
+          attribute :title, :string
 
           relationship :title, Module1
         end
@@ -425,13 +488,13 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects reserved engine attribute names" do
+    test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
           "Hologram.Entity.ValidatorTest.ReservedRelationship#{Macro.camelize(to_string(reserved_name))}"
 
         expected_msg =
-          "reserved name #{inspect(reserved_name)} used for relationship in #{module_name} - engine attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+          "reserved name #{inspect(reserved_name)} used for relationship in #{module_name} - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
 
         code = """
         defmodule #{module_name} do
