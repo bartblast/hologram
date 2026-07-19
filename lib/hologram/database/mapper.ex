@@ -123,6 +123,38 @@ defmodule Hologram.Database.Mapper do
   end
 
   @doc """
+  Validates that the given entity type modules form no cycles of required to-one
+  relationships (self-references included).
+
+  Returns :ok, or raises Hologram.CompileError listing the detected cycles. No row inside
+  such a cycle can ever be created - every insert would require an already existing row
+  further along the cycle - so at least one relationship in each cycle must be declared
+  optional: true (a nullable reference column breaks the cycle). Optional to-one and
+  to-many relationships never form cycle edges.
+  """
+  @spec validate_required_to_one_cycles!(list(module)) :: :ok
+  def validate_required_to_one_cycles!(entity_types) do
+    {cycles, _visited} =
+      Enum.reduce(entity_types, {[], MapSet.new()}, fn entity_type, {cycles, visited} ->
+        find_cycles(entity_type, [], cycles, visited)
+      end)
+
+    if cycles != [] do
+      descriptions =
+        cycles
+        |> Enum.map(&canonicalize_cycle/1)
+        |> Enum.sort()
+        |> Enum.map_join("\n", &describe_cycle/1)
+
+      raise Hologram.CompileError,
+        message:
+          "cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:\n#{descriptions}"
+    end
+
+    :ok
+  end
+
+  @doc """
   Validates that no two of the given entity type modules derive the same table name.
 
   Returns :ok, or raises Hologram.CompileError listing every colliding table name together
@@ -152,6 +184,58 @@ defmodule Hologram.Database.Mapper do
     :ok
   end
 
+  # Rotates the cycle so that it starts at its smallest hop, giving every cycle a single
+  # stable rendering regardless of which entity type the traversal entered it from.
+  defp canonicalize_cycle(cycle) do
+    start_index =
+      cycle
+      |> Enum.with_index()
+      |> Enum.min_by(fn {{entity_type, name}, _index} -> {inspect(entity_type), name} end)
+      |> elem(1)
+
+    {hops_before_start, hops_from_start} = Enum.split(cycle, start_index)
+    hops_from_start ++ hops_before_start
+  end
+
+  defp describe_cycle([{first_entity_type, _first_name} | _later_hops] = cycle) do
+    hops =
+      Enum.map_join(cycle, " -> ", fn {entity_type, name} ->
+        "#{inspect(entity_type)} (relationship #{inspect(name)})"
+      end)
+
+    "  * #{hops} -> #{inspect(first_entity_type)}"
+  end
+
+  # Depth-first traversal over required to-one edges. The path holds the hops taken to reach
+  # the current entity type (most recent first) - reaching an entity type already on the path
+  # closes a cycle. Fully explored entity types are marked visited and never re-entered, so
+  # each cycle is reported once.
+  defp find_cycles(entity_type, path, cycles, visited) do
+    if MapSet.member?(visited, entity_type) do
+      {cycles, visited}
+    else
+      {cycles, visited} =
+        entity_type
+        |> required_to_one_targets()
+        |> Enum.reduce({cycles, visited}, fn {name, target}, {cycles, visited} ->
+          new_path = [{entity_type, name} | path]
+
+          if Enum.any?(new_path, fn {module, _name} -> module == target end) do
+            {hops_beyond_target, [target_hop | _earlier_hops]} =
+              Enum.split_while(new_path, fn {module, _name} -> module != target end)
+
+            cycle = [target_hop | Enum.reverse(hops_beyond_target)]
+
+            {[cycle | cycles], visited}
+          else
+            find_cycles(target, new_path, cycles, visited)
+          end
+        end)
+
+      {cycles, MapSet.put(visited, entity_type)}
+    end
+  end
+
   defp fit_identifier(identifier) do
     if byte_size(identifier) > @max_identifier_bytes do
       hash =
@@ -170,6 +254,14 @@ defmodule Hologram.Database.Mapper do
 
   defp id_column do
     %{name: "id", type: :uuid, sql_type: "uuid", null: false, references: nil, source: :system}
+  end
+
+  defp required_to_one_targets(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.reject(fn {_name, type, opts} ->
+      is_list(type) or Keyword.get(opts, :optional) == true
+    end)
+    |> Enum.map(fn {name, target, _opts} -> {name, target} end)
   end
 
   defp sql_type(:boolean, _table_name, _name), do: "boolean"

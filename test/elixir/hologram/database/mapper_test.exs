@@ -217,6 +217,124 @@ defmodule Hologram.Database.MapperTest do
     end
   end
 
+  describe "validate_required_to_one_cycles!/1" do
+    test "returns :ok for an empty list" do
+      assert validate_required_to_one_cycles!([]) == :ok
+    end
+
+    test "returns :ok when no required to-one cycles exist" do
+      assert validate_required_to_one_cycles!([Module1, Module2, Module3]) == :ok
+    end
+
+    test "returns :ok when a cycle is broken by an optional to-one relationship" do
+      defmodule InlineEntityFixture3 do
+        use Hologram.Entity
+
+        relationship :b, Hologram.Database.MapperTest.InlineEntityFixture4
+      end
+
+      defmodule InlineEntityFixture4 do
+        use Hologram.Entity
+
+        relationship :a, Hologram.Database.MapperTest.InlineEntityFixture3, optional: true
+      end
+
+      assert validate_required_to_one_cycles!([InlineEntityFixture3, InlineEntityFixture4]) ==
+               :ok
+    end
+
+    test "returns :ok when a cycle is broken by a to-many relationship" do
+      defmodule InlineEntityFixture5 do
+        use Hologram.Entity
+
+        relationship :b, Hologram.Database.MapperTest.InlineEntityFixture6
+      end
+
+      defmodule InlineEntityFixture6 do
+        use Hologram.Entity
+
+        relationship :a, [Hologram.Database.MapperTest.InlineEntityFixture5]
+      end
+
+      assert validate_required_to_one_cycles!([InlineEntityFixture5, InlineEntityFixture6]) ==
+               :ok
+    end
+
+    test "rejects a self-referential required to-one relationship" do
+      defmodule InlineEntityFixture7 do
+        use Hologram.Entity
+
+        relationship :parent, __MODULE__
+      end
+
+      expected_msg = """
+      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+        * Hologram.Database.MapperTest.InlineEntityFixture7 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture7\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_required_to_one_cycles!([InlineEntityFixture7])
+      end
+    end
+
+    test "rejects a cycle across multiple entity types" do
+      defmodule InlineEntityFixture8 do
+        use Hologram.Entity
+
+        relationship :next, Hologram.Database.MapperTest.InlineEntityFixture9
+      end
+
+      defmodule InlineEntityFixture9 do
+        use Hologram.Entity
+
+        relationship :back, Hologram.Database.MapperTest.InlineEntityFixture8
+      end
+
+      expected_msg = """
+      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+        * Hologram.Database.MapperTest.InlineEntityFixture8 (relationship :next) -> Hologram.Database.MapperTest.InlineEntityFixture9 (relationship :back) -> Hologram.Database.MapperTest.InlineEntityFixture8\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_required_to_one_cycles!([InlineEntityFixture8, InlineEntityFixture9])
+      end
+    end
+
+    test "lists every cycle when multiple cycles exist" do
+      defmodule InlineEntityFixture10 do
+        use Hologram.Entity
+
+        relationship :parent, __MODULE__
+      end
+
+      defmodule InlineEntityFixture11 do
+        use Hologram.Entity
+
+        relationship :next, Hologram.Database.MapperTest.InlineEntityFixture12
+      end
+
+      defmodule InlineEntityFixture12 do
+        use Hologram.Entity
+
+        relationship :back, Hologram.Database.MapperTest.InlineEntityFixture11
+      end
+
+      expected_msg = """
+      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+        * Hologram.Database.MapperTest.InlineEntityFixture10 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture10
+        * Hologram.Database.MapperTest.InlineEntityFixture11 (relationship :next) -> Hologram.Database.MapperTest.InlineEntityFixture12 (relationship :back) -> Hologram.Database.MapperTest.InlineEntityFixture11\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_required_to_one_cycles!([
+          InlineEntityFixture10,
+          InlineEntityFixture11,
+          InlineEntityFixture12
+        ])
+      end
+    end
+  end
+
   describe "validate_table_names!/1" do
     test "returns :ok for an empty list" do
       assert validate_table_names!([]) == :ok
