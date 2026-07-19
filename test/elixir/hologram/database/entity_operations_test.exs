@@ -1,12 +1,10 @@
-defmodule Hologram.Database.PrimitivesTest do
-  # TODO: once Hologram.Database delegates its entity row operations to a dedicated
-  # internal module, align this file with that module so that every test file matches
-  # a module file.
+defmodule Hologram.Database.EntityOperationsTest do
   use Hologram.Test.DatabaseCase, async: true
 
-  import Hologram.Database
+  import Hologram.Database.EntityOperations
 
   alias Hologram.Database.Codec
+  alias Hologram.Database.Connection
   alias Hologram.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -21,7 +19,7 @@ defmodule Hologram.Database.PrimitivesTest do
     encoded_target_id = Codec.encode(target_entity.id, :uuid)
 
     {:ok, %Postgrex.Result{rows: [[count]]}} =
-      query(count_sql, [encoded_source_id, encoded_target_id])
+      Connection.query(count_sql, [encoded_source_id, encoded_target_id])
 
     count
   end
@@ -101,7 +99,7 @@ defmodule Hologram.Database.PrimitivesTest do
       encoded_id = Codec.encode(created_entity.id, :uuid)
 
       assert {:ok, %Postgrex.Result{rows: [[true, nil, "some text"]]}} =
-               query(select_sql, [encoded_id])
+               Connection.query(select_sql, [encoded_id])
     end
 
     test "encodes attribute values per type at the driver boundary" do
@@ -117,7 +115,7 @@ defmodule Hologram.Database.PrimitivesTest do
       encoded_id = Codec.encode(created_entity.id, :uuid)
 
       assert {:ok, %Postgrex.Result{rows: [[~D[2026-07-19], ^written_at, "x", 1.5]]}} =
-               query(select_sql, [encoded_id])
+               Connection.query(select_sql, [encoded_id])
     end
 
     test "writes to-one relationship references into the reference columns" do
@@ -134,7 +132,7 @@ defmodule Hologram.Database.PrimitivesTest do
       encoded_target_id = Codec.encode(target_entity.id, :uuid)
 
       assert {:ok, %Postgrex.Result{rows: [[nil, ^encoded_target_id]]}} =
-               query(select_sql, [encoded_id])
+               Connection.query(select_sql, [encoded_id])
     end
 
     test "raises on constraint violations" do

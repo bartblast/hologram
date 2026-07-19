@@ -1,27 +1,62 @@
 defmodule Hologram.Database do
   @moduledoc false
 
-  # TODO: split the internals into dedicated modules along the substrate/primitives seam
-  # (connection/transaction machinery vs entity row operations) once all primitives exist -
-  # the public surface stays on this module, and test files then match module files.
-
-  # SQL statements in this module interpolate ONLY framework-derived identifiers (always
-  # through Mapper.quote_identifier/1) and $n placeholders - every value travels as a bound
-  # param. The sobelow_skip markers on the emitting functions record that invariant.
-
   use Supervisor
 
-  alias Hologram.Database.Codec
   alias Hologram.Database.Config
   alias Hologram.Database.Connection
+  alias Hologram.Database.EntityOperations
   alias Hologram.Database.Mapper
   alias Hologram.Reflection
-
-  @data_schema "hologram_data"
 
   @mapping_key {__MODULE__, :mapping}
 
   @pool_name Hologram.Database.Pool
+
+  @doc """
+  Adds the (source, target) edge to the given to-many relationship of the entity with
+  the given id. Idempotent - adding an existing edge is a no-op. Returns :ok. Naming
+  anything but a declared to-many relationship raises ArgumentError, and a missing
+  source or target entity raises through the edge's foreign keys.
+  """
+  @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
+  defdelegate add_relationship(entity_type, id, relationship_name, target_id),
+    to: EntityOperations
+
+  @doc """
+  Inserts the given entity as a full row - every column is named and bound explicitly -
+  stamping created_at and updated_at with the same current UTC timestamp. Returns the
+  stamped entity. Constraint violations raise.
+  """
+  @spec create(struct) :: struct
+  defdelegate create(entity), to: EntityOperations
+
+  @doc """
+  Deletes the entity of the given type with the given id together with its own outgoing
+  to-many edges, in one transaction. An incoming reference from another entity - a
+  to-one reference column or an edge pointing at this entity - restricts the delete,
+  returning {:error, {:restricted, %{entity_type: entity_type, id: id}}} with nothing
+  deleted. This is the one translated constraint error - any other constraint violation
+  raises. Deleting a nonexistent id is a no-op. Returns :ok.
+  """
+  @spec delete(module, String.t()) :: :ok | {:error, {:restricted, map}}
+  defdelegate delete(entity_type, id), to: EntityOperations
+
+  @doc """
+  Deletes the (source, target) edge from the given to-many relationship of the entity
+  with the given id. Idempotent - deleting an absent edge is a no-op. Returns :ok.
+  Naming anything but a declared to-many relationship raises ArgumentError.
+  """
+  @spec delete_relationship(module, String.t(), atom, String.t()) :: :ok
+  defdelegate delete_relationship(entity_type, id, relationship_name, target_id),
+    to: EntityOperations
+
+  @doc """
+  Returns the entity of the given type with the given id, or nil when no row matches.
+  Column values are decoded back into their logical types.
+  """
+  @spec get(module, String.t()) :: struct | nil
+  defdelegate get(entity_type, id), to: EntityOperations
 
   @doc """
   Executes the given SQL statement with the given params and returns {:ok, result} or
@@ -49,141 +84,15 @@ defmodule Hologram.Database do
   defdelegate transaction(fun, opts \\ []), to: Connection
 
   @doc """
-  Adds the (source, target) edge to the given to-many relationship of the entity with
-  the given id. Idempotent - adding an existing edge is a no-op. Returns :ok. Naming
-  anything but a declared to-many relationship raises ArgumentError, and a missing
-  source or target entity raises through the edge's foreign keys.
+  Updates the entity of the given type with the given id, setting exactly the changed
+  columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
+  are keyed by declared attribute and to-one relationship names - a to-one reference is
+  set, reassigned, or cleared (nil) through its relationship name. Changing any other
+  name, system attributes included, raises ArgumentError - as does updating an id that
+  names no entity. Returns :ok. Constraint violations raise.
   """
-  @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
-  # sobelow_skip ["SQL.Query"]
-  def add_relationship(entity_type, id, relationship_name, target_id) do
-    join_table = fetch_join_table!(entity_type, relationship_name)
-
-    statement =
-      ~s|INSERT INTO #{qualified_table(join_table.name)} ("source_id", "target_id") VALUES ($1, $2) ON CONFLICT DO NOTHING|
-
-    encoded_id = Codec.encode(id, :uuid)
-    encoded_target_id = Codec.encode(target_id, :uuid)
-
-    case query(statement, [encoded_id, encoded_target_id]) do
-      {:ok, _result} -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
-  Inserts the given entity as a full row - every column is named and bound explicitly -
-  stamping created_at and updated_at with the same current UTC timestamp. Returns the
-  stamped entity. Constraint violations raise.
-  """
-  @spec create(struct) :: struct
-  # sobelow_skip ["SQL.Query"]
-  def create(entity) do
-    entity_type = entity.__struct__
-    %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
-
-    now = DateTime.utc_now(:microsecond)
-    stamped_entity = %{entity | created_at: now, updated_at: now}
-
-    encoded_values =
-      Enum.map(columns, fn column ->
-        stamped_entity
-        |> Map.fetch!(field_name(column))
-        |> Codec.encode(column.type)
-      end)
-
-    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
-    placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
-
-    statement =
-      "INSERT INTO #{qualified_table(table)} (#{column_list}) VALUES (#{placeholder_list})"
-
-    case query(statement, encoded_values) do
-      {:ok, _result} -> stamped_entity
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
-  Deletes the entity of the given type with the given id together with its own outgoing
-  to-many edges, in one transaction. An incoming reference from another entity - a
-  to-one reference column or an edge pointing at this entity - restricts the delete,
-  returning {:error, {:restricted, %{entity_type: entity_type, id: id}}} with nothing
-  deleted. This is the one translated constraint error - any other constraint violation
-  raises. Deleting a nonexistent id is a no-op. Returns :ok.
-  """
-  @spec delete(module, String.t()) :: :ok | {:error, {:restricted, map}}
-  def delete(entity_type, id) do
-    %{table: table, join_tables: join_tables} = Map.fetch!(mapping(), entity_type)
-
-    encoded_id = Codec.encode(id, :uuid)
-
-    transaction_result =
-      transaction(fn ->
-        delete_outgoing_edges(join_tables, encoded_id)
-        delete_entity_row(entity_type, table, id, encoded_id)
-      end)
-
-    case transaction_result do
-      {:ok, :ok} -> :ok
-      {:error, _reason} = error -> error
-    end
-  end
-
-  @doc """
-  Deletes the (source, target) edge from the given to-many relationship of the entity
-  with the given id. Idempotent - deleting an absent edge is a no-op. Returns :ok.
-  Naming anything but a declared to-many relationship raises ArgumentError.
-  """
-  @spec delete_relationship(module, String.t(), atom, String.t()) :: :ok
-  # sobelow_skip ["SQL.Query"]
-  def delete_relationship(entity_type, id, relationship_name, target_id) do
-    join_table = fetch_join_table!(entity_type, relationship_name)
-
-    statement =
-      ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1 AND "target_id" = $2|
-
-    encoded_id = Codec.encode(id, :uuid)
-    encoded_target_id = Codec.encode(target_id, :uuid)
-
-    case query(statement, [encoded_id, encoded_target_id]) do
-      {:ok, _result} -> :ok
-      {:error, error} -> raise error
-    end
-  end
-
-  @doc """
-  Returns the entity of the given type with the given id, or nil when no row matches.
-  Column values are decoded back into their logical types.
-  """
-  @spec get(module, String.t()) :: struct | nil
-  # sobelow_skip ["SQL.Query"]
-  def get(entity_type, id) do
-    %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
-
-    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
-    statement = ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1|
-
-    encoded_id = Codec.encode(id, :uuid)
-
-    case query(statement, [encoded_id]) do
-      {:ok, %Postgrex.Result{rows: []}} ->
-        nil
-
-      {:ok, %Postgrex.Result{rows: [row]}} ->
-        fields =
-          columns
-          |> Enum.zip(row)
-          |> Enum.map(fn {column, value} ->
-            {field_name(column), Codec.decode(value, column.type)}
-          end)
-
-        struct!(entity_type, fields)
-
-      {:error, error} ->
-        raise error
-    end
-  end
+  @spec update(module, String.t(), map | keyword) :: :ok
+  defdelegate update(entity_type, id, changes), to: EntityOperations
 
   @doc """
   Returns the physical name mapping derived from the discovered entity type modules.
@@ -216,66 +125,6 @@ defmodule Hologram.Database do
     end
   end
 
-  @doc """
-  Updates the entity of the given type with the given id, setting exactly the changed
-  columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
-  are keyed by declared attribute and to-one relationship names - a to-one reference is
-  set, reassigned, or cleared (nil) through its relationship name. Changing any other
-  name, system attributes included, raises ArgumentError - as does updating an id that
-  names no entity. Returns :ok. Constraint violations raise.
-  """
-  @spec update(module, String.t(), map | keyword) :: :ok
-  # sobelow_skip ["SQL.Query"]
-  def update(entity_type, id, changes) do
-    %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
-
-    columns_by_field =
-      columns
-      |> Enum.reject(&(&1.source == :system))
-      |> Map.new(&{field_name(&1), &1})
-
-    sorted_changes =
-      changes
-      |> Map.new()
-      |> Enum.sort()
-
-    validate_changed_names!(entity_type, sorted_changes, columns_by_field)
-
-    set_list =
-      sorted_changes
-      |> Enum.with_index(1)
-      |> Enum.map_join(", ", fn {{name, _value}, index} ->
-        "#{Mapper.quote_identifier(columns_by_field[name].name)} = $#{index}"
-      end)
-
-    updated_at_placeholder = length(sorted_changes) + 1
-    id_placeholder = length(sorted_changes) + 2
-
-    statement =
-      ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
-
-    changed_values =
-      Enum.map(sorted_changes, fn {name, value} ->
-        Codec.encode(value, columns_by_field[name].type)
-      end)
-
-    updated_at = DateTime.utc_now(:microsecond)
-    encoded_updated_at = Codec.encode(updated_at, :datetime)
-    encoded_id = Codec.encode(id, :uuid)
-
-    case query(statement, changed_values ++ [encoded_updated_at, encoded_id]) do
-      {:ok, %Postgrex.Result{num_rows: 1}} ->
-        :ok
-
-      {:ok, %Postgrex.Result{num_rows: 0}} ->
-        raise ArgumentError,
-              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
-
-      {:error, error} ->
-        raise error
-    end
-  end
-
   @impl Supervisor
   def init(opts) do
     mapping = Mapper.derive!(Reflection.list_entities())
@@ -304,72 +153,5 @@ defmodule Hologram.Database do
       )
 
     Supervisor.init([{Postgrex, postgrex_opts}], strategy: :one_for_one)
-  end
-
-  # sobelow_skip ["SQL.Query"]
-  defp delete_entity_row(entity_type, table, id, encoded_id) do
-    statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
-
-    case query(statement, [encoded_id]) do
-      {:ok, _result} ->
-        :ok
-
-      {:error, %Postgrex.Error{postgres: %{code: :foreign_key_violation}}} ->
-        rollback({:restricted, %{entity_type: entity_type, id: id}})
-
-      {:error, error} ->
-        raise error
-    end
-  end
-
-  # sobelow_skip ["SQL.Query"]
-  defp delete_outgoing_edges(join_tables, encoded_id) do
-    Enum.each(join_tables, fn join_table ->
-      statement = ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1|
-
-      case query(statement, [encoded_id]) do
-        {:ok, _result} -> :ok
-        {:error, error} -> raise error
-      end
-    end)
-  end
-
-  defp fetch_join_table!(entity_type, relationship_name) do
-    %{join_tables: join_tables} = Map.fetch!(mapping(), entity_type)
-
-    case Enum.find(join_tables, &(&1.relationship == relationship_name)) do
-      nil ->
-        raise ArgumentError,
-              "invalid relationship for #{inspect(entity_type)} - #{inspect(relationship_name)} is not a declared to-many relationship"
-
-      join_table ->
-        join_table
-    end
-  end
-
-  defp field_name(%{source: :system, name: name}), do: String.to_existing_atom(name)
-
-  defp field_name(%{source: {:attribute, name}}), do: name
-
-  defp field_name(%{source: {:relationship, name}}), do: name
-
-  defp qualified_table(table) do
-    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
-  end
-
-  defp validate_changed_names!(entity_type, sorted_changes, columns_by_field) do
-    unknown_names =
-      sorted_changes
-      |> Enum.map(fn {name, _value} -> name end)
-      |> Enum.reject(&Map.has_key?(columns_by_field, &1))
-
-    if unknown_names != [] do
-      listed_names = Enum.map_join(unknown_names, ", ", &inspect/1)
-
-      raise ArgumentError,
-            "invalid changes for #{inspect(entity_type)} - only declared attributes and to-one relationships can be updated: #{listed_names}"
-    end
-
-    :ok
   end
 end
