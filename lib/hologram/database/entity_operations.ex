@@ -145,7 +145,7 @@ defmodule Hologram.Database.EntityOperations do
       |> Map.new()
       |> Enum.sort()
 
-    validate_changed_names!(entity_type, sorted_changes, columns_by_field)
+    validate_changes!(entity_type, sorted_changes, columns_by_field)
 
     set_list =
       sorted_changes
@@ -233,7 +233,12 @@ defmodule Hologram.Database.EntityOperations do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
   end
 
-  defp validate_changed_names!(entity_type, sorted_changes, columns_by_field) do
+  defp validate_changes!(entity_type, sorted_changes, columns_by_field) do
+    if sorted_changes == [] do
+      raise ArgumentError,
+            "invalid changes for #{inspect(entity_type)} - at least one declared attribute or to-one relationship must be changed"
+    end
+
     unknown_names =
       sorted_changes
       |> Enum.map(fn {name, _value} -> name end)

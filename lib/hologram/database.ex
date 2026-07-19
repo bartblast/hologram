@@ -88,8 +88,8 @@ defmodule Hologram.Database do
   columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
   are keyed by declared attribute and to-one relationship names - a to-one reference is
   set, reassigned, or cleared (nil) through its relationship name. Changing any other
-  name, system attributes included, raises ArgumentError - as does updating an id that
-  names no entity. Returns :ok. Constraint violations raise.
+  name, system attributes included, raises ArgumentError - as do empty changes and an
+  id that names no entity. Returns :ok. Constraint violations raise.
   """
   @spec update(module, String.t(), map | keyword) :: :ok
   defdelegate update(entity_type, id, changes), to: EntityOperations

@@ -305,6 +305,17 @@ defmodule Hologram.Database.EntityOperationsTest do
       end
     end
 
+    test "raises when changes are empty" do
+      created_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      expected_msg =
+        "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - at least one declared attribute or to-one relationship must be changed"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module2, created_entity.id, %{})
+      end
+    end
+
     test "raises when the id names no entity" do
       nonexistent_id = Entity.generate_id()
 
