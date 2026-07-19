@@ -13,6 +13,7 @@ defmodule Hologram.Database do
 
   alias Hologram.Database.Codec
   alias Hologram.Database.Config
+  alias Hologram.Database.Connection
   alias Hologram.Database.Mapper
   alias Hologram.Reflection
 
@@ -22,11 +23,30 @@ defmodule Hologram.Database do
 
   @pool_name Hologram.Database.Pool
 
-  @sandbox_rollback_throw {__MODULE__, :sandbox_rollback}
+  @doc """
+  Executes the given SQL statement with the given params and returns {:ok, result} or
+  {:error, exception}. Inside transaction/2 the statement runs on the transaction's
+  connection, otherwise on the pool.
+  """
+  @spec query(String.t(), list, keyword) :: {:ok, Postgrex.Result.t()} | {:error, Exception.t()}
+  defdelegate query(statement, params \\ [], opts \\ []), to: Connection
 
-  @sandbox_savepoint "hologram_transaction"
+  @doc """
+  Aborts the enclosing transaction/2, making it return {:error, reason}. Raises
+  ArgumentError when called outside of a transaction.
+  """
+  @spec rollback(any) :: no_return
+  defdelegate rollback(reason), to: Connection
 
-  @transaction_key {__MODULE__, :transaction}
+  @doc """
+  Runs the given zero-arity function inside a database transaction and returns
+  {:ok, result}. Transactions are flat: a nested call joins the ongoing transaction
+  instead of nesting - there are no savepoints, and rollback/1 aborts the one flat
+  transaction wherever it is called. An exception rolls the transaction back and
+  re-raises.
+  """
+  @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
+  defdelegate transaction(fun, opts \\ []), to: Connection
 
   @doc """
   Adds the (source, target) edge to the given to-many relationship of the entity with
@@ -133,19 +153,6 @@ defmodule Hologram.Database do
   end
 
   @doc """
-  Marks the calling process as running inside an externally managed transaction (the test
-  sandbox): queries route to the pool as usual, transaction/2 emulates the outermost
-  transaction with a savepoint instead of issuing BEGIN/COMMIT, and rollback/1 rolls back
-  to that savepoint - so the externally managed transaction itself is never committed or
-  aborted.
-  """
-  @spec enter_sandbox() :: :ok
-  def enter_sandbox do
-    Process.put(@transaction_key, {:sandbox, @pool_name})
-    :ok
-  end
-
-  @doc """
   Returns the entity of the given type with the given id, or nil when no row matches.
   Column values are decoded back into their logical types.
   """
@@ -196,34 +203,6 @@ defmodule Hologram.Database do
   end
 
   @doc """
-  Executes the given SQL statement with the given params and returns {:ok, result} or
-  {:error, exception}. Inside transaction/2 the statement runs on the transaction's
-  connection, otherwise on the pool.
-  """
-  @spec query(String.t(), list, keyword) :: {:ok, Postgrex.Result.t()} | {:error, Exception.t()}
-  def query(statement, params \\ [], opts \\ []) do
-    Postgrex.query(current_connection(), statement, params, opts)
-  end
-
-  @doc """
-  Aborts the enclosing transaction/2, making it return {:error, reason}. Raises
-  ArgumentError when called outside of a transaction.
-  """
-  @spec rollback(any) :: no_return
-  def rollback(reason) do
-    case Process.get(@transaction_key) do
-      {:transaction, connection} ->
-        Postgrex.rollback(connection, reason)
-
-      {:sandbox_transaction, _pool_name} ->
-        throw({@sandbox_rollback_throw, reason})
-
-      _other ->
-        raise ArgumentError, "cannot rollback - not inside a transaction"
-    end
-  end
-
-  @doc """
   Starts the database: derives and caches the mapping, then starts the connection pool.
   The given opts override the resolved connection options. The database is a VM-wide
   singleton - starting while an instance is already running yields :ignore instead of
@@ -234,23 +213,6 @@ defmodule Hologram.Database do
     case Supervisor.start_link(__MODULE__, opts, name: __MODULE__) do
       {:error, {:already_started, _pid}} -> :ignore
       other -> other
-    end
-  end
-
-  @doc """
-  Runs the given zero-arity function inside a database transaction and returns
-  {:ok, result}. Transactions are flat: a nested call joins the ongoing transaction
-  instead of nesting - there are no savepoints, and rollback/1 aborts the one flat
-  transaction wherever it is called. An exception rolls the transaction back and
-  re-raises.
-  """
-  @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
-  def transaction(fun, opts \\ []) do
-    case Process.get(@transaction_key) do
-      nil -> run_transaction(fun, opts)
-      {:sandbox, pool_name} -> run_sandbox_transaction(fun, pool_name)
-      {:transaction, _connection} -> {:ok, fun.()}
-      {:sandbox_transaction, _pool_name} -> {:ok, fun.()}
     end
   end
 
@@ -344,15 +306,6 @@ defmodule Hologram.Database do
     Supervisor.init([{Postgrex, postgrex_opts}], strategy: :one_for_one)
   end
 
-  defp current_connection do
-    case Process.get(@transaction_key) do
-      nil -> @pool_name
-      {:sandbox, pool_name} -> pool_name
-      {:sandbox_transaction, pool_name} -> pool_name
-      {:transaction, connection} -> connection
-    end
-  end
-
   # sobelow_skip ["SQL.Query"]
   defp delete_entity_row(entity_type, table, id, encoded_id) do
     statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
@@ -402,46 +355,6 @@ defmodule Hologram.Database do
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
-  end
-
-  # Emulates the outermost transaction inside the externally managed sandbox transaction:
-  # a savepoint stands in for BEGIN, so that commit/abort of the emulated transaction
-  # never touches the sandbox transaction around it.
-  defp run_sandbox_transaction(fun, pool_name) do
-    Postgrex.query!(pool_name, "SAVEPOINT #{@sandbox_savepoint}", [])
-    Process.put(@transaction_key, {:sandbox_transaction, pool_name})
-
-    try do
-      result = fun.()
-      Postgrex.query!(pool_name, "RELEASE SAVEPOINT #{@sandbox_savepoint}", [])
-      {:ok, result}
-    rescue
-      exception ->
-        Postgrex.query!(pool_name, "ROLLBACK TO SAVEPOINT #{@sandbox_savepoint}", [])
-        reraise exception, __STACKTRACE__
-    catch
-      :throw, {@sandbox_rollback_throw, reason} ->
-        Postgrex.query!(pool_name, "ROLLBACK TO SAVEPOINT #{@sandbox_savepoint}", [])
-        {:error, reason}
-    after
-      Process.put(@transaction_key, {:sandbox, pool_name})
-    end
-  end
-
-  defp run_transaction(fun, opts) do
-    Postgrex.transaction(
-      @pool_name,
-      fn connection ->
-        Process.put(@transaction_key, {:transaction, connection})
-
-        try do
-          fun.()
-        after
-          Process.delete(@transaction_key)
-        end
-      end,
-      opts
-    )
   end
 
   defp validate_changed_names!(entity_type, sorted_changes, columns_by_field) do

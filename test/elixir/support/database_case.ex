@@ -15,6 +15,7 @@ defmodule Hologram.Test.DatabaseCase do
   use ExUnit.CaseTemplate
 
   alias Hologram.Database
+  alias Hologram.Database.Connection
 
   using do
     quote do
@@ -51,7 +52,7 @@ defmodule Hologram.Test.DatabaseCase do
 
     # Route the gateway's transaction machinery through the sandbox: transaction/2
     # emulates the outermost transaction with a savepoint instead of BEGIN/COMMIT.
-    Database.enter_sandbox()
+    Connection.enter_sandbox()
 
     on_exit(fn ->
       send(owner_pid, {:rollback, self()})
