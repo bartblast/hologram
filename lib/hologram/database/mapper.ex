@@ -201,7 +201,11 @@ defmodule Hologram.Database.Mapper do
     if collisions != [] do
       descriptions =
         Enum.map_join(collisions, "\n", fn {table_name, modules} ->
-          module_names = modules |> Enum.sort() |> Enum.map_join(", ", &inspect/1)
+          module_names =
+            modules
+            |> Enum.sort()
+            |> Enum.map_join(", ", &inspect/1)
+
           "  * table name \"#{table_name}\" is derived from #{module_names}"
         end)
 
@@ -226,6 +230,16 @@ defmodule Hologram.Database.Mapper do
     hops_from_start ++ hops_before_start
   end
 
+  defp describe_column_collision({name, group}) do
+    sources =
+      Enum.map_join(group, ", ", fn column ->
+        {kind, declaration_name} = column.source
+        "#{kind} #{inspect(declaration_name)}"
+      end)
+
+    "  * column \"#{name}\" is derived from #{sources}"
+  end
+
   defp describe_cycle([{first_entity_type, _first_name} | _later_hops] = cycle) do
     hops =
       Enum.map_join(cycle, " -> ", fn {entity_type, name} ->
@@ -246,19 +260,8 @@ defmodule Hologram.Database.Mapper do
       {cycles, visited} =
         entity_type
         |> required_to_one_targets()
-        |> Enum.reduce({cycles, visited}, fn {name, target}, {cycles, visited} ->
-          new_path = [{entity_type, name} | path]
-
-          if Enum.any?(new_path, fn {module, _name} -> module == target end) do
-            {hops_beyond_target, [target_hop | _earlier_hops]} =
-              Enum.split_while(new_path, fn {module, _name} -> module != target end)
-
-            cycle = [target_hop | Enum.reverse(hops_beyond_target)]
-
-            {[cycle | cycles], visited}
-          else
-            find_cycles(target, new_path, cycles, visited)
-          end
+        |> Enum.reduce({cycles, visited}, fn {name, target}, acc ->
+          follow_edge({entity_type, name}, target, path, acc)
         end)
 
       {cycles, MapSet.put(visited, entity_type)}
@@ -278,6 +281,22 @@ defmodule Hologram.Database.Mapper do
       binary_part(identifier, 0, prefix_bytes) <> "_" <> hash
     else
       identifier
+    end
+  end
+
+  # Closes a cycle when the target is already on the path, descends into the target otherwise.
+  defp follow_edge(hop, target, path, {cycles, visited}) do
+    new_path = [hop | path]
+
+    if Enum.any?(new_path, fn {module, _name} -> module == target end) do
+      {hops_beyond_target, [target_hop | _earlier_hops]} =
+        Enum.split_while(new_path, fn {module, _name} -> module != target end)
+
+      cycle = [target_hop | Enum.reverse(hops_beyond_target)]
+
+      {[cycle | cycles], visited}
+    else
+      find_cycles(target, new_path, cycles, visited)
     end
   end
 
@@ -332,16 +351,7 @@ defmodule Hologram.Database.Mapper do
       |> Enum.sort()
 
     if collisions != [] do
-      descriptions =
-        Enum.map_join(collisions, "\n", fn {name, group} ->
-          sources =
-            Enum.map_join(group, ", ", fn column ->
-              {kind, declaration_name} = column.source
-              "#{kind} #{inspect(declaration_name)}"
-            end)
-
-          "  * column \"#{name}\" is derived from #{sources}"
-        end)
+      descriptions = Enum.map_join(collisions, "\n", &describe_column_collision/1)
 
       raise Hologram.CompileError,
         message:
