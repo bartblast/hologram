@@ -152,7 +152,7 @@ defmodule Hologram.Database.MapperTest do
   end
 
   describe "derive!/1" do
-    test "returns the layout mapping keyed by entity type" do
+    test "returns the mapping keyed by entity type" do
       assert derive!([Module1, Module3]) == %{
                Module1 => %{
                  table: table_name(Module1),

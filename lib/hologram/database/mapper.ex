@@ -61,12 +61,12 @@ defmodule Hologram.Database.Mapper do
   end
 
   @doc """
-  Derives the complete physical layout mapping for the given entity type modules.
+  Derives the complete physical name mapping for the given entity type modules.
 
   Runs every derivation check exactly once - table name collisions, required to-one cycles,
   per-entity column collisions, and cross-entity within-kind derived name collisions (join
   tables and enum types, whose single-underscore seams can merge to the same name across
-  entities) - and returns a map from entity type module to its layout: :table (the table
+  entities) - and returns a map from entity type module to its mapping: :table (the table
   name), :columns (as returned by columns/1), and :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module)) :: %{module => %{atom => any}}
@@ -353,9 +353,9 @@ defmodule Hologram.Database.Mapper do
 
   defp validate_derived_names!(mapping) do
     entries =
-      Enum.flat_map(mapping, fn {entity_type, layout} ->
+      Enum.flat_map(mapping, fn {entity_type, entity_mapping} ->
         enum_type_entries =
-          layout.columns
+          entity_mapping.columns
           |> Enum.filter(&(&1.type == :enum))
           |> Enum.map(fn column ->
             {:attribute, attribute_name} = column.source
@@ -368,7 +368,7 @@ defmodule Hologram.Database.Mapper do
           end)
 
         join_table_entries =
-          Enum.map(layout.join_tables, fn join_table ->
+          Enum.map(entity_mapping.join_tables, fn join_table ->
             %{
               kind: "join table",
               derived_name: join_table.name,
