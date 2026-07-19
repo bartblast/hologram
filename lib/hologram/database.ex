@@ -182,8 +182,8 @@ defmodule Hologram.Database do
   columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
   are keyed by declared attribute and to-one relationship names - a to-one reference is
   set, reassigned, or cleared (nil) through its relationship name. Changing any other
-  name, system attributes included, raises ArgumentError. Updating a nonexistent id is
-  a no-op. Returns :ok. Constraint violations raise.
+  name, system attributes included, raises ArgumentError - as does updating an id that
+  names no entity. Returns :ok. Constraint violations raise.
   """
   @spec update(module, String.t(), map | keyword) :: :ok
   def update(entity_type, id, changes) do
@@ -223,8 +223,15 @@ defmodule Hologram.Database do
     encoded_id = Codec.encode(id, :uuid)
 
     case query(statement, changed_values ++ [encoded_updated_at, encoded_id]) do
-      {:ok, _result} -> :ok
-      {:error, error} -> raise error
+      {:ok, %Postgrex.Result{num_rows: 1}} ->
+        :ok
+
+      {:ok, %Postgrex.Result{num_rows: 0}} ->
+        raise ArgumentError,
+              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+
+      {:error, error} ->
+        raise error
     end
   end
 

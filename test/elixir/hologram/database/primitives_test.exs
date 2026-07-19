@@ -150,8 +150,15 @@ defmodule Hologram.Database.PrimitivesTest do
       end
     end
 
-    test "updating a nonexistent id is a no-op" do
-      assert update(Module2, Entity.generate_id(), %{c: "some text"}) == :ok
+    test "raises when the id names no entity" do
+      nonexistent_id = Entity.generate_id()
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Entity.Module2 - no entity with id #{inspect(nonexistent_id)}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module2, nonexistent_id, %{c: "some text"})
+      end
     end
   end
 end
