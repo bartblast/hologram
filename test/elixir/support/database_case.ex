@@ -46,8 +46,17 @@ defmodule Hologram.Test.DatabaseCase do
         end
       end)
 
+    # The owner is deliberately NOT linked (it must outlive the test process, failing
+    # tests included) - a monitor turns an owner crash into an immediate clear failure
+    # instead of a hanging receive.
+    setup_monitor_ref = Process.monitor(owner_pid)
+
     receive do
-      {:sandbox_ready, ^owner_pid} -> :ok
+      {:sandbox_ready, ^owner_pid} ->
+        Process.demonitor(setup_monitor_ref, [:flush])
+
+      {:DOWN, ^setup_monitor_ref, :process, ^owner_pid, reason} ->
+        raise "sandbox owner process crashed during checkout: #{inspect(reason)}"
     end
 
     # Route the gateway's transaction machinery through the sandbox: transaction/2
@@ -55,10 +64,15 @@ defmodule Hologram.Test.DatabaseCase do
     Connection.enter_sandbox()
 
     on_exit(fn ->
+      exit_monitor_ref = Process.monitor(owner_pid)
       send(owner_pid, {:rollback, self()})
 
       receive do
-        {:sandbox_finished, ^owner_pid} -> :ok
+        {:sandbox_finished, ^owner_pid} ->
+          Process.demonitor(exit_monitor_ref, [:flush])
+
+        {:DOWN, ^exit_monitor_ref, :process, ^owner_pid, reason} ->
+          raise "sandbox owner process crashed before rollback: #{inspect(reason)}"
       end
     end)
 
