@@ -342,10 +342,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       on_exit(fn -> :application.unload(fixture_app) end)
 
-      expected_msg = """
-      colliding column names in Mix.Tasks.Compile.HologramTest.InvalidMappingEntityFixture - rename the declarations so that every derived column name is unique:
-        * column "owner_id" is derived from attribute :owner_id, relationship :owner\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding column names in Mix.Tasks.Compile.HologramTest.InvalidMappingEntityFixture - rename the declarations so that every derived column name is unique:
+          * column "owner_id" is derived from attribute :owner_id, relationship :owner\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         run(opts)

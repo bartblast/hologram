@@ -140,10 +140,11 @@ defmodule Hologram.Database.MapperTest do
         relationship :project, Module1
       end
 
-      expected_msg = """
-      colliding column names in Hologram.Database.MapperTest.InlineEntityFixture1 - rename the declarations so that every derived column name is unique:
-        * column "project_id" is derived from attribute :project_id, relationship :project\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding column names in Hologram.Database.MapperTest.InlineEntityFixture1 - rename the declarations so that every derived column name is unique:
+          * column "project_id" is derived from attribute :project_id, relationship :project\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         columns(InlineEntityFixture1)
@@ -168,10 +169,11 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "runs the table name collision check" do
-      expected_msg = """
-      colliding table names - rename modules so that every entity type derives a unique table name:
-        * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding table names - rename modules so that every entity type derives a unique table name:
+          * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([Hologram.Blog.Post, Hologram.BlogPost])
@@ -185,10 +187,11 @@ defmodule Hologram.Database.MapperTest do
         relationship :parent, __MODULE__
       end
 
-      expected_msg = """
-      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
-        * Hologram.Database.MapperTest.InlineEntityFixture13 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture13\
-      """
+      expected_msg =
+        normalize_newlines("""
+        cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+          * Hologram.Database.MapperTest.InlineEntityFixture13 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture13\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([InlineEntityFixture13])
@@ -208,10 +211,11 @@ defmodule Hologram.Database.MapperTest do
         relationship :c, [Module1]
       end
 
-      expected_msg = """
-      colliding derived names - rename the declarations so that every derived name is unique:
-        * join table "database_mapper_test_inline_entity_fixture14_b_c_$join" is derived from relationship :b_c in Hologram.Database.MapperTest.InlineEntityFixture14, relationship :c in Hologram.Database.MapperTest.InlineEntityFixture14B\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * join table "database_mapper_test_inline_entity_fixture14_b_c_$join" is derived from relationship :b_c in Hologram.Database.MapperTest.InlineEntityFixture14, relationship :c in Hologram.Database.MapperTest.InlineEntityFixture14B\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([InlineEntityFixture14, InlineEntityFixture14B])
@@ -231,10 +235,11 @@ defmodule Hologram.Database.MapperTest do
         attribute :p, :enum, values: [:x, :y]
       end
 
-      expected_msg = """
-      colliding derived names - rename the declarations so that every derived name is unique:
-        * enum type "database_mapper_test_inline_entity_fixture15_b_p_$enum" is derived from attribute :b_p in Hologram.Database.MapperTest.InlineEntityFixture15, attribute :p in Hologram.Database.MapperTest.InlineEntityFixture15B\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * enum type "database_mapper_test_inline_entity_fixture15_b_p_$enum" is derived from attribute :b_p in Hologram.Database.MapperTest.InlineEntityFixture15, attribute :p in Hologram.Database.MapperTest.InlineEntityFixture15B\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([InlineEntityFixture15, InlineEntityFixture15B])
@@ -258,11 +263,12 @@ defmodule Hologram.Database.MapperTest do
         relationship :r, [Module1]
       end
 
-      expected_msg = """
-      colliding derived names - rename the declarations so that every derived name is unique:
-        * enum type "database_mapper_test_inline_entity_fixture16_b_p_$enum" is derived from attribute :b_p in Hologram.Database.MapperTest.InlineEntityFixture16, attribute :p in Hologram.Database.MapperTest.InlineEntityFixture16B
-        * join table "database_mapper_test_inline_entity_fixture16_b_r_$join" is derived from relationship :b_r in Hologram.Database.MapperTest.InlineEntityFixture16, relationship :r in Hologram.Database.MapperTest.InlineEntityFixture16B\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * enum type "database_mapper_test_inline_entity_fixture16_b_p_$enum" is derived from attribute :b_p in Hologram.Database.MapperTest.InlineEntityFixture16, attribute :p in Hologram.Database.MapperTest.InlineEntityFixture16B
+          * join table "database_mapper_test_inline_entity_fixture16_b_r_$join" is derived from relationship :b_r in Hologram.Database.MapperTest.InlineEntityFixture16, relationship :r in Hologram.Database.MapperTest.InlineEntityFixture16B\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         derive!([InlineEntityFixture16, InlineEntityFixture16B])
@@ -386,10 +392,11 @@ defmodule Hologram.Database.MapperTest do
         relationship :parent, __MODULE__
       end
 
-      expected_msg = """
-      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
-        * Hologram.Database.MapperTest.InlineEntityFixture7 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture7\
-      """
+      expected_msg =
+        normalize_newlines("""
+        cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+          * Hologram.Database.MapperTest.InlineEntityFixture7 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture7\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_required_to_one_cycles!([InlineEntityFixture7])
@@ -409,10 +416,11 @@ defmodule Hologram.Database.MapperTest do
         relationship :back, Hologram.Database.MapperTest.InlineEntityFixture8
       end
 
-      expected_msg = """
-      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
-        * Hologram.Database.MapperTest.InlineEntityFixture8 (relationship :next) -> Hologram.Database.MapperTest.InlineEntityFixture9 (relationship :back) -> Hologram.Database.MapperTest.InlineEntityFixture8\
-      """
+      expected_msg =
+        normalize_newlines("""
+        cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+          * Hologram.Database.MapperTest.InlineEntityFixture8 (relationship :next) -> Hologram.Database.MapperTest.InlineEntityFixture9 (relationship :back) -> Hologram.Database.MapperTest.InlineEntityFixture8\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_required_to_one_cycles!([InlineEntityFixture8, InlineEntityFixture9])
@@ -438,11 +446,12 @@ defmodule Hologram.Database.MapperTest do
         relationship :back, Hologram.Database.MapperTest.InlineEntityFixture11
       end
 
-      expected_msg = """
-      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
-        * Hologram.Database.MapperTest.InlineEntityFixture10 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture10
-        * Hologram.Database.MapperTest.InlineEntityFixture11 (relationship :next) -> Hologram.Database.MapperTest.InlineEntityFixture12 (relationship :back) -> Hologram.Database.MapperTest.InlineEntityFixture11\
-      """
+      expected_msg =
+        normalize_newlines("""
+        cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+          * Hologram.Database.MapperTest.InlineEntityFixture10 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture10
+          * Hologram.Database.MapperTest.InlineEntityFixture11 (relationship :next) -> Hologram.Database.MapperTest.InlineEntityFixture12 (relationship :back) -> Hologram.Database.MapperTest.InlineEntityFixture11\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_required_to_one_cycles!([
@@ -464,10 +473,11 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "rejects modules deriving the same table name" do
-      expected_msg = """
-      colliding table names - rename modules so that every entity type derives a unique table name:
-        * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding table names - rename modules so that every entity type derives a unique table name:
+          * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_table_names!([Hologram.Blog.Post, Hologram.BlogPost])
@@ -475,10 +485,11 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "lists all modules when more than two derive the same table name" do
-      expected_msg = """
-      colliding table names - rename modules so that every entity type derives a unique table name:
-        * table name "blog_post" is derived from Blog.Post, Hologram.Blog.Post, Hologram.BlogPost\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding table names - rename modules so that every entity type derives a unique table name:
+          * table name "blog_post" is derived from Blog.Post, Hologram.Blog.Post, Hologram.BlogPost\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_table_names!([Blog.Post, Hologram.Blog.Post, Hologram.BlogPost])
@@ -486,11 +497,12 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "lists every collision group when multiple table names collide" do
-      expected_msg = """
-      colliding table names - rename modules so that every entity type derives a unique table name:
-        * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost
-        * table name "task_list" is derived from Hologram.Task.List, Hologram.TaskList\
-      """
+      expected_msg =
+        normalize_newlines("""
+        colliding table names - rename modules so that every entity type derives a unique table name:
+          * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost
+          * table name "task_list" is derived from Hologram.Task.List, Hologram.TaskList\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_table_names!([
