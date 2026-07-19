@@ -238,6 +238,26 @@ jobs:
         if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
         run: mix eslint
 
+      # Step: Start the runner image's preinstalled Postgres server (service containers are
+      # Linux-only, so both OSes start the local server and align it with the zero-config
+      # test defaults: localhost:5432, postgres/postgres).
+      - name: Start Postgres (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+
+      - name: Start Postgres (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PGPASSWORD: root
+        run: |
+          $pg_service_name = (Get-Service -Name "postgresql*").Name
+          Set-Service -Name $pg_service_name -StartupType Manual
+          Start-Service -Name $pg_service_name
+          & "$env:PGBIN\psql" -U postgres -c "ALTER USER postgres PASSWORD 'postgres';"
+
       # Step: Execute lib Elixir tests.
       - name: Run lib Elixir tests
         run: mix test --warnings-as-errors --exclude consistency
