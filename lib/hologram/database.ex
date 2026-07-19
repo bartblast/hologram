@@ -1,11 +1,18 @@
 defmodule Hologram.Database do
   @moduledoc false
 
+  # TODO: split the internals into dedicated modules along the substrate/primitives seam
+  # (connection/transaction machinery vs entity row operations) once all primitives exist -
+  # the public surface stays on this module, and test files then match module files.
+
   use Supervisor
 
+  alias Hologram.Database.Codec
   alias Hologram.Database.Config
   alias Hologram.Database.Mapper
   alias Hologram.Reflection
+
+  @data_schema "hologram_data"
 
   @mapping_key {__MODULE__, :mapping}
 
@@ -16,6 +23,38 @@ defmodule Hologram.Database do
   @sandbox_savepoint "hologram_transaction"
 
   @transaction_key {__MODULE__, :transaction}
+
+  @doc """
+  Inserts the given entity as a full row - every column is named and bound explicitly -
+  stamping created_at and updated_at with the same current UTC timestamp. Returns the
+  stamped entity. Constraint violations raise.
+  """
+  @spec create(struct) :: struct
+  def create(entity) do
+    entity_type = entity.__struct__
+    %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
+
+    now = DateTime.utc_now(:microsecond)
+    stamped_entity = %{entity | created_at: now, updated_at: now}
+
+    encoded_values =
+      Enum.map(columns, fn column ->
+        stamped_entity
+        |> Map.fetch!(field_name(column))
+        |> Codec.encode(column.type)
+      end)
+
+    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
+    placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
+
+    statement =
+      "INSERT INTO #{qualified_table(table)} (#{column_list}) VALUES (#{placeholder_list})"
+
+    case query(statement, encoded_values) do
+      {:ok, _result} -> stamped_entity
+      {:error, error} -> raise error
+    end
+  end
 
   @doc """
   Marks the calling process as running inside an externally managed transaction (the test
@@ -139,6 +178,16 @@ defmodule Hologram.Database do
       {:sandbox_transaction, pool_name} -> pool_name
       {:transaction, connection} -> connection
     end
+  end
+
+  defp field_name(%{source: :system, name: name}), do: String.to_existing_atom(name)
+
+  defp field_name(%{source: {:attribute, name}}), do: name
+
+  defp field_name(%{source: {:relationship, name}}), do: name
+
+  defp qualified_table(table) do
+    "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(table)}"
   end
 
   # Emulates the outermost transaction inside the externally managed sandbox transaction:
