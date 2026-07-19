@@ -5,6 +5,10 @@ defmodule Hologram.Database do
   # (connection/transaction machinery vs entity row operations) once all primitives exist -
   # the public surface stays on this module, and test files then match module files.
 
+  # SQL statements in this module interpolate ONLY framework-derived identifiers (always
+  # through Mapper.quote_identifier/1) and $n placeholders - every value travels as a bound
+  # param. The sobelow_skip markers on the emitting functions record that invariant.
+
   use Supervisor
 
   alias Hologram.Database.Codec
@@ -31,6 +35,7 @@ defmodule Hologram.Database do
   source or target entity raises through the edge's foreign keys.
   """
   @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
+  # sobelow_skip ["SQL.Query"]
   def add_relationship(entity_type, id, relationship_name, target_id) do
     join_table = fetch_join_table!(entity_type, relationship_name)
 
@@ -52,6 +57,7 @@ defmodule Hologram.Database do
   stamped entity. Constraint violations raise.
   """
   @spec create(struct) :: struct
+  # sobelow_skip ["SQL.Query"]
   def create(entity) do
     entity_type = entity.__struct__
     %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
@@ -110,6 +116,7 @@ defmodule Hologram.Database do
   Naming anything but a declared to-many relationship raises ArgumentError.
   """
   @spec delete_relationship(module, String.t(), atom, String.t()) :: :ok
+  # sobelow_skip ["SQL.Query"]
   def delete_relationship(entity_type, id, relationship_name, target_id) do
     join_table = fetch_join_table!(entity_type, relationship_name)
 
@@ -143,6 +150,7 @@ defmodule Hologram.Database do
   Column values are decoded back into their logical types.
   """
   @spec get(module, String.t()) :: struct | nil
+  # sobelow_skip ["SQL.Query"]
   def get(entity_type, id) do
     %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
 
@@ -255,6 +263,7 @@ defmodule Hologram.Database do
   names no entity. Returns :ok. Constraint violations raise.
   """
   @spec update(module, String.t(), map | keyword) :: :ok
+  # sobelow_skip ["SQL.Query"]
   def update(entity_type, id, changes) do
     %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
 
@@ -344,6 +353,7 @@ defmodule Hologram.Database do
     end
   end
 
+  # sobelow_skip ["SQL.Query"]
   defp delete_entity_row(entity_type, table, id, encoded_id) do
     statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
 
@@ -359,6 +369,7 @@ defmodule Hologram.Database do
     end
   end
 
+  # sobelow_skip ["SQL.Query"]
   defp delete_outgoing_edges(join_tables, encoded_id) do
     Enum.each(join_tables, fn join_table ->
       statement = ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1|
