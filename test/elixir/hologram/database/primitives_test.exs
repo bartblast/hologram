@@ -78,4 +78,25 @@ defmodule Hologram.Database.PrimitivesTest do
       assert error.postgres.code == :unique_violation
     end
   end
+
+  describe "get/2" do
+    test "returns the entity with values decoded back into their logical types" do
+      entity = Entity.new(Module4, a: ~D[2026-07-19], b: DateTime.utc_now(:microsecond), d: 1.5)
+
+      created_entity = create(entity)
+
+      assert get(Module4, created_entity.id) == created_entity
+    end
+
+    test "returns to-one relationship references as target ids" do
+      target_entity = create(Entity.new(Module1))
+      created_entity = create(Entity.new(Module3, c: target_entity.id))
+
+      assert get(Module3, created_entity.id) == created_entity
+    end
+
+    test "returns nil when no row matches" do
+      assert get(Module1, Entity.generate_id()) == nil
+    end
+  end
 end

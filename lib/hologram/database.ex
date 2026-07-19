@@ -70,6 +70,38 @@ defmodule Hologram.Database do
   end
 
   @doc """
+  Returns the entity of the given type with the given id, or nil when no row matches.
+  Column values are decoded back into their logical types.
+  """
+  @spec get(module, String.t()) :: struct | nil
+  def get(entity_type, id) do
+    %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
+
+    column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
+    statement = ~s|SELECT #{column_list} FROM #{qualified_table(table)} WHERE "id" = $1|
+
+    encoded_id = Codec.encode(id, :uuid)
+
+    case query(statement, [encoded_id]) do
+      {:ok, %Postgrex.Result{rows: []}} ->
+        nil
+
+      {:ok, %Postgrex.Result{rows: [row]}} ->
+        fields =
+          columns
+          |> Enum.zip(row)
+          |> Enum.map(fn {column, value} ->
+            {field_name(column), Codec.decode(value, column.type)}
+          end)
+
+        struct!(entity_type, fields)
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
+  @doc """
   Returns the physical name mapping derived from the discovered entity type modules.
   The mapping is derived once at boot and cached for the lifetime of the runtime.
   """
