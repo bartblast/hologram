@@ -146,8 +146,12 @@ defmodule Hologram.Database do
     end
   end
 
-  # The database is a VM-wide singleton - booting while an instance is already running
-  # yields to the running instance instead of failing the caller's supervision tree.
+  @doc """
+  Starts the database: derives and caches the mapping, then starts the connection pool.
+  The given opts override the resolved connection options. The database is a VM-wide
+  singleton - starting while an instance is already running yields :ignore instead of
+  failing the caller's supervision tree.
+  """
   @spec start_link(keyword) :: Supervisor.on_start()
   def start_link(opts \\ []) do
     case Supervisor.start_link(__MODULE__, opts, name: __MODULE__) do
