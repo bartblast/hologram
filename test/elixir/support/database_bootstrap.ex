@@ -89,7 +89,8 @@ defmodule Hologram.Test.DatabaseBootstrap do
   end
 
   defp ensure_database!(database_opts) do
-    {:ok, connection_pid} = Postgrex.start_link(connection_opts(database_opts, "postgres"))
+    maintenance_connection_opts = connection_opts(database_opts, "postgres")
+    {:ok, connection_pid} = Postgrex.start_link(maintenance_connection_opts)
 
     database_existence_query = "SELECT 1 FROM pg_database WHERE datname = $1"
 
@@ -112,6 +113,7 @@ defmodule Hologram.Test.DatabaseBootstrap do
   end
 
   defp print_unreachable_server_message(database_opts) do
+    # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     IO.puts(:stderr, """
 
     Postgres is required to run the Hologram test suite, but no server is reachable at \
@@ -127,8 +129,8 @@ defmodule Hologram.Test.DatabaseBootstrap do
   end
 
   defp recreate_schema_layout!(database_opts) do
-    {:ok, connection_pid} =
-      Postgrex.start_link(connection_opts(database_opts, database_opts[:database]))
+    target_connection_opts = connection_opts(database_opts, database_opts[:database])
+    {:ok, connection_pid} = Postgrex.start_link(target_connection_opts)
 
     Enum.each(@schema_statements, &Postgrex.query!(connection_pid, &1, []))
 

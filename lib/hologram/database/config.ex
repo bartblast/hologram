@@ -69,14 +69,15 @@ defmodule Hologram.Database.Config do
 
     database = uri.path && String.trim_leading(uri.path, "/")
 
-    [
+    components = [
       database: database,
       host: uri.host,
       password: password,
       port: uri.port,
       user: user
     ]
-    |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+
+    Enum.reject(components, fn {_key, value} -> value in [nil, ""] end)
   end
 
   defp validate_required!(resolved, env) do
