@@ -79,6 +79,32 @@ defmodule Hologram.Database do
   end
 
   @doc """
+  Deletes the entity of the given type with the given id together with its own outgoing
+  to-many edges, in one transaction. An incoming reference from another entity - a
+  to-one reference column or an edge pointing at this entity - restricts the delete,
+  returning {:error, {:restricted, %{entity_type: entity_type, id: id}}} with nothing
+  deleted. This is the one translated constraint error - any other constraint violation
+  raises. Deleting a nonexistent id is a no-op. Returns :ok.
+  """
+  @spec delete(module, String.t()) :: :ok | {:error, {:restricted, map}}
+  def delete(entity_type, id) do
+    %{table: table, join_tables: join_tables} = Map.fetch!(mapping(), entity_type)
+
+    encoded_id = Codec.encode(id, :uuid)
+
+    transaction_result =
+      transaction(fn ->
+        delete_outgoing_edges(join_tables, encoded_id)
+        delete_entity_row(entity_type, table, id, encoded_id)
+      end)
+
+    case transaction_result do
+      {:ok, :ok} -> :ok
+      {:error, _reason} = error -> error
+    end
+  end
+
+  @doc """
   Deletes the (source, target) edge from the given to-many relationship of the entity
   with the given id. Idempotent - deleting an absent edge is a no-op. Returns :ok.
   Naming anything but a declared to-many relationship raises ArgumentError.
@@ -316,6 +342,32 @@ defmodule Hologram.Database do
       {:sandbox_transaction, pool_name} -> pool_name
       {:transaction, connection} -> connection
     end
+  end
+
+  defp delete_entity_row(entity_type, table, id, encoded_id) do
+    statement = ~s|DELETE FROM #{qualified_table(table)} WHERE "id" = $1|
+
+    case query(statement, [encoded_id]) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, %Postgrex.Error{postgres: %{code: :foreign_key_violation}}} ->
+        rollback({:restricted, %{entity_type: entity_type, id: id}})
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
+  defp delete_outgoing_edges(join_tables, encoded_id) do
+    Enum.each(join_tables, fn join_table ->
+      statement = ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1|
+
+      case query(statement, [encoded_id]) do
+        {:ok, _result} -> :ok
+        {:error, error} -> raise error
+      end
+    end)
   end
 
   defp fetch_join_table!(entity_type, relationship_name) do

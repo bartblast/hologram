@@ -138,6 +138,57 @@ defmodule Hologram.Database.PrimitivesTest do
     end
   end
 
+  describe "delete/2" do
+    test "deletes the entity row" do
+      created_entity = create(Entity.new(Module1))
+
+      assert delete(Module1, created_entity.id) == :ok
+
+      assert get(Module1, created_entity.id) == nil
+    end
+
+    test "deletes own outgoing edges with the row" do
+      required_target = create(Entity.new(Module1))
+      source_entity = create(Entity.new(Module3, c: required_target.id))
+      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert delete(Module3, source_entity.id) == :ok
+
+      assert get(Module3, source_entity.id) == nil
+      assert count_edges(source_entity, target_entity) == 0
+    end
+
+    test "restricts when another entity references the entity" do
+      target_entity = create(Entity.new(Module1))
+      referencing_entity = create(Entity.new(Module3, c: target_entity.id))
+
+      assert delete(Module1, target_entity.id) ==
+               {:error, {:restricted, %{entity_type: Module1, id: target_entity.id}}}
+
+      assert get(Module1, target_entity.id) == target_entity
+      assert get(Module3, referencing_entity.id) == referencing_entity
+    end
+
+    test "restricts when the entity is the target of another entity's edges" do
+      required_target = create(Entity.new(Module1))
+      source_entity = create(Entity.new(Module3, c: required_target.id))
+      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert delete(Module2, target_entity.id) ==
+               {:error, {:restricted, %{entity_type: Module2, id: target_entity.id}}}
+
+      assert count_edges(source_entity, target_entity) == 1
+    end
+
+    test "deleting a nonexistent id is a no-op" do
+      assert delete(Module1, Entity.generate_id()) == :ok
+    end
+  end
+
   describe "delete_relationship/4" do
     test "deletes an edge from the join table" do
       required_target = create(Entity.new(Module1))
