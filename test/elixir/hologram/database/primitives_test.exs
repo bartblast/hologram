@@ -26,6 +26,20 @@ defmodule Hologram.Database.PrimitivesTest do
     count
   end
 
+  # The system clock can be coarser than a microsecond (Windows timer granularity reaches
+  # ~16ms), making consecutive utc_now readings equal - wait until the clock has visibly
+  # advanced, so that a subsequent write provably stamps a later timestamp.
+  defp wait_until_clock_advances_past(datetime) do
+    now = DateTime.utc_now(:microsecond)
+
+    if DateTime.compare(now, datetime) == :gt do
+      :ok
+    else
+      Process.sleep(1)
+      wait_until_clock_advances_past(datetime)
+    end
+  end
+
   describe "add_relationship/4" do
     test "adds an edge to the join table" do
       required_target = create(Entity.new(Module1))
@@ -244,6 +258,8 @@ defmodule Hologram.Database.PrimitivesTest do
   describe "update/3" do
     test "sets exactly the changed columns and bumps updated_at" do
       created_entity = create(Entity.new(Module2, a: true, b: 1, c: "before"))
+
+      wait_until_clock_advances_past(created_entity.updated_at)
 
       assert update(Module2, created_entity.id, %{c: "after"}) == :ok
 
