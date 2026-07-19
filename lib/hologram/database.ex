@@ -25,6 +25,28 @@ defmodule Hologram.Database do
   @transaction_key {__MODULE__, :transaction}
 
   @doc """
+  Adds the (source, target) edge to the given to-many relationship of the entity with
+  the given id. Idempotent - adding an existing edge is a no-op. Returns :ok. Naming
+  anything but a declared to-many relationship raises ArgumentError, and a missing
+  source or target entity raises through the edge's foreign keys.
+  """
+  @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
+  def add_relationship(entity_type, id, relationship_name, target_id) do
+    join_table = fetch_join_table!(entity_type, relationship_name)
+
+    statement =
+      ~s|INSERT INTO #{qualified_table(join_table.name)} ("source_id", "target_id") VALUES ($1, $2) ON CONFLICT DO NOTHING|
+
+    encoded_id = Codec.encode(id, :uuid)
+    encoded_target_id = Codec.encode(target_id, :uuid)
+
+    case query(statement, [encoded_id, encoded_target_id]) do
+      {:ok, _result} -> :ok
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc """
   Inserts the given entity as a full row - every column is named and bound explicitly -
   stamping created_at and updated_at with the same current UTC timestamp. Returns the
   stamped entity. Constraint violations raise.
@@ -272,6 +294,19 @@ defmodule Hologram.Database do
       {:sandbox, pool_name} -> pool_name
       {:sandbox_transaction, pool_name} -> pool_name
       {:transaction, connection} -> connection
+    end
+  end
+
+  defp fetch_join_table!(entity_type, relationship_name) do
+    %{join_tables: join_tables} = Map.fetch!(mapping(), entity_type)
+
+    case Enum.find(join_tables, &(&1.relationship == relationship_name)) do
+      nil ->
+        raise ArgumentError,
+              "invalid relationship for #{inspect(entity_type)} - #{inspect(relationship_name)} is not a declared to-many relationship"
+
+      join_table ->
+        join_table
     end
   end
 

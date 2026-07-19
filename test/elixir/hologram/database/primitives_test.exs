@@ -13,6 +13,65 @@ defmodule Hologram.Database.PrimitivesTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
 
+  defp count_edges(source_entity, target_entity) do
+    count_sql =
+      ~s|SELECT count(*) FROM "hologram_data"."test_fixtures_entity_module3_a_$join" WHERE "source_id" = $1 AND "target_id" = $2|
+
+    encoded_source_id = Codec.encode(source_entity.id, :uuid)
+    encoded_target_id = Codec.encode(target_entity.id, :uuid)
+
+    {:ok, %Postgrex.Result{rows: [[count]]}} =
+      query(count_sql, [encoded_source_id, encoded_target_id])
+
+    count
+  end
+
+  describe "add_relationship/4" do
+    test "adds an edge to the join table" do
+      required_target = create(Entity.new(Module1))
+      source_entity = create(Entity.new(Module3, c: required_target.id))
+      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      assert add_relationship(Module3, source_entity.id, :a, target_entity.id) == :ok
+
+      assert count_edges(source_entity, target_entity) == 1
+    end
+
+    test "is idempotent" do
+      required_target = create(Entity.new(Module1))
+      source_entity = create(Entity.new(Module3, c: required_target.id))
+      target_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      assert count_edges(source_entity, target_entity) == 1
+    end
+
+    test "raises when the relationship is not a declared to-many relationship" do
+      expected_msg =
+        "invalid relationship for Hologram.Test.Fixtures.Entity.Module3 - :b is not a declared to-many relationship"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(Module3, Entity.generate_id(), :b, Entity.generate_id())
+      end
+    end
+
+    test "raises when the source or target entity is missing" do
+      required_target = create(Entity.new(Module1))
+      source_entity = create(Entity.new(Module3, c: required_target.id))
+
+      error =
+        try do
+          add_relationship(Module3, source_entity.id, :a, Entity.generate_id())
+        rescue
+          error in Postgrex.Error -> error
+        end
+
+      assert error.postgres.code == :foreign_key_violation
+    end
+  end
+
   describe "create/1" do
     test "inserts a full row and stamps both timestamps with the same value" do
       entity = Entity.new(Module2, a: true, c: "some text")
