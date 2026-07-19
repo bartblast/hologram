@@ -177,6 +177,57 @@ defmodule Hologram.Database do
     end
   end
 
+  @doc """
+  Updates the entity of the given type with the given id, setting exactly the changed
+  columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
+  are keyed by declared attribute and to-one relationship names - a to-one reference is
+  set, reassigned, or cleared (nil) through its relationship name. Changing any other
+  name, system attributes included, raises ArgumentError. Updating a nonexistent id is
+  a no-op. Returns :ok. Constraint violations raise.
+  """
+  @spec update(module, String.t(), map | keyword) :: :ok
+  def update(entity_type, id, changes) do
+    %{table: table, columns: columns} = Map.fetch!(mapping(), entity_type)
+
+    columns_by_field =
+      columns
+      |> Enum.reject(&(&1.source == :system))
+      |> Map.new(&{field_name(&1), &1})
+
+    sorted_changes =
+      changes
+      |> Map.new()
+      |> Enum.sort()
+
+    validate_changed_names!(entity_type, sorted_changes, columns_by_field)
+
+    set_list =
+      sorted_changes
+      |> Enum.with_index(1)
+      |> Enum.map_join(", ", fn {{name, _value}, index} ->
+        "#{Mapper.quote_identifier(columns_by_field[name].name)} = $#{index}"
+      end)
+
+    updated_at_placeholder = length(sorted_changes) + 1
+    id_placeholder = length(sorted_changes) + 2
+
+    statement =
+      ~s|UPDATE #{qualified_table(table)} SET #{set_list}, "updated_at" = $#{updated_at_placeholder} WHERE "id" = $#{id_placeholder}|
+
+    changed_values =
+      Enum.map(sorted_changes, fn {name, value} ->
+        Codec.encode(value, columns_by_field[name].type)
+      end)
+
+    encoded_updated_at = Codec.encode(DateTime.utc_now(:microsecond), :datetime)
+    encoded_id = Codec.encode(id, :uuid)
+
+    case query(statement, changed_values ++ [encoded_updated_at, encoded_id]) do
+      {:ok, _result} -> :ok
+      {:error, error} -> raise error
+    end
+  end
+
   @impl Supervisor
   def init(opts) do
     mapping = Mapper.derive!(Reflection.list_entities())
@@ -264,5 +315,21 @@ defmodule Hologram.Database do
       end,
       opts
     )
+  end
+
+  defp validate_changed_names!(entity_type, sorted_changes, columns_by_field) do
+    unknown_names =
+      sorted_changes
+      |> Enum.map(fn {name, _value} -> name end)
+      |> Enum.reject(&Map.has_key?(columns_by_field, &1))
+
+    if unknown_names != [] do
+      listed_names = Enum.map_join(unknown_names, ", ", &inspect/1)
+
+      raise ArgumentError,
+            "invalid changes for #{inspect(entity_type)} - only declared attributes and to-one relationships can be updated: #{listed_names}"
+    end
+
+    :ok
   end
 end

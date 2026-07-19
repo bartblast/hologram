@@ -99,4 +99,59 @@ defmodule Hologram.Database.PrimitivesTest do
       assert get(Module1, Entity.generate_id()) == nil
     end
   end
+
+  describe "update/3" do
+    test "sets exactly the changed columns and bumps updated_at" do
+      created_entity = create(Entity.new(Module2, a: true, b: 1, c: "before"))
+
+      assert update(Module2, created_entity.id, %{c: "after"}) == :ok
+
+      reloaded_entity = get(Module2, created_entity.id)
+
+      assert reloaded_entity.c == "after"
+      assert reloaded_entity.a == created_entity.a
+      assert reloaded_entity.b == created_entity.b
+      assert reloaded_entity.created_at == created_entity.created_at
+      assert DateTime.compare(reloaded_entity.updated_at, created_entity.updated_at) == :gt
+    end
+
+    test "sets, reassigns and clears to-one references" do
+      first_target = create(Entity.new(Module1))
+      second_target = create(Entity.new(Module1))
+      optional_target = create(Entity.new(Module2, a: true, c: "some text"))
+
+      created_entity = create(Entity.new(Module3, c: first_target.id))
+
+      :ok = update(Module3, created_entity.id, %{c: second_target.id})
+      assert get(Module3, created_entity.id).c == second_target.id
+
+      :ok = update(Module3, created_entity.id, %{b: optional_target.id})
+      assert get(Module3, created_entity.id).b == optional_target.id
+
+      :ok = update(Module3, created_entity.id, %{b: nil})
+      assert get(Module3, created_entity.id).b == nil
+    end
+
+    test "raises when changes name anything but declared attributes and to-one relationships" do
+      created_entity = create(Entity.new(Module2, a: true, c: "some text"))
+
+      expected_unknown_msg =
+        "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :nonexistent"
+
+      assert_error ArgumentError, expected_unknown_msg, fn ->
+        update(Module2, created_entity.id, %{nonexistent: 1})
+      end
+
+      expected_system_msg =
+        "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :created_at"
+
+      assert_error ArgumentError, expected_system_msg, fn ->
+        update(Module2, created_entity.id, %{created_at: DateTime.utc_now(:microsecond)})
+      end
+    end
+
+    test "updating a nonexistent id is a no-op" do
+      assert update(Module2, Entity.generate_id(), %{c: "some text"}) == :ok
+    end
+  end
 end
