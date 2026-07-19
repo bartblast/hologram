@@ -24,6 +24,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Database.Mapper
   alias Hologram.Entity.Validator
   alias Hologram.Reflection
 
@@ -230,7 +231,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp validate_data_model! do
-    Validator.validate_model!(Reflection.list_entities())
+    entity_types = Reflection.list_entities()
+
+    Validator.validate_model!(entity_types)
+
+    # The mapping value is discarded - only the fail-fast derivation checks matter here.
+    Mapper.derive!(entity_types)
+
+    :ok
   end
 
   defp validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str) do
