@@ -35,7 +35,11 @@ defmodule Hologram.Entity do
   end
 
   defmacro __before_compile__(env) do
-    system_attributes = Macro.escape(@system_attributes)
+    system_attributes =
+      @system_attributes
+      |> Enum.sort()
+      |> Macro.escape()
+
     struct_fields = struct_fields(env.module)
 
     quote do
