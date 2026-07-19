@@ -151,6 +151,35 @@ defmodule Hologram.Database.MapperTest do
     end
   end
 
+  describe "join_tables/1" do
+    test "returns empty list for entity type with no to-many relationships" do
+      assert join_tables(Module1) == []
+    end
+
+    test "derives join tables for to-many relationships and excludes to-one relationships" do
+      assert join_tables(Module3) == [
+               %{
+                 name: "test_fixtures_entity_module3_a_$join",
+                 relationship: :a,
+                 source_table: "test_fixtures_entity_module3",
+                 target_table: "test_fixtures_entity_module2",
+                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_$idx"
+               }
+             ]
+    end
+
+    test "derives join tables for self-referential to-many relationships" do
+      defmodule InlineEntityFixture2 do
+        use Hologram.Entity
+
+        relationship :parts, [__MODULE__]
+      end
+
+      assert [join_table] = join_tables(InlineEntityFixture2)
+      assert join_table.source_table == join_table.target_table
+    end
+  end
+
   describe "quote_identifier/1" do
     test "wraps the identifier in double quotes" do
       assert quote_identifier("blog_post") == ~s("blog_post")

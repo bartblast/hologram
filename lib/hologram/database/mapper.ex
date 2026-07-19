@@ -61,6 +61,36 @@ defmodule Hologram.Database.Mapper do
   end
 
   @doc """
+  Returns the join table definitions derived from the given entity type module's to-many
+  relationships, sorted by relationship name.
+
+  Each definition is a map with :name (the join table name - `<source_table>_<relationship>_$join`
+  per the derived-name system), :relationship (the declaring relationship name), :source_table,
+  :target_table, and :reverse_index (the name of the index over (target_id, source_id)).
+  Join table columns are fixed: source_id/target_id uuid NOT NULL, composite primary key
+  (source_id, target_id), both columns FK ON DELETE RESTRICT. To-one relationships derive
+  no join tables - they live as reference columns on the owning row.
+  """
+  @spec join_tables(module) :: list(%{atom => any})
+  def join_tables(entity_type) do
+    source_table = table_name(entity_type)
+
+    entity_type.__relationships__()
+    |> Enum.filter(fn {_name, type, _opts} -> is_list(type) end)
+    |> Enum.map(fn {name, [target], _opts} ->
+      join_table_name = fit_identifier("#{source_table}_#{name}_$join")
+
+      %{
+        name: join_table_name,
+        relationship: name,
+        source_table: source_table,
+        target_table: table_name(target),
+        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx")
+      }
+    end)
+  end
+
+  @doc """
   Returns the given identifier wrapped in double quotes, with embedded double quotes escaped.
   Emitted SQL always quotes identifiers, so no derived name can ever clash with a reserved word.
   """
