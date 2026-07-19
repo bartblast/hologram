@@ -28,9 +28,14 @@ defmodule Hologram.Database do
     @pool_name
   end
 
+  # The database is a VM-wide singleton - booting while an instance is already running
+  # yields to the running instance instead of failing the caller's supervision tree.
   @spec start_link(keyword) :: Supervisor.on_start()
   def start_link(opts \\ []) do
-    Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
+    case Supervisor.start_link(__MODULE__, opts, name: __MODULE__) do
+      {:error, {:already_started, _pid}} -> :ignore
+      other -> other
+    end
   end
 
   @impl Supervisor

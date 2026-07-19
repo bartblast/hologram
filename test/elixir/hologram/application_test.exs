@@ -41,11 +41,20 @@ defmodule Hologram.ApplicationTest do
       children = Supervisor.which_children(pid)
       child_modules = Enum.map(children, fn {module, _pid, _type, _modules} -> module end)
 
+      # The entity fixture modules activate the database child (test env declares entities).
+      # The child yields to the suite-wide gateway instance (database singleton semantics),
+      # so it is listed without a pid and nothing here disturbs concurrent database tests.
+      assert Hologram.Database in child_modules
+
       assert Hologram.Assets.PageDigestRegistry in child_modules
       assert Hologram.Assets.PathRegistry in child_modules
       assert Hologram.Assets.ManifestCache in child_modules
       assert Hologram.Realtime.SubscriptionRegistry in child_modules
       assert Hologram.Router.PageModuleResolver in child_modules
+
+      # Stop the app tree deterministically - link teardown is asynchronous and would race
+      # the gateway restart and the other test's supervisor start.
+      :ok = Supervisor.stop(pid)
     end
 
     test "starts empty supervisor when HOLOGRAM_START is not set" do
@@ -56,6 +65,10 @@ defmodule Hologram.ApplicationTest do
 
       children = Supervisor.which_children(pid)
       assert children == []
+
+      # Stop the app tree deterministically - link teardown is asynchronous and would race
+      # the other test's supervisor start.
+      :ok = Supervisor.stop(pid)
     end
   end
 end
