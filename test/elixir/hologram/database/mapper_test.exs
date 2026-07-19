@@ -151,6 +151,125 @@ defmodule Hologram.Database.MapperTest do
     end
   end
 
+  describe "derive!/1" do
+    test "returns the layout mapping keyed by entity type" do
+      assert derive!([Module1, Module3]) == %{
+               Module1 => %{
+                 table: table_name(Module1),
+                 columns: columns(Module1),
+                 join_tables: join_tables(Module1)
+               },
+               Module3 => %{
+                 table: table_name(Module3),
+                 columns: columns(Module3),
+                 join_tables: join_tables(Module3)
+               }
+             }
+    end
+
+    test "runs the table name collision check" do
+      expected_msg = """
+      colliding table names - rename modules so that every entity type derives a unique table name:
+        * table name "blog_post" is derived from Hologram.Blog.Post, Hologram.BlogPost\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([Hologram.Blog.Post, Hologram.BlogPost])
+      end
+    end
+
+    test "runs the required to-one cycle check" do
+      defmodule InlineEntityFixture13 do
+        use Hologram.Entity
+
+        relationship :parent, __MODULE__
+      end
+
+      expected_msg = """
+      cyclic required to-one relationships - no row in such a cycle can ever be created, mark at least one relationship in each cycle as optional: true:
+        * Hologram.Database.MapperTest.InlineEntityFixture13 (relationship :parent) -> Hologram.Database.MapperTest.InlineEntityFixture13\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture13])
+      end
+    end
+
+    test "rejects entities deriving the same join table name" do
+      defmodule InlineEntityFixture14 do
+        use Hologram.Entity
+
+        relationship :b_c, [Module1]
+      end
+
+      defmodule InlineEntityFixture14B do
+        use Hologram.Entity
+
+        relationship :c, [Module1]
+      end
+
+      expected_msg = """
+      colliding derived names - rename the declarations so that every derived name is unique:
+        * join table "database_mapper_test_inline_entity_fixture14_b_c_$join" is derived from relationship :b_c in Hologram.Database.MapperTest.InlineEntityFixture14, relationship :c in Hologram.Database.MapperTest.InlineEntityFixture14B\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture14, InlineEntityFixture14B])
+      end
+    end
+
+    test "rejects entities deriving the same enum type name" do
+      defmodule InlineEntityFixture15 do
+        use Hologram.Entity
+
+        attribute :b_p, :enum, values: [:x, :y]
+      end
+
+      defmodule InlineEntityFixture15B do
+        use Hologram.Entity
+
+        attribute :p, :enum, values: [:x, :y]
+      end
+
+      expected_msg = """
+      colliding derived names - rename the declarations so that every derived name is unique:
+        * enum type "database_mapper_test_inline_entity_fixture15_b_p_$enum" is derived from attribute :b_p in Hologram.Database.MapperTest.InlineEntityFixture15, attribute :p in Hologram.Database.MapperTest.InlineEntityFixture15B\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture15, InlineEntityFixture15B])
+      end
+    end
+
+    test "lists every derived name collision across kinds" do
+      defmodule InlineEntityFixture16 do
+        use Hologram.Entity
+
+        attribute :b_p, :enum, values: [:x, :y]
+
+        relationship :b_r, [Module1]
+      end
+
+      defmodule InlineEntityFixture16B do
+        use Hologram.Entity
+
+        attribute :p, :enum, values: [:x, :y]
+
+        relationship :r, [Module1]
+      end
+
+      expected_msg = """
+      colliding derived names - rename the declarations so that every derived name is unique:
+        * enum type "database_mapper_test_inline_entity_fixture16_b_p_$enum" is derived from attribute :b_p in Hologram.Database.MapperTest.InlineEntityFixture16, attribute :p in Hologram.Database.MapperTest.InlineEntityFixture16B
+        * join table "database_mapper_test_inline_entity_fixture16_b_r_$join" is derived from relationship :b_r in Hologram.Database.MapperTest.InlineEntityFixture16, relationship :r in Hologram.Database.MapperTest.InlineEntityFixture16B\
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture16, InlineEntityFixture16B])
+      end
+    end
+  end
+
   describe "join_tables/1" do
     test "returns empty list for entity type with no to-many relationships" do
       assert join_tables(Module1) == []

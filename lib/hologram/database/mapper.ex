@@ -61,6 +61,35 @@ defmodule Hologram.Database.Mapper do
   end
 
   @doc """
+  Derives the complete physical layout mapping for the given entity type modules.
+
+  Runs every derivation check exactly once - table name collisions, required to-one cycles,
+  per-entity column collisions, and cross-entity within-kind derived name collisions (join
+  tables and enum types, whose single-underscore seams can merge to the same name across
+  entities) - and returns a map from entity type module to its layout: :table (the table
+  name), :columns (as returned by columns/1), and :join_tables (as returned by join_tables/1).
+  """
+  @spec derive!(list(module)) :: %{module => %{atom => any}}
+  def derive!(entity_types) do
+    validate_table_names!(entity_types)
+    validate_required_to_one_cycles!(entity_types)
+
+    mapping =
+      Map.new(entity_types, fn entity_type ->
+        {entity_type,
+         %{
+           table: table_name(entity_type),
+           columns: columns(entity_type),
+           join_tables: join_tables(entity_type)
+         }}
+      end)
+
+    validate_derived_names!(mapping)
+
+    mapping
+  end
+
+  @doc """
   Returns the join table definitions derived from the given entity type module's to-many
   relationships, sorted by relationship name.
 
@@ -317,6 +346,61 @@ defmodule Hologram.Database.Mapper do
       raise Hologram.CompileError,
         message:
           "colliding column names in #{inspect(entity_type)} - rename the declarations so that every derived column name is unique:\n#{descriptions}"
+    end
+
+    :ok
+  end
+
+  defp validate_derived_names!(mapping) do
+    entries =
+      Enum.flat_map(mapping, fn {entity_type, layout} ->
+        enum_type_entries =
+          layout.columns
+          |> Enum.filter(&(&1.type == :enum))
+          |> Enum.map(fn column ->
+            {:attribute, attribute_name} = column.source
+
+            %{
+              kind: "enum type",
+              derived_name: column.sql_type,
+              declaration: "attribute #{inspect(attribute_name)} in #{inspect(entity_type)}"
+            }
+          end)
+
+        join_table_entries =
+          Enum.map(layout.join_tables, fn join_table ->
+            %{
+              kind: "join table",
+              derived_name: join_table.name,
+              declaration:
+                "relationship #{inspect(join_table.relationship)} in #{inspect(entity_type)}"
+            }
+          end)
+
+        enum_type_entries ++ join_table_entries
+      end)
+
+    collisions =
+      entries
+      |> Enum.group_by(&{&1.kind, &1.derived_name})
+      |> Enum.filter(fn {_key, group} -> length(group) > 1 end)
+      |> Enum.sort()
+
+    if collisions != [] do
+      descriptions =
+        Enum.map_join(collisions, "\n", fn {{kind, derived_name}, group} ->
+          declarations =
+            group
+            |> Enum.map(& &1.declaration)
+            |> Enum.sort()
+            |> Enum.join(", ")
+
+          "  * #{kind} \"#{derived_name}\" is derived from #{declarations}"
+        end)
+
+      raise Hologram.CompileError,
+        message:
+          "colliding derived names - rename the declarations so that every derived name is unique:\n#{descriptions}"
     end
 
     :ok
