@@ -401,19 +401,21 @@ defmodule Hologram.Database.SchemaReconciler do
   end
 
   defp log_destructive_op(%{op: :drop_column} = op) do
-    Logger.info(~s(schema reconciliation dropped column "#{op.column}" on table "#{op.table}"))
+    Logger.warning(
+      ~s(Hologram: schema reconciliation dropped column "#{op.column}" on table "#{op.table}")
+    )
   end
 
   defp log_destructive_op(%{op: :drop_enum_type} = op) do
-    Logger.info(~s(schema reconciliation dropped enum type "#{op.enum_type}"))
+    Logger.warning(~s(Hologram: schema reconciliation dropped enum type "#{op.enum_type}"))
   end
 
   defp log_destructive_op(%{op: :drop_table} = op) do
-    Logger.info(~s(schema reconciliation dropped table "#{op.table}"))
+    Logger.warning(~s(Hologram: schema reconciliation dropped table "#{op.table}"))
   end
 
   defp log_destructive_op(%{op: :rebuild_enum_type} = op) do
-    Logger.info(~s(schema reconciliation rebuilt enum type "#{op.enum_type}"))
+    Logger.warning(~s(Hologram: schema reconciliation rebuilt enum type "#{op.enum_type}"))
   end
 
   defp log_destructive_op(_op), do: :ok

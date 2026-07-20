@@ -327,9 +327,6 @@ defmodule Hologram.Database.SchemaReconcilerTest do
     end
 
     test "logs each destructive action after the run" do
-      Logger.configure(level: :info)
-      on_exit(fn -> Logger.configure(level: :warning) end)
-
       reconcile(reconcile_context([Module1, Module4]))
       context = reconcile_context([Module1])
 
@@ -338,10 +335,11 @@ defmodule Hologram.Database.SchemaReconcilerTest do
           reconcile(context)
         end)
 
-      assert log =~ ~s(schema reconciliation dropped table "test_fixtures_entity_module4")
+      assert log =~
+               ~s(Hologram: schema reconciliation dropped table "test_fixtures_entity_module4")
 
       assert log =~
-               ~s(schema reconciliation dropped enum type "test_fixtures_entity_module4_c_$enum")
+               ~s(Hologram: schema reconciliation dropped enum type "test_fixtures_entity_module4_c_$enum")
     end
 
     test "raises for a hand-created table in hologram_data" do

@@ -174,7 +174,7 @@ defmodule Hologram.LiveReload do
   rescue
     error ->
       message = Exception.message(error)
-      Logger.error("schema reconciliation failed: #{message}")
+      Logger.error("Hologram: schema reconciliation failed: #{message}")
 
       {:error, message}
   end
