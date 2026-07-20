@@ -23,6 +23,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "uuid",
                  collation: nil,
                  enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
                  fk_constraint: nil,
@@ -35,6 +36,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "timestamptz",
                  collation: nil,
                  enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
                  fk_constraint: nil,
@@ -47,6 +49,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "timestamptz",
                  collation: nil,
                  enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
                  fk_constraint: nil,
@@ -69,6 +72,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "boolean",
                  collation: nil,
                  enum_values: nil,
+                 default: false,
                  null: false,
                  references: nil,
                  fk_constraint: nil,
@@ -81,6 +85,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "int8",
                  collation: nil,
                  enum_values: nil,
+                 default: nil,
                  null: true,
                  references: nil,
                  fk_constraint: nil,
@@ -93,6 +98,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "text",
                  collation: "C",
                  enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
                  fk_constraint: nil,
@@ -139,6 +145,14 @@ defmodule Hologram.Database.MapperTest do
       assert column(Module4, "c").enum_values == ["x", "y"]
     end
 
+    test "carries the declared default value" do
+      assert column(Module4, "c").default == :x
+    end
+
+    test "derives nil default for attributes without one" do
+      assert column(Module4, "a").default == nil
+    end
+
     test "derives nil enum values for non-enum types" do
       assert column(Module4, "a").enum_values == nil
     end
@@ -156,6 +170,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "uuid",
                  collation: nil,
                  enum_values: nil,
+                 default: nil,
                  null: true,
                  references: "test_fixtures_entity_module2",
                  fk_constraint: "test_fixtures_entity_module3_b_id_$fk",
@@ -168,6 +183,7 @@ defmodule Hologram.Database.MapperTest do
                  sql_type: "uuid",
                  collation: nil,
                  enum_values: nil,
+                 default: nil,
                  null: false,
                  references: "test_fixtures_entity_module1",
                  fk_constraint: "test_fixtures_entity_module3_c_id_$fk",
