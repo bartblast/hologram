@@ -549,6 +549,79 @@ defmodule Hologram.Database.SchemaTest do
     end
   end
 
+  describe "diff/2 - phase ordering" do
+    test "orders ops across all kinds by the apply-phase sequence" do
+      actual_task_table =
+        @task_table
+        |> Map.put(:primary_key, %{columns: ["id"], constraint: "task_pkey"})
+        |> Map.update!(
+          :columns,
+          &Map.put(&1, "legacy", %{type: "boolean", collation: nil, null: false})
+        )
+        |> Map.put(:foreign_keys, %{
+          "project_id" => %{
+            references: "project",
+            on_delete: :restrict,
+            constraint: "task_project_id_$fk"
+          }
+        })
+        |> Map.put(:indexes, %{"task_old_$idx" => %{columns: ["legacy"]}})
+
+      target_task_table =
+        @task_table
+        |> Map.update!(:columns, fn columns ->
+          columns
+          |> Map.put("done", %{type: "boolean", collation: nil, null: false})
+          |> Map.put("name", %{type: "text", collation: "C", null: true})
+        end)
+        |> Map.put(:foreign_keys, %{
+          "project_id" => %{
+            references: "workspace",
+            on_delete: :restrict,
+            constraint: "task_project_id_$fk"
+          }
+        })
+        |> Map.put(:indexes, %{"task_new_$idx" => %{columns: ["done"]}})
+
+      actual = %{
+        tables: %{"old" => @project_table, "task" => actual_task_table},
+        enum_types: %{
+          "old_$enum" => ["x"],
+          "status_$enum" => ["todo"]
+        }
+      }
+
+      target = %{
+        tables: %{"fresh" => @project_table, "task" => target_task_table},
+        enum_types: %{
+          "new_$enum" => ["a"],
+          "status_$enum" => ["todo", "done"]
+        }
+      }
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [
+               :drop_foreign_key,
+               :drop_index,
+               :drop_column,
+               :drop_table,
+               :drop_enum_type,
+               :create_enum_type,
+               :add_enum_value,
+               :create_table,
+               :add_column,
+               :alter_column,
+               :rename_constraint,
+               :add_foreign_key,
+               :create_index
+             ]
+    end
+  end
+
   describe "from_mapping/1" do
     test "derives a table with columns and primary key per entity type" do
       assert from_mapping(Mapper.derive!([Module1])) == %{

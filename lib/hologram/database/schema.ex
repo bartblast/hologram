@@ -5,6 +5,26 @@ defmodule Hologram.Database.Schema do
   # target foreign key and index then diffs as an add.
   @absent_table %{columns: %{}, primary_key: nil, foreign_keys: %{}, indexes: %{}}
 
+  # Apply phases: destructive ops first in reverse dependency order, constructive ops
+  # after in dependency order. Enum value adds and rebuilds share one phase - a given
+  # type emits either, never both.
+  @phases %{
+    drop_foreign_key: 0,
+    drop_index: 1,
+    drop_column: 2,
+    drop_table: 3,
+    drop_enum_type: 4,
+    create_enum_type: 5,
+    add_enum_value: 6,
+    rebuild_enum_type: 6,
+    create_table: 7,
+    add_column: 8,
+    alter_column: 9,
+    rename_constraint: 10,
+    add_foreign_key: 11,
+    create_index: 12
+  }
+
   @doc """
   Returns the physical change ops that converge the actual schema term to the target
   schema term.
@@ -35,14 +55,22 @@ defmodule Hologram.Database.Schema do
   carrying the new values and the columns using the type. A name-keyed diff cannot
   detect value renames - they surface as rebuilds.
 
-  Ops are ordered alphabetically by table and name within each kind.
+  The op list is ordered by apply phase - destructive kinds first in reverse dependency
+  order, constructive kinds after in dependency order (drop_foreign_key, drop_index,
+  drop_column, drop_table, drop_enum_type, create_enum_type, enum value changes,
+  create_table, add_column, alter_column, rename_constraint, add_foreign_key,
+  create_index) - and alphabetically by table and name within each phase, so the same
+  terms always produce the same op sequence.
   """
   @spec diff(%{atom => any}, %{atom => any}) :: list(%{atom => any})
   def diff(actual, target) do
-    table_ops(actual.tables, target.tables) ++
-      column_ops(actual.tables, target.tables) ++
-      constraint_index_ops(actual.tables, target.tables) ++
-      enum_ops(actual, target)
+    ops =
+      table_ops(actual.tables, target.tables) ++
+        column_ops(actual.tables, target.tables) ++
+        constraint_index_ops(actual.tables, target.tables) ++
+        enum_ops(actual, target)
+
+    Enum.sort_by(ops, &@phases[&1.op])
   end
 
   @doc """
