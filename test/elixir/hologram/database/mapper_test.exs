@@ -26,6 +26,7 @@ defmodule Hologram.Database.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
+                 fk_index: nil,
                  source: :system
                },
                %{
@@ -37,6 +38,7 @@ defmodule Hologram.Database.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
+                 fk_index: nil,
                  source: :system
                },
                %{
@@ -48,6 +50,7 @@ defmodule Hologram.Database.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
+                 fk_index: nil,
                  source: :system
                }
              ]
@@ -69,6 +72,7 @@ defmodule Hologram.Database.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
+                 fk_index: nil,
                  source: {:attribute, :a}
                },
                %{
@@ -80,6 +84,7 @@ defmodule Hologram.Database.MapperTest do
                  null: true,
                  references: nil,
                  fk_constraint: nil,
+                 fk_index: nil,
                  source: {:attribute, :b}
                },
                %{
@@ -91,6 +96,7 @@ defmodule Hologram.Database.MapperTest do
                  null: false,
                  references: nil,
                  fk_constraint: nil,
+                 fk_index: nil,
                  source: {:attribute, :c}
                }
              ]
@@ -153,6 +159,7 @@ defmodule Hologram.Database.MapperTest do
                  null: true,
                  references: "test_fixtures_entity_module2",
                  fk_constraint: "test_fixtures_entity_module3_b_id_$fk",
+                 fk_index: "test_fixtures_entity_module3_b_id_$idx",
                  source: {:relationship, :b}
                },
                %{
@@ -164,6 +171,7 @@ defmodule Hologram.Database.MapperTest do
                  null: false,
                  references: "test_fixtures_entity_module1",
                  fk_constraint: "test_fixtures_entity_module3_c_id_$fk",
+                 fk_index: "test_fixtures_entity_module3_c_id_$idx",
                  source: {:relationship, :c}
                }
              ]
@@ -178,6 +186,17 @@ defmodule Hologram.Database.MapperTest do
 
       assert column(InlineEntityFixture17, "quite_long_relationship_name_id").fk_constraint ==
                "database_mapper_test_inline_entity_fixture17_quite_lon_9f01ea3f"
+    end
+
+    test "shortens foreign key index names over the PostgreSQL identifier limit" do
+      defmodule InlineEntityFixture18 do
+        use Hologram.Entity
+
+        relationship :quite_long_relationship_name, Module1
+      end
+
+      assert column(InlineEntityFixture18, "quite_long_relationship_name_id").fk_index ==
+               "database_mapper_test_inline_entity_fixture18_quite_lon_70323e73"
     end
 
     test "rejects declarations deriving the same column name" do

@@ -19,9 +19,11 @@ defmodule Hologram.Database.Mapper do
   that carry none), :enum_values (the declared enum values as strings in declaration order,
   nil for non-enum types), :null (true only for optional declarations), :references (the
   referenced table name for to-one relationship columns, nil otherwise), :fk_constraint (the
-  derived `<table>_<column>_$fk` constraint name for reference columns, nil otherwise), and
-  :source (:system, or the declaration the column is derived from). To-many relationships
-  derive no columns - they live in join tables.
+  derived `<table>_<column>_$fk` constraint name for reference columns, nil otherwise),
+  :fk_index (the derived `<table>_<column>_$idx` index name for reference columns, nil
+  otherwise - PostgreSQL never indexes FK columns automatically), and :source (:system, or
+  the declaration the column is derived from). To-many relationships derive no columns -
+  they live in join tables.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
@@ -41,6 +43,7 @@ defmodule Hologram.Database.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: nil,
           fk_constraint: nil,
+          fk_index: nil,
           source: {:attribute, name}
         }
       end)
@@ -58,6 +61,7 @@ defmodule Hologram.Database.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
           fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
+          fk_index: fit_identifier("#{table_name}_#{name}_id_$idx"),
           source: {:relationship, name}
         }
       end)
@@ -339,6 +343,7 @@ defmodule Hologram.Database.Mapper do
       null: false,
       references: nil,
       fk_constraint: nil,
+      fk_index: nil,
       source: :system
     }
   end
@@ -380,6 +385,7 @@ defmodule Hologram.Database.Mapper do
         null: false,
         references: nil,
         fk_constraint: nil,
+        fk_index: nil,
         source: :system
       }
     end)
