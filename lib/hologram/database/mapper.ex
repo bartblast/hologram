@@ -18,9 +18,10 @@ defmodule Hologram.Database.Mapper do
   name for :enum attributes), :collation (the pinned per-column collation name, nil for types
   that carry none), :enum_values (the declared enum values as strings in declaration order,
   nil for non-enum types), :null (true only for optional declarations), :references (the
-  referenced table name for to-one relationship columns, nil otherwise), and :source (:system,
-  or the declaration the column is derived from). To-many relationships derive no columns -
-  they live in join tables.
+  referenced table name for to-one relationship columns, nil otherwise), :fk_constraint (the
+  derived `<table>_<column>_$fk` constraint name for reference columns, nil otherwise), and
+  :source (:system, or the declaration the column is derived from). To-many relationships
+  derive no columns - they live in join tables.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
@@ -39,6 +40,7 @@ defmodule Hologram.Database.Mapper do
           enum_values: enum_values(type, opts),
           null: Keyword.get(opts, :optional) == true,
           references: nil,
+          fk_constraint: nil,
           source: {:attribute, name}
         }
       end)
@@ -55,6 +57,7 @@ defmodule Hologram.Database.Mapper do
           enum_values: nil,
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
+          fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
           source: {:relationship, name}
         }
       end)
@@ -73,7 +76,8 @@ defmodule Hologram.Database.Mapper do
   per-entity column collisions, and cross-entity within-kind derived name collisions (join
   tables and enum types, whose single-underscore seams can merge to the same name across
   entities) - and returns a map from entity type module to its mapping: :table (the table
-  name), :columns (as returned by columns/1), and :join_tables (as returned by join_tables/1).
+  name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
+  by columns/1), and :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module)) :: %{module => %{atom => any}}
   def derive!(entity_types) do
@@ -82,9 +86,12 @@ defmodule Hologram.Database.Mapper do
 
     mapping =
       Map.new(entity_types, fn entity_type ->
+        table_name = table_name(entity_type)
+
         {entity_type,
          %{
-           table: table_name(entity_type),
+           table: table_name,
+           pk_constraint: fit_identifier("#{table_name}_$pk"),
            columns: columns(entity_type),
            join_tables: join_tables(entity_type)
          }}
@@ -101,9 +108,10 @@ defmodule Hologram.Database.Mapper do
 
   Each definition is a map with :name (the join table name - `<source_table>_<relationship>_$join`
   per the derived-name system), :relationship (the declaring relationship name), :source_table,
-  :target_table, and :reverse_index (the name of the index over (target_id, source_id)).
-  Join table columns are fixed: source_id/target_id uuid NOT NULL, composite primary key
-  (source_id, target_id), both columns FK ON DELETE RESTRICT. To-one relationships derive
+  :target_table, :reverse_index (the name of the index over (target_id, source_id)),
+  :pk_constraint, :source_fk_constraint, and :target_fk_constraint (the derived constraint
+  names). Join table columns are fixed: source_id/target_id uuid NOT NULL, composite primary
+  key (source_id, target_id), both columns FK ON DELETE RESTRICT. To-one relationships derive
   no join tables - they live as reference columns on the owning row.
   """
   @spec join_tables(module) :: list(%{atom => any})
@@ -120,7 +128,10 @@ defmodule Hologram.Database.Mapper do
         relationship: name,
         source_table: source_table,
         target_table: table_name(target),
-        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx")
+        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx"),
+        pk_constraint: fit_identifier("#{join_table_name}_$pk"),
+        source_fk_constraint: fit_identifier("#{join_table_name}_source_id_$fk"),
+        target_fk_constraint: fit_identifier("#{join_table_name}_target_id_$fk")
       }
     end)
   end
@@ -327,6 +338,7 @@ defmodule Hologram.Database.Mapper do
       enum_values: nil,
       null: false,
       references: nil,
+      fk_constraint: nil,
       source: :system
     }
   end
@@ -367,6 +379,7 @@ defmodule Hologram.Database.Mapper do
         enum_values: nil,
         null: false,
         references: nil,
+        fk_constraint: nil,
         source: :system
       }
     end)

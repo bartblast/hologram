@@ -25,6 +25,7 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
                  source: :system
                },
                %{
@@ -35,6 +36,7 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
                  source: :system
                },
                %{
@@ -45,6 +47,7 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
                  source: :system
                }
              ]
@@ -65,6 +68,7 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
                  source: {:attribute, :a}
                },
                %{
@@ -75,6 +79,7 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: true,
                  references: nil,
+                 fk_constraint: nil,
                  source: {:attribute, :b}
                },
                %{
@@ -85,6 +90,7 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
                  source: {:attribute, :c}
                }
              ]
@@ -146,6 +152,7 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: true,
                  references: "test_fixtures_entity_module2",
+                 fk_constraint: "test_fixtures_entity_module3_b_id_$fk",
                  source: {:relationship, :b}
                },
                %{
@@ -156,9 +163,21 @@ defmodule Hologram.Database.MapperTest do
                  enum_values: nil,
                  null: false,
                  references: "test_fixtures_entity_module1",
+                 fk_constraint: "test_fixtures_entity_module3_c_id_$fk",
                  source: {:relationship, :c}
                }
              ]
+    end
+
+    test "shortens foreign key constraint names over the PostgreSQL identifier limit" do
+      defmodule InlineEntityFixture17 do
+        use Hologram.Entity
+
+        relationship :quite_long_relationship_name, Module1
+      end
+
+      assert column(InlineEntityFixture17, "quite_long_relationship_name_id").fk_constraint ==
+               "database_mapper_test_inline_entity_fixture17_quite_lon_9f01ea3f"
     end
 
     test "rejects declarations deriving the same column name" do
@@ -186,11 +205,13 @@ defmodule Hologram.Database.MapperTest do
       assert derive!([Module1, Module3]) == %{
                Module1 => %{
                  table: table_name(Module1),
+                 pk_constraint: "test_fixtures_entity_module1_$pk",
                  columns: columns(Module1),
                  join_tables: join_tables(Module1)
                },
                Module3 => %{
                  table: table_name(Module3),
+                 pk_constraint: "test_fixtures_entity_module3_$pk",
                  columns: columns(Module3),
                  join_tables: join_tables(Module3)
                }
@@ -317,7 +338,10 @@ defmodule Hologram.Database.MapperTest do
                  relationship: :a,
                  source_table: "test_fixtures_entity_module3",
                  target_table: "test_fixtures_entity_module2",
-                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_$idx"
+                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_$idx",
+                 pk_constraint: "test_fixtures_entity_module3_a_$join_$pk",
+                 source_fk_constraint: "test_fixtures_entity_module3_a_$join_source_id_$fk",
+                 target_fk_constraint: "test_fixtures_entity_module3_a_$join_target_id_$fk"
                }
              ]
     end
