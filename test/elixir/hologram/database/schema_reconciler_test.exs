@@ -63,9 +63,13 @@ defmodule Hologram.Database.SchemaReconcilerTest do
 
   describe "create_system_tables/0" do
     test "creates the marker and registry tables" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
+
       assert create_system_tables() == :ok
 
       assert read_marker() == nil
+      assert registry() == MapSet.new()
     end
   end
 
@@ -165,13 +169,12 @@ defmodule Hologram.Database.SchemaReconcilerTest do
 
   describe "read_marker/0" do
     test "returns nil when no marker has been written" do
-      create_system_tables()
+      {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."database"))
 
       assert read_marker() == nil
     end
 
     test "returns the written marker" do
-      create_system_tables()
       write_marker(@marker)
 
       assert read_marker() == @marker
@@ -514,7 +517,7 @@ defmodule Hologram.Database.SchemaReconcilerTest do
 
   describe "registry/0" do
     test "returns an empty set when nothing is registered" do
-      create_system_tables()
+      {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."schema_object"))
 
       assert registry() == MapSet.new()
     end
@@ -522,7 +525,7 @@ defmodule Hologram.Database.SchemaReconcilerTest do
 
   describe "update_registry/1" do
     setup do
-      create_system_tables()
+      {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."schema_object"))
       :ok
     end
 
@@ -697,7 +700,6 @@ defmodule Hologram.Database.SchemaReconcilerTest do
 
   describe "write_marker/1" do
     test "replaces the previous marker row" do
-      create_system_tables()
       write_marker(@marker)
       write_marker(%{@marker | env: "dev", last_reconciled_at: ~U[2026-07-20 13:00:00.000000Z]})
 
