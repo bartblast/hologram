@@ -88,6 +88,17 @@ defmodule Hologram.Database.DDL do
   end
 
   @doc """
+  Returns the parameterized statement filling the NULLs of the given column with the
+  first parameter.
+  """
+  @spec fill_statement(String.t(), String.t()) :: String.t()
+  def fill_statement(table, column) do
+    quoted_column = Mapper.quote_identifier(column)
+
+    "UPDATE #{qualified(table)} SET #{quoted_column} = $1 WHERE #{quoted_column} IS NULL"
+  end
+
+  @doc """
   Returns the pre-flight check statement counting the rows with a NULL in the given
   column - the rows that block making the column required without a fill.
   """

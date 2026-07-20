@@ -3,6 +3,7 @@ defmodule Hologram.Database.SchemaReconciler do
 
   require Logger
 
+  alias Hologram.Database.Codec
   alias Hologram.Database.Connection
   alias Hologram.Database.DDL
   alias Hologram.Database.Introspection
@@ -133,9 +134,9 @@ defmodule Hologram.Database.SchemaReconciler do
         ops = Schema.diff(actual, target)
 
         check_aliens!(ops, registry())
-        preflight!(ops, actual)
+        preflight!(ops, actual, context.mapping)
 
-        apply_ops(ops)
+        apply_ops(ops, context.mapping)
         update_registry(ops)
         write_marker(marker_from_context(context))
 
@@ -206,14 +207,55 @@ defmodule Hologram.Database.SchemaReconciler do
     :ok
   end
 
-  defp apply_ops(ops) do
-    Enum.each(ops, fn op ->
-      op
-      |> DDL.statements()
-      |> Enum.each(fn statement ->
-        {:ok, _result} = Connection.query(statement)
-      end)
-    end)
+  # A required add with a declared default applies as add-nullable, parameterized fill,
+  # then tighten - so existing rows receive the default and the DDL never carries values.
+  defp apply_op(%{op: :add_column} = op, mapping) do
+    fill = if op.definition.null, do: :none, else: fill_value(mapping, op.table, op.column)
+
+    case fill do
+      :none ->
+        execute_statements(DDL.statements(op))
+
+      {:ok, encoded_value} ->
+        nullable_definition = %{op.definition | null: true}
+        execute_statements(DDL.statements(%{op | definition: nullable_definition}))
+        fill_column(op.table, op.column, encoded_value)
+
+        tighten_op = %{
+          op: :alter_column,
+          table: op.table,
+          column: op.column,
+          before: nullable_definition,
+          after: op.definition
+        }
+
+        execute_statements(DDL.statements(tighten_op))
+    end
+  end
+
+  # Pure null-tightening with a declared default fills the NULLs first - a combined
+  # type change never fills (the default holds a new-type value, the column still has
+  # the old type), so pre-flight lets only NULL-free combined changes through.
+  defp apply_op(%{op: :alter_column} = op, mapping) do
+    fill =
+      if op.before.null and not op.after.null and op.before.type == op.after.type do
+        fill_value(mapping, op.table, op.column)
+      else
+        :none
+      end
+
+    case fill do
+      :none -> :ok
+      {:ok, encoded_value} -> fill_column(op.table, op.column, encoded_value)
+    end
+
+    execute_statements(DDL.statements(op))
+  end
+
+  defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
+
+  defp apply_ops(ops, mapping) do
+    Enum.each(ops, &apply_op(&1, mapping))
   end
 
   defp check_alien!(%{op: :drop_column} = op, registry) do
@@ -318,6 +360,33 @@ defmodule Hologram.Database.SchemaReconciler do
     :ok
   end
 
+  defp execute_statements(statements) do
+    Enum.each(statements, fn statement ->
+      {:ok, _result} = Connection.query(statement)
+    end)
+  end
+
+  defp fill_column(table, column, encoded_value) do
+    fill_statement = DDL.fill_statement(table, column)
+
+    {:ok, _result} = Connection.query(fill_statement, [encoded_value])
+  end
+
+  defp fill_value(mapping, table, column_name) do
+    entity_mapping =
+      mapping
+      |> Map.values()
+      |> Enum.find(&(&1.table == table))
+
+    column = entity_mapping && Enum.find(entity_mapping.columns, &(&1.name == column_name))
+
+    case column do
+      %{default: nil} -> :none
+      %{default: default, type: type} -> {:ok, Codec.encode(default, type)}
+      nil -> :none
+    end
+  end
+
   defp hologram_schemas do
     statement = """
     SELECT nspname
@@ -384,8 +453,8 @@ defmodule Hologram.Database.SchemaReconciler do
 
   defp pluralize_values(_values), do: "values"
 
-  defp preflight!(ops, actual) do
-    Enum.each(ops, &preflight_op!(&1, actual))
+  defp preflight!(ops, actual, mapping) do
+    Enum.each(ops, &preflight_op!(&1, actual, mapping))
   end
 
   defp preflight_cast_rows!(op) do
@@ -399,13 +468,13 @@ defmodule Hologram.Database.SchemaReconciler do
     end
   end
 
-  defp preflight_null_tightening!(op) do
-    count =
-      if op.before.null and not op.after.null do
-        count_result(DDL.null_check_statement(op.table, op.column))
-      else
-        0
-      end
+  defp preflight_null_tightening!(op, mapping) do
+    fillable? =
+      op.before.type == op.after.type and
+        match?({:ok, _value}, fill_value(mapping, op.table, op.column))
+
+    checked? = op.before.null and not op.after.null and not fillable?
+    count = if checked?, do: count_result(DDL.null_check_statement(op.table, op.column)), else: 0
 
     if count > 0 do
       raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
@@ -414,8 +483,12 @@ defmodule Hologram.Database.SchemaReconciler do
     end
   end
 
-  defp preflight_op!(%{op: :add_column} = op, _actual) do
-    count = if op.definition.null, do: 0, else: count_result(DDL.rows_check_statement(op.table))
+  defp preflight_op!(%{op: :add_column} = op, _actual, mapping) do
+    checked? =
+      not op.definition.null and
+        not match?({:ok, _value}, fill_value(mapping, op.table, op.column))
+
+    count = if checked?, do: count_result(DDL.rows_check_statement(op.table)), else: 0
 
     if count > 0 do
       raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
@@ -424,12 +497,12 @@ defmodule Hologram.Database.SchemaReconciler do
     end
   end
 
-  defp preflight_op!(%{op: :alter_column} = op, _actual) do
+  defp preflight_op!(%{op: :alter_column} = op, _actual, mapping) do
     preflight_type_change!(op)
-    preflight_null_tightening!(op)
+    preflight_null_tightening!(op, mapping)
   end
 
-  defp preflight_op!(%{op: :rebuild_enum_type} = op, actual) do
+  defp preflight_op!(%{op: :rebuild_enum_type} = op, actual, _mapping) do
     removed_values = actual.enum_types[op.enum_type] -- op.values
 
     if removed_values != [] do
@@ -439,7 +512,7 @@ defmodule Hologram.Database.SchemaReconciler do
     end
   end
 
-  defp preflight_op!(_op, _actual), do: :ok
+  defp preflight_op!(_op, _actual, _mapping), do: :ok
 
   defp preflight_removed_enum_values!(table, column, removed_values) do
     count = count_result(DDL.enum_values_check_statement(table, column, removed_values))

@@ -269,6 +269,60 @@ defmodule Hologram.Database.SchemaReconcilerTest do
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
     end
 
+    test "fills NULLs with the declared default when making a column required" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | default: 42, null: false})
+
+      reconcile(context)
+
+      select_statement =
+        ~s(SELECT "b" FROM "hologram_data"."test_fixtures_entity_module2")
+
+      {:ok, %{rows: rows}} = Connection.query(select_statement)
+
+      assert rows == [[42]]
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "fills existing rows with the declared default when adding a required column" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      new_column = %{
+        name: "z",
+        type: :integer,
+        sql_type: "int8",
+        collation: nil,
+        enum_values: nil,
+        default: 7,
+        null: false,
+        references: nil,
+        fk_constraint: nil,
+        fk_index: nil,
+        source: {:attribute, :z}
+      }
+
+      context =
+        update_in(reconcile_context([Module2]), [:mapping, Module2, :columns], fn columns ->
+          [new_column | columns]
+        end)
+
+      reconcile(context)
+
+      select_statement =
+        ~s(SELECT "z" FROM "hologram_data"."test_fixtures_entity_module2")
+
+      {:ok, %{rows: rows}} = Connection.query(select_statement)
+
+      assert rows == [[7]]
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
     test "logs each destructive action after the run" do
       Logger.configure(level: :info)
       on_exit(fn -> Logger.configure(level: :warning) end)
@@ -385,6 +439,7 @@ defmodule Hologram.Database.SchemaReconcilerTest do
         sql_type: "int8",
         collation: nil,
         enum_values: nil,
+        default: nil,
         null: false,
         references: nil,
         fk_constraint: nil,
@@ -401,6 +456,29 @@ defmodule Hologram.Database.SchemaReconcilerTest do
         ~s(cannot add required column "z" to table "test_fixtures_entity_module2" - ) <>
           "1 existing row would have no value - " <>
           "declare a default:, make the attribute optional:, or clear the rows"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    test "raises for a combined type change and tightening with NULLs despite a default" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(
+          Module2,
+          "b",
+          &%{&1 | default: 4.2, sql_type: "float8", null: false}
+        )
+
+      expected_msg =
+        ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
+          "found 1 row with NULL - " <>
+          "declare a default:, keep the attribute optional:, or fix the data"
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
