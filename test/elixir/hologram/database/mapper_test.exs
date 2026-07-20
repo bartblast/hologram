@@ -22,6 +22,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :uuid,
                  sql_type: "uuid",
                  collation: nil,
+                 enum_values: nil,
                  null: false,
                  references: nil,
                  source: :system
@@ -31,6 +32,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :datetime,
                  sql_type: "timestamptz",
                  collation: nil,
+                 enum_values: nil,
                  null: false,
                  references: nil,
                  source: :system
@@ -40,6 +42,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :datetime,
                  sql_type: "timestamptz",
                  collation: nil,
+                 enum_values: nil,
                  null: false,
                  references: nil,
                  source: :system
@@ -59,6 +62,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :boolean,
                  sql_type: "boolean",
                  collation: nil,
+                 enum_values: nil,
                  null: false,
                  references: nil,
                  source: {:attribute, :a}
@@ -68,6 +72,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :integer,
                  sql_type: "int8",
                  collation: nil,
+                 enum_values: nil,
                  null: true,
                  references: nil,
                  source: {:attribute, :b}
@@ -77,6 +82,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :string,
                  sql_type: "text",
                  collation: "C",
+                 enum_values: nil,
                  null: false,
                  references: nil,
                  source: {:attribute, :c}
@@ -117,6 +123,14 @@ defmodule Hologram.Database.MapperTest do
       assert column(Module2, "a").collation == nil
     end
 
+    test "carries enum values as strings in declaration order" do
+      assert column(Module4, "c").enum_values == ["x", "y"]
+    end
+
+    test "derives nil enum values for non-enum types" do
+      assert column(Module4, "a").enum_values == nil
+    end
+
     test "derives to-one relationship reference columns and excludes to-many relationships" do
       relationship_columns =
         Module3
@@ -129,6 +143,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :uuid,
                  sql_type: "uuid",
                  collation: nil,
+                 enum_values: nil,
                  null: true,
                  references: "test_fixtures_entity_module2",
                  source: {:relationship, :b}
@@ -138,6 +153,7 @@ defmodule Hologram.Database.MapperTest do
                  type: :uuid,
                  sql_type: "uuid",
                  collation: nil,
+                 enum_values: nil,
                  null: false,
                  references: "test_fixtures_entity_module1",
                  source: {:relationship, :c}

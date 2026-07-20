@@ -16,10 +16,11 @@ defmodule Hologram.Database.Mapper do
   Each definition is a map with :name (column name string), :type (the logical attribute type,
   as consumed by the codec), :sql_type (the SQL type name - a derived per-attribute enum type
   name for :enum attributes), :collation (the pinned per-column collation name, nil for types
-  that carry none), :null (true only for optional declarations), :references (the referenced
-  table name for to-one relationship columns, nil otherwise), and :source (:system, or the
-  declaration the column is derived from). To-many relationships derive no columns - they
-  live in join tables.
+  that carry none), :enum_values (the declared enum values as strings in declaration order,
+  nil for non-enum types), :null (true only for optional declarations), :references (the
+  referenced table name for to-one relationship columns, nil otherwise), and :source (:system,
+  or the declaration the column is derived from). To-many relationships derive no columns -
+  they live in join tables.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
@@ -35,6 +36,7 @@ defmodule Hologram.Database.Mapper do
           type: type,
           sql_type: sql_type(type, table_name, name),
           collation: collation(type),
+          enum_values: enum_values(type, opts),
           null: Keyword.get(opts, :optional) == true,
           references: nil,
           source: {:attribute, name}
@@ -50,6 +52,7 @@ defmodule Hologram.Database.Mapper do
           type: :uuid,
           sql_type: "uuid",
           collation: nil,
+          enum_values: nil,
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
           source: {:relationship, name}
@@ -256,6 +259,14 @@ defmodule Hologram.Database.Mapper do
     "  * #{hops} -> #{inspect(first_entity_type)}"
   end
 
+  defp enum_values(:enum, opts) do
+    opts
+    |> Keyword.fetch!(:values)
+    |> Enum.map(&Atom.to_string/1)
+  end
+
+  defp enum_values(_type, _opts), do: nil
+
   # Depth-first traversal over required to-one edges. The path holds the hops taken to reach
   # the current entity type (most recent first) - reaching an entity type already on the path
   # closes a cycle. Fully explored entity types are marked visited and never re-entered, so
@@ -313,6 +324,7 @@ defmodule Hologram.Database.Mapper do
       type: :uuid,
       sql_type: "uuid",
       collation: nil,
+      enum_values: nil,
       null: false,
       references: nil,
       source: :system
@@ -352,6 +364,7 @@ defmodule Hologram.Database.Mapper do
         type: :datetime,
         sql_type: "timestamptz",
         collation: nil,
+        enum_values: nil,
         null: false,
         references: nil,
         source: :system
