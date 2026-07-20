@@ -86,7 +86,12 @@ defmodule Hologram.Database.SchemaTest do
         enum_types: %{}
       }
 
-      assert Enum.map(diff(actual, target), &{&1.op, &1.table}) == [
+      ops =
+        actual
+        |> diff(target)
+        |> Enum.map(&{&1.op, &1.table})
+
+      assert ops == [
                {:drop_table, "a_old"},
                {:drop_table, "b_old"},
                {:create_table, "a_new"},
@@ -189,7 +194,12 @@ defmodule Hologram.Database.SchemaTest do
         enum_types: %{}
       }
 
-      assert Enum.map(diff(actual, target), &{&1.op, &1.table, &1[:column]}) == [
+      ops =
+        actual
+        |> diff(target)
+        |> Enum.map(&{&1.op, &1.table, &1.column})
+
+      assert ops == [
                {:drop_column, "project", "old"},
                {:drop_column, "task", "name"},
                {:add_column, "task", "done"},

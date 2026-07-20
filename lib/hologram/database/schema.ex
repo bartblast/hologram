@@ -53,6 +53,48 @@ defmodule Hologram.Database.Schema do
     %{tables: tables, enum_types: enum_types}
   end
 
+  defp column_add_ops(table, actual_columns, target_columns) do
+    target_columns
+    |> Enum.reject(fn {name, _definition} -> Map.has_key?(actual_columns, name) end)
+    |> Enum.sort_by(fn {name, _definition} -> name end)
+    |> Enum.map(fn {name, definition} ->
+      %{op: :add_column, table: table, column: name, definition: definition}
+    end)
+  end
+
+  defp column_alter_ops(table, actual_columns, target_columns) do
+    actual_columns
+    |> Enum.sort_by(fn {name, _definition} -> name end)
+    |> Enum.flat_map(fn {name, actual_definition} ->
+      case target_columns[name] do
+        nil ->
+          []
+
+        ^actual_definition ->
+          []
+
+        target_definition ->
+          [
+            %{
+              op: :alter_column,
+              table: table,
+              column: name,
+              before: actual_definition,
+              after: target_definition
+            }
+          ]
+      end
+    end)
+  end
+
+  defp column_drop_ops(table, actual_columns, target_columns) do
+    actual_columns
+    |> Map.keys()
+    |> Enum.reject(&Map.has_key?(target_columns, &1))
+    |> Enum.sort()
+    |> Enum.map(&%{op: :drop_column, table: table, column: &1})
+  end
+
   defp column_ops(actual_tables, target_tables) do
     shared_tables =
       actual_tables
@@ -60,54 +102,14 @@ defmodule Hologram.Database.Schema do
       |> Enum.filter(&Map.has_key?(target_tables, &1))
       |> Enum.sort()
 
-    drops =
-      Enum.flat_map(shared_tables, fn table ->
-        actual_tables[table].columns
-        |> Map.keys()
-        |> Enum.reject(&Map.has_key?(target_tables[table].columns, &1))
-        |> Enum.sort()
-        |> Enum.map(&%{op: :drop_column, table: table, column: &1})
-      end)
-
-    adds =
-      Enum.flat_map(shared_tables, fn table ->
-        target_tables[table].columns
-        |> Enum.reject(fn {name, _definition} ->
-          Map.has_key?(actual_tables[table].columns, name)
-        end)
-        |> Enum.sort_by(fn {name, _definition} -> name end)
-        |> Enum.map(fn {name, definition} ->
-          %{op: :add_column, table: table, column: name, definition: definition}
+    ops_per_kind =
+      Enum.map([&column_drop_ops/3, &column_add_ops/3, &column_alter_ops/3], fn kind_ops ->
+        Enum.flat_map(shared_tables, fn table ->
+          kind_ops.(table, actual_tables[table].columns, target_tables[table].columns)
         end)
       end)
 
-    alters =
-      Enum.flat_map(shared_tables, fn table ->
-        actual_tables[table].columns
-        |> Enum.sort_by(fn {name, _definition} -> name end)
-        |> Enum.flat_map(fn {name, actual_definition} ->
-          case target_tables[table].columns[name] do
-            nil ->
-              []
-
-            ^actual_definition ->
-              []
-
-            target_definition ->
-              [
-                %{
-                  op: :alter_column,
-                  table: table,
-                  column: name,
-                  before: actual_definition,
-                  after: target_definition
-                }
-              ]
-          end
-        end)
-      end)
-
-    drops ++ adds ++ alters
+    Enum.concat(ops_per_kind)
   end
 
   defp entity_table(entity_mapping) do
