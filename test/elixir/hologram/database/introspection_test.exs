@@ -66,7 +66,117 @@ defmodule Hologram.Database.IntrospectionTest do
       {:ok, _result} = Connection.query(create_statement)
       {:ok, _result} = Connection.query(drop_statement)
 
-      assert schema().tables["columnless"] == %{columns: %{}}
+      assert schema().tables["columnless"].columns == %{}
+    end
+
+    test "introspects the primary key with its constraint name" do
+      create_statement = """
+      CREATE TABLE "hologram_data"."pk_owner" (
+        "id" uuid NOT NULL,
+        CONSTRAINT "pk_owner_$pk" PRIMARY KEY ("id")
+      )
+      """
+
+      {:ok, _result} = Connection.query(create_statement)
+
+      assert schema().tables["pk_owner"].primary_key == %{
+               columns: ["id"],
+               constraint: "pk_owner_$pk"
+             }
+    end
+
+    test "introspects composite primary keys in constraint column order" do
+      create_statement = """
+      CREATE TABLE "hologram_data"."composite_pk_owner" (
+        "a" uuid NOT NULL,
+        "b" uuid NOT NULL,
+        CONSTRAINT "composite_pk_owner_$pk" PRIMARY KEY ("b", "a")
+      )
+      """
+
+      {:ok, _result} = Connection.query(create_statement)
+
+      assert schema().tables["composite_pk_owner"].primary_key == %{
+               columns: ["b", "a"],
+               constraint: "composite_pk_owner_$pk"
+             }
+    end
+
+    test "derives nil primary key for tables without one" do
+      create_statement = ~s{CREATE TABLE "hologram_data"."pk_less" ("x" int8)}
+
+      {:ok, _result} = Connection.query(create_statement)
+
+      assert schema().tables["pk_less"].primary_key == nil
+    end
+
+    test "introspects foreign keys keyed by owning column" do
+      referencing_statement = """
+      CREATE TABLE "hologram_data"."referencing" (
+        "target_id" uuid,
+        CONSTRAINT "referencing_target_id_$fk" FOREIGN KEY ("target_id")
+          REFERENCES "hologram_data"."test_fixtures_entity_module1" ("id") ON DELETE RESTRICT
+      )
+      """
+
+      {:ok, _result} = Connection.query(referencing_statement)
+
+      assert schema().tables["referencing"].foreign_keys == %{
+               "target_id" => %{
+                 references: "test_fixtures_entity_module1",
+                 on_delete: :restrict,
+                 constraint: "referencing_target_id_$fk"
+               }
+             }
+    end
+
+    test "decodes delete actions beyond restrict" do
+      referencing_statement = """
+      CREATE TABLE "hologram_data"."cascading" (
+        "target_id" uuid,
+        CONSTRAINT "cascading_target_id_$fk" FOREIGN KEY ("target_id")
+          REFERENCES "hologram_data"."test_fixtures_entity_module1" ("id") ON DELETE CASCADE
+      )
+      """
+
+      {:ok, _result} = Connection.query(referencing_statement)
+
+      assert schema().tables["cascading"].foreign_keys["target_id"].on_delete == :cascade
+    end
+
+    test "introspects indexes with their column order" do
+      create_statement = ~s{CREATE TABLE "hologram_data"."indexed" ("a" int8, "b" int8)}
+
+      index_statement =
+        ~s{CREATE INDEX "indexed_b_a_$idx" ON "hologram_data"."indexed" ("b", "a")}
+
+      {:ok, _result} = Connection.query(create_statement)
+      {:ok, _result} = Connection.query(index_statement)
+
+      assert schema().tables["indexed"].indexes == %{
+               "indexed_b_a_$idx" => %{columns: ["b", "a"]}
+             }
+    end
+
+    test "excludes primary-key-backing indexes" do
+      create_statement = """
+      CREATE TABLE "hologram_data"."pk_indexed" (
+        "id" uuid NOT NULL,
+        CONSTRAINT "pk_indexed_$pk" PRIMARY KEY ("id")
+      )
+      """
+
+      {:ok, _result} = Connection.query(create_statement)
+
+      assert schema().tables["pk_indexed"].indexes == %{}
+    end
+
+    test "introspects the fixture join table reverse index" do
+      assert schema().tables["test_fixtures_entity_module3_a_$join"].indexes == %{
+               "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
+                 columns: ["target_id", "source_id"]
+               }
+             }
     end
   end
 end
