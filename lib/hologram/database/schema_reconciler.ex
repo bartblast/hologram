@@ -2,6 +2,18 @@ defmodule Hologram.Database.SchemaReconciler do
   @moduledoc false
 
   alias Hologram.Database.Connection
+  alias Hologram.Database.DDL
+  alias Hologram.Database.Introspection
+  alias Hologram.Database.Schema
+
+  # Fixed application-defined key for pg_advisory_xact_lock - serializes concurrent
+  # reconciliations from multiple VMs against one database (the second waits, then
+  # introspects the converged state and gets an empty diff). The value is frozen
+  # forever: a different key breaks mutual exclusion across Hologram versions, so it
+  # must survive any code move or rename. Provenance (for uniqueness, not for
+  # re-derivation): first 8 bytes of md5("hologram_schema_reconciliation") as a
+  # signed int64.
+  @advisory_lock_key 4_787_000_136_577_093_832
 
   # Control-plane bookkeeping DDL - static and framework-owned, never model-derived.
   # The database table is the managed-database marker (single row, maintained by
@@ -90,6 +102,41 @@ defmodule Hologram.Database.SchemaReconciler do
   end
 
   @doc """
+  Converges the database schema to the given mapping and returns %{status:, ops:} -
+  status is :claimed (virgin database) or :managed, ops are the applied change ops
+  (empty when the schema already matched).
+
+  The whole run is one crash-atomic transaction serialized by an advisory lock: guard
+  check (claiming when virgin), introspect the actual schema, project the target from
+  the mapping, diff, render and apply the DDL, update the managed-object registry from
+  the op stream, and refresh the marker (last_reconciled_at, hologram_version). The
+  context carries :mapping plus the guard facts (:otp_app, :env) and the marker
+  diagnostics (:hologram_version, :timestamp).
+  """
+  @spec reconcile(%{atom => any}) :: %{atom => any}
+  def reconcile(context) do
+    {:ok, result} =
+      Connection.transaction(fn ->
+        {:ok, _result} =
+          Connection.query("SELECT pg_advisory_xact_lock($1)", [@advisory_lock_key])
+
+        status = ensure_managed!(context)
+
+        actual = Introspection.schema()
+        target = Schema.from_mapping(context.mapping)
+        ops = Schema.diff(actual, target)
+
+        apply_ops(ops)
+        update_registry(ops)
+        write_marker(marker_from_context(context))
+
+        %{status: status, ops: ops}
+      end)
+
+    result
+  end
+
+  @doc """
   Returns the managed-object registry as a set of {kind, parent, name} tuples - kind is
   one of :table, :column, :constraint, :index, or :enum_type, and parent is the owning
   table name (an empty string for standalone objects: tables and enum types).
@@ -146,6 +193,16 @@ defmodule Hologram.Database.SchemaReconciler do
     {:ok, _result} = Connection.query(insert_statement, params)
 
     :ok
+  end
+
+  defp apply_ops(ops) do
+    Enum.each(ops, fn op ->
+      op
+      |> DDL.statements()
+      |> Enum.each(fn statement ->
+        {:ok, _result} = Connection.query(statement)
+      end)
+    end)
   end
 
   defp check_marker!(context) do
@@ -217,6 +274,16 @@ defmodule Hologram.Database.SchemaReconciler do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     Enum.map(rows, fn [name] -> name end)
+  end
+
+  defp marker_from_context(context) do
+    %{
+      otp_app: context.otp_app,
+      env: context.env,
+      managed_by: "reconciliation",
+      hologram_version: context.hologram_version,
+      last_reconciled_at: context.timestamp
+    }
   end
 
   defp marker_table_exists? do

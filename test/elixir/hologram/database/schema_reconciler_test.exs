@@ -4,6 +4,13 @@ defmodule Hologram.Database.SchemaReconcilerTest do
   import Hologram.Database.SchemaReconciler
 
   alias Hologram.Database.Connection
+  alias Hologram.Database.Introspection
+  alias Hologram.Database.Mapper
+  alias Hologram.Database.Schema
+  alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module4
 
   @context %{
     otp_app: "hologram",
@@ -28,6 +35,10 @@ defmodule Hologram.Database.SchemaReconcilerTest do
   defp drop_hologram_schemas do
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+  end
+
+  defp reconcile_context(entity_types) do
+    Map.put(@context, :mapping, Mapper.derive!(entity_types))
   end
 
   describe "create_system_tables/0" do
@@ -129,6 +140,71 @@ defmodule Hologram.Database.SchemaReconcilerTest do
       assert_error RuntimeError, expected_msg, fn ->
         ensure_managed!(@context)
       end
+    end
+  end
+
+  describe "reconcile/1" do
+    setup do
+      drop_hologram_schemas()
+      :ok
+    end
+
+    test "claims a virgin database and converges it to the mapping" do
+      context = reconcile_context([Module1])
+
+      result = reconcile(context)
+
+      assert result.status == :claimed
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert {:table, "", "test_fixtures_entity_module1"} in registry()
+      assert read_marker().last_reconciled_at == @context.timestamp
+    end
+
+    test "returns no ops when the schema already matches" do
+      context = reconcile_context([Module1])
+      reconcile(context)
+
+      result = reconcile(context)
+
+      assert result.status == :managed
+      assert result.ops == []
+    end
+
+    test "converges relationships, join tables, and indexes" do
+      context = reconcile_context([Module1, Module2, Module3])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges enum types" do
+      context = reconcile_context([Module4])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges additive model changes" do
+      reconcile(reconcile_context([Module1]))
+      context = reconcile_context([Module1, Module4])
+
+      result = reconcile(context)
+
+      assert result.status == :managed
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges destructive model changes and cleans the registry" do
+      reconcile(reconcile_context([Module1, Module4]))
+      context = reconcile_context([Module1])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      refute {:table, "", "test_fixtures_entity_module4"} in registry()
+      refute {:enum_type, "", "test_fixtures_entity_module4_c_$enum"} in registry()
     end
   end
 
