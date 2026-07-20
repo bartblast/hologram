@@ -2,6 +2,21 @@ defmodule Hologram.Database.Schema do
   @moduledoc false
 
   @doc """
+  Returns the physical change ops that converge the actual schema term to the target
+  schema term.
+
+  Each op is a self-contained map with an :op kind and the term fragments needed to
+  render it. Tables present only in the target emit :create_table (columns and primary
+  key - foreign keys and indexes are always separate ops), tables present only in the
+  actual schema emit :drop_table (their own constraints, indexes, and columns die with
+  them). Ops are ordered alphabetically by table name within each kind.
+  """
+  @spec diff(%{atom => any}, %{atom => any}) :: list(%{atom => any})
+  def diff(actual, target) do
+    table_ops(actual.tables, target.tables)
+  end
+
+  @doc """
   Returns the physical schema term derived from the given mapping.
 
   The term is plain data keyed by physical names - the shape both sides of the
@@ -93,5 +108,29 @@ defmodule Hologram.Database.Schema do
        foreign_keys: foreign_keys,
        indexes: %{join_table.reverse_index => %{columns: ["target_id", "source_id"]}}
      }}
+  end
+
+  defp table_ops(actual_tables, target_tables) do
+    drops =
+      actual_tables
+      |> Map.keys()
+      |> Enum.reject(&Map.has_key?(target_tables, &1))
+      |> Enum.sort()
+      |> Enum.map(&%{op: :drop_table, table: &1})
+
+    creates =
+      target_tables
+      |> Enum.reject(fn {name, _definition} -> Map.has_key?(actual_tables, name) end)
+      |> Enum.sort_by(fn {name, _definition} -> name end)
+      |> Enum.map(fn {name, definition} ->
+        %{
+          op: :create_table,
+          table: name,
+          columns: definition.columns,
+          primary_key: definition.primary_key
+        }
+      end)
+
+    drops ++ creates
   end
 end

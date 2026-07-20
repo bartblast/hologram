@@ -9,11 +9,90 @@ defmodule Hologram.Database.SchemaTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
 
+  @task_table %{
+    columns: %{
+      "id" => %{type: "uuid", collation: nil, null: false},
+      "name" => %{type: "text", collation: "C", null: false}
+    },
+    primary_key: %{columns: ["id"], constraint: "task_$pk"},
+    foreign_keys: %{},
+    indexes: %{}
+  }
+
+  @project_table %{
+    columns: %{"id" => %{type: "uuid", collation: nil, null: false}},
+    primary_key: %{columns: ["id"], constraint: "project_$pk"},
+    foreign_keys: %{},
+    indexes: %{}
+  }
+
   defp table(entity_type, table_name) do
     [entity_type]
     |> Mapper.derive!()
     |> from_mapping()
     |> get_in([:tables, table_name])
+  end
+
+  describe "diff/2 - tables" do
+    test "returns no ops for identical terms" do
+      term = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      assert diff(term, term) == []
+    end
+
+    test "emits create_table with columns and primary key for target-only tables" do
+      actual = %{tables: %{}, enum_types: %{}}
+      target = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [
+               %{
+                 op: :create_table,
+                 table: "task",
+                 columns: @task_table.columns,
+                 primary_key: @task_table.primary_key
+               }
+             ]
+    end
+
+    test "emits drop_table for actual-only tables" do
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+      target = %{tables: %{}, enum_types: %{}}
+
+      assert diff(actual, target) == [%{op: :drop_table, table: "task"}]
+    end
+
+    test "emits no table ops for tables present on both sides" do
+      changed_task_table = %{
+        @task_table
+        | primary_key: %{columns: ["id"], constraint: "renamed_$pk"}
+      }
+
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+      target = %{tables: %{"task" => changed_task_table}, enum_types: %{}}
+
+      table_ops =
+        actual
+        |> diff(target)
+        |> Enum.filter(&(&1.op in [:create_table, :drop_table]))
+
+      assert table_ops == []
+    end
+
+    test "orders ops alphabetically by table name within each kind" do
+      actual = %{tables: %{"a_old" => @task_table, "b_old" => @project_table}, enum_types: %{}}
+
+      target = %{
+        tables: %{"a_new" => @task_table, "b_new" => @project_table},
+        enum_types: %{}
+      }
+
+      assert Enum.map(diff(actual, target), &{&1.op, &1.table}) == [
+               {:drop_table, "a_old"},
+               {:drop_table, "b_old"},
+               {:create_table, "a_new"},
+               {:create_table, "b_new"}
+             ]
+    end
   end
 
   describe "from_mapping/1" do
