@@ -178,5 +178,27 @@ defmodule Hologram.Database.IntrospectionTest do
                }
              }
     end
+
+    test "introspects enum types with their values" do
+      assert schema().enum_types == %{"test_fixtures_entity_module4_c_$enum" => ["x", "y"]}
+    end
+
+    test "introspects enum values in sort order after positioned additions" do
+      add_statement =
+        ~s(ALTER TYPE "hologram_data"."test_fixtures_entity_module4_c_$enum" ) <>
+          "ADD VALUE 'w' BEFORE 'x'"
+
+      {:ok, _result} = Connection.query(add_statement)
+
+      assert schema().enum_types["test_fixtures_entity_module4_c_$enum"] == ["w", "x", "y"]
+    end
+
+    test "excludes enum types outside the hologram_data schema" do
+      create_statement = ~s{CREATE TYPE "public"."alien_$enum" AS ENUM ('a')}
+
+      {:ok, _result} = Connection.query(create_statement)
+
+      refute Map.has_key?(schema().enum_types, "alien_$enum")
+    end
   end
 end

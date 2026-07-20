@@ -17,7 +17,6 @@ defmodule Hologram.Database.Introspection do
   # pg_type names already match the mapper's type vocabulary except boolean.
   @typname_translations %{"bool" => "boolean"}
 
-  # TODO: extend the term with enum types.
   @doc """
   Returns the physical schema term introspected from the database - the actual side of
   the reconciliation comparison, in the same shape as Schema.from_mapping/1 produces.
@@ -28,11 +27,12 @@ defmodule Hologram.Database.Introspection do
   (%{columns:, constraint:}, nil when the table has none), :foreign_keys (owning column
   name to %{references:, on_delete:, constraint:}), and :indexes (index name to
   %{columns:} in index column order, primary-key-backing indexes excluded - they are
-  implied by the constraint).
+  implied by the constraint). :enum_types maps each enum type name to its values in
+  enum sort order.
   """
   @spec schema() :: %{atom => any}
   def schema do
-    %{tables: tables()}
+    %{tables: tables(), enum_types: enum_types()}
   end
 
   defp column_definitions do
@@ -100,6 +100,25 @@ defmodule Hologram.Database.Introspection do
     {:ok, %{rows: rows}} = Connection.query(statement, [@data_schema])
 
     Enum.reduce(rows, {%{}, %{}}, &constraint_entry/2)
+  end
+
+  defp enum_types do
+    statement = """
+    SELECT t.typname, e.enumlabel
+    FROM pg_catalog.pg_enum e
+    JOIN pg_catalog.pg_type t ON t.oid = e.enumtypid
+    JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = $1
+    ORDER BY t.typname, e.enumsortorder
+    """
+
+    {:ok, %{rows: rows}} = Connection.query(statement, [@data_schema])
+
+    rows
+    |> Enum.group_by(fn [typname, _label] -> typname end)
+    |> Map.new(fn {typname, type_rows} ->
+      {typname, Enum.map(type_rows, fn [_typname, label] -> label end)}
+    end)
   end
 
   defp indexes do
