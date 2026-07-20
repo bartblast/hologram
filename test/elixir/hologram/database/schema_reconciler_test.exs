@@ -3,6 +3,15 @@ defmodule Hologram.Database.SchemaReconcilerTest do
 
   import Hologram.Database.SchemaReconciler
 
+  alias Hologram.Database.Connection
+
+  @context %{
+    otp_app: "hologram",
+    env: "test",
+    hologram_version: "0.5.0",
+    timestamp: ~U[2026-07-20 12:30:00.000000Z]
+  }
+
   @marker %{
     otp_app: "hologram",
     env: "test",
@@ -11,11 +20,115 @@ defmodule Hologram.Database.SchemaReconcilerTest do
     last_reconciled_at: ~U[2026-07-20 12:30:00.000000Z]
   }
 
+  @not_managed_msg "the configured database contains Hologram schemas but no " <>
+                     "managed-database marker - it is not managed by schema " <>
+                     "reconciliation - drop the \"hologram_system\" and " <>
+                     "\"hologram_data\" schemas or point the config at another database"
+
+  defp drop_hologram_schemas do
+    {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
+    {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+  end
+
   describe "create_system_tables/0" do
     test "creates the marker and registry tables" do
       assert create_system_tables() == :ok
 
       assert read_marker() == nil
+    end
+  end
+
+  describe "ensure_managed!/1" do
+    test "claims a virgin database" do
+      drop_hologram_schemas()
+
+      assert ensure_managed!(@context) == :claimed
+
+      assert read_marker() == %{
+               otp_app: "hologram",
+               env: "test",
+               managed_by: "reconciliation",
+               hologram_version: "0.5.0",
+               last_reconciled_at: ~U[2026-07-20 12:30:00.000000Z]
+             }
+
+      assert registry() == MapSet.new()
+    end
+
+    test "returns :managed when the marker matches the context" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+
+      assert ensure_managed!(@context) == :managed
+    end
+
+    test "raises when Hologram schemas exist without a marker" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_system"))
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
+
+      assert_error RuntimeError, @not_managed_msg, fn ->
+        ensure_managed!(@context)
+      end
+    end
+
+    test "raises when only one Hologram schema exists" do
+      drop_hologram_schemas()
+      {:ok, _result} = Connection.query(~s(CREATE SCHEMA "hologram_data"))
+
+      assert_error RuntimeError, @not_managed_msg, fn ->
+        ensure_managed!(@context)
+      end
+    end
+
+    test "raises when the marker row is missing" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      {:ok, _result} = Connection.query(~s(DELETE FROM "hologram_system"."database"))
+
+      assert_error RuntimeError, @not_managed_msg, fn ->
+        ensure_managed!(@context)
+      end
+    end
+
+    test "raises when the marker belongs to another app" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+
+      expected_msg =
+        "the configured database belongs to app \"hologram\" - " <>
+          "the current app is \"other_app\" - point the config at the right database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(%{@context | otp_app: "other_app"})
+      end
+    end
+
+    test "raises when the marker belongs to another env" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+
+      expected_msg =
+        "the configured database belongs to the \"test\" env - " <>
+          "the current env is \"dev\" - the config points at another env's database"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(%{@context | env: "dev"})
+      end
+    end
+
+    test "raises when the database is managed by migrations" do
+      drop_hologram_schemas()
+      ensure_managed!(@context)
+      write_marker(%{read_marker() | managed_by: "migrations"})
+
+      expected_msg =
+        "the configured database is managed by migrations - " <>
+          "schema reconciliation never touches it"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        ensure_managed!(@context)
+      end
     end
   end
 
