@@ -121,6 +121,85 @@ defmodule Hologram.Database.DDLTest do
     end
   end
 
+  describe "statements/1 for add_foreign_key" do
+    test "renders a named constraint referencing the target id with the delete action" do
+      op = %{
+        op: :add_foreign_key,
+        table: "task",
+        column: "project_id",
+        references: "project",
+        on_delete: :restrict,
+        constraint: "task_project_id_$fk"
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."task" ) <>
+                 ~s(ADD CONSTRAINT "task_project_id_$fk" ) <>
+                 ~s{FOREIGN KEY ("project_id") } <>
+                 ~s{REFERENCES "hologram_data"."project" ("id") } <>
+                 "ON DELETE RESTRICT"
+             ]
+    end
+  end
+
+  describe "statements/1 for drop_foreign_key" do
+    test "renders the constraint drop" do
+      op = %{op: :drop_foreign_key, table: "task", constraint: "task_project_id_$fk"}
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."task" DROP CONSTRAINT "task_project_id_$fk")
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_constraint" do
+    test "renders the constraint rename" do
+      op = %{op: :rename_constraint, table: "task", from: "task_pkey", to: "task_$pk"}
+
+      assert statements(op) == [
+               ~s(ALTER TABLE "hologram_data"."task" ) <>
+                 ~s(RENAME CONSTRAINT "task_pkey" TO "task_$pk")
+             ]
+    end
+  end
+
+  describe "statements/1 for create_index" do
+    test "renders a named index over its columns" do
+      op = %{
+        op: :create_index,
+        table: "task",
+        index: "task_project_id_$idx",
+        columns: ["project_id"]
+      }
+
+      assert statements(op) == [
+               ~s{CREATE INDEX "task_project_id_$idx" ON "hologram_data"."task" ("project_id")}
+             ]
+    end
+
+    test "renders multi-column indexes in column order" do
+      op = %{
+        op: :create_index,
+        table: "task_tags_$join",
+        index: "task_tags_$join_target_id_$idx",
+        columns: ["target_id", "source_id"]
+      }
+
+      assert statements(op) == [
+               ~s(CREATE INDEX "task_tags_$join_target_id_$idx" ) <>
+                 ~s{ON "hologram_data"."task_tags_$join" ("target_id", "source_id")}
+             ]
+    end
+  end
+
+  describe "statements/1 for drop_index" do
+    test "renders the schema-qualified index drop" do
+      op = %{op: :drop_index, index: "task_project_id_$idx"}
+
+      assert statements(op) == [~s(DROP INDEX "hologram_data"."task_project_id_$idx")]
+    end
+  end
+
   describe "statements/1 for alter_column" do
     test "renders SET NOT NULL when the column becomes required" do
       op = %{

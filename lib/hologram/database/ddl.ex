@@ -18,12 +18,27 @@ defmodule Hologram.Database.DDL do
   :drop_table render one statement each. :alter_column renders one ALTER TABLE
   statement combining a type action (with COLLATE and a USING cast) and a nullability
   action, as needed.
+
+  :add_foreign_key renders a named ADD CONSTRAINT referencing the target table's id
+  column with the delete action - :drop_foreign_key and :rename_constraint render
+  their ALTER TABLE forms. :create_index renders a named index over its columns -
+  :drop_index renders the schema-qualified drop (indexes are schema-level objects).
   """
   @spec statements(%{atom => any}) :: list(String.t())
   def statements(%{op: :add_column} = op) do
     [
       "ALTER TABLE #{qualified(op.table)} " <>
         "ADD COLUMN #{column_definition(op.column, op.definition)}"
+    ]
+  end
+
+  def statements(%{op: :add_foreign_key} = op) do
+    [
+      "ALTER TABLE #{qualified(op.table)} " <>
+        "ADD CONSTRAINT #{Mapper.quote_identifier(op.constraint)} " <>
+        "FOREIGN KEY (#{Mapper.quote_identifier(op.column)}) " <>
+        ~s{REFERENCES #{qualified(op.references)} ("id") } <>
+        "ON DELETE #{delete_action(op.on_delete)}"
     ]
   end
 
@@ -50,6 +65,15 @@ defmodule Hologram.Database.DDL do
     ["ALTER TABLE #{qualified(op.table)} #{actions}"]
   end
 
+  def statements(%{op: :create_index} = op) do
+    columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
+
+    [
+      "CREATE INDEX #{Mapper.quote_identifier(op.index)} " <>
+        "ON #{qualified(op.table)} (#{columns})"
+    ]
+  end
+
   def statements(%{op: :create_table} = op) do
     column_lines =
       op.columns
@@ -63,7 +87,7 @@ defmodule Hologram.Database.DDL do
       "  CONSTRAINT #{Mapper.quote_identifier(op.primary_key.constraint)} " <>
         "PRIMARY KEY (#{pk_columns})"
 
-    lines = Enum.join(column_lines ++ [pk_line], ",\n")
+    lines = Enum.join(column_lines, ",\n") <> ",\n" <> pk_line
 
     ["CREATE TABLE #{qualified(op.table)} (\n#{lines}\n)"]
   end
@@ -72,8 +96,27 @@ defmodule Hologram.Database.DDL do
     ["ALTER TABLE #{qualified(op.table)} DROP COLUMN #{Mapper.quote_identifier(op.column)}"]
   end
 
+  def statements(%{op: :drop_foreign_key} = op) do
+    [
+      "ALTER TABLE #{qualified(op.table)} " <>
+        "DROP CONSTRAINT #{Mapper.quote_identifier(op.constraint)}"
+    ]
+  end
+
+  def statements(%{op: :drop_index} = op) do
+    ["DROP INDEX #{qualified(op.index)}"]
+  end
+
   def statements(%{op: :drop_table} = op) do
     ["DROP TABLE #{qualified(op.table)}"]
+  end
+
+  def statements(%{op: :rename_constraint} = op) do
+    [
+      "ALTER TABLE #{qualified(op.table)} " <>
+        "RENAME CONSTRAINT #{Mapper.quote_identifier(op.from)} " <>
+        "TO #{Mapper.quote_identifier(op.to)}"
+    ]
   end
 
   defp column_definition(name, definition) do
@@ -100,6 +143,8 @@ defmodule Hologram.Database.DDL do
 
     "#{type_sql(definition.type)}#{collate_part}"
   end
+
+  defp delete_action(:restrict), do: "RESTRICT"
 
   defp qualified(name) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(name)}"
