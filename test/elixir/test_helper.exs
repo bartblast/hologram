@@ -14,7 +14,7 @@ System.put_env(
 )
 
 # Boot the test database: server connectivity check (fail fast with instructions), database
-# creation when absent, fixture schema layout recreation.
+# creation when absent, Hologram schema drop (the suite starts virgin).
 Hologram.Test.DatabaseBootstrap.run!()
 
 # Skip tests that don't work reliably on either OS type
@@ -30,6 +30,10 @@ ExUnit.start(exclude: exclude_opts)
 # every test process transparently gets its own connection. Positioned after ExUnit.start,
 # because environment detection recognizes the test env by the running ExUnit server.
 {:ok, _database_pid} = Hologram.Database.start_link(pool: DBConnection.Ownership)
+
+# Create the fixture schema layout from scratch: reconciliation claims the virgin database
+# and converges it to the fixture entity model - the suite is auto-sync's first consumer.
+Hologram.Database.SchemaReconciler.reconcile(Hologram.Database.reconciliation_context())
 
 Mox.defmock(AssetManifestCacheMock, for: AssetManifestCache)
 Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMock)

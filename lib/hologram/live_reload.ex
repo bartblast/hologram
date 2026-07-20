@@ -3,9 +3,12 @@ defmodule Hologram.LiveReload do
 
   use GenServer
 
+  require Logger
+
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
+  alias Hologram.Database
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -75,18 +78,26 @@ defmodule Hologram.LiveReload do
 
   @doc """
   Reloads the application after a file change by recompiling Elixir code,
-  recompiling Hologram components, reloading Hologram runtime, and 
-  broadcasting reload notifications to connected clients.
+  recompiling Hologram components, reconciling the database schema, reloading
+  Hologram runtime, and broadcasting reload notifications to connected clients.
 
-  If code reloading fails, broadcasts a compilation error instead.
+  If code reloading or schema reconciliation fails, broadcasts a compilation error
+  instead - clients only ever reload into a converged database.
   """
   @spec reload(String.t(), any) :: :ok
   def reload(_file_path, endpoint) do
     case reload_code(endpoint) do
       :ok ->
         recompile_hologram()
-        reload_runtime()
-        broadcast_reload()
+
+        case reload_database() do
+          :ok ->
+            reload_runtime()
+            broadcast_reload()
+
+          {:error, message} ->
+            broadcast_compilation_error(message)
+        end
 
       {:error, output} ->
         broadcast_compilation_error(output)
@@ -152,6 +163,20 @@ defmodule Hologram.LiveReload do
     # Code.put_compiler_option(:ignore_module_conflict, true)
     # Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
     # Code.put_compiler_option(:ignore_module_conflict, false)
+  end
+
+  # Reconciliation failures surface like compilation errors - logged loudly and
+  # broadcast to connected clients.
+  defp reload_database do
+    Database.reload()
+
+    :ok
+  rescue
+    error ->
+      message = Exception.message(error)
+      Logger.error("Hologram: schema reconciliation failed: #{message}")
+
+      {:error, message}
   end
 
   defp reload_runtime do

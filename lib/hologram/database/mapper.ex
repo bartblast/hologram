@@ -14,11 +14,17 @@ defmodule Hologram.Database.Mapper do
   system timestamps.
 
   Each definition is a map with :name (column name string), :type (the logical attribute type,
-  as consumed by the codec), :sql_type (the DDL type fragment - a derived per-attribute enum
-  type name for :enum attributes), :null (true only for optional declarations), :references
-  (the referenced table name for to-one relationship columns, nil otherwise), and :source
-  (:system, or the declaration the column is derived from). To-many relationships derive no
-  columns - they live in join tables.
+  as consumed by the codec), :sql_type (the SQL type name - a derived per-attribute enum type
+  name for :enum attributes), :collation (the pinned per-column collation name, nil for types
+  that carry none), :enum_values (the declared enum values as strings in declaration order,
+  nil for non-enum types), :default (the declared default value, nil when none - creation
+  semantics owned by the write path, never a DB DEFAULT), :null (true only for optional
+  declarations), :references (the referenced table name for to-one relationship columns,
+  nil otherwise), :fk_constraint (the derived `<table>_<column>_$fk` constraint name for
+  reference columns, nil otherwise), :fk_index (the derived `<table>_<column>_$idx` index
+  name for reference columns, nil otherwise - PostgreSQL never indexes FK columns
+  automatically), and :source (:system, or the declaration the column is derived from).
+  To-many relationships derive no columns - they live in join tables.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
@@ -33,8 +39,13 @@ defmodule Hologram.Database.Mapper do
           name: Atom.to_string(name),
           type: type,
           sql_type: sql_type(type, table_name, name),
+          collation: collation(type),
+          enum_values: enum_values(type, opts),
+          default: Keyword.get(opts, :default),
           null: Keyword.get(opts, :optional) == true,
           references: nil,
+          fk_constraint: nil,
+          fk_index: nil,
           source: {:attribute, name}
         }
       end)
@@ -47,8 +58,13 @@ defmodule Hologram.Database.Mapper do
           name: fit_identifier("#{name}_id"),
           type: :uuid,
           sql_type: "uuid",
+          collation: nil,
+          enum_values: nil,
+          default: nil,
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
+          fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
+          fk_index: fit_identifier("#{table_name}_#{name}_id_$idx"),
           source: {:relationship, name}
         }
       end)
@@ -67,7 +83,8 @@ defmodule Hologram.Database.Mapper do
   per-entity column collisions, and cross-entity within-kind derived name collisions (join
   tables and enum types, whose single-underscore seams can merge to the same name across
   entities) - and returns a map from entity type module to its mapping: :table (the table
-  name), :columns (as returned by columns/1), and :join_tables (as returned by join_tables/1).
+  name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
+  by columns/1), and :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module)) :: %{module => %{atom => any}}
   def derive!(entity_types) do
@@ -76,9 +93,12 @@ defmodule Hologram.Database.Mapper do
 
     mapping =
       Map.new(entity_types, fn entity_type ->
+        table_name = table_name(entity_type)
+
         {entity_type,
          %{
-           table: table_name(entity_type),
+           table: table_name,
+           pk_constraint: fit_identifier("#{table_name}_$pk"),
            columns: columns(entity_type),
            join_tables: join_tables(entity_type)
          }}
@@ -90,14 +110,37 @@ defmodule Hologram.Database.Mapper do
   end
 
   @doc """
+  Returns the given identifier unchanged when it fits the PostgreSQL identifier limit,
+  or shortened to a readable prefix followed by a short deterministic hash of the full
+  identifier otherwise.
+  """
+  @spec fit_identifier(String.t()) :: String.t()
+  def fit_identifier(identifier) do
+    if byte_size(identifier) > @max_identifier_bytes do
+      hash =
+        :md5
+        |> :crypto.hash(identifier)
+        |> Base.encode16(case: :lower)
+        |> binary_part(0, @hash_bytes)
+
+      prefix_bytes = @max_identifier_bytes - @hash_bytes - 1
+
+      binary_part(identifier, 0, prefix_bytes) <> "_" <> hash
+    else
+      identifier
+    end
+  end
+
+  @doc """
   Returns the join table definitions derived from the given entity type module's to-many
   relationships, sorted by relationship name.
 
   Each definition is a map with :name (the join table name - `<source_table>_<relationship>_$join`
   per the derived-name system), :relationship (the declaring relationship name), :source_table,
-  :target_table, and :reverse_index (the name of the index over (target_id, source_id)).
-  Join table columns are fixed: source_id/target_id uuid NOT NULL, composite primary key
-  (source_id, target_id), both columns FK ON DELETE RESTRICT. To-one relationships derive
+  :target_table, :reverse_index (the name of the index over (target_id, source_id)),
+  :pk_constraint, :source_fk_constraint, and :target_fk_constraint (the derived constraint
+  names). Join table columns are fixed: source_id/target_id uuid NOT NULL, composite primary
+  key (source_id, target_id), both columns FK ON DELETE RESTRICT. To-one relationships derive
   no join tables - they live as reference columns on the owning row.
   """
   @spec join_tables(module) :: list(%{atom => any})
@@ -114,7 +157,10 @@ defmodule Hologram.Database.Mapper do
         relationship: name,
         source_table: source_table,
         target_table: table_name(target),
-        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx")
+        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx"),
+        pk_constraint: fit_identifier("#{join_table_name}_$pk"),
+        source_fk_constraint: fit_identifier("#{join_table_name}_source_id_$fk"),
+        target_fk_constraint: fit_identifier("#{join_table_name}_target_id_$fk")
       }
     end)
   end
@@ -230,6 +276,10 @@ defmodule Hologram.Database.Mapper do
     hops_from_start ++ hops_before_start
   end
 
+  defp collation(:string), do: "C"
+
+  defp collation(_type), do: nil
+
   defp describe_column_collision({name, group}) do
     sources =
       Enum.map_join(group, ", ", fn column ->
@@ -248,6 +298,14 @@ defmodule Hologram.Database.Mapper do
 
     "  * #{hops} -> #{inspect(first_entity_type)}"
   end
+
+  defp enum_values(:enum, opts) do
+    opts
+    |> Keyword.fetch!(:values)
+    |> Enum.map(&Atom.to_string/1)
+  end
+
+  defp enum_values(_type, _opts), do: nil
 
   # Depth-first traversal over required to-one edges. The path holds the hops taken to reach
   # the current entity type (most recent first) - reaching an entity type already on the path
@@ -268,22 +326,6 @@ defmodule Hologram.Database.Mapper do
     end
   end
 
-  defp fit_identifier(identifier) do
-    if byte_size(identifier) > @max_identifier_bytes do
-      hash =
-        :md5
-        |> :crypto.hash(identifier)
-        |> Base.encode16(case: :lower)
-        |> binary_part(0, @hash_bytes)
-
-      prefix_bytes = @max_identifier_bytes - @hash_bytes - 1
-
-      binary_part(identifier, 0, prefix_bytes) <> "_" <> hash
-    else
-      identifier
-    end
-  end
-
   # Closes a cycle when the target is already on the path, descends into the target otherwise.
   defp follow_edge(hop, target, path, {cycles, visited}) do
     new_path = [hop | path]
@@ -301,7 +343,19 @@ defmodule Hologram.Database.Mapper do
   end
 
   defp id_column do
-    %{name: "id", type: :uuid, sql_type: "uuid", null: false, references: nil, source: :system}
+    %{
+      name: "id",
+      type: :uuid,
+      sql_type: "uuid",
+      collation: nil,
+      enum_values: nil,
+      default: nil,
+      null: false,
+      references: nil,
+      fk_constraint: nil,
+      fk_index: nil,
+      source: :system
+    }
   end
 
   defp required_to_one_targets(entity_type) do
@@ -324,7 +378,7 @@ defmodule Hologram.Database.Mapper do
 
   defp sql_type(:integer, _table_name, _name), do: "int8"
 
-  defp sql_type(:string, _table_name, _name), do: ~s(text COLLATE "C")
+  defp sql_type(:string, _table_name, _name), do: "text"
 
   defp strip_root([root | [_head | _tail] = remainder], root), do: remainder
 
@@ -336,8 +390,13 @@ defmodule Hologram.Database.Mapper do
         name: name,
         type: :datetime,
         sql_type: "timestamptz",
+        collation: nil,
+        enum_values: nil,
+        default: nil,
         null: false,
         references: nil,
+        fk_constraint: nil,
+        fk_index: nil,
         source: :system
       }
     end)

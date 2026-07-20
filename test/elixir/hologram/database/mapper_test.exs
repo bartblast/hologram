@@ -21,24 +21,39 @@ defmodule Hologram.Database.MapperTest do
                  name: "id",
                  type: :uuid,
                  sql_type: "uuid",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
+                 fk_index: nil,
                  source: :system
                },
                %{
                  name: "created_at",
                  type: :datetime,
                  sql_type: "timestamptz",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
+                 fk_index: nil,
                  source: :system
                },
                %{
                  name: "updated_at",
                  type: :datetime,
                  sql_type: "timestamptz",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
+                 fk_index: nil,
                  source: :system
                }
              ]
@@ -55,24 +70,39 @@ defmodule Hologram.Database.MapperTest do
                  name: "a",
                  type: :boolean,
                  sql_type: "boolean",
+                 collation: nil,
+                 enum_values: nil,
+                 default: false,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
+                 fk_index: nil,
                  source: {:attribute, :a}
                },
                %{
                  name: "b",
                  type: :integer,
                  sql_type: "int8",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
                  null: true,
                  references: nil,
+                 fk_constraint: nil,
+                 fk_index: nil,
                  source: {:attribute, :b}
                },
                %{
                  name: "c",
                  type: :string,
-                 sql_type: ~s(text COLLATE "C"),
+                 sql_type: "text",
+                 collation: "C",
+                 enum_values: nil,
+                 default: nil,
                  null: false,
                  references: nil,
+                 fk_constraint: nil,
+                 fk_index: nil,
                  source: {:attribute, :c}
                }
              ]
@@ -103,7 +133,28 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "maps :string to text with pinned C collation" do
-      assert column(Module2, "c").sql_type == ~s(text COLLATE "C")
+      assert column(Module2, "c").sql_type == "text"
+      assert column(Module2, "c").collation == "C"
+    end
+
+    test "derives nil collation for types that carry none" do
+      assert column(Module2, "a").collation == nil
+    end
+
+    test "carries enum values as strings in declaration order" do
+      assert column(Module4, "c").enum_values == ["x", "y"]
+    end
+
+    test "carries the declared default value" do
+      assert column(Module4, "c").default == :x
+    end
+
+    test "derives nil default for attributes without one" do
+      assert column(Module4, "a").default == nil
+    end
+
+    test "derives nil enum values for non-enum types" do
+      assert column(Module4, "a").enum_values == nil
     end
 
     test "derives to-one relationship reference columns and excludes to-many relationships" do
@@ -117,19 +168,51 @@ defmodule Hologram.Database.MapperTest do
                  name: "b_id",
                  type: :uuid,
                  sql_type: "uuid",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
                  null: true,
                  references: "test_fixtures_entity_module2",
+                 fk_constraint: "test_fixtures_entity_module3_b_id_$fk",
+                 fk_index: "test_fixtures_entity_module3_b_id_$idx",
                  source: {:relationship, :b}
                },
                %{
                  name: "c_id",
                  type: :uuid,
                  sql_type: "uuid",
+                 collation: nil,
+                 enum_values: nil,
+                 default: nil,
                  null: false,
                  references: "test_fixtures_entity_module1",
+                 fk_constraint: "test_fixtures_entity_module3_c_id_$fk",
+                 fk_index: "test_fixtures_entity_module3_c_id_$idx",
                  source: {:relationship, :c}
                }
              ]
+    end
+
+    test "shortens foreign key constraint names over the PostgreSQL identifier limit" do
+      defmodule InlineEntityFixture17 do
+        use Hologram.Entity
+
+        relationship :quite_long_relationship_name, Module1
+      end
+
+      assert column(InlineEntityFixture17, "quite_long_relationship_name_id").fk_constraint ==
+               "database_mapper_test_inline_entity_fixture17_quite_lon_9f01ea3f"
+    end
+
+    test "shortens foreign key index names over the PostgreSQL identifier limit" do
+      defmodule InlineEntityFixture18 do
+        use Hologram.Entity
+
+        relationship :quite_long_relationship_name, Module1
+      end
+
+      assert column(InlineEntityFixture18, "quite_long_relationship_name_id").fk_index ==
+               "database_mapper_test_inline_entity_fixture18_quite_lon_70323e73"
     end
 
     test "rejects declarations deriving the same column name" do
@@ -157,11 +240,13 @@ defmodule Hologram.Database.MapperTest do
       assert derive!([Module1, Module3]) == %{
                Module1 => %{
                  table: table_name(Module1),
+                 pk_constraint: "test_fixtures_entity_module1_$pk",
                  columns: columns(Module1),
                  join_tables: join_tables(Module1)
                },
                Module3 => %{
                  table: table_name(Module3),
+                 pk_constraint: "test_fixtures_entity_module3_$pk",
                  columns: columns(Module3),
                  join_tables: join_tables(Module3)
                }
@@ -276,6 +361,25 @@ defmodule Hologram.Database.MapperTest do
     end
   end
 
+  describe "fit_identifier/1" do
+    test "returns identifiers within the PostgreSQL limit unchanged" do
+      assert fit_identifier("task_status_$enum") == "task_status_$enum"
+    end
+
+    test "returns a 63-byte identifier unchanged" do
+      identifier = String.duplicate("a", 63)
+
+      assert fit_identifier(identifier) == identifier
+    end
+
+    test "shortens identifiers over the limit to a prefix plus a deterministic hash" do
+      identifier = String.duplicate("a", 60) <> "_$enum"
+
+      assert fit_identifier(identifier) ==
+               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2f41a680"
+    end
+  end
+
   describe "join_tables/1" do
     test "returns empty list for entity type with no to-many relationships" do
       assert join_tables(Module1) == []
@@ -288,7 +392,10 @@ defmodule Hologram.Database.MapperTest do
                  relationship: :a,
                  source_table: "test_fixtures_entity_module3",
                  target_table: "test_fixtures_entity_module2",
-                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_$idx"
+                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_$idx",
+                 pk_constraint: "test_fixtures_entity_module3_a_$join_$pk",
+                 source_fk_constraint: "test_fixtures_entity_module3_a_$join_source_id_$fk",
+                 target_fk_constraint: "test_fixtures_entity_module3_a_$join_target_id_$fk"
                }
              ]
     end
