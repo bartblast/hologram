@@ -102,7 +102,7 @@ defmodule Hologram.Database.DDLTest do
       }
 
       expected_statement =
-        """
+        normalize_newlines("""
         CREATE TABLE "hologram_data"."task" (
           "id" uuid NOT NULL,
           "done" boolean,
@@ -111,8 +111,7 @@ defmodule Hologram.Database.DDLTest do
           "updated_at" timestamptz NOT NULL,
           CONSTRAINT "task_$pk" PRIMARY KEY ("id")
         )\
-        """
-        |> normalize_newlines()
+        """)
 
       assert statements(op) == [expected_statement]
     end
@@ -129,14 +128,13 @@ defmodule Hologram.Database.DDLTest do
       }
 
       expected_statement =
-        """
+        normalize_newlines("""
         CREATE TABLE "hologram_data"."task" (
           "id" uuid NOT NULL,
           "status" "hologram_data"."task_status_$enum" NOT NULL,
           CONSTRAINT "task_$pk" PRIMARY KEY ("id")
         )\
-        """
-        |> normalize_newlines()
+        """)
 
       assert statements(op) == [expected_statement]
     end
@@ -153,14 +151,13 @@ defmodule Hologram.Database.DDLTest do
       }
 
       expected_statement =
-        """
+        normalize_newlines("""
         CREATE TABLE "hologram_data"."task_tags_$join" (
           "source_id" uuid NOT NULL,
           "target_id" uuid NOT NULL,
           CONSTRAINT "task_tags_$join_$pk" PRIMARY KEY ("source_id", "target_id")
         )\
-        """
-        |> normalize_newlines()
+        """)
 
       assert statements(op) == [expected_statement]
     end
