@@ -69,6 +69,38 @@ defmodule Hologram.Database.SchemaReconciler do
   end
 
   @doc """
+  Returns the managed-object registry as a set of {kind, parent, name} tuples - kind is
+  one of :table, :column, :constraint, :index, or :enum_type, and parent is the owning
+  table name (an empty string for standalone objects: tables and enum types).
+  """
+  @spec registry() :: MapSet.t()
+  def registry do
+    statement = ~s(SELECT "kind", "parent", "name" FROM "hologram_system"."schema_object")
+
+    {:ok, %{rows: rows}} = Connection.query(statement)
+
+    MapSet.new(rows, fn [kind, parent, name] ->
+      {String.to_existing_atom(kind), parent, name}
+    end)
+  end
+
+  @doc """
+  Applies the given change ops to the managed-object registry, in the caller's
+  transaction.
+
+  Create and add ops register the objects they produce (a created table registers
+  itself, its columns, and its primary key constraint) - drop ops deregister them (a
+  dropped table takes everything parented to it) - a constraint rename updates the
+  registered name. Ops that change an object without changing its identity (column
+  alterations, enum value changes, rebuilds) leave the registry untouched.
+  Registration is idempotent - stale rows from out-of-contract edits never fail it.
+  """
+  @spec update_registry(list(%{atom => any})) :: :ok
+  def update_registry(ops) do
+    Enum.each(ops, &record_op/1)
+  end
+
+  @doc """
   Writes the given marker as the single row of the managed-database marker table,
   replacing any previous row.
   """
@@ -91,6 +123,97 @@ defmodule Hologram.Database.SchemaReconciler do
     ]
 
     {:ok, _result} = Connection.query(insert_statement, params)
+
+    :ok
+  end
+
+  defp deregister(kind, parent, name) do
+    statement = """
+    DELETE FROM "hologram_system"."schema_object"
+    WHERE "kind" = $1 AND "parent" = $2 AND "name" = $3
+    """
+
+    {:ok, _result} = Connection.query(statement, [Atom.to_string(kind), parent, name])
+
+    :ok
+  end
+
+  defp record_op(%{op: :add_column} = op), do: register(:column, op.table, op.column)
+
+  defp record_op(%{op: :add_enum_value}), do: :ok
+
+  defp record_op(%{op: :add_foreign_key} = op), do: register(:constraint, op.table, op.constraint)
+
+  defp record_op(%{op: :alter_column}), do: :ok
+
+  defp record_op(%{op: :create_enum_type} = op), do: register(:enum_type, "", op.enum_type)
+
+  defp record_op(%{op: :create_index} = op), do: register(:index, op.table, op.index)
+
+  defp record_op(%{op: :create_table} = op) do
+    register(:table, "", op.table)
+
+    op.columns
+    |> Map.keys()
+    |> Enum.each(&register(:column, op.table, &1))
+
+    register(:constraint, op.table, op.primary_key.constraint)
+  end
+
+  defp record_op(%{op: :drop_column} = op), do: deregister(:column, op.table, op.column)
+
+  defp record_op(%{op: :drop_enum_type} = op), do: deregister(:enum_type, "", op.enum_type)
+
+  defp record_op(%{op: :drop_foreign_key} = op) do
+    deregister(:constraint, op.table, op.constraint)
+  end
+
+  defp record_op(%{op: :drop_index} = op) do
+    statement = """
+    DELETE FROM "hologram_system"."schema_object"
+    WHERE "kind" = 'index' AND "name" = $1
+    """
+
+    {:ok, _result} = Connection.query(statement, [op.index])
+
+    :ok
+  end
+
+  defp record_op(%{op: :drop_table} = op) do
+    statement = """
+    DELETE FROM "hologram_system"."schema_object"
+    WHERE ("kind" = 'table' AND "name" = $1) OR "parent" = $1
+    """
+
+    {:ok, _result} = Connection.query(statement, [op.table])
+
+    :ok
+  end
+
+  defp record_op(%{op: :rebuild_enum_type}), do: :ok
+
+  defp record_op(%{op: :rename_constraint} = op) do
+    statement = """
+    UPDATE "hologram_system"."schema_object"
+    SET "name" = $1
+    WHERE "kind" = 'constraint' AND "parent" = $2 AND "name" = $3
+    """
+
+    {:ok, _result} = Connection.query(statement, [op.to, op.table, op.from])
+
+    :ok
+  end
+
+  defp record_op(%{op: :rename_enum_value}), do: :ok
+
+  defp register(kind, parent, name) do
+    statement = """
+    INSERT INTO "hologram_system"."schema_object" ("kind", "parent", "name")
+    VALUES ($1, $2, $3)
+    ON CONFLICT DO NOTHING
+    """
+
+    {:ok, _result} = Connection.query(statement, [Atom.to_string(kind), parent, name])
 
     :ok
   end
