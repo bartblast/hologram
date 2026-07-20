@@ -97,6 +97,15 @@ defmodule Hologram.Database.DDL do
   end
 
   @doc """
+  Returns the pre-flight check statement counting the rows of the given table - the
+  rows that block adding a required column without a fill.
+  """
+  @spec rows_check_statement(String.t()) :: String.t()
+  def rows_check_statement(table) do
+    "SELECT COUNT(*) FROM #{qualified(table)}"
+  end
+
+  @doc """
   Returns the DDL statements that execute the given change op, in execution order.
 
   :create_table renders one statement with all columns and the named primary key

@@ -37,8 +37,28 @@ defmodule Hologram.Database.SchemaReconcilerTest do
     {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
   end
 
+  defp insert_module2_row(b_value, c_value) do
+    statement = """
+    INSERT INTO "hologram_data"."test_fixtures_entity_module2"
+      ("id", "a", "b", "c", "created_at", "updated_at")
+    VALUES ('00000000-0000-0000-0000-000000000001', TRUE, #{b_value}, #{c_value},
+            '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+    """
+
+    {:ok, _result} = Connection.query(statement)
+  end
+
   defp reconcile_context(entity_types) do
     Map.put(@context, :mapping, Mapper.derive!(entity_types))
+  end
+
+  defp update_mapping_column(context, entity_type, column_name, fun) do
+    update_in(context, [:mapping, entity_type, :columns], fn columns ->
+      Enum.map(columns, fn
+        %{name: ^column_name} = column -> fun.(column)
+        column -> column
+      end)
+    end)
   end
 
   describe "create_system_tables/0" do
@@ -143,6 +163,21 @@ defmodule Hologram.Database.SchemaReconcilerTest do
     end
   end
 
+  describe "read_marker/0" do
+    test "returns nil when no marker has been written" do
+      create_system_tables()
+
+      assert read_marker() == nil
+    end
+
+    test "returns the written marker" do
+      create_system_tables()
+      write_marker(@marker)
+
+      assert read_marker() == @marker
+    end
+  end
+
   describe "reconcile/1" do
     setup do
       drop_hologram_schemas()
@@ -206,20 +241,196 @@ defmodule Hologram.Database.SchemaReconcilerTest do
       refute {:table, "", "test_fixtures_entity_module4"} in registry()
       refute {:enum_type, "", "test_fixtures_entity_module4_c_$enum"} in registry()
     end
-  end
 
-  describe "read_marker/0" do
-    test "returns nil when no marker has been written" do
-      create_system_tables()
+    test "converges a data-dependent type change when the rows allow it" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'123'")
 
-      assert read_marker() == nil
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | sql_type: "int8", collation: nil})
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
     end
 
-    test "returns the written marker" do
-      create_system_tables()
-      write_marker(@marker)
+    test "converges an enum value removal when no rows hold it" do
+      reconcile(reconcile_context([Module4]))
 
-      assert read_marker() == @marker
+      context =
+        [Module4]
+        |> reconcile_context()
+        |> update_mapping_column(Module4, "c", &%{&1 | enum_values: ["x"]})
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "logs each destructive action after the run" do
+      Logger.configure(level: :info)
+      on_exit(fn -> Logger.configure(level: :warning) end)
+
+      reconcile(reconcile_context([Module1, Module4]))
+      context = reconcile_context([Module1])
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          reconcile(context)
+        end)
+
+      assert log =~ ~s(schema reconciliation dropped table "test_fixtures_entity_module4")
+
+      assert log =~
+               ~s(schema reconciliation dropped enum type "test_fixtures_entity_module4_c_$enum")
+    end
+
+    test "raises for a hand-created table in hologram_data" do
+      reconcile(reconcile_context([Module1]))
+
+      {:ok, _result} = Connection.query(~s{CREATE TABLE "hologram_data"."alien" ("x" int8)})
+
+      expected_msg =
+        ~s(unknown table "alien" in the hologram_data schema - ) <>
+          "this schema is model-managed - move the object to another schema or remove it"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(reconcile_context([Module1]))
+      end
+    end
+
+    test "raises for a hand-added column on a managed table" do
+      reconcile(reconcile_context([Module1]))
+
+      alter_statement =
+        ~s(ALTER TABLE "hologram_data"."test_fixtures_entity_module1" ADD COLUMN "extra" int8)
+
+      {:ok, _result} = Connection.query(alter_statement)
+
+      expected_msg =
+        ~s(unknown column "extra" on table "test_fixtures_entity_module1" ) <>
+          "in the hologram_data schema - this schema is model-managed - " <>
+          "move the object to another schema or remove it"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(reconcile_context([Module1]))
+      end
+    end
+
+    test "raises for an unsupported type change" do
+      reconcile(reconcile_context([Module2]))
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | sql_type: "boolean", collation: nil})
+
+      expected_msg =
+        ~s(changing column "c" on table "test_fixtures_entity_module2" ) <>
+          "from text to boolean is not supported - " <>
+          "remove the attribute and re-add it with the new type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    test "raises for a data-dependent type change blocked by existing rows" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | sql_type: "int8", collation: nil})
+
+      expected_msg =
+        ~s(1 row in "test_fixtures_entity_module2"."c" ) <>
+          "cannot convert from text to int8 - " <>
+          "fix the data or remove the attribute and re-add it with the new type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    test "raises when making a column required while rows hold NULL" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | null: false})
+
+      expected_msg =
+        ~s(cannot make column "b" on table "test_fixtures_entity_module2" required - ) <>
+          "found 1 row with NULL - " <>
+          "declare a default:, keep the attribute optional:, or fix the data"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    test "raises when adding a required column to a table with rows" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_row("NULL", "'abc'")
+
+      new_column = %{
+        name: "z",
+        type: :integer,
+        sql_type: "int8",
+        collation: nil,
+        enum_values: nil,
+        null: false,
+        references: nil,
+        fk_constraint: nil,
+        fk_index: nil,
+        source: {:attribute, :z}
+      }
+
+      context =
+        update_in(reconcile_context([Module2]), [:mapping, Module2, :columns], fn columns ->
+          [new_column | columns]
+        end)
+
+      expected_msg =
+        ~s(cannot add required column "z" to table "test_fixtures_entity_module2" - ) <>
+          "1 existing row would have no value - " <>
+          "declare a default:, make the attribute optional:, or clear the rows"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    test "raises when removing an enum value that rows still hold" do
+      reconcile(reconcile_context([Module4]))
+
+      insert_statement = """
+      INSERT INTO "hologram_data"."test_fixtures_entity_module4"
+        ("id", "a", "b", "c", "d", "created_at", "updated_at")
+      VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
+              'y', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00')
+      """
+
+      {:ok, _result} = Connection.query(insert_statement)
+
+      context =
+        [Module4]
+        |> reconcile_context()
+        |> update_mapping_column(Module4, "c", &%{&1 | enum_values: ["x"]})
+
+      expected_msg =
+        ~s(found 1 row in "test_fixtures_entity_module4"."c" ) <>
+          "holding removed enum value 'y' - update the rows or re-add the value"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
     end
   end
 

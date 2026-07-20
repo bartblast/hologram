@@ -1,6 +1,8 @@
 defmodule Hologram.Database.SchemaReconciler do
   @moduledoc false
 
+  require Logger
+
   alias Hologram.Database.Connection
   alias Hologram.Database.DDL
   alias Hologram.Database.Introspection
@@ -108,10 +110,14 @@ defmodule Hologram.Database.SchemaReconciler do
 
   The whole run is one crash-atomic transaction serialized by an advisory lock: guard
   check (claiming when virgin), introspect the actual schema, project the target from
-  the mapping, diff, render and apply the DDL, update the managed-object registry from
-  the op stream, and refresh the marker (last_reconciled_at, hologram_version). The
-  context carries :mapping plus the guard facts (:otp_app, :env) and the marker
-  diagnostics (:hologram_version, :timestamp).
+  the mapping, diff, alien check (dropping an object the registry does not know fails
+  loudly - hologram_data is model-managed), pre-flight data validation (transformations
+  the existing rows cannot follow fail with the ways out before any DDL runs), render
+  and apply the DDL, update the managed-object registry from the op stream, and refresh
+  the marker (last_reconciled_at, hologram_version). After the transaction commits,
+  each destructive action is logged as one concise line. The context carries :mapping
+  plus the guard facts (:otp_app, :env) and the marker diagnostics (:hologram_version,
+  :timestamp).
   """
   @spec reconcile(%{atom => any}) :: %{atom => any}
   def reconcile(context) do
@@ -126,12 +132,17 @@ defmodule Hologram.Database.SchemaReconciler do
         target = Schema.from_mapping(context.mapping)
         ops = Schema.diff(actual, target)
 
+        check_aliens!(ops, registry())
+        preflight!(ops, actual)
+
         apply_ops(ops)
         update_registry(ops)
         write_marker(marker_from_context(context))
 
         %{status: status, ops: ops}
       end)
+
+    log_destructive_ops(result.ops)
 
     result
   end
@@ -205,6 +216,44 @@ defmodule Hologram.Database.SchemaReconciler do
     end)
   end
 
+  defp check_alien!(%{op: :drop_column} = op, registry) do
+    if {:column, op.table, op.column} not in registry do
+      raise_alien!(~s(column "#{op.column}" on table "#{op.table}"))
+    end
+  end
+
+  defp check_alien!(%{op: :drop_enum_type} = op, registry) do
+    if {:enum_type, "", op.enum_type} not in registry do
+      raise_alien!(~s(enum type "#{op.enum_type}"))
+    end
+  end
+
+  defp check_alien!(%{op: :drop_foreign_key} = op, registry) do
+    if {:constraint, op.table, op.constraint} not in registry do
+      raise_alien!(~s(constraint "#{op.constraint}" on table "#{op.table}"))
+    end
+  end
+
+  defp check_alien!(%{op: :drop_index} = op, registry) do
+    index = op.index
+
+    if not Enum.any?(registry, &match?({:index, _parent, ^index}, &1)) do
+      raise_alien!(~s(index "#{op.index}"))
+    end
+  end
+
+  defp check_alien!(%{op: :drop_table} = op, registry) do
+    if {:table, "", op.table} not in registry do
+      raise_alien!(~s(table "#{op.table}"))
+    end
+  end
+
+  defp check_alien!(_op, _registry), do: :ok
+
+  defp check_aliens!(ops, registry) do
+    Enum.each(ops, &check_alien!(&1, registry))
+  end
+
   defp check_marker!(context) do
     if not marker_table_exists?() do
       raise_not_managed!()
@@ -252,6 +301,12 @@ defmodule Hologram.Database.SchemaReconciler do
     :claimed
   end
 
+  defp count_result(statement) do
+    {:ok, %{rows: [[count]]}} = Connection.query(statement)
+
+    count
+  end
+
   defp deregister(kind, parent, name) do
     statement = """
     DELETE FROM "hologram_system"."schema_object"
@@ -276,6 +331,28 @@ defmodule Hologram.Database.SchemaReconciler do
     Enum.map(rows, fn [name] -> name end)
   end
 
+  defp log_destructive_op(%{op: :drop_column} = op) do
+    Logger.info(~s(schema reconciliation dropped column "#{op.column}" on table "#{op.table}"))
+  end
+
+  defp log_destructive_op(%{op: :drop_enum_type} = op) do
+    Logger.info(~s(schema reconciliation dropped enum type "#{op.enum_type}"))
+  end
+
+  defp log_destructive_op(%{op: :drop_table} = op) do
+    Logger.info(~s(schema reconciliation dropped table "#{op.table}"))
+  end
+
+  defp log_destructive_op(%{op: :rebuild_enum_type} = op) do
+    Logger.info(~s(schema reconciliation rebuilt enum type "#{op.enum_type}"))
+  end
+
+  defp log_destructive_op(_op), do: :ok
+
+  defp log_destructive_ops(ops) do
+    Enum.each(ops, &log_destructive_op/1)
+  end
+
   defp marker_from_context(context) do
     %{
       otp_app: context.otp_app,
@@ -297,6 +374,106 @@ defmodule Hologram.Database.SchemaReconciler do
     {:ok, %{rows: rows}} = Connection.query(statement)
 
     rows != []
+  end
+
+  defp pluralize_rows(1), do: "row"
+
+  defp pluralize_rows(_count), do: "rows"
+
+  defp pluralize_values([_value]), do: "value"
+
+  defp pluralize_values(_values), do: "values"
+
+  defp preflight!(ops, actual) do
+    Enum.each(ops, &preflight_op!(&1, actual))
+  end
+
+  defp preflight_cast_rows!(op) do
+    count =
+      count_result(DDL.cast_check_statement(op.table, op.column, op.before.type, op.after.type))
+
+    if count > 0 do
+      raise ~s(#{count} #{pluralize_rows(count)} in "#{op.table}"."#{op.column}" ) <>
+              "cannot convert from #{op.before.type} to #{op.after.type} - " <>
+              "fix the data or remove the attribute and re-add it with the new type"
+    end
+  end
+
+  defp preflight_null_tightening!(op) do
+    count =
+      if op.before.null and not op.after.null do
+        count_result(DDL.null_check_statement(op.table, op.column))
+      else
+        0
+      end
+
+    if count > 0 do
+      raise ~s(cannot make column "#{op.column}" on table "#{op.table}" required - ) <>
+              "found #{count} #{pluralize_rows(count)} with NULL - " <>
+              "declare a default:, keep the attribute optional:, or fix the data"
+    end
+  end
+
+  defp preflight_op!(%{op: :add_column} = op, _actual) do
+    count = if op.definition.null, do: 0, else: count_result(DDL.rows_check_statement(op.table))
+
+    if count > 0 do
+      raise ~s(cannot add required column "#{op.column}" to table "#{op.table}" - ) <>
+              "#{count} existing #{pluralize_rows(count)} would have no value - " <>
+              "declare a default:, make the attribute optional:, or clear the rows"
+    end
+  end
+
+  defp preflight_op!(%{op: :alter_column} = op, _actual) do
+    preflight_type_change!(op)
+    preflight_null_tightening!(op)
+  end
+
+  defp preflight_op!(%{op: :rebuild_enum_type} = op, actual) do
+    removed_values = actual.enum_types[op.enum_type] -- op.values
+
+    if removed_values != [] do
+      Enum.each(op.columns, fn {table, column} ->
+        preflight_removed_enum_values!(table, column, removed_values)
+      end)
+    end
+  end
+
+  defp preflight_op!(_op, _actual), do: :ok
+
+  defp preflight_removed_enum_values!(table, column, removed_values) do
+    count = count_result(DDL.enum_values_check_statement(table, column, removed_values))
+
+    if count > 0 do
+      values = Enum.map_join(removed_values, ", ", &"'#{&1}'")
+
+      raise ~s(found #{count} #{pluralize_rows(count)} in "#{table}"."#{column}" ) <>
+              "holding removed enum #{pluralize_values(removed_values)} #{values} - " <>
+              "update the rows or re-add the #{pluralize_values(removed_values)}"
+    end
+  end
+
+  defp preflight_type_change!(op) do
+    if op.before.type != op.after.type do
+      case DDL.cast_class(op.before.type, op.after.type) do
+        :safe ->
+          :ok
+
+        :data_dependent ->
+          preflight_cast_rows!(op)
+
+        :unsupported ->
+          raise ~s(changing column "#{op.column}" on table "#{op.table}" ) <>
+                  "from #{op.before.type} to #{op.after.type} is not supported - " <>
+                  "remove the attribute and re-add it with the new type"
+      end
+    end
+  end
+
+  defp raise_alien!(description) do
+    raise "unknown #{description} in the hologram_data schema - " <>
+            "this schema is model-managed - " <>
+            "move the object to another schema or remove it"
   end
 
   defp raise_not_managed! do
