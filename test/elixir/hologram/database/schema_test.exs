@@ -325,8 +325,8 @@ defmodule Hologram.Database.SchemaTest do
       target = %{tables: %{"task" => @task_table}, enum_types: %{}}
 
       expected_msg =
-        "primary key columns mismatch on table \"task\" " <>
-          "(actual: [\"id\", \"name\"], target: [\"id\"]) - " <>
+        ~s(primary key columns mismatch on table "task" ) <>
+          ~s{(actual: ["id", "name"], target: ["id"]) - } <>
           "no derivable schema can produce this, the database was edited by hand"
 
       assert_error ArgumentError, expected_msg, fn ->
@@ -396,7 +396,10 @@ defmodule Hologram.Database.SchemaTest do
       actual = %{tables: %{}, enum_types: %{}}
       target = %{tables: %{"task" => new_table}, enum_types: %{}}
 
-      op_kinds = Enum.map(diff(actual, target), & &1.op)
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
 
       assert op_kinds == [:create_table, :add_foreign_key, :create_index]
     end
@@ -411,6 +414,138 @@ defmodule Hologram.Database.SchemaTest do
       target = %{tables: %{}, enum_types: %{}}
 
       assert diff(actual, target) == [%{op: :drop_table, table: "task"}]
+    end
+  end
+
+  describe "diff/2 - enum types" do
+    test "returns no ops for identical enum types" do
+      term = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+
+      assert diff(term, term) == []
+    end
+
+    test "emits create_enum_type with values for target-only types" do
+      actual = %{tables: %{}, enum_types: %{}}
+      target = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+
+      assert diff(actual, target) == [
+               %{
+                 op: :create_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["todo", "done"]
+               }
+             ]
+    end
+
+    test "emits drop_enum_type for actual-only types" do
+      actual = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+      target = %{tables: %{}, enum_types: %{}}
+
+      assert diff(actual, target) == [%{op: :drop_enum_type, enum_type: "task_status_$enum"}]
+    end
+
+    test "emits add_enum_value with nil position for values appended at the tail" do
+      actual = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+
+      target = %{
+        tables: %{},
+        enum_types: %{"task_status_$enum" => ["todo", "done", "archived"]}
+      }
+
+      assert diff(actual, target) == [
+               %{
+                 op: :add_enum_value,
+                 enum_type: "task_status_$enum",
+                 value: "archived",
+                 position: nil
+               }
+             ]
+    end
+
+    test "emits add_enum_value anchored before the nearest following pre-existing value" do
+      actual = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+
+      target = %{
+        tables: %{},
+        enum_types: %{"task_status_$enum" => ["draft", "todo", "doing", "review", "done"]}
+      }
+
+      assert diff(actual, target) == [
+               %{
+                 op: :add_enum_value,
+                 enum_type: "task_status_$enum",
+                 value: "draft",
+                 position: {:before, "todo"}
+               },
+               %{
+                 op: :add_enum_value,
+                 enum_type: "task_status_$enum",
+                 value: "doing",
+                 position: {:before, "done"}
+               },
+               %{
+                 op: :add_enum_value,
+                 enum_type: "task_status_$enum",
+                 value: "review",
+                 position: {:before, "done"}
+               }
+             ]
+    end
+
+    test "emits rebuild_enum_type for value removal" do
+      actual = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "doing", "done"]}}
+      target = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+
+      assert diff(actual, target) == [
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["todo", "done"],
+                 columns: []
+               }
+             ]
+    end
+
+    test "emits rebuild_enum_type for value reorder" do
+      actual = %{tables: %{}, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+      target = %{tables: %{}, enum_types: %{"task_status_$enum" => ["done", "todo"]}}
+
+      assert diff(actual, target) == [
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["done", "todo"],
+                 columns: []
+               }
+             ]
+    end
+
+    test "rebuild_enum_type carries the columns using the type" do
+      status_column = %{type: "task_status_$enum", collation: nil, null: false}
+
+      task_table = %{
+        @task_table
+        | columns: Map.put(@task_table.columns, "status", status_column)
+      }
+
+      project_table = %{
+        @project_table
+        | columns: Map.put(@project_table.columns, "state", status_column)
+      }
+
+      tables = %{"project" => project_table, "task" => task_table}
+
+      actual = %{tables: tables, enum_types: %{"task_status_$enum" => ["todo", "done"]}}
+      target = %{tables: tables, enum_types: %{"task_status_$enum" => ["done"]}}
+
+      assert diff(actual, target) == [
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["done"],
+                 columns: [{"project", "state"}, {"task", "status"}]
+               }
+             ]
     end
   end
 

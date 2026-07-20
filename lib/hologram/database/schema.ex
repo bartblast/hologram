@@ -27,13 +27,22 @@ defmodule Hologram.Database.Schema do
   (they die with the table). Raises ArgumentError when primary key columns mismatch -
   no derivable schema can produce that, so it means a hand-edited database.
 
+  Enum types are identified by name: target-only emit :create_enum_type (with values),
+  actual-only emit :drop_enum_type. When a shared type's values changed and the actual
+  values survive in order (pure additions), each new value emits :add_enum_value with a
+  :position ({:before, value} anchored on the nearest following pre-existing value, nil
+  to append at the tail) - anything else (removal, reorder) emits :rebuild_enum_type
+  carrying the new values and the columns using the type. A name-keyed diff cannot
+  detect value renames - they surface as rebuilds.
+
   Ops are ordered alphabetically by table and name within each kind.
   """
   @spec diff(%{atom => any}, %{atom => any}) :: list(%{atom => any})
   def diff(actual, target) do
     table_ops(actual.tables, target.tables) ++
       column_ops(actual.tables, target.tables) ++
-      constraint_index_ops(actual.tables, target.tables)
+      constraint_index_ops(actual.tables, target.tables) ++
+      enum_ops(actual, target)
   end
 
   @doc """
@@ -207,6 +216,78 @@ defmodule Hologram.Database.Schema do
      }}
   end
 
+  defp enum_ops(actual, target) do
+    drops =
+      actual.enum_types
+      |> Map.keys()
+      |> Enum.reject(&Map.has_key?(target.enum_types, &1))
+      |> Enum.sort()
+      |> Enum.map(&%{op: :drop_enum_type, enum_type: &1})
+
+    creates =
+      target.enum_types
+      |> Enum.reject(fn {name, _values} -> Map.has_key?(actual.enum_types, name) end)
+      |> Enum.sort_by(fn {name, _values} -> name end)
+      |> Enum.map(fn {name, values} ->
+        %{op: :create_enum_type, enum_type: name, values: values}
+      end)
+
+    changes =
+      target.enum_types
+      |> Enum.sort_by(fn {name, _values} -> name end)
+      |> Enum.flat_map(fn {name, target_values} ->
+        enum_value_ops(name, actual.enum_types[name], target_values, target.tables)
+      end)
+
+    drops ++ creates ++ changes
+  end
+
+  defp enum_type_columns(name, tables) do
+    tables
+    |> Enum.sort_by(fn {table, _definition} -> table end)
+    |> Enum.flat_map(fn {table, definition} ->
+      definition.columns
+      |> Enum.filter(fn {_column, column_definition} -> column_definition.type == name end)
+      |> Enum.sort_by(fn {column, _definition} -> column end)
+      |> Enum.map(fn {column, _definition} -> {table, column} end)
+    end)
+  end
+
+  defp enum_value_add_ops(name, actual_values, target_values) do
+    target_values
+    |> Enum.with_index()
+    |> Enum.reject(fn {value, _index} -> value in actual_values end)
+    |> Enum.map(fn {value, index} ->
+      following_actual_value =
+        target_values
+        |> Enum.drop(index + 1)
+        |> Enum.find(&(&1 in actual_values))
+
+      position = if following_actual_value, do: {:before, following_actual_value}
+
+      %{op: :add_enum_value, enum_type: name, value: value, position: position}
+    end)
+  end
+
+  defp enum_value_ops(_name, nil, _target_values, _target_tables), do: []
+
+  defp enum_value_ops(_name, actual_values, actual_values, _target_tables), do: []
+
+  defp enum_value_ops(name, actual_values, target_values, target_tables) do
+    if subsequence?(actual_values, target_values) do
+      enum_value_add_ops(name, actual_values, target_values)
+    else
+      [
+        %{
+          op: :rebuild_enum_type,
+          enum_type: name,
+          values: target_values,
+          columns: enum_type_columns(name, target_tables)
+        }
+      ]
+    end
+  end
+
   defp fk_add_ops(table, actual_definition, target_definition) do
     target_definition.foreign_keys
     |> Enum.sort_by(fn {column, _fk} -> column end)
@@ -319,6 +400,14 @@ defmodule Hologram.Database.Schema do
         []
     end
   end
+
+  defp subsequence?([], _list), do: true
+
+  defp subsequence?(_values, []), do: false
+
+  defp subsequence?([head | tail], [head | list_tail]), do: subsequence?(tail, list_tail)
+
+  defp subsequence?(values, [_head | list_tail]), do: subsequence?(values, list_tail)
 
   defp table_ops(actual_tables, target_tables) do
     drops =
