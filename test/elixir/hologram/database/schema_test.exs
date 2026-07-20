@@ -208,6 +208,212 @@ defmodule Hologram.Database.SchemaTest do
     end
   end
 
+  describe "diff/2 - constraints and indexes" do
+    @task_fk %{references: "project", on_delete: :restrict, constraint: "task_project_id_$fk"}
+
+    defp with_foreign_key(table_definition, column, fk) do
+      %{table_definition | foreign_keys: Map.put(table_definition.foreign_keys, column, fk)}
+    end
+
+    defp with_index(table_definition, name, columns) do
+      %{table_definition | indexes: Map.put(table_definition.indexes, name, %{columns: columns})}
+    end
+
+    test "emits add_foreign_key for target-only foreign keys" do
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      target = %{
+        tables: %{"task" => with_foreign_key(@task_table, "project_id", @task_fk)},
+        enum_types: %{}
+      }
+
+      assert diff(actual, target) == [
+               %{
+                 op: :add_foreign_key,
+                 table: "task",
+                 column: "project_id",
+                 references: "project",
+                 on_delete: :restrict,
+                 constraint: "task_project_id_$fk"
+               }
+             ]
+    end
+
+    test "emits drop_foreign_key for actual-only foreign keys" do
+      actual = %{
+        tables: %{"task" => with_foreign_key(@task_table, "project_id", @task_fk)},
+        enum_types: %{}
+      }
+
+      target = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [
+               %{op: :drop_foreign_key, table: "task", constraint: "task_project_id_$fk"}
+             ]
+    end
+
+    test "emits drop plus add for a structural foreign key change" do
+      changed_fk = %{@task_fk | references: "workspace"}
+
+      actual = %{
+        tables: %{"task" => with_foreign_key(@task_table, "project_id", @task_fk)},
+        enum_types: %{}
+      }
+
+      target = %{
+        tables: %{"task" => with_foreign_key(@task_table, "project_id", changed_fk)},
+        enum_types: %{}
+      }
+
+      assert diff(actual, target) == [
+               %{op: :drop_foreign_key, table: "task", constraint: "task_project_id_$fk"},
+               %{
+                 op: :add_foreign_key,
+                 table: "task",
+                 column: "project_id",
+                 references: "workspace",
+                 on_delete: :restrict,
+                 constraint: "task_project_id_$fk"
+               }
+             ]
+    end
+
+    test "emits rename_constraint for a foreign key name-only mismatch" do
+      legacy_fk = %{@task_fk | constraint: "task_project_id_fkey"}
+
+      actual = %{
+        tables: %{"task" => with_foreign_key(@task_table, "project_id", legacy_fk)},
+        enum_types: %{}
+      }
+
+      target = %{
+        tables: %{"task" => with_foreign_key(@task_table, "project_id", @task_fk)},
+        enum_types: %{}
+      }
+
+      assert diff(actual, target) == [
+               %{
+                 op: :rename_constraint,
+                 table: "task",
+                 from: "task_project_id_fkey",
+                 to: "task_project_id_$fk"
+               }
+             ]
+    end
+
+    test "emits rename_constraint for a primary key name-only mismatch" do
+      legacy_task_table = %{
+        @task_table
+        | primary_key: %{columns: ["id"], constraint: "task_pkey"}
+      }
+
+      actual = %{tables: %{"task" => legacy_task_table}, enum_types: %{}}
+      target = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [
+               %{op: :rename_constraint, table: "task", from: "task_pkey", to: "task_$pk"}
+             ]
+    end
+
+    test "raises on primary key columns mismatch" do
+      edited_task_table = %{
+        @task_table
+        | primary_key: %{columns: ["id", "name"], constraint: "task_$pk"}
+      }
+
+      actual = %{tables: %{"task" => edited_task_table}, enum_types: %{}}
+      target = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      expected_msg =
+        "primary key columns mismatch on table \"task\" " <>
+          "(actual: [\"id\", \"name\"], target: [\"id\"]) - " <>
+          "no derivable schema can produce this, the database was edited by hand"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        diff(actual, target)
+      end
+    end
+
+    test "emits create_index for target-only indexes" do
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      target = %{
+        tables: %{"task" => with_index(@task_table, "task_project_id_$idx", ["project_id"])},
+        enum_types: %{}
+      }
+
+      assert diff(actual, target) == [
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_project_id_$idx",
+                 columns: ["project_id"]
+               }
+             ]
+    end
+
+    test "emits drop_index for actual-only indexes" do
+      actual = %{
+        tables: %{"task" => with_index(@task_table, "task_project_id_$idx", ["project_id"])},
+        enum_types: %{}
+      }
+
+      target = %{tables: %{"task" => @task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [%{op: :drop_index, index: "task_project_id_$idx"}]
+    end
+
+    test "emits drop plus create for an index definition change" do
+      actual = %{
+        tables: %{"task" => with_index(@task_table, "task_project_id_$idx", ["project_id"])},
+        enum_types: %{}
+      }
+
+      target = %{
+        tables: %{
+          "task" => with_index(@task_table, "task_project_id_$idx", ["project_id", "name"])
+        },
+        enum_types: %{}
+      }
+
+      assert diff(actual, target) == [
+               %{op: :drop_index, index: "task_project_id_$idx"},
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_project_id_$idx",
+                 columns: ["project_id", "name"]
+               }
+             ]
+    end
+
+    test "emits foreign key and index adds for new tables" do
+      new_table =
+        @task_table
+        |> with_foreign_key("project_id", @task_fk)
+        |> with_index("task_project_id_$idx", ["project_id"])
+
+      actual = %{tables: %{}, enum_types: %{}}
+      target = %{tables: %{"task" => new_table}, enum_types: %{}}
+
+      op_kinds = Enum.map(diff(actual, target), & &1.op)
+
+      assert op_kinds == [:create_table, :add_foreign_key, :create_index]
+    end
+
+    test "emits no constraint or index drops for dropped tables" do
+      dropped_table =
+        @task_table
+        |> with_foreign_key("project_id", @task_fk)
+        |> with_index("task_project_id_$idx", ["project_id"])
+
+      actual = %{tables: %{"task" => dropped_table}, enum_types: %{}}
+      target = %{tables: %{}, enum_types: %{}}
+
+      assert diff(actual, target) == [%{op: :drop_table, table: "task"}]
+    end
+  end
+
   describe "from_mapping/1" do
     test "derives a table with columns and primary key per entity type" do
       assert from_mapping(Mapper.derive!([Module1])) == %{

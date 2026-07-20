@@ -1,6 +1,10 @@
 defmodule Hologram.Database.Schema do
   @moduledoc false
 
+  # Stand-in for the actual side of tables that exist only in the target - every
+  # target foreign key and index then diffs as an add.
+  @absent_table %{columns: %{}, primary_key: nil, foreign_keys: %{}, indexes: %{}}
+
   @doc """
   Returns the physical change ops that converge the actual schema term to the target
   schema term.
@@ -12,11 +16,24 @@ defmodule Hologram.Database.Schema do
   them). Tables present on both sides diff column by column: target-only columns emit
   :add_column (with the column definition), actual-only columns emit :drop_column, and
   columns whose definitions differ emit :alter_column with :before/:after payloads.
-  Ops are ordered alphabetically by table and column name within each kind.
+
+  Foreign keys diff by owning column: target-only emit :add_foreign_key, actual-only
+  emit :drop_foreign_key, a structural change (referenced table or delete action) emits
+  drop plus add, and a constraint-name-only mismatch emits :rename_constraint - the
+  same op a primary key constraint name mismatch emits. Indexes are identified by name:
+  target-only emit :create_index, actual-only emit :drop_index, and a definition change
+  emits drop plus create. New tables emit adds for their foreign keys and indexes
+  (:create_table carries neither) - dropped tables emit no constraint or index drops
+  (they die with the table). Raises ArgumentError when primary key columns mismatch -
+  no derivable schema can produce that, so it means a hand-edited database.
+
+  Ops are ordered alphabetically by table and name within each kind.
   """
   @spec diff(%{atom => any}, %{atom => any}) :: list(%{atom => any})
   def diff(actual, target) do
-    table_ops(actual.tables, target.tables) ++ column_ops(actual.tables, target.tables)
+    table_ops(actual.tables, target.tables) ++
+      column_ops(actual.tables, target.tables) ++
+      constraint_index_ops(actual.tables, target.tables)
   end
 
   @doc """
@@ -112,6 +129,55 @@ defmodule Hologram.Database.Schema do
     Enum.concat(ops_per_kind)
   end
 
+  defp constraint_index_ops(actual_tables, target_tables) do
+    target_names =
+      target_tables
+      |> Map.keys()
+      |> Enum.sort()
+
+    kinds = [
+      &fk_drop_ops/3,
+      &index_drop_ops/3,
+      &constraint_rename_ops/3,
+      &fk_add_ops/3,
+      &index_create_ops/3
+    ]
+
+    Enum.flat_map(kinds, fn kind_ops ->
+      Enum.flat_map(target_names, fn table ->
+        kind_ops.(table, Map.get(actual_tables, table, @absent_table), target_tables[table])
+      end)
+    end)
+  end
+
+  defp constraint_rename_ops(table, actual_definition, target_definition) do
+    fk_renames =
+      actual_definition.foreign_keys
+      |> Enum.sort_by(fn {column, _fk} -> column end)
+      |> Enum.flat_map(fn {column, actual_fk} ->
+        target_fk = target_definition.foreign_keys[column]
+
+        if target_fk && fk_structure(target_fk) == fk_structure(actual_fk) &&
+             target_fk.constraint != actual_fk.constraint do
+          [
+            %{
+              op: :rename_constraint,
+              table: table,
+              from: actual_fk.constraint,
+              to: target_fk.constraint
+            }
+          ]
+        else
+          []
+        end
+      end)
+
+    pk_renames =
+      pk_rename_ops(table, actual_definition.primary_key, target_definition.primary_key)
+
+    pk_renames ++ fk_renames
+  end
+
   defp entity_table(entity_mapping) do
     columns =
       Map.new(entity_mapping.columns, fn column ->
@@ -139,6 +205,63 @@ defmodule Hologram.Database.Schema do
        foreign_keys: foreign_keys,
        indexes: indexes
      }}
+  end
+
+  defp fk_add_ops(table, actual_definition, target_definition) do
+    target_definition.foreign_keys
+    |> Enum.sort_by(fn {column, _fk} -> column end)
+    |> Enum.reject(fn {column, target_fk} ->
+      case actual_definition.foreign_keys[column] do
+        nil -> false
+        actual_fk -> fk_structure(actual_fk) == fk_structure(target_fk)
+      end
+    end)
+    |> Enum.map(fn {column, target_fk} ->
+      %{
+        op: :add_foreign_key,
+        table: table,
+        column: column,
+        references: target_fk.references,
+        on_delete: target_fk.on_delete,
+        constraint: target_fk.constraint
+      }
+    end)
+  end
+
+  defp fk_drop_ops(table, actual_definition, target_definition) do
+    actual_definition.foreign_keys
+    |> Enum.sort_by(fn {column, _fk} -> column end)
+    |> Enum.reject(fn {column, actual_fk} ->
+      case target_definition.foreign_keys[column] do
+        nil -> false
+        target_fk -> fk_structure(actual_fk) == fk_structure(target_fk)
+      end
+    end)
+    |> Enum.map(fn {_column, actual_fk} ->
+      %{op: :drop_foreign_key, table: table, constraint: actual_fk.constraint}
+    end)
+  end
+
+  defp fk_structure(fk), do: Map.take(fk, [:on_delete, :references])
+
+  defp index_create_ops(table, actual_definition, target_definition) do
+    target_definition.indexes
+    |> Enum.sort_by(fn {name, _index} -> name end)
+    |> Enum.reject(fn {name, target_index} ->
+      actual_definition.indexes[name] == target_index
+    end)
+    |> Enum.map(fn {name, target_index} ->
+      %{op: :create_index, table: table, index: name, columns: target_index.columns}
+    end)
+  end
+
+  defp index_drop_ops(_table, actual_definition, target_definition) do
+    actual_definition.indexes
+    |> Enum.sort_by(fn {name, _index} -> name end)
+    |> Enum.reject(fn {name, actual_index} ->
+      target_definition.indexes[name] == actual_index
+    end)
+    |> Enum.map(fn {name, _index} -> %{op: :drop_index, index: name} end)
   end
 
   defp join_table(join_table) do
@@ -170,6 +293,31 @@ defmodule Hologram.Database.Schema do
        foreign_keys: foreign_keys,
        indexes: %{join_table.reverse_index => %{columns: ["target_id", "source_id"]}}
      }}
+  end
+
+  defp pk_rename_ops(_table, nil, _target_pk), do: []
+
+  defp pk_rename_ops(table, actual_pk, target_pk) do
+    cond do
+      actual_pk.columns != target_pk.columns ->
+        raise ArgumentError,
+              "primary key columns mismatch on table \"#{table}\" " <>
+                "(actual: #{inspect(actual_pk.columns)}, target: #{inspect(target_pk.columns)}) - " <>
+                "no derivable schema can produce this, the database was edited by hand"
+
+      actual_pk.constraint != target_pk.constraint ->
+        [
+          %{
+            op: :rename_constraint,
+            table: table,
+            from: actual_pk.constraint,
+            to: target_pk.constraint
+          }
+        ]
+
+      true ->
+        []
+    end
   end
 
   defp table_ops(actual_tables, target_tables) do
