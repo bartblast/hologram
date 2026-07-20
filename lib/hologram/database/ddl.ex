@@ -23,12 +23,31 @@ defmodule Hologram.Database.DDL do
   column with the delete action - :drop_foreign_key and :rename_constraint render
   their ALTER TABLE forms. :create_index renders a named index over its columns -
   :drop_index renders the schema-qualified drop (indexes are schema-level objects).
+
+  :create_enum_type, :drop_enum_type, :add_enum_value (with its BEFORE anchor when
+  positioned), and :rename_enum_value render one statement each. :rebuild_enum_type
+  renders the rebuild sequence: rename the old type aside, create the replacement
+  under the canonical name, cast every column using the type (through text, applying
+  the optional old-to-new value remap as a CASE expression), then drop the old type.
   """
   @spec statements(%{atom => any}) :: list(String.t())
   def statements(%{op: :add_column} = op) do
     [
       "ALTER TABLE #{qualified(op.table)} " <>
         "ADD COLUMN #{column_definition(op.column, op.definition)}"
+    ]
+  end
+
+  def statements(%{op: :add_enum_value} = op) do
+    position_part =
+      case op.position do
+        {:before, anchor} -> " BEFORE #{enum_literal(anchor)}"
+        nil -> ""
+      end
+
+    [
+      "ALTER TYPE #{qualified(op.enum_type)} " <>
+        "ADD VALUE #{enum_literal(op.value)}#{position_part}"
     ]
   end
 
@@ -65,6 +84,12 @@ defmodule Hologram.Database.DDL do
     ["ALTER TABLE #{qualified(op.table)} #{actions}"]
   end
 
+  def statements(%{op: :create_enum_type} = op) do
+    values = Enum.map_join(op.values, ", ", &enum_literal/1)
+
+    ["CREATE TYPE #{qualified(op.enum_type)} AS ENUM (#{values})"]
+  end
+
   def statements(%{op: :create_index} = op) do
     columns = Enum.map_join(op.columns, ", ", &Mapper.quote_identifier/1)
 
@@ -96,6 +121,10 @@ defmodule Hologram.Database.DDL do
     ["ALTER TABLE #{qualified(op.table)} DROP COLUMN #{Mapper.quote_identifier(op.column)}"]
   end
 
+  def statements(%{op: :drop_enum_type} = op) do
+    ["DROP TYPE #{qualified(op.enum_type)}"]
+  end
+
   def statements(%{op: :drop_foreign_key} = op) do
     [
       "ALTER TABLE #{qualified(op.table)} " <>
@@ -111,11 +140,44 @@ defmodule Hologram.Database.DDL do
     ["DROP TABLE #{qualified(op.table)}"]
   end
 
+  def statements(%{op: :rebuild_enum_type} = op) do
+    old_type = Mapper.fit_identifier("#{op.enum_type}_$old")
+    remap = Map.get(op, :remap, %{})
+
+    rename_statement =
+      "ALTER TYPE #{qualified(op.enum_type)} RENAME TO #{Mapper.quote_identifier(old_type)}"
+
+    create_statement =
+      "CREATE TYPE #{qualified(op.enum_type)} AS ENUM " <>
+        "(#{Enum.map_join(op.values, ", ", &enum_literal/1)})"
+
+    cast_statements =
+      Enum.map(op.columns, fn {table, column} ->
+        quoted_column = Mapper.quote_identifier(column)
+        type = qualified(op.enum_type)
+
+        "ALTER TABLE #{qualified(table)} " <>
+          "ALTER COLUMN #{quoted_column} TYPE #{type} " <>
+          "USING #{rebuild_cast(quoted_column, remap)}::#{type}"
+      end)
+
+    drop_statement = "DROP TYPE #{qualified(old_type)}"
+
+    Enum.concat([[rename_statement, create_statement], cast_statements, [drop_statement]])
+  end
+
   def statements(%{op: :rename_constraint} = op) do
     [
       "ALTER TABLE #{qualified(op.table)} " <>
         "RENAME CONSTRAINT #{Mapper.quote_identifier(op.from)} " <>
         "TO #{Mapper.quote_identifier(op.to)}"
+    ]
+  end
+
+  def statements(%{op: :rename_enum_value} = op) do
+    [
+      "ALTER TYPE #{qualified(op.enum_type)} " <>
+        "RENAME VALUE #{enum_literal(op.from)} TO #{enum_literal(op.to)}"
     ]
   end
 
@@ -146,8 +208,27 @@ defmodule Hologram.Database.DDL do
 
   defp delete_action(:restrict), do: "RESTRICT"
 
+  defp enum_literal(value) do
+    "'#{String.replace(value, "'", "''")}'"
+  end
+
   defp qualified(name) do
     "#{Mapper.quote_identifier(@data_schema)}.#{Mapper.quote_identifier(name)}"
+  end
+
+  defp rebuild_cast(quoted_column, remap) when remap == %{} do
+    "#{quoted_column}::text"
+  end
+
+  defp rebuild_cast(quoted_column, remap) do
+    branches =
+      remap
+      |> Enum.sort()
+      |> Enum.map_join(" ", fn {old_value, new_value} ->
+        "WHEN #{enum_literal(old_value)} THEN #{enum_literal(new_value)}"
+      end)
+
+    "(CASE #{quoted_column}::text #{branches} ELSE #{quoted_column}::text END)"
   end
 
   defp type_sql(type) when type in @builtin_types, do: type

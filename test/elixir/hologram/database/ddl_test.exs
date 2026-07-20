@@ -200,6 +200,152 @@ defmodule Hologram.Database.DDLTest do
     end
   end
 
+  describe "statements/1 for create_enum_type" do
+    test "renders the type with its values in order" do
+      op = %{op: :create_enum_type, enum_type: "task_status_$enum", values: ["todo", "done"]}
+
+      assert statements(op) == [
+               ~s{CREATE TYPE "hologram_data"."task_status_$enum" AS ENUM ('todo', 'done')}
+             ]
+    end
+
+    test "escapes single quotes in values" do
+      op = %{op: :create_enum_type, enum_type: "task_status_$enum", values: ["won't do"]}
+
+      assert statements(op) == [
+               ~s{CREATE TYPE "hologram_data"."task_status_$enum" AS ENUM ('won''t do')}
+             ]
+    end
+  end
+
+  describe "statements/1 for drop_enum_type" do
+    test "renders the schema-qualified type drop" do
+      op = %{op: :drop_enum_type, enum_type: "task_status_$enum"}
+
+      assert statements(op) == [~s(DROP TYPE "hologram_data"."task_status_$enum")]
+    end
+  end
+
+  describe "statements/1 for add_enum_value" do
+    test "renders a plain append for nil position" do
+      op = %{
+        op: :add_enum_value,
+        enum_type: "task_status_$enum",
+        value: "archived",
+        position: nil
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TYPE "hologram_data"."task_status_$enum" ADD VALUE 'archived')
+             ]
+    end
+
+    test "renders the BEFORE anchor for positioned values" do
+      op = %{
+        op: :add_enum_value,
+        enum_type: "task_status_$enum",
+        value: "draft",
+        position: {:before, "todo"}
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TYPE "hologram_data"."task_status_$enum" ) <>
+                 "ADD VALUE 'draft' BEFORE 'todo'"
+             ]
+    end
+  end
+
+  describe "statements/1 for rename_enum_value" do
+    test "renders the value rename" do
+      op = %{
+        op: :rename_enum_value,
+        enum_type: "task_status_$enum",
+        from: "done",
+        to: "completed"
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TYPE "hologram_data"."task_status_$enum" ) <>
+                 "RENAME VALUE 'done' TO 'completed'"
+             ]
+    end
+  end
+
+  describe "statements/1 for rebuild_enum_type" do
+    test "renders the rename-create-cast-drop sequence" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "task_status_$enum",
+        values: ["todo", "done"],
+        columns: [{"task", "status"}]
+      }
+
+      assert statements(op) == [
+               ~s(ALTER TYPE "hologram_data"."task_status_$enum" ) <>
+                 ~s(RENAME TO "task_status_$enum_$old"),
+               ~s{CREATE TYPE "hologram_data"."task_status_$enum" AS ENUM ('todo', 'done')},
+               ~s(ALTER TABLE "hologram_data"."task" ) <>
+                 ~s(ALTER COLUMN "status" TYPE "hologram_data"."task_status_$enum" ) <>
+                 ~s(USING "status"::text::"hologram_data"."task_status_$enum"),
+               ~s(DROP TYPE "hologram_data"."task_status_$enum_$old")
+             ]
+    end
+
+    test "renders one cast statement per column using the type" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "task_status_$enum",
+        values: ["done"],
+        columns: [{"project", "state"}, {"task", "status"}]
+      }
+
+      cast_statements =
+        op
+        |> statements()
+        |> Enum.filter(&String.contains?(&1, "ALTER COLUMN"))
+
+      assert length(cast_statements) == 2
+      assert Enum.at(cast_statements, 0) =~ ~s(ALTER TABLE "hologram_data"."project")
+      assert Enum.at(cast_statements, 1) =~ ~s(ALTER TABLE "hologram_data"."task")
+    end
+
+    test "renders the remap as a CASE expression in the cast" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "task_status_$enum",
+        values: ["todo", "done"],
+        columns: [{"task", "status"}],
+        remap: %{"wip" => "todo"}
+      }
+
+      cast_statement =
+        op
+        |> statements()
+        |> Enum.at(2)
+
+      assert cast_statement ==
+               ~s(ALTER TABLE "hologram_data"."task" ) <>
+                 ~s(ALTER COLUMN "status" TYPE "hologram_data"."task_status_$enum" ) <>
+                 ~s{USING (CASE "status"::text WHEN 'wip' THEN 'todo' } <>
+                 ~s{ELSE "status"::text END)::"hologram_data"."task_status_$enum"}
+    end
+
+    test "shortens the temporary type name over the PostgreSQL identifier limit" do
+      op = %{
+        op: :rebuild_enum_type,
+        enum_type: "task_extraordinarily_long_attribute_name_for_the_status_$enum",
+        values: ["done"],
+        columns: []
+      }
+
+      fitted_old_type = "task_extraordinarily_long_attribute_name_for_the_statu_aa768be9"
+      [rename_statement, _create_statement, drop_statement] = statements(op)
+
+      assert rename_statement =~ ~s(RENAME TO "#{fitted_old_type}")
+      assert drop_statement == ~s(DROP TYPE "hologram_data"."#{fitted_old_type}")
+    end
+  end
+
   describe "statements/1 for alter_column" do
     test "renders SET NOT NULL when the column becomes required" do
       op = %{

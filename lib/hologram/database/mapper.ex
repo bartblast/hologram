@@ -107,6 +107,28 @@ defmodule Hologram.Database.Mapper do
   end
 
   @doc """
+  Returns the given identifier unchanged when it fits the PostgreSQL identifier limit,
+  or shortened to a readable prefix followed by a short deterministic hash of the full
+  identifier otherwise.
+  """
+  @spec fit_identifier(String.t()) :: String.t()
+  def fit_identifier(identifier) do
+    if byte_size(identifier) > @max_identifier_bytes do
+      hash =
+        :md5
+        |> :crypto.hash(identifier)
+        |> Base.encode16(case: :lower)
+        |> binary_part(0, @hash_bytes)
+
+      prefix_bytes = @max_identifier_bytes - @hash_bytes - 1
+
+      binary_part(identifier, 0, prefix_bytes) <> "_" <> hash
+    else
+      identifier
+    end
+  end
+
+  @doc """
   Returns the join table definitions derived from the given entity type module's to-many
   relationships, sorted by relationship name.
 
@@ -298,22 +320,6 @@ defmodule Hologram.Database.Mapper do
         end)
 
       {cycles, MapSet.put(visited, entity_type)}
-    end
-  end
-
-  defp fit_identifier(identifier) do
-    if byte_size(identifier) > @max_identifier_bytes do
-      hash =
-        :md5
-        |> :crypto.hash(identifier)
-        |> Base.encode16(case: :lower)
-        |> binary_part(0, @hash_bytes)
-
-      prefix_bytes = @max_identifier_bytes - @hash_bytes - 1
-
-      binary_part(identifier, 0, prefix_bytes) <> "_" <> hash
-    else
-      identifier
     end
   end
 

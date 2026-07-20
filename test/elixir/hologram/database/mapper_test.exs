@@ -345,6 +345,25 @@ defmodule Hologram.Database.MapperTest do
     end
   end
 
+  describe "fit_identifier/1" do
+    test "returns identifiers within the PostgreSQL limit unchanged" do
+      assert fit_identifier("task_status_$enum") == "task_status_$enum"
+    end
+
+    test "returns a 63-byte identifier unchanged" do
+      identifier = String.duplicate("a", 63)
+
+      assert fit_identifier(identifier) == identifier
+    end
+
+    test "shortens identifiers over the limit to a prefix plus a deterministic hash" do
+      identifier = String.duplicate("a", 60) <> "_$enum"
+
+      assert fit_identifier(identifier) ==
+               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_2f41a680"
+    end
+  end
+
   describe "join_tables/1" do
     test "returns empty list for entity type with no to-many relationships" do
       assert join_tables(Module1) == []
