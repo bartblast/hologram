@@ -101,16 +101,18 @@ defmodule Hologram.Database.DDLTest do
         primary_key: %{columns: ["id"], constraint: "task_$pk"}
       }
 
-      expected_statement = """
-      CREATE TABLE "hologram_data"."task" (
-        "id" uuid NOT NULL,
-        "done" boolean,
-        "name" text COLLATE "C" NOT NULL,
-        "created_at" timestamptz NOT NULL,
-        "updated_at" timestamptz NOT NULL,
-        CONSTRAINT "task_$pk" PRIMARY KEY ("id")
-      )\
-      """
+      expected_statement =
+        """
+        CREATE TABLE "hologram_data"."task" (
+          "id" uuid NOT NULL,
+          "done" boolean,
+          "name" text COLLATE "C" NOT NULL,
+          "created_at" timestamptz NOT NULL,
+          "updated_at" timestamptz NOT NULL,
+          CONSTRAINT "task_$pk" PRIMARY KEY ("id")
+        )\
+        """
+        |> normalize_newlines()
 
       assert statements(op) == [expected_statement]
     end
@@ -126,13 +128,15 @@ defmodule Hologram.Database.DDLTest do
         primary_key: %{columns: ["id"], constraint: "task_$pk"}
       }
 
-      expected_statement = """
-      CREATE TABLE "hologram_data"."task" (
-        "id" uuid NOT NULL,
-        "status" "hologram_data"."task_status_$enum" NOT NULL,
-        CONSTRAINT "task_$pk" PRIMARY KEY ("id")
-      )\
-      """
+      expected_statement =
+        """
+        CREATE TABLE "hologram_data"."task" (
+          "id" uuid NOT NULL,
+          "status" "hologram_data"."task_status_$enum" NOT NULL,
+          CONSTRAINT "task_$pk" PRIMARY KEY ("id")
+        )\
+        """
+        |> normalize_newlines()
 
       assert statements(op) == [expected_statement]
     end
@@ -148,13 +152,15 @@ defmodule Hologram.Database.DDLTest do
         primary_key: %{columns: ["source_id", "target_id"], constraint: "task_tags_$join_$pk"}
       }
 
-      expected_statement = """
-      CREATE TABLE "hologram_data"."task_tags_$join" (
-        "source_id" uuid NOT NULL,
-        "target_id" uuid NOT NULL,
-        CONSTRAINT "task_tags_$join_$pk" PRIMARY KEY ("source_id", "target_id")
-      )\
-      """
+      expected_statement =
+        """
+        CREATE TABLE "hologram_data"."task_tags_$join" (
+          "source_id" uuid NOT NULL,
+          "target_id" uuid NOT NULL,
+          CONSTRAINT "task_tags_$join_$pk" PRIMARY KEY ("source_id", "target_id")
+        )\
+        """
+        |> normalize_newlines()
 
       assert statements(op) == [expected_statement]
     end
