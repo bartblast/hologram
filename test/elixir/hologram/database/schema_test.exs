@@ -29,9 +29,12 @@ defmodule Hologram.Database.SchemaTest do
                    primary_key: %{
                      columns: ["id"],
                      constraint: "test_fixtures_entity_module1_$pk"
-                   }
+                   },
+                   foreign_keys: %{},
+                   indexes: %{}
                  }
-               }
+               },
+               enum_types: %{}
              }
     end
 
@@ -65,7 +68,33 @@ defmodule Hologram.Database.SchemaTest do
       assert columns["c_id"] == %{type: "uuid", collation: nil, null: false}
     end
 
-    test "derives join tables with fixed columns and a composite primary key" do
+    test "derives foreign keys keyed by owning column with restrict delete action" do
+      foreign_keys = table(Module3, "test_fixtures_entity_module3").foreign_keys
+
+      assert foreign_keys == %{
+               "b_id" => %{
+                 references: "test_fixtures_entity_module2",
+                 on_delete: :restrict,
+                 constraint: "test_fixtures_entity_module3_b_id_$fk"
+               },
+               "c_id" => %{
+                 references: "test_fixtures_entity_module1",
+                 on_delete: :restrict,
+                 constraint: "test_fixtures_entity_module3_c_id_$fk"
+               }
+             }
+    end
+
+    test "derives an index per reference column" do
+      indexes = table(Module3, "test_fixtures_entity_module3").indexes
+
+      assert indexes == %{
+               "test_fixtures_entity_module3_b_id_$idx" => %{columns: ["b_id"]},
+               "test_fixtures_entity_module3_c_id_$idx" => %{columns: ["c_id"]}
+             }
+    end
+
+    test "derives join tables with fixed columns, composite primary key, foreign keys, and reverse index" do
       assert table(Module3, "test_fixtures_entity_module3_a_$join") == %{
                columns: %{
                  "source_id" => %{type: "uuid", collation: nil, null: false},
@@ -74,8 +103,35 @@ defmodule Hologram.Database.SchemaTest do
                primary_key: %{
                  columns: ["source_id", "target_id"],
                  constraint: "test_fixtures_entity_module3_a_$join_$pk"
+               },
+               foreign_keys: %{
+                 "source_id" => %{
+                   references: "test_fixtures_entity_module3",
+                   on_delete: :restrict,
+                   constraint: "test_fixtures_entity_module3_a_$join_source_id_$fk"
+                 },
+                 "target_id" => %{
+                   references: "test_fixtures_entity_module2",
+                   on_delete: :restrict,
+                   constraint: "test_fixtures_entity_module3_a_$join_target_id_$fk"
+                 }
+               },
+               indexes: %{
+                 "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
+                   columns: ["target_id", "source_id"]
+                 }
                }
              }
+    end
+
+    test "collects enum types with values in declaration order" do
+      enum_types =
+        [Module4]
+        |> Mapper.derive!()
+        |> from_mapping()
+        |> Map.fetch!(:enum_types)
+
+      assert enum_types == %{"test_fixtures_entity_module4_c_$enum" => ["x", "y"]}
     end
 
     test "collects tables across all entity types in the mapping" do
