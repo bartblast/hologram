@@ -95,6 +95,109 @@ defmodule Hologram.Database.SchemaTest do
     end
   end
 
+  describe "diff/2 - columns" do
+    test "emits add_column with the definition for target-only columns" do
+      target_task_table = %{
+        @task_table
+        | columns:
+            Map.put(@task_table.columns, "done", %{type: "boolean", collation: nil, null: false})
+      }
+
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+      target = %{tables: %{"task" => target_task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [
+               %{
+                 op: :add_column,
+                 table: "task",
+                 column: "done",
+                 definition: %{type: "boolean", collation: nil, null: false}
+               }
+             ]
+    end
+
+    test "emits drop_column for actual-only columns" do
+      target_task_table = %{@task_table | columns: Map.delete(@task_table.columns, "name")}
+
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+      target = %{tables: %{"task" => target_task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [%{op: :drop_column, table: "task", column: "name"}]
+    end
+
+    test "emits alter_column with before and after for changed definitions" do
+      target_task_table = %{
+        @task_table
+        | columns:
+            Map.put(@task_table.columns, "name", %{type: "text", collation: "C", null: true})
+      }
+
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+      target = %{tables: %{"task" => target_task_table}, enum_types: %{}}
+
+      assert diff(actual, target) == [
+               %{
+                 op: :alter_column,
+                 table: "task",
+                 column: "name",
+                 before: %{type: "text", collation: "C", null: false},
+                 after: %{type: "text", collation: "C", null: true}
+               }
+             ]
+    end
+
+    test "emits no column ops for tables missing on either side" do
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+      target = %{tables: %{"project" => @project_table}, enum_types: %{}}
+
+      column_ops =
+        actual
+        |> diff(target)
+        |> Enum.filter(&(&1.op in [:add_column, :drop_column, :alter_column]))
+
+      assert column_ops == []
+    end
+
+    test "orders column ops by kind, then table and column name" do
+      actual_project_table = %{
+        @project_table
+        | columns:
+            Map.put(@project_table.columns, "old", %{type: "boolean", collation: nil, null: false})
+      }
+
+      target_task_table = %{
+        @task_table
+        | columns:
+            @task_table.columns
+            |> Map.delete("name")
+            |> Map.put("done", %{type: "boolean", collation: nil, null: false})
+      }
+
+      target_project_table = %{
+        @project_table
+        | columns:
+            Map.put(@project_table.columns, "id", %{type: "uuid", collation: nil, null: true})
+      }
+
+      actual = %{
+        tables: %{"project" => actual_project_table, "task" => @task_table},
+        enum_types: %{}
+      }
+
+      target = %{
+        tables: %{"project" => target_project_table, "task" => target_task_table},
+        enum_types: %{}
+      }
+
+      assert Enum.map(diff(actual, target), &{&1.op, &1.table, &1[:column]}) == [
+               {:drop_column, "project", "old"},
+               {:drop_column, "task", "name"},
+               {:add_column, "task", "done"},
+               {:alter_column, "project", "id"}
+             ]
+    end
+  end
+
   describe "from_mapping/1" do
     test "derives a table with columns and primary key per entity type" do
       assert from_mapping(Mapper.derive!([Module1])) == %{

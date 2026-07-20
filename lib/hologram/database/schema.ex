@@ -9,11 +9,14 @@ defmodule Hologram.Database.Schema do
   render it. Tables present only in the target emit :create_table (columns and primary
   key - foreign keys and indexes are always separate ops), tables present only in the
   actual schema emit :drop_table (their own constraints, indexes, and columns die with
-  them). Ops are ordered alphabetically by table name within each kind.
+  them). Tables present on both sides diff column by column: target-only columns emit
+  :add_column (with the column definition), actual-only columns emit :drop_column, and
+  columns whose definitions differ emit :alter_column with :before/:after payloads.
+  Ops are ordered alphabetically by table and column name within each kind.
   """
   @spec diff(%{atom => any}, %{atom => any}) :: list(%{atom => any})
   def diff(actual, target) do
-    table_ops(actual.tables, target.tables)
+    table_ops(actual.tables, target.tables) ++ column_ops(actual.tables, target.tables)
   end
 
   @doc """
@@ -48,6 +51,63 @@ defmodule Hologram.Database.Schema do
       |> Map.new()
 
     %{tables: tables, enum_types: enum_types}
+  end
+
+  defp column_ops(actual_tables, target_tables) do
+    shared_tables =
+      actual_tables
+      |> Map.keys()
+      |> Enum.filter(&Map.has_key?(target_tables, &1))
+      |> Enum.sort()
+
+    drops =
+      Enum.flat_map(shared_tables, fn table ->
+        actual_tables[table].columns
+        |> Map.keys()
+        |> Enum.reject(&Map.has_key?(target_tables[table].columns, &1))
+        |> Enum.sort()
+        |> Enum.map(&%{op: :drop_column, table: table, column: &1})
+      end)
+
+    adds =
+      Enum.flat_map(shared_tables, fn table ->
+        target_tables[table].columns
+        |> Enum.reject(fn {name, _definition} ->
+          Map.has_key?(actual_tables[table].columns, name)
+        end)
+        |> Enum.sort_by(fn {name, _definition} -> name end)
+        |> Enum.map(fn {name, definition} ->
+          %{op: :add_column, table: table, column: name, definition: definition}
+        end)
+      end)
+
+    alters =
+      Enum.flat_map(shared_tables, fn table ->
+        actual_tables[table].columns
+        |> Enum.sort_by(fn {name, _definition} -> name end)
+        |> Enum.flat_map(fn {name, actual_definition} ->
+          case target_tables[table].columns[name] do
+            nil ->
+              []
+
+            ^actual_definition ->
+              []
+
+            target_definition ->
+              [
+                %{
+                  op: :alter_column,
+                  table: table,
+                  column: name,
+                  before: actual_definition,
+                  after: target_definition
+                }
+              ]
+          end
+        end)
+      end)
+
+    drops ++ adds ++ alters
   end
 
   defp entity_table(entity_mapping) do
