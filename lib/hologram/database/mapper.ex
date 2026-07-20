@@ -14,11 +14,12 @@ defmodule Hologram.Database.Mapper do
   system timestamps.
 
   Each definition is a map with :name (column name string), :type (the logical attribute type,
-  as consumed by the codec), :sql_type (the DDL type fragment - a derived per-attribute enum
-  type name for :enum attributes), :null (true only for optional declarations), :references
-  (the referenced table name for to-one relationship columns, nil otherwise), and :source
-  (:system, or the declaration the column is derived from). To-many relationships derive no
-  columns - they live in join tables.
+  as consumed by the codec), :sql_type (the SQL type name - a derived per-attribute enum type
+  name for :enum attributes), :collation (the pinned per-column collation name, nil for types
+  that carry none), :null (true only for optional declarations), :references (the referenced
+  table name for to-one relationship columns, nil otherwise), and :source (:system, or the
+  declaration the column is derived from). To-many relationships derive no columns - they
+  live in join tables.
 
   Raises Hologram.CompileError when two declarations derive the same column name (an attribute
   named x_id collides with a to-one relationship named x).
@@ -33,6 +34,7 @@ defmodule Hologram.Database.Mapper do
           name: Atom.to_string(name),
           type: type,
           sql_type: sql_type(type, table_name, name),
+          collation: collation(type),
           null: Keyword.get(opts, :optional) == true,
           references: nil,
           source: {:attribute, name}
@@ -47,6 +49,7 @@ defmodule Hologram.Database.Mapper do
           name: fit_identifier("#{name}_id"),
           type: :uuid,
           sql_type: "uuid",
+          collation: nil,
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
           source: {:relationship, name}
@@ -230,6 +233,10 @@ defmodule Hologram.Database.Mapper do
     hops_from_start ++ hops_before_start
   end
 
+  defp collation(:string), do: "C"
+
+  defp collation(_type), do: nil
+
   defp describe_column_collision({name, group}) do
     sources =
       Enum.map_join(group, ", ", fn column ->
@@ -301,7 +308,15 @@ defmodule Hologram.Database.Mapper do
   end
 
   defp id_column do
-    %{name: "id", type: :uuid, sql_type: "uuid", null: false, references: nil, source: :system}
+    %{
+      name: "id",
+      type: :uuid,
+      sql_type: "uuid",
+      collation: nil,
+      null: false,
+      references: nil,
+      source: :system
+    }
   end
 
   defp required_to_one_targets(entity_type) do
@@ -324,7 +339,7 @@ defmodule Hologram.Database.Mapper do
 
   defp sql_type(:integer, _table_name, _name), do: "int8"
 
-  defp sql_type(:string, _table_name, _name), do: ~s(text COLLATE "C")
+  defp sql_type(:string, _table_name, _name), do: "text"
 
   defp strip_root([root | [_head | _tail] = remainder], root), do: remainder
 
@@ -336,6 +351,7 @@ defmodule Hologram.Database.Mapper do
         name: name,
         type: :datetime,
         sql_type: "timestamptz",
+        collation: nil,
         null: false,
         references: nil,
         source: :system

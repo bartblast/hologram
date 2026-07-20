@@ -21,6 +21,7 @@ defmodule Hologram.Database.MapperTest do
                  name: "id",
                  type: :uuid,
                  sql_type: "uuid",
+                 collation: nil,
                  null: false,
                  references: nil,
                  source: :system
@@ -29,6 +30,7 @@ defmodule Hologram.Database.MapperTest do
                  name: "created_at",
                  type: :datetime,
                  sql_type: "timestamptz",
+                 collation: nil,
                  null: false,
                  references: nil,
                  source: :system
@@ -37,6 +39,7 @@ defmodule Hologram.Database.MapperTest do
                  name: "updated_at",
                  type: :datetime,
                  sql_type: "timestamptz",
+                 collation: nil,
                  null: false,
                  references: nil,
                  source: :system
@@ -55,6 +58,7 @@ defmodule Hologram.Database.MapperTest do
                  name: "a",
                  type: :boolean,
                  sql_type: "boolean",
+                 collation: nil,
                  null: false,
                  references: nil,
                  source: {:attribute, :a}
@@ -63,6 +67,7 @@ defmodule Hologram.Database.MapperTest do
                  name: "b",
                  type: :integer,
                  sql_type: "int8",
+                 collation: nil,
                  null: true,
                  references: nil,
                  source: {:attribute, :b}
@@ -70,7 +75,8 @@ defmodule Hologram.Database.MapperTest do
                %{
                  name: "c",
                  type: :string,
-                 sql_type: ~s(text COLLATE "C"),
+                 sql_type: "text",
+                 collation: "C",
                  null: false,
                  references: nil,
                  source: {:attribute, :c}
@@ -103,7 +109,12 @@ defmodule Hologram.Database.MapperTest do
     end
 
     test "maps :string to text with pinned C collation" do
-      assert column(Module2, "c").sql_type == ~s(text COLLATE "C")
+      assert column(Module2, "c").sql_type == "text"
+      assert column(Module2, "c").collation == "C"
+    end
+
+    test "derives nil collation for types that carry none" do
+      assert column(Module2, "a").collation == nil
     end
 
     test "derives to-one relationship reference columns and excludes to-many relationships" do
@@ -117,6 +128,7 @@ defmodule Hologram.Database.MapperTest do
                  name: "b_id",
                  type: :uuid,
                  sql_type: "uuid",
+                 collation: nil,
                  null: true,
                  references: "test_fixtures_entity_module2",
                  source: {:relationship, :b}
@@ -125,6 +137,7 @@ defmodule Hologram.Database.MapperTest do
                  name: "c_id",
                  type: :uuid,
                  sql_type: "uuid",
+                 collation: nil,
                  null: false,
                  references: "test_fixtures_entity_module1",
                  source: {:relationship, :c}
