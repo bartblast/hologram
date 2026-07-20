@@ -7,7 +7,94 @@ defmodule Hologram.Database.DDL do
   # in the data schema and must be schema-qualified and quoted.
   @builtin_types ["boolean", "date", "float8", "int8", "text", "timestamptz", "uuid"]
 
+  # Casts that succeed exactly when the existing rows allow them - each has a pre-flight
+  # check statement counting the rows that cannot follow.
+  @data_dependent_casts [
+    {"float8", "int8"},
+    {"text", "float8"},
+    {"text", "int8"},
+    {"timestamptz", "date"}
+  ]
+
   @data_schema "hologram_data"
+
+  # Casts that always succeed with no data loss (anything to text is handled separately -
+  # text is the universal sink, derived enum types included).
+  @safe_casts [{"date", "timestamptz"}, {"int8", "float8"}]
+
+  @doc """
+  Returns the pre-flight check statement for a data-dependent cast - a query counting
+  the rows whose values cannot follow the type change from the given type to the given
+  type. Only defined for type pairs classified :data_dependent by cast_class/2.
+  """
+  @spec cast_check_statement(String.t(), String.t(), String.t(), String.t()) :: String.t()
+  def cast_check_statement(table, column, "float8", "int8") do
+    quoted_column = Mapper.quote_identifier(column)
+
+    count_statement(table, "#{quoted_column} <> trunc(#{quoted_column})")
+  end
+
+  def cast_check_statement(table, column, "text", "float8") do
+    quoted_column = Mapper.quote_identifier(column)
+
+    count_statement(
+      table,
+      "NOT (#{quoted_column} ~ '^[+-]?([0-9]+(\\.[0-9]+)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$')"
+    )
+  end
+
+  def cast_check_statement(table, column, "text", "int8") do
+    quoted_column = Mapper.quote_identifier(column)
+
+    count_statement(table, "NOT (#{quoted_column} ~ '^[+-]?[0-9]+$')")
+  end
+
+  def cast_check_statement(table, column, "timestamptz", "date") do
+    quoted_column = Mapper.quote_identifier(column)
+
+    count_statement(table, "#{quoted_column} <> date_trunc('day', #{quoted_column})")
+  end
+
+  @doc """
+  Returns the cast class for a column type change: :safe (always succeeds, rendered as
+  a plain USING cast), :data_dependent (succeeds exactly when the existing rows allow
+  it - pre-flight checked via cast_check_statement/4), or :unsupported (no automatic
+  conversion exists - the change requires removing and re-adding the attribute).
+  Identity and anything-to-text are safe - text is the universal sink, derived enum
+  types included.
+  """
+  @spec cast_class(String.t(), String.t()) :: :safe | :data_dependent | :unsupported
+  def cast_class(type, type), do: :safe
+
+  def cast_class(_from_type, "text"), do: :safe
+
+  def cast_class(from_type, to_type) do
+    cond do
+      {from_type, to_type} in @safe_casts -> :safe
+      {from_type, to_type} in @data_dependent_casts -> :data_dependent
+      true -> :unsupported
+    end
+  end
+
+  @doc """
+  Returns the pre-flight check statement counting the rows that hold any of the given
+  enum values in the given column - the values a rebuild would leave unrepresentable.
+  """
+  @spec enum_values_check_statement(String.t(), String.t(), list(String.t())) :: String.t()
+  def enum_values_check_statement(table, column, values) do
+    literals = Enum.map_join(values, ", ", &enum_literal/1)
+
+    count_statement(table, "#{Mapper.quote_identifier(column)}::text IN (#{literals})")
+  end
+
+  @doc """
+  Returns the pre-flight check statement counting the rows with a NULL in the given
+  column - the rows that block making the column required without a fill.
+  """
+  @spec null_check_statement(String.t(), String.t()) :: String.t()
+  def null_check_statement(table, column) do
+    count_statement(table, "#{Mapper.quote_identifier(column)} IS NULL")
+  end
 
   @doc """
   Returns the DDL statements that execute the given change op, in execution order.
@@ -204,6 +291,10 @@ defmodule Hologram.Database.DDL do
       end
 
     "#{type_sql(definition.type)}#{collate_part}"
+  end
+
+  defp count_statement(table, predicate) do
+    "SELECT COUNT(*) FROM #{qualified(table)} WHERE #{predicate}"
   end
 
   defp delete_action(:restrict), do: "RESTRICT"

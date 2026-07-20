@@ -3,6 +3,89 @@ defmodule Hologram.Database.DDLTest do
 
   import Hologram.Database.DDL
 
+  describe "cast_class/2" do
+    test "classifies identity as safe" do
+      assert cast_class("int8", "int8") == :safe
+    end
+
+    test "classifies any type to text as safe" do
+      assert cast_class("int8", "text") == :safe
+      assert cast_class("task_status_$enum", "text") == :safe
+    end
+
+    test "classifies int8 to float8 as safe" do
+      assert cast_class("int8", "float8") == :safe
+    end
+
+    test "classifies date to timestamptz as safe" do
+      assert cast_class("date", "timestamptz") == :safe
+    end
+
+    test "classifies text to int8 as data-dependent" do
+      assert cast_class("text", "int8") == :data_dependent
+    end
+
+    test "classifies text to float8 as data-dependent" do
+      assert cast_class("text", "float8") == :data_dependent
+    end
+
+    test "classifies float8 to int8 as data-dependent" do
+      assert cast_class("float8", "int8") == :data_dependent
+    end
+
+    test "classifies timestamptz to date as data-dependent" do
+      assert cast_class("timestamptz", "date") == :data_dependent
+    end
+
+    test "classifies conversions with no automatic path as unsupported" do
+      assert cast_class("boolean", "date") == :unsupported
+      assert cast_class("text", "task_status_$enum") == :unsupported
+      assert cast_class("uuid", "int8") == :unsupported
+    end
+  end
+
+  describe "cast_check_statement/4" do
+    test "counts rows with fractional parts for float8 to int8" do
+      assert cast_check_statement("task", "score", "float8", "int8") ==
+               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
+                 ~s{WHERE "score" <> trunc("score")}
+    end
+
+    test "counts rows with non-integer text for text to int8" do
+      assert cast_check_statement("task", "count", "text", "int8") ==
+               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
+                 ~s{WHERE NOT ("count" ~ '^[+-]?[0-9]+$')}
+    end
+
+    test "counts rows with non-numeric text for text to float8" do
+      assert cast_check_statement("task", "score", "text", "float8") ==
+               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
+                 ~s{WHERE NOT ("score" ~ } <>
+                 ~s{'^[+-]?([0-9]+(\\.[0-9]+)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$')}
+    end
+
+    test "counts rows with a time part for timestamptz to date" do
+      assert cast_check_statement("task", "due_at", "timestamptz", "date") ==
+               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
+                 ~s{WHERE "due_at" <> date_trunc('day', "due_at")}
+    end
+  end
+
+  describe "enum_values_check_statement/3" do
+    test "counts rows holding any of the given values" do
+      assert enum_values_check_statement("task", "status", ["wip", "blocked"]) ==
+               ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
+                 ~s{WHERE "status"::text IN ('wip', 'blocked')}
+    end
+  end
+
+  describe "null_check_statement/2" do
+    test "counts rows with a NULL in the column" do
+      assert null_check_statement("task", "subtitle") ==
+               ~s{SELECT COUNT(*) FROM "hologram_data"."task" WHERE "subtitle" IS NULL}
+    end
+  end
+
   describe "statements/1 for create_table" do
     test "renders columns in canonical order with the named primary key constraint" do
       op = %{
