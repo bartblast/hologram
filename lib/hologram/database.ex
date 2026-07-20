@@ -7,6 +7,7 @@ defmodule Hologram.Database do
   alias Hologram.Database.Connection
   alias Hologram.Database.EntityOperations
   alias Hologram.Database.Mapper
+  alias Hologram.Database.SchemaReconciler
   alias Hologram.Reflection
 
   @mapping_key {__MODULE__, :mapping}
@@ -112,7 +113,36 @@ defmodule Hologram.Database do
   end
 
   @doc """
-  Starts the database: derives and caches the mapping, then starts the connection pool.
+  Runs dev schema reconciliation as a one-shot supervision child after the pool starts
+  and returns :ignore (no process stays running). A failed reconciliation fails the
+  boot loudly.
+  """
+  @spec reconcile_at_boot() :: :ignore
+  def reconcile_at_boot do
+    SchemaReconciler.reconcile(reconciliation_context())
+
+    :ignore
+  end
+
+  @doc """
+  Returns the context for a schema reconciliation run: the cached mapping, the guard
+  facts (otp_app and env as strings), and the marker diagnostics (the Hologram version
+  and the current UTC timestamp).
+  """
+  @spec reconciliation_context() :: %{atom => any}
+  def reconciliation_context do
+    %{
+      mapping: mapping(),
+      otp_app: Atom.to_string(Reflection.otp_app()),
+      env: Atom.to_string(Hologram.env()),
+      hologram_version: to_string(Application.spec(:hologram, :vsn)),
+      timestamp: DateTime.utc_now(:microsecond)
+    }
+  end
+
+  @doc """
+  Starts the database: derives and caches the mapping, then starts the connection pool -
+  in dev, schema reconciliation runs as a one-shot boot step right after the pool is up.
   The given opts override the resolved connection options. The database is a VM-wide
   singleton - starting while an instance is already running yields :ignore instead of
   failing the caller's supervision tree.
@@ -152,6 +182,15 @@ defmodule Hologram.Database do
         opts
       )
 
-    Supervisor.init([{Postgrex, postgrex_opts}], strategy: :one_for_one)
+    pool_child = {Postgrex, postgrex_opts}
+
+    children =
+      if Hologram.env() == :dev do
+        [pool_child, %{id: :schema_reconciliation, start: {__MODULE__, :reconcile_at_boot, []}}]
+      else
+        [pool_child]
+      end
+
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end
