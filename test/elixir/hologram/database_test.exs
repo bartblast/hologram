@@ -1,10 +1,13 @@
 defmodule Hologram.DatabaseTest do
   # async: false - the dev-boot test flips the HOLOGRAM_ENV env var, which is global.
-  use Hologram.Test.BasicCase, async: false
+  use Hologram.Test.DatabaseCase, async: false
 
   import Hologram.Database
 
+  alias Hologram.Database.Connection
+  alias Hologram.Database.Introspection
   alias Hologram.Database.Mapper
+  alias Hologram.Database.Schema
   alias Hologram.Reflection
 
   describe "init/1" do
@@ -45,6 +48,17 @@ defmodule Hologram.DatabaseTest do
       assert context.env == "test"
       assert context.hologram_version == Mix.Project.config()[:version]
       assert %DateTime{} = context.timestamp
+    end
+  end
+
+  describe "reload/0" do
+    test "re-derives the mapping and reconciles the schema" do
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_system" CASCADE))
+      {:ok, _result} = Connection.query(~s(DROP SCHEMA "hologram_data" CASCADE))
+
+      assert reload() == :ok
+
+      assert Introspection.schema() == Schema.from_mapping(mapping())
     end
   end
 end

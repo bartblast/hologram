@@ -141,6 +141,23 @@ defmodule Hologram.Database do
   end
 
   @doc """
+  Re-derives and re-caches the mapping from the current entity type modules, then
+  reconciles the schema - the live-reload path after a dev code change. A no-op when
+  the database is not running (no entities declared at boot). Returns :ok.
+  """
+  @spec reload() :: :ok
+  def reload do
+    if Process.whereis(__MODULE__) do
+      mapping = Mapper.derive!(Reflection.list_entities())
+      :persistent_term.put(@mapping_key, mapping)
+
+      SchemaReconciler.reconcile(reconciliation_context())
+    end
+
+    :ok
+  end
+
+  @doc """
   Starts the database: derives and caches the mapping, then starts the connection pool -
   in dev, schema reconciliation runs as a one-shot boot step right after the pool is up.
   The given opts override the resolved connection options. The database is a VM-wide
