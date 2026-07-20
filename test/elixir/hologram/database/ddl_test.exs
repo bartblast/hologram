@@ -13,14 +13,15 @@ defmodule Hologram.Database.DDLTest do
     test "counts rows with non-integer text for text to int8" do
       assert cast_check_statement("task", "count", "text", "int8") ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
-                 ~s{WHERE NOT ("count" ~ '^[+-]?[0-9]+$')}
+                 ~s{WHERE NOT ("count" ~ '^\\s*[+-]?[0-9]+\\s*$')}
     end
 
     test "counts rows with non-numeric text for text to float8" do
       assert cast_check_statement("task", "score", "text", "float8") ==
                ~s{SELECT COUNT(*) FROM "hologram_data"."task" } <>
                  ~s{WHERE NOT ("score" ~ } <>
-                 ~s{'^[+-]?([0-9]+(\\.[0-9]+)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$')}
+                 ~s{'^\\s*[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?\\s*$' } <>
+                 ~s{OR "score" ~* '^\\s*[+-]?(inf(inity)?|nan)\\s*$')}
     end
 
     test "counts rows with a time part for timestamptz to date" do

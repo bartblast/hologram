@@ -247,7 +247,7 @@ defmodule Hologram.Database.SchemaReconcilerTest do
 
     test "converges a data-dependent type change when the rows allow it" do
       reconcile(reconcile_context([Module2]))
-      insert_module2_row("NULL", "'123'")
+      insert_module2_row("NULL", "' 123 '")
 
       context =
         [Module2]

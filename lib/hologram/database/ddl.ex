@@ -34,19 +34,29 @@ defmodule Hologram.Database.DDL do
     count_statement(table, "#{quoted_column} <> trunc(#{quoted_column})")
   end
 
+  # Mirrors PostgreSQL's float8 input rules: surrounding whitespace, optional exponent,
+  # bare-dot forms (5. and .5), and the case-insensitive specials NaN/Infinity/inf.
+  # Conservative approximation - exotic platform-dependent forms (hex floats) are still
+  # flagged, with the error's ways out covering them.
+  # TODO: replace with pg_input_is_valid once the minimum supported PostgreSQL version is 16.
   def cast_check_statement(table, column, "text", "float8") do
     quoted_column = Mapper.quote_identifier(column)
 
+    numeric_regex = "'^\\s*[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?\\s*$'"
+    special_regex = "'^\\s*[+-]?(inf(inity)?|nan)\\s*$'"
+
     count_statement(
       table,
-      "NOT (#{quoted_column} ~ '^[+-]?([0-9]+(\\.[0-9]+)?|\\.[0-9]+)([eE][+-]?[0-9]+)?$')"
+      "NOT (#{quoted_column} ~ #{numeric_regex} OR #{quoted_column} ~* #{special_regex})"
     )
   end
 
+  # Mirrors PostgreSQL's int8 input rules: surrounding whitespace is accepted.
+  # TODO: replace with pg_input_is_valid once the minimum supported PostgreSQL version is 16.
   def cast_check_statement(table, column, "text", "int8") do
     quoted_column = Mapper.quote_identifier(column)
 
-    count_statement(table, "NOT (#{quoted_column} ~ '^[+-]?[0-9]+$')")
+    count_statement(table, "NOT (#{quoted_column} ~ '^\\s*[+-]?[0-9]+\\s*$')")
   end
 
   def cast_check_statement(table, column, "timestamptz", "date") do
