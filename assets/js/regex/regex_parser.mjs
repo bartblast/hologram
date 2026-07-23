@@ -26,9 +26,9 @@ const ESCAPE_ANCHOR_KINDS = {
 // properties, \Q...\E) are implemented
 const FUTURE_CLASS_ESCAPES = new Set([..."EPQp"]);
 
-// TODO: shrink as remaining escape sequences (backreferences, subroutine
-// references, Unicode properties, \K, \Q...\E) are implemented
-const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EKPQgkp123456789"]);
+// TODO: shrink as remaining escape sequences (delimited backreferences,
+// subroutine references, Unicode properties, \K, \Q...\E) are implemented
+const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EKPQgkp"]);
 
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
@@ -59,16 +59,29 @@ const SHORTHAND_CLASS_LETTERS = new Set([..."DHSVWdhsvw"]);
 const UNSUPPORTED_BY_PCRE2_ESCAPES = new Set(["F", "L", "U", "l", "u"]);
 
 export default class RegexParser {
+  #allGroupNames = null;
   #dupnames;
   #groupCount = 0;
   #groupNames = new Set();
   #noAutoCapture;
   #position = 0;
   #source;
+  #totalGroups = null;
   #unicode;
 
+  // Parsing is done in two passes, because PCRE2 allows forward references:
+  // whether \12 is a backreference or an octal escape depends on the total
+  // number of capture groups in the whole pattern. The first (lenient) pass
+  // only collects the group count and names, the second pass builds the AST.
   static parse(source, opts = {}) {
-    return new RegexParser(source, opts).#parsePattern();
+    const prescanner = new RegexParser(source, opts);
+    prescanner.#parsePattern();
+
+    const parser = new RegexParser(source, opts);
+    parser.#allGroupNames = prescanner.#groupNames;
+    parser.#totalGroups = prescanner.#groupCount;
+
+    return parser.#parsePattern();
   }
 
   constructor(source, opts = {}) {
@@ -501,6 +514,46 @@ export default class RegexParser {
     return upperCased ^ 0x40;
   }
 
+  // Parses a \ddd escape starting with a non-zero digit, with the position at
+  // the first digit. Such an escape is a backreference when the group exists,
+  // an octal character escape as a fallback, matching PCRE2 behavior.
+  #parseDigitEscape() {
+    const digitsStart = this.#position;
+
+    while (this.#isDigit(this.#peek())) this.#position++;
+
+    const digits = this.#source.slice(digitsStart, this.#position);
+    const number = Number(digits);
+
+    // Lenient prescan pass: the total group count isn't known yet
+    if (this.#totalGroups === null) {
+      return {type: "backreference", number: number, name: null};
+    }
+
+    if (number <= this.#totalGroups) {
+      return {type: "backreference", number: number, name: null};
+    }
+
+    // A single-digit escape is always a backreference
+    if (digits.length === 1) {
+      throw new RegexParseError(
+        "reference to non-existent subpattern",
+        this.#position,
+      );
+    }
+
+    // Octal fallback: re-read as an octal escape plus literal digits
+    if (digits[0] <= "7") {
+      this.#position = digitsStart;
+      return {type: "literal", codePoint: this.#parseOctalEscape()};
+    }
+
+    throw new RegexParseError(
+      "reference to non-existent subpattern",
+      this.#position,
+    );
+  }
+
   #parseEscape() {
     this.#position++;
 
@@ -527,6 +580,8 @@ export default class RegexParser {
       this.#position++;
       return {type: "newlineSequence"};
     }
+
+    if (this.#isDigit(char) && char !== "0") return this.#parseDigitEscape();
 
     const codePoint = this.#tryParseCharEscapeCodePoint(false);
 
@@ -1056,6 +1111,12 @@ export default class RegexParser {
 
       // \8 and \9 are literal digits inside a class
       if (char === "8" || char === "9") {
+        this.#position++;
+        return char.codePointAt(0);
+      }
+
+      // \g and \k are literal letters inside a class
+      if (char === "g" || char === "k") {
         this.#position++;
         return char.codePointAt(0);
       }

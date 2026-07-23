@@ -162,6 +162,121 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("backreferences", () => {
+      it("parses single-digit backreference", () => {
+        assert.deepEqual(RegexParser.parse("(a)\\1"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: 1, name: null},
+          ],
+        });
+      });
+
+      it("parses forward reference", () => {
+        assert.deepEqual(RegexParser.parse("\\2(a)(b)"), {
+          type: "concatenation",
+          items: [
+            {type: "backreference", number: 2, name: null},
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "group",
+              number: 2,
+              name: null,
+              content: {type: "literal", codePoint: 98},
+            },
+          ],
+        });
+      });
+
+      it("parses multi-digit backreference when the group exists", () => {
+        const groups = [..."abcdefghijkl"].map((char, index) => ({
+          type: "group",
+          number: index + 1,
+          name: null,
+          content: {type: "literal", codePoint: char.codePointAt(0)},
+        }));
+
+        assert.deepEqual(
+          RegexParser.parse("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\12"),
+          {
+            type: "concatenation",
+            items: [...groups, {type: "backreference", number: 12, name: null}],
+          },
+        );
+      });
+
+      it("parses multi-digit escape as octal when the group doesn't exist", () => {
+        assert.deepEqual(RegexParser.parse("\\12"), {
+          type: "literal",
+          codePoint: 10,
+        });
+      });
+
+      it("stops octal fallback at non-octal digit", () => {
+        assert.deepEqual(RegexParser.parse("\\19"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 1},
+            {type: "literal", codePoint: 57},
+          ],
+        });
+      });
+
+      it("binds quantifier to the literal digit after octal fallback", () => {
+        assert.deepEqual(RegexParser.parse("\\19*"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 1},
+            {
+              type: "quantifier",
+              min: 0,
+              max: null,
+              mode: "greedy",
+              item: {type: "literal", codePoint: 57},
+            },
+          ],
+        });
+      });
+
+      it("parses octal fallback above \\377 in unicode mode", () => {
+        assert.deepEqual(RegexParser.parse("\\777", {unicode: true}), {
+          type: "literal",
+          codePoint: 511,
+        });
+      });
+
+      it("raises on single-digit reference to non-existent group", () => {
+        assertRegexParseError("\\1", "reference to non-existent subpattern", 2);
+      });
+
+      it("raises on multi-digit reference starting with 8 or 9", () => {
+        assertRegexParseError(
+          "\\89",
+          "reference to non-existent subpattern",
+          3,
+        );
+      });
+
+      it("raises on octal fallback above \\377 in 8-bit mode", () => {
+        assertRegexParseError(
+          "\\777",
+          "octal value is greater than \\377 in 8-bit non-UTF-8 mode",
+          4,
+        );
+      });
+    });
+
     describe("character classes", () => {
       it("parses class with single characters", () => {
         assert.deepEqual(RegexParser.parse("[abc]"), {
@@ -439,6 +554,17 @@ describe("RegexParser", () => {
           items: [
             {type: "literal", codePoint: 56},
             {type: "literal", codePoint: 57},
+          ],
+        });
+      });
+
+      it("parses \\g and \\k as literal letters", () => {
+        assert.deepEqual(RegexParser.parse("[\\g\\k]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 103},
+            {type: "literal", codePoint: 107},
           ],
         });
       });
