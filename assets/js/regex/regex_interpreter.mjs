@@ -11,6 +11,7 @@ export default class RegexInterpreter {
     const state = {
       caseless: opts.caseless === true,
       subject: subject,
+      ungreedy: opts.ungreedy === true,
       unicode: opts.unicode === true,
     };
 
@@ -146,6 +147,9 @@ export default class RegexInterpreter {
         return continuation(position + $.#codePointLength(state, codePoint));
       }
 
+      case "quantifier":
+        return $.#matchQuantifier(node, state, position, continuation);
+
       // Start options are compile metadata and match nothing
       case "startOption":
         return continuation(position);
@@ -156,6 +160,52 @@ export default class RegexInterpreter {
           `unsupported AST node for interpretation: ${node.type}`,
         );
     }
+  }
+
+  static #matchQuantifier(node, state, position, continuation) {
+    if (node.mode === "possessive") {
+      // TODO: remove when atomic matching is implemented
+      throw new Error(
+        "unsupported quantifier mode for interpretation: possessive",
+      );
+    }
+
+    // The ungreedy option swaps the meaning of greedy and lazy
+    const isLazy = (node.mode === "lazy") !== state.ungreedy;
+
+    return $.#matchRepetitions(node, state, position, 0, isLazy, continuation);
+  }
+
+  static #matchRepetitions(node, state, position, count, isLazy, continuation) {
+    const canStop = count >= node.min;
+    const canContinue = node.max === null || count < node.max;
+
+    const tryMore = () =>
+      canContinue &&
+      $.#matchNode(node.item, state, position, (nextPosition) => {
+        // An empty iteration beyond the required minimum would repeat
+        // forever, so it stops the repetition, matching PCRE2 behavior
+        if (nextPosition === position && count >= node.min) return false;
+
+        return $.#matchRepetitions(
+          node,
+          state,
+          nextPosition,
+          count + 1,
+          isLazy,
+          continuation,
+        );
+      });
+
+    if (isLazy) {
+      if (canStop && continuation(position)) return true;
+
+      return tryMore();
+    }
+
+    if (tryMore()) return true;
+
+    return canStop && continuation(position);
   }
 
   static #matchSequence(items, itemIndex, state, position, continuation) {
