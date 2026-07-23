@@ -878,6 +878,15 @@ export default class Hologram {
       Debouncer.flush(event.target),
     );
 
+    // Submit is a commit point: everything entered into the form is logically before it, so the
+    // form's pending debounced dispatches run first. Capture phase guarantees the flush precedes
+    // the form's own bound handler reading the event payload and dispatching.
+    document.addEventListener(
+      "submit",
+      (event) => Debouncer.flushWithin(event.target),
+      true,
+    );
+
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
       $.#historyId = history.state;
