@@ -15,6 +15,47 @@ const translate = (source, opts = {}) =>
 
 describe("RegexTranslator", () => {
   describe("translate()", () => {
+    describe("anchors", () => {
+      it("translates subject anchors", () => {
+        assert.deepEqual(translate("\\Aa\\z"), {source: "^a$", flags: ""});
+      });
+
+      it("translates \\Z to end-before-final-newline lookahead", () => {
+        assert.deepEqual(translate("a\\Z"), {
+          source: "a(?=\\n?$)",
+          flags: "",
+        });
+      });
+
+      it("translates default ^ and $", () => {
+        assert.deepEqual(translate("^a$"), {
+          source: "^a(?=\\n?$)",
+          flags: "",
+        });
+      });
+
+      it("translates $ with dollar_endonly", () => {
+        assert.deepEqual(translate("a$", {dollarEndonly: true}), {
+          source: "a$",
+          flags: "",
+        });
+      });
+
+      it("translates multiline ^ and $ via rewrites", () => {
+        assert.deepEqual(translate("^a$", {multiline: true}), {
+          source: "(?:^|(?<=\\n))a(?=\\n|$)",
+          flags: "",
+        });
+      });
+
+      it("translates word boundaries", () => {
+        assert.deepEqual(translate("\\ba\\B"), {
+          source: "\\ba\\B",
+          flags: "",
+        });
+      });
+    });
+
     describe("classes", () => {
       it("translates class with range and single chars", () => {
         assert.deepEqual(translate("[a-z0]"), {
@@ -33,6 +74,48 @@ describe("RegexTranslator", () => {
 
       it("escapes - class member", () => {
         assert.deepEqual(translate("[a-]"), {source: "[a\\-]", flags: ""});
+      });
+
+      it("expands shorthand members", () => {
+        assert.deepEqual(translate("[\\d\\s]"), {
+          source: "[0-9\\x09-\\x0d ]",
+          flags: "",
+        });
+      });
+
+      it("expands negated shorthand member to its complement", () => {
+        assert.deepEqual(translate("[\\D]"), {
+          source: "[\\x00-/:-ÿ]",
+          flags: "",
+        });
+      });
+
+      it("expands negated shorthand member up to the unicode maximum", () => {
+        assert.deepEqual(translate("[\\D]", {unicode: true}), {
+          source: "[\\x00-/:-\\u{10ffff}]",
+          flags: "u",
+        });
+      });
+
+      it("expands POSIX class member", () => {
+        assert.deepEqual(translate("[[:digit:]]"), {
+          source: "[0-9]",
+          flags: "",
+        });
+      });
+
+      it("expands negated POSIX class member to its complement", () => {
+        assert.deepEqual(translate("[[:^alpha:]]"), {
+          source: "[\\x00-@[-`{-ÿ]",
+          flags: "",
+        });
+      });
+
+      it("expands POSIX class member next to plain members", () => {
+        assert.deepEqual(translate("[[:upper:]x]"), {
+          source: "[A-Zx]",
+          flags: "",
+        });
       });
     });
 
@@ -142,6 +225,50 @@ describe("RegexTranslator", () => {
         assert.deepEqual(translate("😀", {unicode: true}), {
           source: "\\u{1f600}",
           flags: "u",
+        });
+      });
+    });
+
+    describe("escape rewrites", () => {
+      it("translates \\d and \\w directly", () => {
+        assert.deepEqual(translate("\\d\\D\\w\\W"), {
+          source: "\\d\\D\\w\\W",
+          flags: "",
+        });
+      });
+
+      it("rewrites \\s to the PCRE2 whitespace set", () => {
+        assert.deepEqual(translate("\\s\\S"), {
+          source: "[\\x09-\\x0d ][^\\x09-\\x0d ]",
+          flags: "",
+        });
+      });
+
+      it("rewrites \\h to the horizontal whitespace set", () => {
+        assert.deepEqual(translate("\\h"), {
+          source: "[\\x09 \u00a0\u1680\u180e\u2000-\u200a\u202f\u205f\u3000]",
+          flags: "",
+        });
+      });
+
+      it("rewrites \\v to the vertical whitespace set", () => {
+        assert.deepEqual(translate("\\v"), {
+          source: "[\\x0a-\\x0d\u0085\u2028-\u2029]",
+          flags: "",
+        });
+      });
+
+      it("rewrites \\R to the newline sequence alternation", () => {
+        assert.deepEqual(translate("\\R"), {
+          source: "(?:\\r\\n|[\\x0a-\\x0d\u0085\u2028-\u2029])",
+          flags: "",
+        });
+      });
+
+      it("rewrites \\N to the non-newline class", () => {
+        assert.deepEqual(translate("\\N", {dotall: true}), {
+          source: "[^\\n]",
+          flags: "",
         });
       });
     });

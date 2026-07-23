@@ -6,13 +6,97 @@ const CLASS_METACHARS = new Set([..."\\]^-"]);
 // Chars that must be escaped outside character classes.
 const METACHARS = new Set([..."$()*+.?[\\]^{|}"]);
 
+// PCRE2 character sets of the POSIX classes, as sorted code point ranges.
+const POSIX_SETS = {
+  alnum: [
+    [0x30, 0x39],
+    [0x41, 0x5a],
+    [0x61, 0x7a],
+  ],
+  alpha: [
+    [0x41, 0x5a],
+    [0x61, 0x7a],
+  ],
+  ascii: [[0x00, 0x7f]],
+  blank: [
+    [0x09, 0x09],
+    [0x20, 0x20],
+  ],
+  cntrl: [
+    [0x00, 0x1f],
+    [0x7f, 0x7f],
+  ],
+  digit: [[0x30, 0x39]],
+  graph: [[0x21, 0x7e]],
+  lower: [[0x61, 0x7a]],
+  print: [[0x20, 0x7e]],
+  punct: [
+    [0x21, 0x2f],
+    [0x3a, 0x40],
+    [0x5b, 0x60],
+    [0x7b, 0x7e],
+  ],
+  space: [
+    [0x09, 0x0d],
+    [0x20, 0x20],
+  ],
+  upper: [[0x41, 0x5a]],
+  word: [
+    [0x30, 0x39],
+    [0x41, 0x5a],
+    [0x5f, 0x5f],
+    [0x61, 0x7a],
+  ],
+  xdigit: [
+    [0x30, 0x39],
+    [0x41, 0x46],
+    [0x61, 0x66],
+  ],
+};
+
+// PCRE2 character sets of the shorthand class escapes, as sorted code point
+// ranges. The d and w sets match the JS \d and \w escapes exactly, the others
+// differ from their JS counterparts.
+const SHORTHAND_SETS = {
+  d: [[0x30, 0x39]],
+  h: [
+    [0x09, 0x09],
+    [0x20, 0x20],
+    [0xa0, 0xa0],
+    [0x1680, 0x1680],
+    [0x180e, 0x180e],
+    [0x2000, 0x200a],
+    [0x202f, 0x202f],
+    [0x205f, 0x205f],
+    [0x3000, 0x3000],
+  ],
+  s: [
+    [0x09, 0x0d],
+    [0x20, 0x20],
+  ],
+  v: [
+    [0x0a, 0x0d],
+    [0x85, 0x85],
+    [0x2028, 0x2029],
+  ],
+  w: [
+    [0x30, 0x39],
+    [0x41, 0x5a],
+    [0x5f, 0x5f],
+    [0x61, 0x7a],
+  ],
+};
+
 export default class RegexTranslator {
   // Translates a parsed pattern into JS RegExp source and flags with
   // matching semantics. Only patterns routed to the native engine are
   // translatable.
   static translate(ast, opts = {}) {
     const context = {
+      dollarEndonly: opts.dollarEndonly === true,
       dotall: opts.dotall === true,
+      maxCodePoint: opts.unicode === true ? 0x10ffff : 0xff,
+      multiline: opts.multiline === true,
       unicode: opts.unicode === true,
     };
 
@@ -22,6 +106,24 @@ export default class RegexTranslator {
     if (opts.unicode === true) flags += "u";
 
     return {source: $.#translateNode(ast, context), flags: flags};
+  }
+
+  // Returns the ranges of all code points up to maxCodePoint that are not
+  // covered by the given sorted ranges.
+  static #complementRanges(ranges, maxCodePoint) {
+    const complement = [];
+    let nextCodePoint = 0;
+
+    for (const [from, to] of ranges) {
+      if (from > nextCodePoint) complement.push([nextCodePoint, from - 1]);
+      nextCodePoint = to + 1;
+    }
+
+    if (nextCodePoint <= maxCodePoint) {
+      complement.push([nextCodePoint, maxCodePoint]);
+    }
+
+    return complement;
   }
 
   static #escapeChar(codePoint) {
@@ -50,6 +152,62 @@ export default class RegexTranslator {
     return $.#escapeCharCommon(codePoint, char);
   }
 
+  static #rangesToClassContent(ranges) {
+    return ranges
+      .map(([from, to]) =>
+        from === to
+          ? $.#escapeClassChar(from)
+          : `${$.#escapeClassChar(from)}-${$.#escapeClassChar(to)}`,
+      )
+      .join("");
+  }
+
+  // Emits a set as class content, complementing it for negated set members,
+  // because JS classes can't nest negation.
+  static #setToClassContent(ranges, negated, context) {
+    const effectiveRanges = negated
+      ? $.#complementRanges(ranges, context.maxCodePoint)
+      : ranges;
+
+    return $.#rangesToClassContent(effectiveRanges);
+  }
+
+  static #translateAnchor(node, context) {
+    switch (node.kind) {
+      // PCRE2 multiline ^ matches only after \n, while the JS m-flag ^ also
+      // matches after \r and the line separators, so multiline is always
+      // handled by rewriting instead of the m flag
+      case "lineStart":
+        return context.multiline ? "(?:^|(?<=\\n))" : "^";
+
+      // Without dollar_endonly, $ also matches before a final newline
+      case "lineEnd":
+        if (context.multiline) return "(?=\\n|$)";
+
+        return context.dollarEndonly ? "$" : "(?=\\n?$)";
+
+      case "nonWordBoundary":
+        return "\\B";
+
+      case "subjectEnd":
+        return "$";
+
+      case "subjectEndBeforeFinalNewline":
+        return "(?=\\n?$)";
+
+      case "subjectStart":
+        return "^";
+
+      case "wordBoundary":
+        return "\\b";
+
+      default:
+        throw new Error(
+          `unsupported anchor for native translation: ${node.kind}`,
+        );
+    }
+  }
+
   static #translateClass(node, context) {
     let members = "";
 
@@ -59,8 +217,24 @@ export default class RegexTranslator {
           members += $.#escapeClassChar(item.codePoint);
           break;
 
+        case "posixClass":
+          members += $.#setToClassContent(
+            POSIX_SETS[item.name],
+            item.negated,
+            context,
+          );
+          break;
+
         case "range":
           members += `${$.#escapeClassChar(item.from)}-${$.#escapeClassChar(item.to)}`;
+          break;
+
+        case "shorthand":
+          members += $.#setToClassContent(
+            SHORTHAND_SETS[item.letter],
+            item.negated,
+            context,
+          );
           break;
 
         default:
@@ -80,6 +254,9 @@ export default class RegexTranslator {
         return node.branches
           .map((branch) => $.#translateNode(branch, context))
           .join("|");
+
+      case "anchor":
+        return $.#translateAnchor(node, context);
 
       case "backreference":
         return node.number !== null ? `\\${node.number}` : `\\k<${node.name}>`;
@@ -122,11 +299,32 @@ export default class RegexTranslator {
           : `(?<${negation}${content})`;
       }
 
+      // \R matches CRLF as a pair or a single vertical whitespace char
+      case "newlineSequence":
+        return `(?:\\r\\n|[${$.#rangesToClassContent(SHORTHAND_SETS.v)}])`;
+
       case "nonCapturingGroup":
         return `(?:${$.#translateNode(node.content, context)})`;
 
+      // \N always excludes only the newline, regardless of dotall
+      case "notNewline":
+        return "[^\\n]";
+
       case "quantifier":
         return $.#translateQuantifier(node, context);
+
+      case "shorthand": {
+        // \d and \w match their JS counterparts exactly
+        if (node.letter === "d" || node.letter === "w") {
+          const escape = node.negated ? node.letter.toUpperCase() : node.letter;
+
+          return `\\${escape}`;
+        }
+
+        const content = $.#rangesToClassContent(SHORTHAND_SETS[node.letter]);
+
+        return node.negated ? `[^${content}]` : `[${content}]`;
+      }
 
       // Start options are compile metadata and match nothing
       case "startOption":
