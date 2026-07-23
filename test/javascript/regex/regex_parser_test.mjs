@@ -12,6 +12,169 @@ defineGlobalErlangAndElixirModules();
 
 describe("RegexParser", () => {
   describe("parse()", () => {
+    describe("alpha assertions", () => {
+      it("parses (*atomic:...) as atomic group", () => {
+        assert.deepEqual(RegexParser.parse("(*atomic:a+)b"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "atomicGroup",
+              content: {
+                type: "quantifier",
+                min: 1,
+                max: null,
+                mode: "greedy",
+                item: {type: "literal", codePoint: 97},
+              },
+            },
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("parses (*pla:...) as positive lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(*pla:a)"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: false,
+          atomic: true,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (*positive_lookahead:...) as positive lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(*positive_lookahead:a)"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: false,
+          atomic: true,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (*nla:...) as negative lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(*nla:a)"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: true,
+          atomic: true,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (*plb:...) as positive lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(*plb:a)"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          atomic: true,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (*nlb:...) as negative lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(*nlb:a)"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: true,
+          atomic: true,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (*napla:...) as non-atomic positive lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(*napla:a)"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: false,
+          atomic: false,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (*naplb:...) as non-atomic positive lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(*naplb:a)"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          atomic: false,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (?* as non-atomic positive lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(?*a)"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: false,
+          atomic: false,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (?<* as non-atomic positive lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(?<*a)"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          atomic: false,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses (*sr:...) as script run", () => {
+        assert.deepEqual(RegexParser.parse("(*sr:ab)"), {
+          type: "scriptRun",
+          atomic: false,
+          content: {
+            type: "concatenation",
+            items: [
+              {type: "literal", codePoint: 97},
+              {type: "literal", codePoint: 98},
+            ],
+          },
+        });
+      });
+
+      it("parses (*asr:...) as atomic script run", () => {
+        assert.deepEqual(RegexParser.parse("(*asr:ab)"), {
+          type: "scriptRun",
+          atomic: true,
+          content: {
+            type: "concatenation",
+            items: [
+              {type: "literal", codePoint: 97},
+              {type: "literal", codePoint: 98},
+            ],
+          },
+        });
+      });
+
+      it("raises on unbounded alpha lookbehind", () => {
+        assertRegexParseError(
+          "(*plb:a*)b",
+          "length of lookbehind assertion is not limited",
+          2,
+        );
+      });
+
+      it("raises on unknown alpha assertion name", () => {
+        assertRegexParseError(
+          "(*foo:a)",
+          "(*alpha_assertion) not recognized",
+          5,
+        );
+      });
+
+      it("raises on alpha assertion without colon", () => {
+        assertRegexParseError(
+          "(*atomic)",
+          "(*alpha_assertion) not recognized",
+          9,
+        );
+      });
+    });
+
     describe("anchors", () => {
       it("parses ^ as line start", () => {
         assert.deepEqual(RegexParser.parse("^"), {
@@ -489,6 +652,119 @@ describe("RegexParser", () => {
           "(?<x>a)\\k<x*>",
           "syntax error in subpattern name (missing terminator?)",
           11,
+        );
+      });
+    });
+
+    describe("branch reset groups", () => {
+      it("restarts group numbering in each branch", () => {
+        assert.deepEqual(RegexParser.parse("(?|(a)|(b))"), {
+          type: "branchResetGroup",
+          content: {
+            type: "alternation",
+            branches: [
+              {
+                type: "group",
+                number: 1,
+                name: null,
+                content: {type: "literal", codePoint: 97},
+              },
+              {
+                type: "group",
+                number: 1,
+                name: null,
+                content: {type: "literal", codePoint: 98},
+              },
+            ],
+          },
+        });
+      });
+
+      it("continues numbering after the widest branch", () => {
+        assert.deepEqual(RegexParser.parse("(?|(a)(b)|(c))(d)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "branchResetGroup",
+              content: {
+                type: "alternation",
+                branches: [
+                  {
+                    type: "concatenation",
+                    items: [
+                      {
+                        type: "group",
+                        number: 1,
+                        name: null,
+                        content: {type: "literal", codePoint: 97},
+                      },
+                      {
+                        type: "group",
+                        number: 2,
+                        name: null,
+                        content: {type: "literal", codePoint: 98},
+                      },
+                    ],
+                  },
+                  {
+                    type: "group",
+                    number: 1,
+                    name: null,
+                    content: {type: "literal", codePoint: 99},
+                  },
+                ],
+              },
+            },
+            {
+              type: "group",
+              number: 3,
+              name: null,
+              content: {type: "literal", codePoint: 100},
+            },
+          ],
+        });
+      });
+
+      it("parses single branch", () => {
+        assert.deepEqual(RegexParser.parse("(?|(a))"), {
+          type: "branchResetGroup",
+          content: {
+            type: "group",
+            number: 1,
+            name: null,
+            content: {type: "literal", codePoint: 97},
+          },
+        });
+      });
+
+      it("allows duplicate names across branches", () => {
+        assert.deepEqual(RegexParser.parse("(?|(?<x>a)|(?<x>b))"), {
+          type: "branchResetGroup",
+          content: {
+            type: "alternation",
+            branches: [
+              {
+                type: "group",
+                number: 1,
+                name: "x",
+                content: {type: "literal", codePoint: 97},
+              },
+              {
+                type: "group",
+                number: 1,
+                name: "x",
+                content: {type: "literal", codePoint: 98},
+              },
+            ],
+          },
+        });
+      });
+
+      it("raises on duplicate names in the same branch", () => {
+        assertRegexParseError(
+          "(?|(?<x>a)(?<x>b))",
+          "two named subpatterns have the same name (PCRE2_DUPNAMES not set)",
+          15,
         );
       });
     });
@@ -1183,6 +1459,7 @@ describe("RegexParser", () => {
               type: "lookaround",
               direction: "ahead",
               negated: false,
+              atomic: true,
               content: {type: "literal", codePoint: 97},
             },
           },
@@ -2273,6 +2550,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "ahead",
           negated: false,
+          atomic: true,
           content: {type: "literal", codePoint: 97},
         });
       });
@@ -2282,6 +2560,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "ahead",
           negated: true,
+          atomic: true,
           content: {type: "literal", codePoint: 97},
         });
       });
@@ -2291,6 +2570,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "behind",
           negated: false,
+          atomic: true,
           content: {type: "literal", codePoint: 97},
         });
       });
@@ -2300,6 +2580,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "behind",
           negated: true,
+          atomic: true,
           content: {type: "literal", codePoint: 97},
         });
       });
@@ -2309,6 +2590,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "ahead",
           negated: false,
+          atomic: true,
           content: {
             type: "group",
             number: 1,
@@ -2328,6 +2610,7 @@ describe("RegexParser", () => {
             type: "lookaround",
             direction: "ahead",
             negated: false,
+            atomic: true,
             content: {type: "literal", codePoint: 97},
           },
         });
@@ -2338,6 +2621,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "behind",
           negated: false,
+          atomic: true,
           content: {
             type: "quantifier",
             min: 0,
@@ -2353,6 +2637,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "behind",
           negated: false,
+          atomic: true,
           content: {
             type: "group",
             number: 1,
@@ -2379,6 +2664,7 @@ describe("RegexParser", () => {
           type: "lookaround",
           direction: "behind",
           negated: false,
+          atomic: true,
           content: {
             type: "concatenation",
             items: [
@@ -2386,6 +2672,7 @@ describe("RegexParser", () => {
                 type: "lookaround",
                 direction: "ahead",
                 negated: false,
+                atomic: true,
                 content: {
                   type: "quantifier",
                   min: 0,

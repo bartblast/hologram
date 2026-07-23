@@ -2,8 +2,7 @@
 
 import RegexParseError from "./regex_parse_error.mjs";
 
-// TODO: remove when alpha assertions ((*atomic:...), (*pla:...), ...)
-// are implemented
+// Alpha assertion names accepted in the (*name:...) form.
 const ALPHA_ASSERTIONS = new Set([
   "asr",
   "atomic",
@@ -21,6 +20,20 @@ const ALPHA_ASSERTIONS = new Set([
   "script_run",
   "sr",
 ]);
+
+// Lookaround alpha assertion names and the lookarounds they map to.
+const ALPHA_LOOKAROUNDS = {
+  napla: {direction: "ahead", negated: false, atomic: false},
+  naplb: {direction: "behind", negated: false, atomic: false},
+  negative_lookahead: {direction: "ahead", negated: true, atomic: true},
+  negative_lookbehind: {direction: "behind", negated: true, atomic: true},
+  nla: {direction: "ahead", negated: true, atomic: true},
+  nlb: {direction: "behind", negated: true, atomic: true},
+  pla: {direction: "ahead", negated: false, atomic: true},
+  plb: {direction: "behind", negated: false, atomic: true},
+  positive_lookahead: {direction: "ahead", negated: false, atomic: true},
+  positive_lookbehind: {direction: "behind", negated: false, atomic: true},
+};
 
 // Simple single-character escapes valid in all contexts.
 const CHAR_ESCAPE_CODE_POINTS = {
@@ -377,6 +390,45 @@ export default class RegexParser {
     return this.#isAlphanumeric(char) || char === "_";
   }
 
+  // Parses the content of a (*name:...) alpha assertion, with the position
+  // at the colon.
+  #parseAlphaAssertion(word, wordStart) {
+    this.#position++;
+
+    const content = this.#parseAlternation();
+
+    this.#requireGroupClose();
+
+    switch (word) {
+      case "atomic":
+        return {type: "atomicGroup", content: content};
+
+      case "asr":
+      case "atomic_script_run":
+        return {type: "scriptRun", atomic: true, content: content};
+
+      case "script_run":
+      case "sr":
+        return {type: "scriptRun", atomic: false, content: content};
+
+      default: {
+        const {direction, negated, atomic} = ALPHA_LOOKAROUNDS[word];
+
+        if (direction === "behind") {
+          this.#checkLookbehindLength(content, wordStart);
+        }
+
+        return {
+          type: "lookaround",
+          direction: direction,
+          negated: negated,
+          atomic: atomic,
+          content: content,
+        };
+      }
+    }
+  }
+
   #parseAlternation() {
     const branches = [this.#parseConcatenation()];
 
@@ -418,6 +470,45 @@ export default class RegexParser {
     this.#position += codePoint > 0xffff ? 2 : 1;
 
     return {type: "literal", codePoint: codePoint};
+  }
+
+  // Parses a (?|...) branch reset group, with the position at the |.
+  // Each top-level branch restarts group numbering from the same base, and
+  // duplicate names are allowed across branches, matching PCRE2 behavior.
+  #parseBranchReset() {
+    this.#position++;
+
+    const baseGroupCount = this.#groupCount;
+    const outerNames = this.#groupNames;
+    const collectedNames = new Set(outerNames);
+    const branches = [];
+    let maxGroupCount = baseGroupCount;
+
+    while (true) {
+      this.#groupCount = baseGroupCount;
+      this.#groupNames = new Set(outerNames);
+
+      branches.push(this.#parseConcatenation());
+
+      if (this.#groupCount > maxGroupCount) maxGroupCount = this.#groupCount;
+
+      for (const name of this.#groupNames) collectedNames.add(name);
+
+      if (this.#peek() !== "|") break;
+
+      this.#position++;
+    }
+
+    this.#groupCount = maxGroupCount;
+    this.#groupNames = collectedNames;
+    this.#requireGroupClose();
+
+    const content =
+      branches.length === 1
+        ? branches[0]
+        : {type: "alternation", branches: branches};
+
+    return {type: "branchResetGroup", content: content};
   }
 
   #parseCapturingGroup(name) {
@@ -1264,6 +1355,22 @@ export default class RegexParser {
         type: "lookaround",
         direction: "ahead",
         negated: char === "!",
+        atomic: true,
+        content: content,
+      };
+    }
+
+    // (?* is a non-atomic positive lookahead
+    if (char === "*") {
+      this.#position++;
+      const content = this.#parseAlternation();
+      this.#requireGroupClose();
+
+      return {
+        type: "lookaround",
+        direction: "ahead",
+        negated: false,
+        atomic: false,
         content: content,
       };
     }
@@ -1271,7 +1378,8 @@ export default class RegexParser {
     if (char === "<") {
       const nextChar = this.#source[this.#position + 1];
 
-      if (nextChar === "=" || nextChar === "!") {
+      // (?<* is a non-atomic positive lookbehind
+      if (nextChar === "=" || nextChar === "!" || nextChar === "*") {
         const lookbehindStart = this.#position - 2;
 
         this.#position += 2;
@@ -1283,6 +1391,7 @@ export default class RegexParser {
           type: "lookaround",
           direction: "behind",
           negated: nextChar === "!",
+          atomic: nextChar !== "*",
           content: content,
         };
       }
@@ -1386,13 +1495,7 @@ export default class RegexParser {
 
     if ("iJmnsUxa^-".includes(char)) return this.#parseOptionSetting();
 
-    if (char === "|") {
-      // TODO: remove when branch reset groups are implemented
-      throw new RegexParseError(
-        `unsupported pattern construct: (?${char}`,
-        this.#position,
-      );
-    }
+    if (char === "|") return this.#parseBranchReset();
 
     this.#position++;
     throw new RegexParseError(
@@ -1882,18 +1985,14 @@ export default class RegexParser {
     const kind = word === "" ? "mark" : VERB_KINDS[word];
 
     if (kind === undefined) {
-      if (ALPHA_ASSERTIONS.has(word)) {
-        // TODO: remove when alpha assertions are implemented
-        throw new RegexParseError(
-          `unsupported pattern construct: (*${word}`,
-          wordStart,
-        );
+      if (ALPHA_ASSERTIONS.has(word) && this.#peek() === ":") {
+        return this.#parseAlphaAssertion(word, wordStart);
       }
 
       if (/[a-z]/.test(word)) {
         throw new RegexParseError(
           "(*alpha_assertion) not recognized",
-          this.#position + 1,
+          this.#peek() === ":" ? this.#position : this.#position + 1,
         );
       }
 
