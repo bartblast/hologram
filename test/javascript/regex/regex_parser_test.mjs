@@ -459,6 +459,36 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses shorthand escapes", () => {
+        assert.deepEqual(RegexParser.parse("[\\d\\W]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "shorthand", letter: "d", negated: false},
+            {type: "shorthand", letter: "w", negated: true},
+          ],
+        });
+      });
+
+      it("parses shorthand in negated class", () => {
+        assert.deepEqual(RegexParser.parse("[^\\s]"), {
+          type: "class",
+          negated: true,
+          items: [{type: "shorthand", letter: "s", negated: false}],
+        });
+      });
+
+      it("parses - after shorthand before ] as literal", () => {
+        assert.deepEqual(RegexParser.parse("[\\s-]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "shorthand", letter: "s", negated: false},
+            {type: "literal", codePoint: 45},
+          ],
+        });
+      });
+
       it("raises on unterminated class", () => {
         assertRegexParseError(
           "[abc",
@@ -525,6 +555,14 @@ describe("RegexParser", () => {
 
       it("raises on unrecognized escape in class", () => {
         assertRegexParseError("[\\j]", "unrecognized character follows \\", 3);
+      });
+
+      it("raises on shorthand as range start", () => {
+        assertRegexParseError("[\\d-a]", "invalid range in character class", 4);
+      });
+
+      it("raises on shorthand as range endpoint", () => {
+        assertRegexParseError("[a-\\d]", "invalid range in character class", 5);
       });
     });
 
@@ -727,6 +765,62 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("\\é"), {
           type: "literal",
           codePoint: 233,
+        });
+      });
+
+      it("parses \\d as digit shorthand", () => {
+        assert.deepEqual(RegexParser.parse("\\d"), {
+          type: "shorthand",
+          letter: "d",
+          negated: false,
+        });
+      });
+
+      it("parses \\D as negated digit shorthand", () => {
+        assert.deepEqual(RegexParser.parse("\\D"), {
+          type: "shorthand",
+          letter: "d",
+          negated: true,
+        });
+      });
+
+      it("parses all shorthand letters", () => {
+        assert.deepEqual(RegexParser.parse("\\s\\S\\w\\W\\h\\H\\v\\V"), {
+          type: "concatenation",
+          items: [
+            {type: "shorthand", letter: "s", negated: false},
+            {type: "shorthand", letter: "s", negated: true},
+            {type: "shorthand", letter: "w", negated: false},
+            {type: "shorthand", letter: "w", negated: true},
+            {type: "shorthand", letter: "h", negated: false},
+            {type: "shorthand", letter: "h", negated: true},
+            {type: "shorthand", letter: "v", negated: false},
+            {type: "shorthand", letter: "v", negated: true},
+          ],
+        });
+      });
+
+      it("parses quantified shorthand", () => {
+        assert.deepEqual(RegexParser.parse("\\d+"), {
+          type: "quantifier",
+          min: 1,
+          max: null,
+          mode: "greedy",
+          item: {type: "shorthand", letter: "d", negated: false},
+        });
+      });
+
+      it("parses \\R as newline sequence", () => {
+        assert.deepEqual(RegexParser.parse("\\R"), {type: "newlineSequence"});
+      });
+
+      it("parses quantified \\R", () => {
+        assert.deepEqual(RegexParser.parse("\\R*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {type: "newlineSequence"},
         });
       });
 

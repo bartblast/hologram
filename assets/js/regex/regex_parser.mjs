@@ -22,13 +22,13 @@ const ESCAPE_ANCHOR_KINDS = {
   z: "subjectEnd",
 };
 
-// TODO: shrink as remaining escape sequences (shorthand classes, backreferences,
-// Unicode properties, \Q...\E) are implemented
-const FUTURE_CLASS_ESCAPES = new Set([..."DEHPQSVWdhpsvw"]);
+// TODO: shrink as remaining escape sequences (backreferences, Unicode
+// properties, \Q...\E) are implemented
+const FUTURE_CLASS_ESCAPES = new Set([..."EPQp"]);
 
-// TODO: shrink as remaining escape sequences (shorthand classes, backreferences,
-// subroutine references, Unicode properties, \K, \Q...\E) are implemented
-const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."DEHKPQRSVWdghkpsvw123456789"]);
+// TODO: shrink as remaining escape sequences (backreferences, subroutine
+// references, Unicode properties, \K, \Q...\E) are implemented
+const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EKPQgkp123456789"]);
 
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
@@ -50,6 +50,10 @@ const POSIX_CLASS_NAMES = new Set([
   "word",
   "xdigit",
 ]);
+
+// Shorthand character class escape letters, in both cases
+// (uppercase means negated).
+const SHORTHAND_CLASS_LETTERS = new Set([..."DHSVWdhsvw"]);
 
 // Escape letters PCRE2 rejects with a dedicated message.
 const UNSUPPORTED_BY_PCRE2_ESCAPES = new Set(["F", "L", "U", "l", "u"]);
@@ -73,6 +77,16 @@ export default class RegexParser {
 
   #atEnd() {
     return this.#position >= this.#source.length;
+  }
+
+  #buildShorthand(letter) {
+    const isNegated = letter >= "A" && letter <= "Z";
+
+    return {
+      type: "shorthand",
+      letter: letter.toLowerCase(),
+      negated: isNegated,
+    };
   }
 
   // Validates a code point produced by a \x{}, \o{} or \N{U+} escape,
@@ -205,6 +219,14 @@ export default class RegexParser {
 
       isFirstItem = false;
 
+      if (
+        char === "\\" &&
+        SHORTHAND_CLASS_LETTERS.has(this.#source[this.#position + 1])
+      ) {
+        items.push(this.#parseClassShorthand());
+        continue;
+      }
+
       if (char === "[" && this.#source[this.#position + 1] === ":") {
         const posixClass = this.#tryParsePosixClass();
 
@@ -235,6 +257,17 @@ export default class RegexParser {
     this.#position++;
 
     if (
+      this.#peek() === "\\" &&
+      SHORTHAND_CLASS_LETTERS.has(this.#source[this.#position + 1])
+    ) {
+      this.#position += 2;
+      throw new RegexParseError(
+        "invalid range in character class",
+        this.#position,
+      );
+    }
+
+    if (
       this.#peek() === "[" &&
       this.#source[this.#position + 1] === ":" &&
       this.#tryParsePosixClass() !== null
@@ -255,6 +288,28 @@ export default class RegexParser {
     }
 
     return {type: "range", from: from, to: to};
+  }
+
+  // Parses a shorthand class escape used as a class member, with the position
+  // at the backslash. A - following it forms an invalid range unless it's a
+  // literal before ], matching PCRE2 behavior.
+  #parseClassShorthand() {
+    const letter = this.#source[this.#position + 1];
+    this.#position += 2;
+
+    if (
+      this.#peek() === "-" &&
+      this.#source[this.#position + 1] !== "]" &&
+      this.#position + 1 < this.#source.length
+    ) {
+      this.#position++;
+      throw new RegexParseError(
+        "invalid range in character class",
+        this.#position,
+      );
+    }
+
+    return this.#buildShorthand(letter);
   }
 
   // Parses a single class member char, either plain or produced by an escape.
@@ -373,6 +428,16 @@ export default class RegexParser {
     }
 
     if (char === "N") return this.#parseNotNewlineEscape();
+
+    if (SHORTHAND_CLASS_LETTERS.has(char)) {
+      this.#position++;
+      return this.#buildShorthand(char);
+    }
+
+    if (char === "R") {
+      this.#position++;
+      return {type: "newlineSequence"};
+    }
 
     const codePoint = this.#tryParseCharEscapeCodePoint(false);
 
