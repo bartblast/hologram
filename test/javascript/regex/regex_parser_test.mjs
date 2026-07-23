@@ -256,6 +256,162 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses \\g with plain number", () => {
+        assert.deepEqual(RegexParser.parse("(a)\\g1"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: 1, name: null},
+          ],
+        });
+      });
+
+      it("parses \\g with braced number", () => {
+        assert.deepEqual(RegexParser.parse("(a)\\g{1}"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: 1, name: null},
+          ],
+        });
+      });
+
+      it("resolves \\g with negative relative number", () => {
+        assert.deepEqual(RegexParser.parse("(a)(b)\\g{-1}"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "group",
+              number: 2,
+              name: null,
+              content: {type: "literal", codePoint: 98},
+            },
+            {type: "backreference", number: 2, name: null},
+          ],
+        });
+      });
+
+      it("resolves \\g with positive relative number", () => {
+        assert.deepEqual(RegexParser.parse("\\g{+1}(a)"), {
+          type: "concatenation",
+          items: [
+            {type: "backreference", number: 1, name: null},
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+          ],
+        });
+      });
+
+      it("parses \\g with braced name", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)\\g{x}"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses \\k with angle-bracketed name", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)\\k<x>"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses \\k with quoted name", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)\\k'x'"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses \\k with braced name", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)\\k{x}"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses (?P=name) reference", () => {
+        assert.deepEqual(RegexParser.parse("(?P<x>a)(?P=x)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "backreference", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses forward named reference", () => {
+        assert.deepEqual(RegexParser.parse("\\k<x>(?<x>a)"), {
+          type: "concatenation",
+          items: [
+            {type: "backreference", number: null, name: "x"},
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+          ],
+        });
+      });
+
       it("raises on single-digit reference to non-existent group", () => {
         assertRegexParseError("\\1", "reference to non-existent subpattern", 2);
       });
@@ -273,6 +429,66 @@ describe("RegexParser", () => {
           "\\777",
           "octal value is greater than \\377 in 8-bit non-UTF-8 mode",
           4,
+        );
+      });
+
+      it("raises on \\g without reference", () => {
+        assertRegexParseError(
+          "\\g",
+          "\\g is not followed by a braced, angle-bracketed, or quoted name/number or by a plain number",
+          2,
+        );
+      });
+
+      it("raises on \\g with empty braces", () => {
+        assertRegexParseError("(a)\\g{}", "subpattern name expected", 6);
+      });
+
+      it("raises on \\g reference to non-existent group", () => {
+        assertRegexParseError(
+          "(a)\\g{2}",
+          "reference to non-existent subpattern",
+          8,
+        );
+      });
+
+      it("raises on \\g relative reference before first group", () => {
+        assertRegexParseError(
+          "\\g{-1}",
+          "reference to non-existent subpattern",
+          2,
+        );
+      });
+
+      it("raises on \\k without delimited name", () => {
+        assertRegexParseError(
+          "\\k",
+          "\\k is not followed by a braced, angle-bracketed, or quoted name",
+          2,
+        );
+      });
+
+      it("raises on \\k reference to non-existent name", () => {
+        assertRegexParseError(
+          "(?<x>a)\\k<y>",
+          "reference to non-existent subpattern",
+          10,
+        );
+      });
+
+      it("raises on (?P=) reference to non-existent name", () => {
+        assertRegexParseError(
+          "(?<x>a)(?P=y)",
+          "reference to non-existent subpattern",
+          11,
+        );
+      });
+
+      it("raises on invalid character in \\k name", () => {
+        assertRegexParseError(
+          "(?<x>a)\\k<x*>",
+          "syntax error in subpattern name (missing terminator?)",
+          11,
         );
       });
     });

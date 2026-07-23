@@ -26,9 +26,9 @@ const ESCAPE_ANCHOR_KINDS = {
 // properties, \Q...\E) are implemented
 const FUTURE_CLASS_ESCAPES = new Set([..."EPQp"]);
 
-// TODO: shrink as remaining escape sequences (delimited backreferences,
-// subroutine references, Unicode properties, \K, \Q...\E) are implemented
-const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EKPQgkp"]);
+// TODO: shrink as remaining escape sequences (Unicode properties, \K, \Q...\E)
+// are implemented
+const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EKPQp"]);
 
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
@@ -583,11 +583,118 @@ export default class RegexParser {
 
     if (this.#isDigit(char) && char !== "0") return this.#parseDigitEscape();
 
+    if (char === "g") return this.#parseGReference();
+
+    if (char === "k") return this.#parseKReference();
+
     const codePoint = this.#tryParseCharEscapeCodePoint(false);
 
     if (codePoint !== null) return {type: "literal", codePoint: codePoint};
 
     this.#raiseEscapeError(false);
+  }
+
+  // Parses a \g reference (\gn, \g{n}, \g{-n}, \g{+n} or \g{name}),
+  // with the position at the g.
+  #parseGReference() {
+    this.#position++;
+
+    const afterG = this.#position;
+
+    if (this.#isDigit(this.#peek())) {
+      const digitsStart = this.#position;
+
+      while (this.#isDigit(this.#peek())) this.#position++;
+
+      const number = Number(this.#source.slice(digitsStart, this.#position));
+      this.#validateNumericReference(number, this.#position);
+
+      return {type: "backreference", number: number, name: null};
+    }
+
+    if (this.#peek() === "{") {
+      this.#position++;
+
+      const sign = this.#peek();
+
+      if (sign === "-" || sign === "+") {
+        this.#position++;
+
+        const digitsStart = this.#position;
+
+        while (this.#isDigit(this.#peek())) this.#position++;
+
+        if (this.#position === digitsStart) {
+          throw new RegexParseError("subpattern name expected", this.#position);
+        }
+
+        const offset = Number(this.#source.slice(digitsStart, this.#position));
+
+        // Relative references resolve against the groups opened so far
+        const number =
+          sign === "-"
+            ? this.#groupCount + 1 - offset
+            : this.#groupCount + offset;
+
+        if (this.#peek() !== "}") {
+          throw new RegexParseError(
+            "syntax error in subpattern name (missing terminator?)",
+            this.#position,
+          );
+        }
+
+        this.#position++;
+
+        if (number <= 0) {
+          throw new RegexParseError(
+            "reference to non-existent subpattern",
+            afterG,
+          );
+        }
+
+        this.#validateNumericReference(number, this.#position);
+
+        return {type: "backreference", number: number, name: null};
+      }
+
+      if (this.#isDigit(sign)) {
+        const digitsStart = this.#position;
+
+        while (this.#isDigit(this.#peek())) this.#position++;
+
+        const number = Number(this.#source.slice(digitsStart, this.#position));
+
+        if (this.#peek() !== "}") {
+          throw new RegexParseError(
+            "syntax error in subpattern name (missing terminator?)",
+            this.#position,
+          );
+        }
+
+        this.#position++;
+        this.#validateNumericReference(number, this.#position);
+
+        return {type: "backreference", number: number, name: null};
+      }
+
+      const {name, nameStart} = this.#parseSubpatternName("}");
+      this.#validateNamedReference(name, nameStart);
+
+      return {type: "backreference", number: null, name: name};
+    }
+
+    if (this.#peek() === "<" || this.#peek() === "'") {
+      // TODO: remove when subroutine calls are implemented
+      throw new RegexParseError(
+        `unsupported pattern construct: \\g${this.#peek()}`,
+        this.#position,
+      );
+    }
+
+    throw new RegexParseError(
+      "\\g is not followed by a braced, angle-bracketed, or quoted name/number or by a plain number",
+      afterG,
+    );
   }
 
   #parseGroup() {
@@ -684,8 +791,17 @@ export default class RegexParser {
         return this.#parseNamedGroup(">");
       }
 
-      if (nextChar === "=" || nextChar === ">") {
-        // TODO: remove when backreferences and subroutine calls are implemented
+      if (nextChar === "=") {
+        this.#position += 2;
+
+        const {name, nameStart} = this.#parseSubpatternName(")");
+        this.#validateNamedReference(name, nameStart);
+
+        return {type: "backreference", number: null, name: name};
+      }
+
+      if (nextChar === ">") {
+        // TODO: remove when subroutine calls are implemented
         throw new RegexParseError(
           `unsupported pattern construct: (?P${nextChar}`,
           this.#position,
@@ -765,43 +881,36 @@ export default class RegexParser {
     return parseInt(this.#source.slice(digitsStart, this.#position), 16);
   }
 
-  // Parses a named capturing group, with the position at the name start.
-  #parseNamedGroup(terminator) {
-    const nameStart = this.#position;
+  // Parses a \k named reference (\k<name>, \k'name' or \k{name}),
+  // with the position at the k.
+  #parseKReference() {
+    this.#position++;
 
-    if (this.#isDigit(this.#peek())) {
-      this.#position++;
+    const delimiter = this.#peek();
+    let terminator = null;
+
+    if (delimiter === "<") terminator = ">";
+    else if (delimiter === "'") terminator = "'";
+    else if (delimiter === "{") terminator = "}";
+
+    if (terminator === null) {
       throw new RegexParseError(
-        "subpattern name must start with a non-digit",
-        this.#position,
-      );
-    }
-
-    while (this.#isWordChar(this.#peek())) this.#position++;
-
-    const nameLength = this.#position - nameStart;
-
-    if (nameLength === 0) {
-      throw new RegexParseError("subpattern name expected", this.#position);
-    }
-
-    if (nameLength > 128) {
-      throw new RegexParseError(
-        "subpattern name is too long (maximum 128 code units)",
-        this.#position,
-      );
-    }
-
-    if (this.#peek() !== terminator) {
-      throw new RegexParseError(
-        "syntax error in subpattern name (missing terminator?)",
+        "\\k is not followed by a braced, angle-bracketed, or quoted name",
         this.#position,
       );
     }
 
     this.#position++;
 
-    const name = this.#source.slice(nameStart, nameStart + nameLength);
+    const {name, nameStart} = this.#parseSubpatternName(terminator);
+    this.#validateNamedReference(name, nameStart);
+
+    return {type: "backreference", number: null, name: name};
+  }
+
+  // Parses a named capturing group, with the position at the name start.
+  #parseNamedGroup(terminator) {
+    const {name} = this.#parseSubpatternName(terminator);
 
     if (!this.#dupnames && this.#groupNames.has(name)) {
       throw new RegexParseError(
@@ -941,6 +1050,49 @@ export default class RegexParser {
     }
 
     return node;
+  }
+
+  // Parses a subpattern name followed by the given terminator,
+  // with the position at the name start.
+  #parseSubpatternName(terminator) {
+    const nameStart = this.#position;
+
+    if (this.#isDigit(this.#peek())) {
+      this.#position++;
+      throw new RegexParseError(
+        "subpattern name must start with a non-digit",
+        this.#position,
+      );
+    }
+
+    while (this.#isWordChar(this.#peek())) this.#position++;
+
+    const nameLength = this.#position - nameStart;
+
+    if (nameLength === 0) {
+      throw new RegexParseError("subpattern name expected", this.#position);
+    }
+
+    if (nameLength > 128) {
+      throw new RegexParseError(
+        "subpattern name is too long (maximum 128 code units)",
+        this.#position,
+      );
+    }
+
+    if (this.#peek() !== terminator) {
+      throw new RegexParseError(
+        "syntax error in subpattern name (missing terminator?)",
+        this.#position,
+      );
+    }
+
+    this.#position++;
+
+    return {
+      name: this.#source.slice(nameStart, nameStart + nameLength),
+      nameStart: nameStart,
+    };
   }
 
   #peek() {
@@ -1200,5 +1352,27 @@ export default class RegexParser {
     }
 
     return {min: bounds.min, max: bounds.max, mode: mode};
+  }
+
+  // Validates a named reference, raising at the name start position.
+  // Skipped in the lenient prescan pass, when names aren't yet collected.
+  #validateNamedReference(name, nameStart) {
+    if (this.#allGroupNames !== null && !this.#allGroupNames.has(name)) {
+      throw new RegexParseError(
+        "reference to non-existent subpattern",
+        nameStart,
+      );
+    }
+  }
+
+  // Validates a numeric reference, raising at the given position.
+  // Skipped in the lenient prescan pass, when the group count isn't known yet.
+  #validateNumericReference(number, errorPosition) {
+    if (this.#totalGroups !== null && number > this.#totalGroups) {
+      throw new RegexParseError(
+        "reference to non-existent subpattern",
+        errorPosition,
+      );
+    }
   }
 }
