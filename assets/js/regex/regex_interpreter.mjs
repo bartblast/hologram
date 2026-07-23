@@ -2,6 +2,12 @@
 
 import RegexAnalyzer from "./regex_analyzer.mjs";
 
+import {
+  codePointInRanges,
+  POSIX_SETS,
+  SHORTHAND_SETS,
+} from "./regex_char_sets.mjs";
+
 // Newline conventions with a two-char CR LF sequence.
 const NEWLINE_PAIR_CONVENTIONS = new Set(["any", "anycrlf", "crlf"]);
 
@@ -30,6 +36,9 @@ const NEWLINE_SEQUENCE_SINGLES = {
   anycrlf: [0x0a, 0x0d],
   unicode: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
 };
+
+// Cache of Unicode property name → predicate over a code point.
+const propertyMatchers = new Map();
 
 export default class RegexInterpreter {
   // Matches a parsed pattern against a subject string, scanning forward from
@@ -179,12 +188,36 @@ export default class RegexInterpreter {
           if (codePoint === item.codePoint) return true;
           break;
 
+        case "posixClass":
+          if (
+            codePointInRanges(POSIX_SETS[item.name], codePoint) !== item.negated
+          ) {
+            return true;
+          }
+          break;
+
         case "range":
           if (codePoint >= item.from && codePoint <= item.to) return true;
           break;
 
+        case "shorthand":
+          if (
+            codePointInRanges(SHORTHAND_SETS[item.letter], codePoint) !==
+            item.negated
+          ) {
+            return true;
+          }
+          break;
+
+        case "unicodeProperty":
+          if (
+            $.#unicodePropertyMatches(item.name, codePoint) !== item.negated
+          ) {
+            return true;
+          }
+          break;
+
         default:
-          // TODO: shrink as remaining interpreter features are implemented
           throw new Error(
             `unsupported class member for interpretation: ${item.type}`,
           );
@@ -464,6 +497,21 @@ export default class RegexInterpreter {
       case "quantifier":
         return $.#matchQuantifier(node, state, position, continuation);
 
+      case "shorthand": {
+        const codePoint = $.#subjectCodePointAt(state, position);
+
+        if (codePoint === null) return false;
+
+        if (
+          codePointInRanges(SHORTHAND_SETS[node.letter], codePoint) ===
+          node.negated
+        ) {
+          return false;
+        }
+
+        return continuation(position + $.#codePointLength(state, codePoint));
+      }
+
       // TODO: in unicode mode \C should consume one UTF-8 byte instead of
       // one UTF-16 code unit
       case "singleByte":
@@ -474,6 +522,18 @@ export default class RegexInterpreter {
       // Start options are compile metadata and match nothing
       case "startOption":
         return continuation(position);
+
+      case "unicodeProperty": {
+        const codePoint = $.#subjectCodePointAt(state, position);
+
+        if (codePoint === null) return false;
+
+        if ($.#unicodePropertyMatches(node.name, codePoint) === node.negated) {
+          return false;
+        }
+
+        return continuation(position + $.#codePointLength(state, codePoint));
+      }
 
       default:
         // TODO: shrink as remaining interpreter features are implemented
@@ -633,6 +693,58 @@ export default class RegexInterpreter {
     return state.unicode
       ? state.subject.codePointAt(position)
       : state.subject.charCodeAt(position);
+  }
+
+  // Returns a cached predicate testing a code point against a PCRE2 Unicode
+  // property name, built on JS property escapes. Bare non-category names are
+  // matched as script extensions, falling back to scripts, following PCRE2.
+  static #unicodePropertyMatcher(name) {
+    switch (name) {
+      case "Any":
+        return () => true;
+
+      // Xan matches alphanumeric chars, Xwd additionally the underscore
+      case "Xan":
+        return (char) => /[\p{L}\p{N}]/u.test(char);
+
+      case "Xwd":
+        return (char) => /[\p{L}\p{N}_]/u.test(char);
+
+      // Xps and Xsp both match white space
+      case "Xps":
+      case "Xsp":
+        return (char) => /\p{White_Space}/u.test(char);
+
+      case "Xuc":
+        // TODO: implement the universally-named character property
+        throw new Error("unsupported Unicode property: Xuc");
+
+      default: {
+        const candidates = name.includes("=")
+          ? [name]
+          : [name, `Script_Extensions=${name}`, `Script=${name}`];
+
+        for (const candidate of candidates) {
+          try {
+            const regex = new RegExp(`\\p{${candidate}}`, "u");
+
+            return (char) => regex.test(char);
+          } catch {
+            // Try the next property name form
+          }
+        }
+
+        throw new Error(`unsupported Unicode property: ${name}`);
+      }
+    }
+  }
+
+  static #unicodePropertyMatches(name, codePoint) {
+    if (!propertyMatchers.has(name)) {
+      propertyMatchers.set(name, $.#unicodePropertyMatcher(name));
+    }
+
+    return propertyMatchers.get(name)(String.fromCodePoint(codePoint));
   }
 }
 

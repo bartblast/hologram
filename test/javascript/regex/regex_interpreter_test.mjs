@@ -189,6 +189,94 @@ describe("RegexInterpreter", () => {
           end: 1,
         });
       });
+
+      it("matches shorthand member", () => {
+        assert.deepEqual(match("[\\d-]", "-"), {start: 0, end: 1});
+      });
+
+      it("matches negated shorthand member", () => {
+        assert.deepEqual(match("[\\W]", "a!"), {start: 1, end: 2});
+      });
+
+      it("matches POSIX class member", () => {
+        assert.deepEqual(match("[[:digit:]]", "a5"), {start: 1, end: 2});
+      });
+
+      it("matches negated POSIX class member", () => {
+        assert.deepEqual(match("[[:^alpha:]]", "ab1"), {start: 2, end: 3});
+      });
+
+      it("matches Unicode property member", () => {
+        assert.deepEqual(match("[\\p{L}5]", "!5"), {start: 1, end: 2});
+      });
+    });
+
+    describe("escape sets", () => {
+      it("matches digits with \\d", () => {
+        assert.deepEqual(match("\\d+", "ab12"), {start: 2, end: 4});
+      });
+
+      it("matches non-digits with \\D", () => {
+        assert.deepEqual(match("\\D", "12a"), {start: 2, end: 3});
+      });
+
+      it("excludes NBSP from \\s", () => {
+        assert.isNull(match("\\s", "\u00a0"));
+      });
+
+      it("matches vertical tab with \\s", () => {
+        assert.deepEqual(match("\\s", "\x0b"), {start: 0, end: 1});
+      });
+
+      it("matches NBSP with \\h", () => {
+        assert.deepEqual(match("\\h", "\u00a0"), {start: 0, end: 1});
+      });
+
+      it("matches NEL with \\v", () => {
+        assert.deepEqual(match("\\v", "\x85"), {start: 0, end: 1});
+      });
+
+      it("matches word chars with \\w", () => {
+        assert.deepEqual(match("\\w+", "!a_1"), {start: 1, end: 4});
+      });
+
+      it("matches letter with \\p{L}", () => {
+        assert.deepEqual(match("\\p{L}", "1é"), {start: 1, end: 2});
+      });
+
+      it("rejects lowercase letter with \\p{Lu}", () => {
+        assert.isNull(match("\\p{Lu}", "a"));
+      });
+
+      it("matches non-letter with \\P{L}", () => {
+        assert.deepEqual(match("\\P{L}", "a1"), {start: 1, end: 2});
+      });
+
+      it("matches script property", () => {
+        assert.deepEqual(match("\\p{Greek}", "aα", {unicode: true}), {
+          start: 1,
+          end: 2,
+        });
+      });
+
+      it("matches name=value property", () => {
+        assert.deepEqual(match("\\p{sc=Greek}", "aα", {unicode: true}), {
+          start: 1,
+          end: 2,
+        });
+      });
+
+      it("matches anything with \\p{Any}", () => {
+        assert.deepEqual(match("\\p{Any}", "\n"), {start: 0, end: 1});
+      });
+
+      it("excludes underscore from \\p{Xan}", () => {
+        assert.isNull(match("\\p{Xan}", "_"));
+      });
+
+      it("includes underscore in \\p{Xwd}", () => {
+        assert.deepEqual(match("\\p{Xwd}", "_"), {start: 0, end: 1});
+      });
     });
 
     describe("newline handling", () => {
