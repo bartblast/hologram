@@ -99,30 +99,6 @@ const GENERAL_CATEGORIES = new Set([
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
 
-// TODO: remove when start-of-pattern option verbs ((*UTF), (*CR), ...)
-// are implemented
-const OPTION_VERBS = new Set([
-  "ANY",
-  "ANYCRLF",
-  "BSR_ANYCRLF",
-  "BSR_UNICODE",
-  "CR",
-  "CRLF",
-  "LF",
-  "LIMIT_DEPTH",
-  "LIMIT_HEAP",
-  "LIMIT_MATCH",
-  "NO_AUTO_POSSESS",
-  "NO_DOTSTAR_ANCHOR",
-  "NO_JIT",
-  "NO_START_OPT",
-  "NOTEMPTY",
-  "NOTEMPTY_ATSTART",
-  "NUL",
-  "UCP",
-  "UTF",
-]);
-
 // The class names recognized by PCRE2 in [:name:] POSIX class elements.
 const POSIX_CLASS_NAMES = new Set([
   "alnum",
@@ -144,6 +120,31 @@ const POSIX_CLASS_NAMES = new Set([
 // Shorthand character class escape letters, in both cases
 // (uppercase means negated).
 const SHORTHAND_CLASS_LETTERS = new Set([..."DHSVWdhsvw"]);
+
+// Option verbs recognized at the start of a pattern.
+// The LIMIT_ verbs take an =number value.
+const START_OPTION_VERBS = new Set([
+  "ANY",
+  "ANYCRLF",
+  "BSR_ANYCRLF",
+  "BSR_UNICODE",
+  "CR",
+  "CRLF",
+  "LF",
+  "LIMIT_DEPTH",
+  "LIMIT_HEAP",
+  "LIMIT_MATCH",
+  "NO_AUTO_POSSESS",
+  "NO_DOTSTAR_ANCHOR",
+  "NO_JIT",
+  "NO_START_OPT",
+  "NOTEMPTY",
+  "NOTEMPTY_ATSTART",
+  "NUL",
+  "UCP",
+  "UTF",
+  "UTF8",
+]);
 
 // Escape letters PCRE2 rejects with a dedicated message.
 const UNSUPPORTED_BY_PCRE2_ESCAPES = new Set(["F", "L", "U", "l", "u"]);
@@ -834,12 +835,65 @@ export default class RegexParser {
       return {kind: "recursion", number: number, name: null};
     }
 
-    if (word === "VERSION") {
-      // TODO: remove when VERSION conditions are implemented
-      throw new RegexParseError(
-        "unsupported pattern construct: (?(VERSION",
-        wordStart,
-      );
+    if (word === "VERSION" && (this.#peek() === ">" || this.#peek() === "=")) {
+      let gte = false;
+
+      if (this.#peek() === ">") {
+        this.#position++;
+
+        if (this.#peek() !== "=") {
+          throw new RegexParseError(
+            "syntax error or number too big in (?(VERSION condition",
+            this.#position,
+          );
+        }
+
+        gte = true;
+      }
+
+      this.#position++;
+
+      const majorStart = this.#position;
+
+      while (this.#isDigit(this.#peek())) this.#position++;
+
+      if (this.#position === majorStart) {
+        throw new RegexParseError(
+          "syntax error or number too big in (?(VERSION condition",
+          this.#position,
+        );
+      }
+
+      const major = Number(this.#source.slice(majorStart, this.#position));
+      let minor = 0;
+
+      if (this.#peek() === ".") {
+        this.#position++;
+
+        const minorStart = this.#position;
+
+        while (this.#isDigit(this.#peek())) this.#position++;
+
+        if (this.#position === minorStart) {
+          throw new RegexParseError(
+            "syntax error or number too big in (?(VERSION condition",
+            this.#position,
+          );
+        }
+
+        minor = Number(this.#source.slice(minorStart, this.#position));
+      }
+
+      if (this.#peek() !== ")") {
+        throw new RegexParseError(
+          "syntax error or number too big in (?(VERSION condition",
+          this.#position,
+        );
+      }
+
+      this.#position++;
+
+      return {kind: "version", gte: gte, major: major, minor: minor};
     }
 
     if (word.length === 0) {
@@ -1615,6 +1669,7 @@ export default class RegexParser {
   }
 
   #parsePattern() {
+    const startOptions = this.#parseStartOptions();
     const node = this.#parseAlternation();
 
     // Only an unmatched ) can stop the top-level alternation before the end
@@ -1626,7 +1681,56 @@ export default class RegexParser {
       );
     }
 
-    return node;
+    if (startOptions.length === 0) return node;
+
+    const items = node.type === "concatenation" ? node.items : [node];
+
+    return {type: "concatenation", items: [...startOptions, ...items]};
+  }
+
+  // Parses (*VERB) option settings at the start of the pattern.
+  // A (* sequence that doesn't form a valid start option is left for the
+  // regular verb parsing, which raises the error PCRE2 produces.
+  #parseStartOptions() {
+    const options = [];
+
+    while (this.#peek() === "(" && this.#source[this.#position + 1] === "*") {
+      const wordStart = this.#position + 2;
+      let scanPosition = wordStart;
+
+      while (this.#isWordChar(this.#source[scanPosition])) scanPosition++;
+
+      const word = this.#source.slice(wordStart, scanPosition);
+
+      if (!START_OPTION_VERBS.has(word)) break;
+
+      let value = null;
+
+      if (this.#source[scanPosition] === "=") {
+        scanPosition++;
+
+        const digitsStart = scanPosition;
+
+        while (this.#isDigit(this.#source[scanPosition])) scanPosition++;
+
+        if (scanPosition === digitsStart) break;
+
+        value = Number(this.#source.slice(digitsStart, scanPosition));
+      }
+
+      if (this.#source[scanPosition] !== ")") break;
+
+      // The LIMIT_ verbs require a value, the other verbs don't take one
+      if (word.startsWith("LIMIT_") !== (value !== null)) break;
+
+      this.#position = scanPosition + 1;
+
+      if (word === "UTF" || word === "UTF8") this.#unicode = true;
+
+      options.push({type: "startOption", name: word, value: value});
+    }
+
+    return options;
   }
 
   // Parses a subpattern name followed by the given terminator,
@@ -1778,8 +1882,8 @@ export default class RegexParser {
     const kind = word === "" ? "mark" : VERB_KINDS[word];
 
     if (kind === undefined) {
-      if (OPTION_VERBS.has(word) || ALPHA_ASSERTIONS.has(word)) {
-        // TODO: remove when option verbs and alpha assertions are implemented
+      if (ALPHA_ASSERTIONS.has(word)) {
+        // TODO: remove when alpha assertions are implemented
         throw new RegexParseError(
           `unsupported pattern construct: (*${word}`,
           wordStart,

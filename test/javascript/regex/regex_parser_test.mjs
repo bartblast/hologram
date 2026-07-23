@@ -1203,6 +1203,33 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses VERSION condition with >=", () => {
+        assert.deepEqual(RegexParser.parse("(?(VERSION>=10.4)a|b)"), {
+          type: "conditional",
+          condition: {kind: "version", gte: true, major: 10, minor: 4},
+          yes: {type: "literal", codePoint: 97},
+          no: {type: "literal", codePoint: 98},
+        });
+      });
+
+      it("parses VERSION condition with =", () => {
+        assert.deepEqual(RegexParser.parse("(?(VERSION=10.4)a|b)"), {
+          type: "conditional",
+          condition: {kind: "version", gte: false, major: 10, minor: 4},
+          yes: {type: "literal", codePoint: 97},
+          no: {type: "literal", codePoint: 98},
+        });
+      });
+
+      it("parses VERSION condition without minor version", () => {
+        assert.deepEqual(RegexParser.parse("(?(VERSION>=10)a)"), {
+          type: "conditional",
+          condition: {kind: "version", gte: true, major: 10, minor: 0},
+          yes: {type: "literal", codePoint: 97},
+          no: null,
+        });
+      });
+
       it("raises on more than two branches", () => {
         assertRegexParseError(
           "(?(1)a|b|c)(x)",
@@ -1268,6 +1295,22 @@ describe("RegexParser", () => {
           "(?(x",
           "syntax error in subpattern name (missing terminator?)",
           4,
+        );
+      });
+
+      it("raises on VERSION condition with invalid operator", () => {
+        assertRegexParseError(
+          "(?(VERSION>10)a)",
+          "syntax error or number too big in (?(VERSION condition",
+          11,
+        );
+      });
+
+      it("raises on bare VERSION treated as name condition", () => {
+        assertRegexParseError(
+          "(?(VERSION)a)",
+          "reference to non-existent subpattern",
+          3,
         );
       });
     });
@@ -2684,6 +2727,101 @@ describe("RegexParser", () => {
           "\\Q\\E*",
           "quantifier does not follow a repeatable item",
           5,
+        );
+      });
+    });
+
+    describe("start options", () => {
+      it("parses option verb", () => {
+        assert.deepEqual(RegexParser.parse("(*UTF)a"), {
+          type: "concatenation",
+          items: [
+            {type: "startOption", name: "UTF", value: null},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses multiple option verbs", () => {
+        assert.deepEqual(RegexParser.parse("(*UTF)(*UCP)a"), {
+          type: "concatenation",
+          items: [
+            {type: "startOption", name: "UTF", value: null},
+            {type: "startOption", name: "UCP", value: null},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses UTF8 alias", () => {
+        assert.deepEqual(RegexParser.parse("(*UTF8)a"), {
+          type: "concatenation",
+          items: [
+            {type: "startOption", name: "UTF8", value: null},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses newline convention verb", () => {
+        assert.deepEqual(RegexParser.parse("(*CR)a"), {
+          type: "concatenation",
+          items: [
+            {type: "startOption", name: "CR", value: null},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses limit verb with value", () => {
+        assert.deepEqual(RegexParser.parse("(*LIMIT_MATCH=1000)a"), {
+          type: "concatenation",
+          items: [
+            {type: "startOption", name: "LIMIT_MATCH", value: 1000},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("switches to unicode mode with UTF verb", () => {
+        assert.deepEqual(RegexParser.parse("(*UTF)\\x{100}"), {
+          type: "concatenation",
+          items: [
+            {type: "startOption", name: "UTF", value: null},
+            {type: "literal", codePoint: 256},
+          ],
+        });
+      });
+
+      it("keeps top-level alternation as one item", () => {
+        assert.deepEqual(RegexParser.parse("(*UTF)a|b"), {
+          type: "concatenation",
+          items: [
+            {type: "startOption", name: "UTF", value: null},
+            {
+              type: "alternation",
+              branches: [
+                {type: "literal", codePoint: 97},
+                {type: "literal", codePoint: 98},
+              ],
+            },
+          ],
+        });
+      });
+
+      it("raises on option verb not at pattern start", () => {
+        assertRegexParseError(
+          "a(*UTF)",
+          "(*VERB) not recognized or malformed",
+          6,
+        );
+      });
+
+      it("raises on limit verb without value", () => {
+        assertRegexParseError(
+          "(*LIMIT_MATCH)a",
+          "(*VERB) not recognized or malformed",
+          13,
         );
       });
     });
