@@ -389,6 +389,76 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses escaped characters", () => {
+        assert.deepEqual(RegexParser.parse("[\\n\\t]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 10},
+            {type: "literal", codePoint: 9},
+          ],
+        });
+      });
+
+      it("parses \\b as backspace", () => {
+        assert.deepEqual(RegexParser.parse("[\\b]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "literal", codePoint: 8}],
+        });
+      });
+
+      it("parses hex escapes", () => {
+        assert.deepEqual(RegexParser.parse("[\\x41]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "literal", codePoint: 65}],
+        });
+      });
+
+      it("parses octal escapes", () => {
+        assert.deepEqual(RegexParser.parse("[\\101]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "literal", codePoint: 65}],
+        });
+      });
+
+      it("parses octal escapes above \\377 in unicode mode", () => {
+        assert.deepEqual(RegexParser.parse("[\\777]", {unicode: true}), {
+          type: "class",
+          negated: false,
+          items: [{type: "literal", codePoint: 511}],
+        });
+      });
+
+      it("parses \\8 and \\9 as literal digits", () => {
+        assert.deepEqual(RegexParser.parse("[\\8\\9]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 56},
+            {type: "literal", codePoint: 57},
+          ],
+        });
+      });
+
+      it("parses escaped dash as literal", () => {
+        assert.deepEqual(RegexParser.parse("[\\-]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "literal", codePoint: 45}],
+        });
+      });
+
+      it("parses range with escaped endpoints", () => {
+        assert.deepEqual(RegexParser.parse("[\\x00-\\x1f]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "range", from: 0, to: 31}],
+        });
+      });
+
       it("raises on unterminated class", () => {
         assertRegexParseError(
           "[abc",
@@ -431,6 +501,30 @@ describe("RegexParser", () => {
           "invalid range in character class",
           12,
         );
+      });
+
+      it("raises on \\N in class", () => {
+        assertRegexParseError("[\\N]", "\\N is not supported in a class", 3);
+      });
+
+      it("raises on \\R in class", () => {
+        assertRegexParseError(
+          "[\\R]",
+          "escape sequence is invalid in character class",
+          3,
+        );
+      });
+
+      it("raises on octal escape above \\377 in 8-bit mode", () => {
+        assertRegexParseError(
+          "[\\777]",
+          "octal value is greater than \\377 in 8-bit non-UTF-8 mode",
+          5,
+        );
+      });
+
+      it("raises on unrecognized escape in class", () => {
+        assertRegexParseError("[\\j]", "unrecognized character follows \\", 3);
       });
     });
 
@@ -497,8 +591,273 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses \\N{U+hhhh} in unicode mode", () => {
+        assert.deepEqual(RegexParser.parse("\\N{U+41}", {unicode: true}), {
+          type: "literal",
+          codePoint: 65,
+        });
+      });
+
+      it("parses simple character escapes", () => {
+        assert.deepEqual(RegexParser.parse("\\a\\e\\f\\n\\r\\t"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 7},
+            {type: "literal", codePoint: 27},
+            {type: "literal", codePoint: 12},
+            {type: "literal", codePoint: 10},
+            {type: "literal", codePoint: 13},
+            {type: "literal", codePoint: 9},
+          ],
+        });
+      });
+
+      it("parses \\x with one hex digit", () => {
+        assert.deepEqual(RegexParser.parse("\\x4"), {
+          type: "literal",
+          codePoint: 4,
+        });
+      });
+
+      it("parses \\x with two hex digits", () => {
+        assert.deepEqual(RegexParser.parse("\\x41"), {
+          type: "literal",
+          codePoint: 65,
+        });
+      });
+
+      it("stops \\x after two hex digits", () => {
+        assert.deepEqual(RegexParser.parse("\\x411"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 65},
+            {type: "literal", codePoint: 49},
+          ],
+        });
+      });
+
+      it("parses \\x{hhh...}", () => {
+        assert.deepEqual(RegexParser.parse("\\x{41}"), {
+          type: "literal",
+          codePoint: 65,
+        });
+      });
+
+      it("parses \\x{hhh...} up to 0xff in 8-bit mode", () => {
+        assert.deepEqual(RegexParser.parse("\\x{ff}"), {
+          type: "literal",
+          codePoint: 255,
+        });
+      });
+
+      it("parses \\x{hhh...} beyond BMP in unicode mode", () => {
+        assert.deepEqual(RegexParser.parse("\\x{1F600}", {unicode: true}), {
+          type: "literal",
+          codePoint: 128512,
+        });
+      });
+
+      it("parses \\0 as NUL", () => {
+        assert.deepEqual(RegexParser.parse("\\0"), {
+          type: "literal",
+          codePoint: 0,
+        });
+      });
+
+      it("parses \\0 with two more octal digits", () => {
+        assert.deepEqual(RegexParser.parse("\\012"), {
+          type: "literal",
+          codePoint: 10,
+        });
+      });
+
+      it("stops \\0 octal after three digits", () => {
+        assert.deepEqual(RegexParser.parse("\\0123"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 10},
+            {type: "literal", codePoint: 51},
+          ],
+        });
+      });
+
+      it("parses \\o{ddd...}", () => {
+        assert.deepEqual(RegexParser.parse("\\o{101}"), {
+          type: "literal",
+          codePoint: 65,
+        });
+      });
+
+      it("parses \\c with uppercase letter", () => {
+        assert.deepEqual(RegexParser.parse("\\cA"), {
+          type: "literal",
+          codePoint: 1,
+        });
+      });
+
+      it("parses \\c with lowercase letter", () => {
+        assert.deepEqual(RegexParser.parse("\\ca"), {
+          type: "literal",
+          codePoint: 1,
+        });
+      });
+
+      it("parses \\c with punctuation character", () => {
+        assert.deepEqual(RegexParser.parse("\\c["), {
+          type: "literal",
+          codePoint: 27,
+        });
+      });
+
+      it("parses escaped metacharacter as literal", () => {
+        assert.deepEqual(RegexParser.parse("\\."), {
+          type: "literal",
+          codePoint: 46,
+        });
+      });
+
+      it("parses escaped backslash as literal", () => {
+        assert.deepEqual(RegexParser.parse("\\\\"), {
+          type: "literal",
+          codePoint: 92,
+        });
+      });
+
+      it("parses escaped non-alphanumeric non-ASCII as literal", () => {
+        assert.deepEqual(RegexParser.parse("\\é"), {
+          type: "literal",
+          codePoint: 233,
+        });
+      });
+
       it("raises on \\ at end of pattern", () => {
         assertRegexParseError("a\\", "\\ at end of pattern", 2);
+      });
+
+      it("raises on \\x without hex digits", () => {
+        assertRegexParseError(
+          "\\x",
+          "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+          2,
+        );
+      });
+
+      it("raises on empty \\x{}", () => {
+        assertRegexParseError(
+          "\\x{}",
+          "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+          3,
+        );
+      });
+
+      it("raises on non-hex character in \\x{}", () => {
+        assertRegexParseError(
+          "\\x{4g}",
+          "non-hex character in \\x{} (closing brace missing?)",
+          5,
+        );
+      });
+
+      it("raises on \\x{} without closing brace", () => {
+        assertRegexParseError(
+          "\\x{41",
+          "non-hex character in \\x{} (closing brace missing?)",
+          6,
+        );
+      });
+
+      it("raises on \\x{} value too large for 8-bit mode", () => {
+        assertRegexParseError(
+          "\\x{100}",
+          "character code point value in \\x{} or \\o{} is too large",
+          6,
+        );
+      });
+
+      it("raises on \\x{} value too large for unicode mode", () => {
+        assertRegexParseError(
+          "\\x{110000}",
+          "character code point value in \\x{} or \\o{} is too large",
+          9,
+          {unicode: true},
+        );
+      });
+
+      it("raises on \\x{} surrogate value in unicode mode", () => {
+        assertRegexParseError(
+          "\\x{d800}",
+          "disallowed Unicode code point (>= 0xd800 && <= 0xdfff)",
+          7,
+          {unicode: true},
+        );
+      });
+
+      it("raises on \\o without opening brace", () => {
+        assertRegexParseError("\\o", "missing opening brace after \\o", 2);
+      });
+
+      it("raises on empty \\o{}", () => {
+        assertRegexParseError(
+          "\\o{}",
+          "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+          3,
+        );
+      });
+
+      it("raises on non-octal character in \\o{}", () => {
+        assertRegexParseError(
+          "\\o{8}",
+          "non-octal character in \\o{} (closing brace missing?)",
+          4,
+        );
+      });
+
+      it("raises on \\o{} value too large for 8-bit mode", () => {
+        assertRegexParseError(
+          "\\o{400}",
+          "character code point value in \\x{} or \\o{} is too large",
+          6,
+        );
+      });
+
+      it("raises on \\c at end of pattern", () => {
+        assertRegexParseError("\\c", "\\c at end of pattern", 2);
+      });
+
+      it("raises on \\c followed by non-printable ASCII", () => {
+        assertRegexParseError(
+          "\\cé",
+          "\\c must be followed by a printable ASCII character",
+          3,
+        );
+      });
+
+      it("raises on unrecognized escape", () => {
+        assertRegexParseError("\\j", "unrecognized character follows \\", 2);
+      });
+
+      it("raises on escape unsupported by PCRE2", () => {
+        assertRegexParseError(
+          "\\u",
+          "PCRE2 does not support \\F, \\L, \\l, \\N{name}, \\U, or \\u",
+          2,
+        );
+      });
+
+      it("raises on \\N{name} form", () => {
+        assertRegexParseError(
+          "\\N{x}",
+          "PCRE2 does not support \\F, \\L, \\l, \\N{name}, \\U, or \\u",
+          3,
+        );
+      });
+
+      it("raises on \\N{U+hhhh} in 8-bit mode", () => {
+        assertRegexParseError(
+          "\\N{U+41}",
+          "\\N{U+dddd} is supported only in Unicode (UTF) mode",
+          8,
+        );
       });
     });
 

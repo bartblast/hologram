@@ -2,6 +2,16 @@
 
 import RegexParseError from "./regex_parse_error.mjs";
 
+// Simple single-character escapes valid in all contexts.
+const CHAR_ESCAPE_CODE_POINTS = {
+  a: 7,
+  e: 27,
+  f: 12,
+  n: 10,
+  r: 13,
+  t: 9,
+};
+
 // Anchor and simple assertion escapes outside character classes.
 const ESCAPE_ANCHOR_KINDS = {
   A: "subjectStart",
@@ -11,6 +21,14 @@ const ESCAPE_ANCHOR_KINDS = {
   b: "wordBoundary",
   z: "subjectEnd",
 };
+
+// TODO: shrink as remaining escape sequences (shorthand classes, backreferences,
+// Unicode properties, \Q...\E) are implemented
+const FUTURE_CLASS_ESCAPES = new Set([..."DEHPQSVWdhpsvw"]);
+
+// TODO: shrink as remaining escape sequences (shorthand classes, backreferences,
+// subroutine references, Unicode properties, \K, \Q...\E) are implemented
+const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."DEHKPQRSVWdghkpsvw123456789"]);
 
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
@@ -33,35 +51,76 @@ const POSIX_CLASS_NAMES = new Set([
   "xdigit",
 ]);
 
+// Escape letters PCRE2 rejects with a dedicated message.
+const UNSUPPORTED_BY_PCRE2_ESCAPES = new Set(["F", "L", "U", "l", "u"]);
+
 export default class RegexParser {
   // TODO: shrink as remaining pattern constructs (groups) are implemented
   static #unsupportedChars = new Set(["(", ")"]);
 
   #position = 0;
   #source;
+  #unicode;
 
-  static parse(source) {
-    return new RegexParser(source).#parseAlternation();
+  static parse(source, opts = {}) {
+    return new RegexParser(source, opts).#parseAlternation();
   }
 
-  constructor(source) {
+  constructor(source, opts = {}) {
     this.#source = source;
+    this.#unicode = opts.unicode === true;
   }
 
   #atEnd() {
     return this.#position >= this.#source.length;
   }
 
-  #isDigit(char) {
-    return char >= "0" && char <= "9";
+  // Validates a code point produced by a \x{}, \o{} or \N{U+} escape,
+  // raising at the current position (just past the digits).
+  #checkCodePointValue(value) {
+    const maxCodePoint = this.#unicode ? 0x10ffff : 0xff;
+
+    if (value > maxCodePoint) {
+      throw new RegexParseError(
+        "character code point value in \\x{} or \\o{} is too large",
+        this.#position,
+      );
+    }
+
+    if (this.#unicode && value >= 0xd800 && value <= 0xdfff) {
+      throw new RegexParseError(
+        "disallowed Unicode code point (>= 0xd800 && <= 0xdfff)",
+        this.#position,
+      );
+    }
   }
 
-  #isPosixNameChar(char) {
+  #isAlphanumeric(char) {
     return (
       (char >= "a" && char <= "z") ||
       (char >= "A" && char <= "Z") ||
       this.#isDigit(char)
     );
+  }
+
+  #isDigit(char) {
+    return char >= "0" && char <= "9";
+  }
+
+  #isHexDigit(char) {
+    return (
+      this.#isDigit(char) ||
+      (char >= "a" && char <= "f") ||
+      (char >= "A" && char <= "F")
+    );
+  }
+
+  #isOctalDigit(char) {
+    return char >= "0" && char <= "7";
+  }
+
+  #isPosixNameChar(char) {
+    return this.#isAlphanumeric(char);
   }
 
   #parseAlternation() {
@@ -146,14 +205,6 @@ export default class RegexParser {
 
       isFirstItem = false;
 
-      if (char === "\\") {
-        // TODO: remove when escapes inside character classes are implemented
-        throw new RegexParseError(
-          `unsupported pattern construct: ${char}`,
-          this.#position,
-        );
-      }
-
       if (char === "[" && this.#source[this.#position + 1] === ":") {
         const posixClass = this.#tryParsePosixClass();
 
@@ -170,8 +221,7 @@ export default class RegexParser {
   }
 
   #parseClassCharOrRange() {
-    const from = this.#source.codePointAt(this.#position);
-    this.#position += from > 0xffff ? 2 : 1;
+    const from = this.#parseClassSingleCodePoint();
 
     // - forms a range only between two members; before ] or at pattern end it's a literal
     if (
@@ -184,14 +234,6 @@ export default class RegexParser {
 
     this.#position++;
 
-    if (this.#peek() === "\\") {
-      // TODO: remove when escapes inside character classes are implemented
-      throw new RegexParseError(
-        `unsupported pattern construct: \\`,
-        this.#position,
-      );
-    }
-
     if (
       this.#peek() === "[" &&
       this.#source[this.#position + 1] === ":" &&
@@ -203,8 +245,7 @@ export default class RegexParser {
       );
     }
 
-    const to = this.#source.codePointAt(this.#position);
-    this.#position += to > 0xffff ? 2 : 1;
+    const to = this.#parseClassSingleCodePoint();
 
     if (to < from) {
       throw new RegexParseError(
@@ -214,6 +255,46 @@ export default class RegexParser {
     }
 
     return {type: "range", from: from, to: to};
+  }
+
+  // Parses a single class member char, either plain or produced by an escape.
+  #parseClassSingleCodePoint() {
+    if (this.#peek() !== "\\") {
+      const codePoint = this.#source.codePointAt(this.#position);
+      this.#position += codePoint > 0xffff ? 2 : 1;
+
+      return codePoint;
+    }
+
+    this.#position++;
+
+    if (this.#atEnd()) {
+      throw new RegexParseError("\\ at end of pattern", this.#position);
+    }
+
+    const char = this.#peek();
+
+    if (char === "N") {
+      this.#position++;
+      throw new RegexParseError(
+        "\\N is not supported in a class",
+        this.#position,
+      );
+    }
+
+    if (char === "R") {
+      this.#position++;
+      throw new RegexParseError(
+        "escape sequence is invalid in character class",
+        this.#position,
+      );
+    }
+
+    const codePoint = this.#tryParseCharEscapeCodePoint(true);
+
+    if (codePoint !== null) return codePoint;
+
+    this.#raiseEscapeError(true);
   }
 
   #parseConcatenation() {
@@ -254,6 +335,28 @@ export default class RegexParser {
       : {type: "concatenation", items: items};
   }
 
+  // Parses a \cx control escape, with the position just past the c.
+  #parseControlEscape() {
+    if (this.#atEnd()) {
+      throw new RegexParseError("\\c at end of pattern", this.#position);
+    }
+
+    const codePoint = this.#source.codePointAt(this.#position);
+    this.#position += codePoint > 0xffff ? 2 : 1;
+
+    if (codePoint < 32 || codePoint > 126) {
+      throw new RegexParseError(
+        "\\c must be followed by a printable ASCII character",
+        this.#position,
+      );
+    }
+
+    const upperCased =
+      codePoint >= 97 && codePoint <= 122 ? codePoint - 32 : codePoint;
+
+    return upperCased ^ 0x40;
+  }
+
   #parseEscape() {
     this.#position++;
 
@@ -269,22 +372,212 @@ export default class RegexParser {
       return {type: "anchor", kind: anchorKind};
     }
 
-    if (char === "N") {
-      // TODO: handle the \N{U+hhhh} code point form when character escapes are implemented
+    if (char === "N") return this.#parseNotNewlineEscape();
+
+    const codePoint = this.#tryParseCharEscapeCodePoint(false);
+
+    if (codePoint !== null) return {type: "literal", codePoint: codePoint};
+
+    this.#raiseEscapeError(false);
+  }
+
+  // Parses a \xhh or \x{hhh...} hex escape, with the position just past the x.
+  #parseHexEscape() {
+    if (this.#peek() === "{") {
       this.#position++;
-      return {type: "notNewline"};
+
+      const digitsStart = this.#position;
+
+      while (this.#isHexDigit(this.#peek())) this.#position++;
+
+      if (this.#peek() !== "}") {
+        throw new RegexParseError(
+          "non-hex character in \\x{} (closing brace missing?)",
+          this.#position + 1,
+        );
+      }
+
+      if (this.#position === digitsStart) {
+        throw new RegexParseError(
+          "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+          this.#position,
+        );
+      }
+
+      const value = parseInt(
+        this.#source.slice(digitsStart, this.#position),
+        16,
+      );
+
+      this.#checkCodePointValue(value);
+      this.#position++;
+
+      return value;
     }
 
-    // TODO: remove when remaining escape sequences (character escapes, shorthand
-    // classes, backreferences, Unicode properties, \Q...\E) are implemented
-    throw new RegexParseError(
-      `unsupported pattern construct: \\${char}`,
-      this.#position,
-    );
+    const digitsStart = this.#position;
+
+    while (this.#position - digitsStart < 2 && this.#isHexDigit(this.#peek())) {
+      this.#position++;
+    }
+
+    if (this.#position === digitsStart) {
+      throw new RegexParseError(
+        "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+        this.#position,
+      );
+    }
+
+    return parseInt(this.#source.slice(digitsStart, this.#position), 16);
+  }
+
+  // Parses \N (not-newline) or the \N{U+hhhh} code point form,
+  // with the position at the N.
+  #parseNotNewlineEscape() {
+    this.#position++;
+
+    if (this.#peek() !== "{") return {type: "notNewline"};
+
+    this.#position++;
+
+    if (this.#peek() !== "U" || this.#source[this.#position + 1] !== "+") {
+      throw new RegexParseError(
+        "PCRE2 does not support \\F, \\L, \\l, \\N{name}, \\U, or \\u",
+        this.#position,
+      );
+    }
+
+    this.#position += 2;
+
+    const digitsStart = this.#position;
+
+    while (this.#isHexDigit(this.#peek())) this.#position++;
+
+    if (this.#peek() !== "}") {
+      throw new RegexParseError(
+        "non-hex character in \\x{} (closing brace missing?)",
+        this.#position + 1,
+      );
+    }
+
+    if (this.#position === digitsStart) {
+      throw new RegexParseError(
+        "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+        this.#position,
+      );
+    }
+
+    const value = parseInt(this.#source.slice(digitsStart, this.#position), 16);
+
+    if (this.#unicode) this.#checkCodePointValue(value);
+
+    this.#position++;
+
+    if (!this.#unicode) {
+      throw new RegexParseError(
+        "\\N{U+dddd} is supported only in Unicode (UTF) mode",
+        this.#position,
+      );
+    }
+
+    return {type: "literal", codePoint: value};
+  }
+
+  // Parses a \o{ddd...} octal escape, with the position just past the o.
+  #parseOctalBraceEscape() {
+    if (this.#peek() !== "{") {
+      throw new RegexParseError(
+        "missing opening brace after \\o",
+        this.#position,
+      );
+    }
+
+    this.#position++;
+
+    const digitsStart = this.#position;
+
+    while (this.#isOctalDigit(this.#peek())) this.#position++;
+
+    if (this.#peek() !== "}") {
+      throw new RegexParseError(
+        "non-octal character in \\o{} (closing brace missing?)",
+        this.#position + 1,
+      );
+    }
+
+    if (this.#position === digitsStart) {
+      throw new RegexParseError(
+        "digits missing after \\x or in \\x{} or \\o{} or \\N{U+}",
+        this.#position,
+      );
+    }
+
+    const value = parseInt(this.#source.slice(digitsStart, this.#position), 8);
+
+    this.#checkCodePointValue(value);
+    this.#position++;
+
+    return value;
+  }
+
+  // Parses an octal escape of up to 3 octal digits, with the position
+  // at the first digit.
+  #parseOctalEscape() {
+    const digitsStart = this.#position;
+
+    while (
+      this.#position - digitsStart < 3 &&
+      this.#isOctalDigit(this.#peek())
+    ) {
+      this.#position++;
+    }
+
+    const value = parseInt(this.#source.slice(digitsStart, this.#position), 8);
+
+    if (!this.#unicode && value > 0xff) {
+      throw new RegexParseError(
+        "octal value is greater than \\377 in 8-bit non-UTF-8 mode",
+        this.#position,
+      );
+    }
+
+    return value;
   }
 
   #peek() {
     return this.#source[this.#position];
+  }
+
+  // Raises the error PCRE2 produces for an escape with no valid meaning,
+  // with the position at the escape char.
+  #raiseEscapeError(inClass) {
+    const char = this.#peek();
+
+    if (UNSUPPORTED_BY_PCRE2_ESCAPES.has(char)) {
+      this.#position++;
+      throw new RegexParseError(
+        "PCRE2 does not support \\F, \\L, \\l, \\N{name}, \\U, or \\u",
+        this.#position,
+      );
+    }
+
+    const futureEscapes = inClass
+      ? FUTURE_CLASS_ESCAPES
+      : FUTURE_TOP_LEVEL_ESCAPES;
+
+    if (futureEscapes.has(char)) {
+      // TODO: remove when remaining escape sequences are implemented
+      throw new RegexParseError(
+        `unsupported pattern construct: \\${char}`,
+        this.#position,
+      );
+    }
+
+    this.#position++;
+    throw new RegexParseError(
+      "unrecognized character follows \\",
+      this.#position,
+    );
   }
 
   // Detects the common mistake of using [:name:] as a whole class,
@@ -373,6 +666,61 @@ export default class RegexParser {
     this.#position = scanPosition + 1;
 
     return {min: min, max: max};
+  }
+
+  // Parses an escape that produces a single code point, with the position
+  // at the escape char. Returns null (without consuming) for escapes with
+  // other meanings.
+  #tryParseCharEscapeCodePoint(inClass) {
+    const char = this.#peek();
+    const simpleCodePoint = CHAR_ESCAPE_CODE_POINTS[char];
+
+    if (simpleCodePoint !== undefined) {
+      this.#position++;
+      return simpleCodePoint;
+    }
+
+    if (char === "x") {
+      this.#position++;
+      return this.#parseHexEscape();
+    }
+
+    if (char === "o") {
+      this.#position++;
+      return this.#parseOctalBraceEscape();
+    }
+
+    if (char === "c") {
+      this.#position++;
+      return this.#parseControlEscape();
+    }
+
+    if (inClass) {
+      // \b is a backspace inside a class
+      if (char === "b") {
+        this.#position++;
+        return 8;
+      }
+
+      // \8 and \9 are literal digits inside a class
+      if (char === "8" || char === "9") {
+        this.#position++;
+        return char.codePointAt(0);
+      }
+
+      if (this.#isOctalDigit(char)) return this.#parseOctalEscape();
+    } else if (char === "0") {
+      return this.#parseOctalEscape();
+    }
+
+    if (!this.#isAlphanumeric(char)) {
+      const codePoint = this.#source.codePointAt(this.#position);
+      this.#position += codePoint > 0xffff ? 2 : 1;
+
+      return codePoint;
+    }
+
+    return null;
   }
 
   // Scans a [:name:] or [:^name:] POSIX class element.

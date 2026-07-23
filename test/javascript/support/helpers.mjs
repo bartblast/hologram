@@ -136,11 +136,11 @@ function assertCapturedBoxedError(
   }
 }
 
-export function assertRegexParseError(source, message, position) {
+export function assertRegexParseError(source, message, position, opts = {}) {
   let error = null;
 
   try {
-    RegexParser.parse(source);
+    RegexParser.parse(source, opts);
   } catch (thrownError) {
     error = thrownError;
   }
