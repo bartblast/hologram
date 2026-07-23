@@ -2,6 +2,16 @@
 
 import RegexParseError from "./regex_parse_error.mjs";
 
+// Anchor and simple assertion escapes outside character classes.
+const ESCAPE_ANCHOR_KINDS = {
+  A: "subjectStart",
+  B: "nonWordBoundary",
+  G: "matchStart",
+  Z: "subjectEndBeforeFinalNewline",
+  b: "wordBoundary",
+  z: "subjectEnd",
+};
+
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
 
@@ -24,8 +34,8 @@ const POSIX_CLASS_NAMES = new Set([
 ]);
 
 export default class RegexParser {
-  // TODO: shrink as remaining pattern constructs (escapes, groups, anchors) are implemented
-  static #unsupportedChars = new Set(["$", "(", ")", ".", "\\", "^"]);
+  // TODO: shrink as remaining pattern constructs (groups) are implemented
+  static #unsupportedChars = new Set(["(", ")"]);
 
   #position = 0;
   #source;
@@ -71,6 +81,23 @@ export default class RegexParser {
     const char = this.#peek();
 
     if (char === "[") return this.#parseCharacterClass();
+
+    if (char === "\\") return this.#parseEscape();
+
+    if (char === ".") {
+      this.#position++;
+      return {type: "dot"};
+    }
+
+    if (char === "^") {
+      this.#position++;
+      return {type: "anchor", kind: "lineStart"};
+    }
+
+    if (char === "$") {
+      this.#position++;
+      return {type: "anchor", kind: "lineEnd"};
+    }
 
     if (RegexParser.#unsupportedChars.has(char)) {
       // TODO: remove when all pattern constructs are implemented
@@ -202,7 +229,11 @@ export default class RegexParser {
 
       const lastItem = items.at(-1);
 
-      if (lastItem === undefined || lastItem.type === "quantifier") {
+      if (
+        lastItem === undefined ||
+        lastItem.type === "quantifier" ||
+        lastItem.type === "anchor"
+      ) {
         throw new RegexParseError(
           "quantifier does not follow a repeatable item",
           this.#position,
@@ -221,6 +252,35 @@ export default class RegexParser {
     return items.length === 1
       ? items[0]
       : {type: "concatenation", items: items};
+  }
+
+  #parseEscape() {
+    this.#position++;
+
+    if (this.#atEnd()) {
+      throw new RegexParseError("\\ at end of pattern", this.#position);
+    }
+
+    const char = this.#peek();
+    const anchorKind = ESCAPE_ANCHOR_KINDS[char];
+
+    if (anchorKind !== undefined) {
+      this.#position++;
+      return {type: "anchor", kind: anchorKind};
+    }
+
+    if (char === "N") {
+      // TODO: handle the \N{U+hhhh} code point form when character escapes are implemented
+      this.#position++;
+      return {type: "notNewline"};
+    }
+
+    // TODO: remove when remaining escape sequences (character escapes, shorthand
+    // classes, backreferences, Unicode properties, \Q...\E) are implemented
+    throw new RegexParseError(
+      `unsupported pattern construct: \\${char}`,
+      this.#position,
+    );
   }
 
   #peek() {

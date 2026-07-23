@@ -12,6 +12,91 @@ defineGlobalErlangAndElixirModules();
 
 describe("RegexParser", () => {
   describe("parse()", () => {
+    describe("anchors", () => {
+      it("parses ^ as line start", () => {
+        assert.deepEqual(RegexParser.parse("^"), {
+          type: "anchor",
+          kind: "lineStart",
+        });
+      });
+
+      it("parses $ as line end", () => {
+        assert.deepEqual(RegexParser.parse("$"), {
+          type: "anchor",
+          kind: "lineEnd",
+        });
+      });
+
+      it("parses \\A as subject start", () => {
+        assert.deepEqual(RegexParser.parse("\\A"), {
+          type: "anchor",
+          kind: "subjectStart",
+        });
+      });
+
+      it("parses \\z as subject end", () => {
+        assert.deepEqual(RegexParser.parse("\\z"), {
+          type: "anchor",
+          kind: "subjectEnd",
+        });
+      });
+
+      it("parses \\Z as subject end before final newline", () => {
+        assert.deepEqual(RegexParser.parse("\\Z"), {
+          type: "anchor",
+          kind: "subjectEndBeforeFinalNewline",
+        });
+      });
+
+      it("parses \\b as word boundary", () => {
+        assert.deepEqual(RegexParser.parse("\\b"), {
+          type: "anchor",
+          kind: "wordBoundary",
+        });
+      });
+
+      it("parses \\B as non-word boundary", () => {
+        assert.deepEqual(RegexParser.parse("\\B"), {
+          type: "anchor",
+          kind: "nonWordBoundary",
+        });
+      });
+
+      it("parses \\G as match start", () => {
+        assert.deepEqual(RegexParser.parse("\\G"), {
+          type: "anchor",
+          kind: "matchStart",
+        });
+      });
+
+      it("parses anchors around literals", () => {
+        assert.deepEqual(RegexParser.parse("^a$"), {
+          type: "concatenation",
+          items: [
+            {type: "anchor", kind: "lineStart"},
+            {type: "literal", codePoint: 97},
+            {type: "anchor", kind: "lineEnd"},
+          ],
+        });
+      });
+
+      it("raises when quantifier follows ^ anchor", () => {
+        assertRegexParseError(
+          "^*",
+          "quantifier does not follow a repeatable item",
+          2,
+        );
+      });
+
+      it("raises when quantifier follows escape anchor", () => {
+        assertRegexParseError(
+          "\\A*",
+          "quantifier does not follow a repeatable item",
+          3,
+        );
+      });
+    });
+
     describe("alternation", () => {
       it("parses two branches", () => {
         assert.deepEqual(RegexParser.parse("a|b"), {
@@ -230,6 +315,18 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses anchor and dot metacharacters as literals", () => {
+        assert.deepEqual(RegexParser.parse("[.$^]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 46},
+            {type: "literal", codePoint: 36},
+            {type: "literal", codePoint: 94},
+          ],
+        });
+      });
+
       it("parses quantified class", () => {
         assert.deepEqual(RegexParser.parse("[ab]*"), {
           type: "quantifier",
@@ -360,12 +457,48 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("dot", () => {
+      it("parses . as dot", () => {
+        assert.deepEqual(RegexParser.parse("."), {type: "dot"});
+      });
+
+      it("parses quantified dot", () => {
+        assert.deepEqual(RegexParser.parse(".*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {type: "dot"},
+        });
+      });
+    });
+
     describe("empty pattern", () => {
       it("parses to empty concatenation", () => {
         assert.deepEqual(RegexParser.parse(""), {
           type: "concatenation",
           items: [],
         });
+      });
+    });
+
+    describe("escapes", () => {
+      it("parses \\N as not-newline", () => {
+        assert.deepEqual(RegexParser.parse("\\N"), {type: "notNewline"});
+      });
+
+      it("parses quantified \\N", () => {
+        assert.deepEqual(RegexParser.parse("\\N*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {type: "notNewline"},
+        });
+      });
+
+      it("raises on \\ at end of pattern", () => {
+        assertRegexParseError("a\\", "\\ at end of pattern", 2);
       });
     });
 
