@@ -24,6 +24,7 @@ import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
+import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
@@ -970,6 +971,14 @@ export default class Hologram {
   }
 
   static #mountPage(isPageModuleRegistered = false) {
+    // Every page-entry path funnels through here (client-side navigation, back/forward
+    // restoration, initial mount), so this is where dispatches still pending from the previous
+    // page are dropped - the context they were meant for no longer exists. Cancel, not flush: a
+    // dispatch must never execute on a page the user has left. On the initial mount both
+    // cancellations are no-ops.
+    Debouncer.cancelAll();
+    Throttler.cancelAll();
+
     let mountData = null;
 
     if ($.#shouldLoadMountData) {
