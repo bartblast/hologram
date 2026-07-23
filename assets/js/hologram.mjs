@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
+import Debouncer from "./debouncer.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
@@ -870,6 +871,12 @@ export default class Hologram {
         Client.connect(true);
       }
     });
+
+    // Losing focus definitively ends any burst of events from an element, so its pending
+    // debounced dispatches fire now instead of waiting out the rest of their windows.
+    document.addEventListener("focusout", (event) =>
+      Debouncer.flush(event.target),
+    );
 
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
