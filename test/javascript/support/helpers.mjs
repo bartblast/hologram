@@ -27,6 +27,8 @@ import Erlang_Uri_String from "../../../assets/js/erlang/uri_string.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
+import RegexParseError from "../../../assets/js/regex/regex_parse_error.mjs";
+import RegexParser from "../../../assets/js/regex/regex_parser.mjs";
 import Renderer from "../../../assets/js/renderer.mjs";
 import Serializer from "../../../assets/js/serializer.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -132,6 +134,20 @@ function assertCapturedBoxedError(
         `but got:\n${receivedErrorType}: ${receivedErrorMessage}`,
     );
   }
+}
+
+export function assertRegexParseError(source, message, position) {
+  let error = null;
+
+  try {
+    RegexParser.parse(source);
+  } catch (thrownError) {
+    error = thrownError;
+  }
+
+  assert.instanceOf(error, RegexParseError);
+  assert.equal(error.message, message);
+  assert.equal(error.position, position);
 }
 
 export function componentRegistryEntryFixture(data = {}) {

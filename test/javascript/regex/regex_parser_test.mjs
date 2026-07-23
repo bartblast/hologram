@@ -2,27 +2,13 @@
 
 import {
   assert,
+  assertRegexParseError,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
-import RegexParseError from "../../../assets/js/regex/regex_parse_error.mjs";
 import RegexParser from "../../../assets/js/regex/regex_parser.mjs";
 
 defineGlobalErlangAndElixirModules();
-
-const assertParseError = (source, message, position) => {
-  let error = null;
-
-  try {
-    RegexParser.parse(source);
-  } catch (thrownError) {
-    error = thrownError;
-  }
-
-  assert.instanceOf(error, RegexParseError);
-  assert.equal(error.message, message);
-  assert.equal(error.position, position);
-};
 
 describe("RegexParser", () => {
   describe("parse()", () => {
@@ -88,6 +74,266 @@ describe("RegexParser", () => {
             {type: "concatenation", items: []},
           ],
         });
+      });
+    });
+
+    describe("character classes", () => {
+      it("parses class with single characters", () => {
+        assert.deepEqual(RegexParser.parse("[abc]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+            {type: "literal", codePoint: 99},
+          ],
+        });
+      });
+
+      it("parses negated class", () => {
+        assert.deepEqual(RegexParser.parse("[^ab]"), {
+          type: "class",
+          negated: true,
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("parses range", () => {
+        assert.deepEqual(RegexParser.parse("[a-z]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "range", from: 97, to: 122}],
+        });
+      });
+
+      it("parses range mixed with single characters", () => {
+        assert.deepEqual(RegexParser.parse("[a-z0]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "range", from: 97, to: 122},
+            {type: "literal", codePoint: 48},
+          ],
+        });
+      });
+
+      it("parses non-ASCII BMP range", () => {
+        assert.deepEqual(RegexParser.parse("[à-ü]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "range", from: 224, to: 252}],
+        });
+      });
+
+      it("parses astral range", () => {
+        assert.deepEqual(RegexParser.parse("[😀-😂]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "range", from: 128512, to: 128514}],
+        });
+      });
+
+      it("parses leading - as literal", () => {
+        assert.deepEqual(RegexParser.parse("[-a]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 45},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses trailing - as literal", () => {
+        assert.deepEqual(RegexParser.parse("[a-]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 45},
+          ],
+        });
+      });
+
+      it("parses - after range as literal", () => {
+        assert.deepEqual(RegexParser.parse("[a-z-0]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "range", from: 97, to: 122},
+            {type: "literal", codePoint: 45},
+            {type: "literal", codePoint: 48},
+          ],
+        });
+      });
+
+      it("parses leading ] as literal", () => {
+        assert.deepEqual(RegexParser.parse("[]a]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 93},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses leading ] in negated class as literal", () => {
+        assert.deepEqual(RegexParser.parse("[^]a]"), {
+          type: "class",
+          negated: true,
+          items: [
+            {type: "literal", codePoint: 93},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses leading ] as range start", () => {
+        assert.deepEqual(RegexParser.parse("[]-a]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "range", from: 93, to: 97}],
+        });
+      });
+
+      it("parses ^ not in first position as literal", () => {
+        assert.deepEqual(RegexParser.parse("[a^]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 94},
+          ],
+        });
+      });
+
+      it("parses [ as literal", () => {
+        assert.deepEqual(RegexParser.parse("[[]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "literal", codePoint: 91}],
+        });
+      });
+
+      it("parses quantifier metacharacters as literals", () => {
+        assert.deepEqual(RegexParser.parse("[*+]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 42},
+            {type: "literal", codePoint: 43},
+          ],
+        });
+      });
+
+      it("parses quantified class", () => {
+        assert.deepEqual(RegexParser.parse("[ab]*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {
+            type: "class",
+            negated: false,
+            items: [
+              {type: "literal", codePoint: 97},
+              {type: "literal", codePoint: 98},
+            ],
+          },
+        });
+      });
+
+      it("parses POSIX class", () => {
+        assert.deepEqual(RegexParser.parse("[[:alpha:]]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "posixClass", name: "alpha", negated: false}],
+        });
+      });
+
+      it("parses negated POSIX class", () => {
+        assert.deepEqual(RegexParser.parse("[[:^lower:]]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "posixClass", name: "lower", negated: true}],
+        });
+      });
+
+      it("parses multiple POSIX classes", () => {
+        assert.deepEqual(RegexParser.parse("[[:alpha:][:digit:]]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "posixClass", name: "alpha", negated: false},
+            {type: "posixClass", name: "digit", negated: false},
+          ],
+        });
+      });
+
+      it("parses [ without POSIX shape as literal", () => {
+        assert.deepEqual(RegexParser.parse("[[:a]]"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "class",
+              negated: false,
+              items: [
+                {type: "literal", codePoint: 91},
+                {type: "literal", codePoint: 58},
+                {type: "literal", codePoint: 97},
+              ],
+            },
+            {type: "literal", codePoint: 93},
+          ],
+        });
+      });
+
+      it("raises on unterminated class", () => {
+        assertRegexParseError(
+          "[abc",
+          "missing terminating ] for character class",
+          4,
+        );
+      });
+
+      it("raises on class closed only by literal ]", () => {
+        assertRegexParseError(
+          "[]",
+          "missing terminating ] for character class",
+          2,
+        );
+      });
+
+      it("raises on range out of order", () => {
+        assertRegexParseError(
+          "[z-a]",
+          "range out of order in character class",
+          4,
+        );
+      });
+
+      it("raises on unknown POSIX class name", () => {
+        assertRegexParseError("[[:foo:]]", "unknown POSIX class name", 8);
+      });
+
+      it("raises on POSIX class used outside class", () => {
+        assertRegexParseError(
+          "[:alpha:]",
+          "POSIX named classes are supported only within a class",
+          9,
+        );
+      });
+
+      it("raises on POSIX class as range endpoint", () => {
+        assertRegexParseError(
+          "[a-[:digit:]]",
+          "invalid range in character class",
+          12,
+        );
       });
     });
 
@@ -326,7 +572,7 @@ describe("RegexParser", () => {
       });
 
       it("raises when quantifier has nothing to repeat", () => {
-        assertParseError(
+        assertRegexParseError(
           "*",
           "quantifier does not follow a repeatable item",
           1,
@@ -334,7 +580,7 @@ describe("RegexParser", () => {
       });
 
       it("raises when quantifier follows quantifier", () => {
-        assertParseError(
+        assertRegexParseError(
           "a**",
           "quantifier does not follow a repeatable item",
           3,
@@ -342,7 +588,7 @@ describe("RegexParser", () => {
       });
 
       it("raises when {} quantifier has nothing to repeat", () => {
-        assertParseError(
+        assertRegexParseError(
           "{2}",
           "quantifier does not follow a repeatable item",
           3,
@@ -350,16 +596,20 @@ describe("RegexParser", () => {
       });
 
       it("raises when numbers are out of order", () => {
-        assertParseError("a{2,1}", "numbers out of order in {} quantifier", 5);
+        assertRegexParseError(
+          "a{2,1}",
+          "numbers out of order in {} quantifier",
+          5,
+        );
       });
 
       it("raises when number is too big", () => {
-        assertParseError("a{65536}", "number too big in {} quantifier", 7);
+        assertRegexParseError("a{65536}", "number too big in {} quantifier", 7);
       });
     });
 
     it("raises on unsupported construct", () => {
-      assertParseError("a[", "unsupported pattern construct: [", 1);
+      assertRegexParseError("a(", "unsupported pattern construct: (", 1);
     });
   });
 });

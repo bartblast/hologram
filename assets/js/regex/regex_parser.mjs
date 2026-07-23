@@ -5,9 +5,27 @@ import RegexParseError from "./regex_parse_error.mjs";
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
 
+// The class names recognized by PCRE2 in [:name:] POSIX class elements.
+const POSIX_CLASS_NAMES = new Set([
+  "alnum",
+  "alpha",
+  "ascii",
+  "blank",
+  "cntrl",
+  "digit",
+  "graph",
+  "lower",
+  "print",
+  "punct",
+  "space",
+  "upper",
+  "word",
+  "xdigit",
+]);
+
 export default class RegexParser {
-  // TODO: shrink as remaining pattern constructs (escapes, classes, groups, anchors) are implemented
-  static #unsupportedChars = new Set(["$", "(", ")", ".", "[", "\\", "]", "^"]);
+  // TODO: shrink as remaining pattern constructs (escapes, groups, anchors) are implemented
+  static #unsupportedChars = new Set(["$", "(", ")", ".", "\\", "^"]);
 
   #position = 0;
   #source;
@@ -28,6 +46,14 @@ export default class RegexParser {
     return char >= "0" && char <= "9";
   }
 
+  #isPosixNameChar(char) {
+    return (
+      (char >= "a" && char <= "z") ||
+      (char >= "A" && char <= "Z") ||
+      this.#isDigit(char)
+    );
+  }
+
   #parseAlternation() {
     const branches = [this.#parseConcatenation()];
 
@@ -44,6 +70,8 @@ export default class RegexParser {
   #parseAtom() {
     const char = this.#peek();
 
+    if (char === "[") return this.#parseCharacterClass();
+
     if (RegexParser.#unsupportedChars.has(char)) {
       // TODO: remove when all pattern constructs are implemented
       throw new RegexParseError(
@@ -56,6 +84,109 @@ export default class RegexParser {
     this.#position += codePoint > 0xffff ? 2 : 1;
 
     return {type: "literal", codePoint: codePoint};
+  }
+
+  #parseCharacterClass() {
+    this.#position++;
+
+    this.#raiseIfPosixClassOutsideClass();
+
+    let negated = false;
+
+    if (this.#peek() === "^") {
+      negated = true;
+      this.#position++;
+    }
+
+    const items = [];
+    let isFirstItem = true;
+
+    while (true) {
+      if (this.#atEnd()) {
+        throw new RegexParseError(
+          "missing terminating ] for character class",
+          this.#position,
+        );
+      }
+
+      const char = this.#peek();
+
+      // ] is a literal member when it's the first item, matching PCRE2 behavior
+      if (char === "]" && !isFirstItem) {
+        this.#position++;
+        break;
+      }
+
+      isFirstItem = false;
+
+      if (char === "\\") {
+        // TODO: remove when escapes inside character classes are implemented
+        throw new RegexParseError(
+          `unsupported pattern construct: ${char}`,
+          this.#position,
+        );
+      }
+
+      if (char === "[" && this.#source[this.#position + 1] === ":") {
+        const posixClass = this.#tryParsePosixClass();
+
+        if (posixClass !== null) {
+          items.push(posixClass);
+          continue;
+        }
+      }
+
+      items.push(this.#parseClassCharOrRange());
+    }
+
+    return {type: "class", negated: negated, items: items};
+  }
+
+  #parseClassCharOrRange() {
+    const from = this.#source.codePointAt(this.#position);
+    this.#position += from > 0xffff ? 2 : 1;
+
+    // - forms a range only between two members; before ] or at pattern end it's a literal
+    if (
+      this.#peek() !== "-" ||
+      this.#source[this.#position + 1] === "]" ||
+      this.#position + 1 >= this.#source.length
+    ) {
+      return {type: "literal", codePoint: from};
+    }
+
+    this.#position++;
+
+    if (this.#peek() === "\\") {
+      // TODO: remove when escapes inside character classes are implemented
+      throw new RegexParseError(
+        `unsupported pattern construct: \\`,
+        this.#position,
+      );
+    }
+
+    if (
+      this.#peek() === "[" &&
+      this.#source[this.#position + 1] === ":" &&
+      this.#tryParsePosixClass() !== null
+    ) {
+      throw new RegexParseError(
+        "invalid range in character class",
+        this.#position,
+      );
+    }
+
+    const to = this.#source.codePointAt(this.#position);
+    this.#position += to > 0xffff ? 2 : 1;
+
+    if (to < from) {
+      throw new RegexParseError(
+        "range out of order in character class",
+        this.#position,
+      );
+    }
+
+    return {type: "range", from: from, to: to};
   }
 
   #parseConcatenation() {
@@ -94,6 +225,28 @@ export default class RegexParser {
 
   #peek() {
     return this.#source[this.#position];
+  }
+
+  // Detects the common mistake of using [:name:] as a whole class,
+  // e.g. [:alpha:] instead of [[:alpha:]], matching PCRE2 behavior.
+  #raiseIfPosixClassOutsideClass() {
+    if (this.#peek() !== ":") return;
+
+    let scanPosition = this.#position + 1;
+
+    if (this.#source[scanPosition] === "^") scanPosition++;
+
+    while (this.#isPosixNameChar(this.#source[scanPosition])) scanPosition++;
+
+    if (
+      this.#source[scanPosition] === ":" &&
+      this.#source[scanPosition + 1] === "]"
+    ) {
+      throw new RegexParseError(
+        "POSIX named classes are supported only within a class",
+        scanPosition + 2,
+      );
+    }
   }
 
   // Scans a {n}, {n,}, {n,m} or {,m} bounds spec.
@@ -160,6 +313,39 @@ export default class RegexParser {
     this.#position = scanPosition + 1;
 
     return {min: min, max: max};
+  }
+
+  // Scans a [:name:] or [:^name:] POSIX class element.
+  // Returns null (without consuming) when the syntax doesn't form a POSIX
+  // element, in which case [ is a literal class member, matching PCRE2 behavior.
+  #tryParsePosixClass() {
+    let scanPosition = this.#position + 2;
+    let negated = false;
+
+    if (this.#source[scanPosition] === "^") {
+      negated = true;
+      scanPosition++;
+    }
+
+    const nameStart = scanPosition;
+
+    while (this.#isPosixNameChar(this.#source[scanPosition])) scanPosition++;
+
+    if (
+      this.#source[scanPosition] !== ":" ||
+      this.#source[scanPosition + 1] !== "]"
+    ) {
+      return null;
+    }
+
+    const name = this.#source.slice(nameStart, scanPosition);
+    this.#position = scanPosition + 2;
+
+    if (!POSIX_CLASS_NAMES.has(name)) {
+      throw new RegexParseError("unknown POSIX class name", this.#position);
+    }
+
+    return {type: "posixClass", name: name, negated: negated};
   }
 
   #tryParseQuantifier() {
