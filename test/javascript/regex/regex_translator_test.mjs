@@ -410,6 +410,92 @@ describe("RegexTranslator", () => {
       });
     });
 
+    describe("newline conventions", () => {
+      it("excludes the convention newline from dot", () => {
+        assert.deepEqual(translate(".", {newline: "cr"}), {
+          source: "[^\\r]",
+          flags: "",
+        });
+      });
+
+      it("excludes nothing from dot under crlf", () => {
+        assert.deepEqual(translate(".", {newline: "crlf"}), {
+          source: "[\\s\\S]",
+          flags: "",
+        });
+      });
+
+      it("excludes both chars from dot under anycrlf", () => {
+        assert.deepEqual(translate(".", {newline: "anycrlf"}), {
+          source: "[^\\r\\n]",
+          flags: "",
+        });
+      });
+
+      it("excludes all newline chars from dot under any", () => {
+        assert.deepEqual(translate(".", {newline: "any"}), {
+          source: "[^\\x0a-\\x0d\\u0085\\u2028-\\u2029]",
+          flags: "",
+        });
+      });
+
+      it("applies the convention to \\N regardless of dotall", () => {
+        assert.deepEqual(translate("\\N", {dotall: true, newline: "crlf"}), {
+          source: "[\\s\\S]",
+          flags: "",
+        });
+      });
+
+      it("applies the convention to multiline anchors", () => {
+        assert.deepEqual(
+          translate("^a$", {multiline: true, newline: "anycrlf"}),
+          {
+            source: "(?:^|(?<=\\n)|(?<=\\r)(?!\\n))a(?=\\r|\\n|$)",
+            flags: "",
+          },
+        );
+      });
+
+      it("applies the convention to default $", () => {
+        assert.deepEqual(translate("a$", {newline: "crlf"}), {
+          source: "a(?=(?:\\r\\n)?$)",
+          flags: "",
+        });
+      });
+
+      it("applies the convention to \\Z", () => {
+        assert.deepEqual(translate("a\\Z", {newline: "cr"}), {
+          source: "a(?=\\r?$)",
+          flags: "",
+        });
+      });
+
+      it("restricts \\R with bsr_anycrlf", () => {
+        assert.deepEqual(translate("\\R", {bsrAnycrlf: true}), {
+          source: "(?:\\r\\n|[\\r\\n])",
+          flags: "",
+        });
+      });
+
+      it("applies newline convention start verb", () => {
+        assert.deepEqual(translate("(*CR)."), {
+          source: "[^\\r]",
+          flags: "",
+        });
+      });
+
+      it("applies bsr start verb", () => {
+        assert.deepEqual(translate("(*BSR_ANYCRLF)\\R"), {
+          source: "(?:\\r\\n|[\\r\\n])",
+          flags: "",
+        });
+      });
+
+      it("applies UTF start verb to flags", () => {
+        assert.deepEqual(translate("(*UTF)a"), {source: "a", flags: "u"});
+      });
+    });
+
     describe("quantifiers", () => {
       it("translates simple quantifiers", () => {
         assert.deepEqual(translate("a*b+c?"), {source: "a*b+c?", flags: ""});

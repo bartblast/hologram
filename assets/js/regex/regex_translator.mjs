@@ -6,6 +6,60 @@ const CLASS_METACHARS = new Set([..."\\]^-"]);
 // Chars that must be escaped outside character classes.
 const METACHARS = new Set([..."$()*+.?[\\]^{|}"]);
 
+// Newline-convention-dependent translations. The dot exclusion sets contain
+// only chars that alone form a complete newline, so the crlf set is empty.
+// Multiline ^ never matches between the CR and LF of a CRLF pair, while $
+// does match there under the anycrlf and any conventions.
+const NEWLINE_VARIANTS = {
+  any: {
+    dot: "[^\\x0a-\\x0d\\u0085\\u2028-\\u2029]",
+    endBeforeFinal: "(?=(?:\\r\\n|[\\x0a-\\x0d\\u0085\\u2028-\\u2029])?$)",
+    lineEndMultiline: "(?=[\\x0a-\\x0d\\u0085\\u2028-\\u2029]|$)",
+    lineStartMultiline:
+      "(?:^|(?<=[\\x0a-\\x0c\\u0085\\u2028-\\u2029])|(?<=\\x0d)(?!\\x0a))",
+  },
+  anycrlf: {
+    dot: "[^\\r\\n]",
+    endBeforeFinal: "(?=(?:\\r\\n|\\r|\\n)?$)",
+    lineEndMultiline: "(?=\\r|\\n|$)",
+    lineStartMultiline: "(?:^|(?<=\\n)|(?<=\\r)(?!\\n))",
+  },
+  cr: {
+    dot: "[^\\r]",
+    endBeforeFinal: "(?=\\r?$)",
+    lineEndMultiline: "(?=\\r|$)",
+    lineStartMultiline: "(?:^|(?<=\\r))",
+  },
+  crlf: {
+    dot: "[\\s\\S]",
+    endBeforeFinal: "(?=(?:\\r\\n)?$)",
+    lineEndMultiline: "(?=\\r\\n|$)",
+    lineStartMultiline: "(?:^|(?<=\\r\\n))",
+  },
+  lf: {
+    dot: "[^\\n]",
+    endBeforeFinal: "(?=\\n?$)",
+    lineEndMultiline: "(?=\\n|$)",
+    lineStartMultiline: "(?:^|(?<=\\n))",
+  },
+  nul: {
+    dot: "[^\\x00]",
+    endBeforeFinal: "(?=\\x00?$)",
+    lineEndMultiline: "(?=\\x00|$)",
+    lineStartMultiline: "(?:^|(?<=\\x00))",
+  },
+};
+
+// Start-of-pattern verbs that select a newline convention.
+const NEWLINE_VERBS = {
+  ANY: "any",
+  ANYCRLF: "anycrlf",
+  CR: "cr",
+  CRLF: "crlf",
+  LF: "lf",
+  NUL: "nul",
+};
+
 // PCRE2 character sets of the POSIX classes, as sorted code point ranges.
 const POSIX_SETS = {
   alnum: [
@@ -93,22 +147,26 @@ export default class RegexTranslator {
   // numbers, which diverge when the translation adds synthetic groups.
   // Only patterns routed to the native engine are translatable.
   static translate(ast, opts = {}) {
+    const effectiveOpts = $.#mergeStartOptions(ast, opts);
+
     const context = {
-      caseless: opts.caseless === true,
-      dollarEndonly: opts.dollarEndonly === true,
-      dotall: opts.dotall === true,
-      maxCodePoint: opts.unicode === true ? 0x10ffff : 0xff,
-      multiline: opts.multiline === true,
+      bsrAnycrlf: effectiveOpts.bsrAnycrlf === true,
+      caseless: effectiveOpts.caseless === true,
+      dollarEndonly: effectiveOpts.dollarEndonly === true,
+      dotall: effectiveOpts.dotall === true,
+      maxCodePoint: effectiveOpts.unicode === true ? 0x10ffff : 0xff,
+      multiline: effectiveOpts.multiline === true,
+      newline: effectiveOpts.newline ?? "lf",
       // Group numbering state, shared across derived contexts
       state: {groupMapping: new Map(), jsGroupCount: 0},
-      ungreedy: opts.ungreedy === true,
-      unicode: opts.unicode === true,
+      ungreedy: effectiveOpts.ungreedy === true,
+      unicode: effectiveOpts.unicode === true,
     };
 
     let flags = "";
 
-    if (opts.caseless === true) flags += "i";
-    if (opts.unicode === true) flags += "u";
+    if (effectiveOpts.caseless === true) flags += "i";
+    if (effectiveOpts.unicode === true) flags += "u";
 
     return {
       source: $.#translateNode(ast, context),
@@ -187,6 +245,29 @@ export default class RegexTranslator {
     return $.#escapeCharCommon(codePoint, char);
   }
 
+  // Merges start-of-pattern option verbs into the compile options.
+  static #mergeStartOptions(ast, opts) {
+    const effectiveOpts = {...opts};
+
+    if (ast.type !== "concatenation") return effectiveOpts;
+
+    for (const item of ast.items) {
+      if (item.type !== "startOption") break;
+
+      if (NEWLINE_VERBS[item.name] !== undefined) {
+        effectiveOpts.newline = NEWLINE_VERBS[item.name];
+      } else if (item.name === "BSR_ANYCRLF") {
+        effectiveOpts.bsrAnycrlf = true;
+      } else if (item.name === "BSR_UNICODE") {
+        effectiveOpts.bsrAnycrlf = false;
+      } else if (item.name === "UTF" || item.name === "UTF8") {
+        effectiveOpts.unicode = true;
+      }
+    }
+
+    return effectiveOpts;
+  }
+
   static #quantifierBounds(node) {
     if (node.min === 0 && node.max === null) return "*";
     if (node.min === 1 && node.max === null) return "+";
@@ -218,18 +299,20 @@ export default class RegexTranslator {
   }
 
   static #translateAnchor(node, context) {
+    const variant = NEWLINE_VARIANTS[context.newline];
+
     switch (node.kind) {
-      // PCRE2 multiline ^ matches only after \n, while the JS m-flag ^ also
-      // matches after \r and the line separators, so multiline is always
-      // handled by rewriting instead of the m flag
+      // PCRE2 multiline ^ recognizes only the configured newline convention,
+      // while the JS m-flag ^ has its own line terminator set, so multiline
+      // is always handled by rewriting instead of the m flag
       case "lineStart":
-        return context.multiline ? "(?:^|(?<=\\n))" : "^";
+        return context.multiline ? variant.lineStartMultiline : "^";
 
       // Without dollar_endonly, $ also matches before a final newline
       case "lineEnd":
-        if (context.multiline) return "(?=\\n|$)";
+        if (context.multiline) return variant.lineEndMultiline;
 
-        return context.dollarEndonly ? "$" : "(?=\\n?$)";
+        return context.dollarEndonly ? "$" : variant.endBeforeFinal;
 
       case "nonWordBoundary":
         return "\\B";
@@ -238,7 +321,7 @@ export default class RegexTranslator {
         return "$";
 
       case "subjectEndBeforeFinalNewline":
-        return "(?=\\n?$)";
+        return variant.endBeforeFinal;
 
       case "subjectStart":
         return "^";
@@ -357,11 +440,13 @@ export default class RegexTranslator {
         return result;
       }
 
-      // PCRE2 dot excludes only \n, while JS dot also excludes \r and the
-      // U+2028 and U+2029 line separators, so dot is always translated to an
+      // PCRE2 dot exclusions follow the newline convention, while JS dot has
+      // its own line terminator set, so dot is always translated to an
       // explicit class
       case "dot":
-        return context.dotall ? "[\\s\\S]" : "[^\\n]";
+        return context.dotall
+          ? "[\\s\\S]"
+          : NEWLINE_VARIANTS[context.newline].dot;
 
       case "group": {
         const jsNumber = ++context.state.jsGroupCount;
@@ -387,16 +472,19 @@ export default class RegexTranslator {
           : `(?<${negation}${content})`;
       }
 
-      // \R matches CRLF as a pair or a single vertical whitespace char
+      // \R matches CRLF as a pair or a single vertical whitespace char,
+      // restricted to CR and LF with the bsr_anycrlf option
       case "newlineSequence":
-        return `(?:\\r\\n|[${$.#rangesToClassContent(SHORTHAND_SETS.v)}])`;
+        return context.bsrAnycrlf
+          ? "(?:\\r\\n|[\\r\\n])"
+          : `(?:\\r\\n|[${$.#rangesToClassContent(SHORTHAND_SETS.v)}])`;
 
       case "nonCapturingGroup":
         return `(?:${$.#translateNode(node.content, context)})`;
 
-      // \N always excludes only the newline, regardless of dotall
+      // \N follows the newline convention like dot, but ignores dotall
       case "notNewline":
-        return "[^\\n]";
+        return NEWLINE_VARIANTS[context.newline].dot;
 
       case "optionGroup": {
         const nextContext = $.#applyOptions(context, node);
