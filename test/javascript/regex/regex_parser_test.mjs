@@ -931,6 +931,311 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("conditionals", () => {
+      it("parses numeric condition", () => {
+        assert.deepEqual(RegexParser.parse("(a)(?(1)b|c)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "group", number: 1, name: null},
+              yes: {type: "literal", codePoint: 98},
+              no: {type: "literal", codePoint: 99},
+            },
+          ],
+        });
+      });
+
+      it("parses condition without no-branch", () => {
+        assert.deepEqual(RegexParser.parse("(a)(?(1)b)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "group", number: 1, name: null},
+              yes: {type: "literal", codePoint: 98},
+              no: null,
+            },
+          ],
+        });
+      });
+
+      it("resolves relative numeric condition", () => {
+        assert.deepEqual(RegexParser.parse("(a)(?(-1)b|c)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "group", number: 1, name: null},
+              yes: {type: "literal", codePoint: 98},
+              no: {type: "literal", codePoint: 99},
+            },
+          ],
+        });
+      });
+
+      it("parses angle-bracketed name condition", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)(?(<x>)b|c)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "group", number: null, name: "x"},
+              yes: {type: "literal", codePoint: 98},
+              no: {type: "literal", codePoint: 99},
+            },
+          ],
+        });
+      });
+
+      it("parses bare name condition", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)(?(x)b|c)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "group", number: null, name: "x"},
+              yes: {type: "literal", codePoint: 98},
+              no: {type: "literal", codePoint: 99},
+            },
+          ],
+        });
+      });
+
+      it("parses name starting with R as name condition", () => {
+        assert.deepEqual(RegexParser.parse("(?<Rx>a)(?(Rx)b|c)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "Rx",
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "group", number: null, name: "Rx"},
+              yes: {type: "literal", codePoint: 98},
+              no: {type: "literal", codePoint: 99},
+            },
+          ],
+        });
+      });
+
+      it("parses whole-pattern recursion condition", () => {
+        assert.deepEqual(RegexParser.parse("(a)(?(R)b|c)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "recursion", number: null, name: null},
+              yes: {type: "literal", codePoint: 98},
+              no: {type: "literal", codePoint: 99},
+            },
+          ],
+        });
+      });
+
+      it("parses numeric recursion condition", () => {
+        assert.deepEqual(RegexParser.parse("(a)(b)(?(R2)c|d)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "group",
+              number: 2,
+              name: null,
+              content: {type: "literal", codePoint: 98},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "recursion", number: 2, name: null},
+              yes: {type: "literal", codePoint: 99},
+              no: {type: "literal", codePoint: 100},
+            },
+          ],
+        });
+      });
+
+      it("parses named recursion condition", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)(?(R&x)b|c)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "conditional",
+              condition: {kind: "recursion", number: null, name: "x"},
+              yes: {type: "literal", codePoint: 98},
+              no: {type: "literal", codePoint: 99},
+            },
+          ],
+        });
+      });
+
+      it("parses DEFINE condition", () => {
+        assert.deepEqual(RegexParser.parse("(?(DEFINE)(?<x>a))(?&x)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "conditional",
+              condition: {kind: "define"},
+              yes: {
+                type: "group",
+                number: 1,
+                name: "x",
+                content: {type: "literal", codePoint: 97},
+              },
+              no: null,
+            },
+            {type: "subroutine", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses assertion condition", () => {
+        assert.deepEqual(RegexParser.parse("(?(?=a)ab|cd)"), {
+          type: "conditional",
+          condition: {
+            kind: "assertion",
+            assertion: {
+              type: "lookaround",
+              direction: "ahead",
+              negated: false,
+              content: {type: "literal", codePoint: 97},
+            },
+          },
+          yes: {
+            type: "concatenation",
+            items: [
+              {type: "literal", codePoint: 97},
+              {type: "literal", codePoint: 98},
+            ],
+          },
+          no: {
+            type: "concatenation",
+            items: [
+              {type: "literal", codePoint: 99},
+              {type: "literal", codePoint: 100},
+            ],
+          },
+        });
+      });
+
+      it("raises on more than two branches", () => {
+        assertRegexParseError(
+          "(?(1)a|b|c)(x)",
+          "conditional subpattern contains more than two branches",
+          0,
+        );
+      });
+
+      it("raises on DEFINE with more than one branch", () => {
+        assertRegexParseError(
+          "(?(DEFINE)a|b)",
+          "DEFINE subpattern contains more than one branch",
+          3,
+        );
+      });
+
+      it("raises on condition referencing non-existent group", () => {
+        assertRegexParseError(
+          "(?(2)a|b)(x)",
+          "reference to non-existent subpattern",
+          2,
+        );
+      });
+
+      it("raises on relative condition referencing non-existent group", () => {
+        assertRegexParseError(
+          "^(a)(?(+1)b|c)$",
+          "reference to non-existent subpattern",
+          7,
+        );
+      });
+
+      it("raises on condition referencing non-existent name", () => {
+        assertRegexParseError(
+          "(?<x>a)(?(y)b|c)",
+          "reference to non-existent subpattern",
+          10,
+        );
+      });
+
+      it("raises on recursion condition referencing non-existent group", () => {
+        assertRegexParseError(
+          "(?(R99)a)(b)",
+          "reference to non-existent subpattern",
+          3,
+        );
+      });
+
+      it("raises on junk after condition number", () => {
+        assertRegexParseError(
+          "(?(1x)a)(x)",
+          "missing closing parenthesis for condition",
+          4,
+        );
+      });
+
+      it("raises on condition at end of pattern", () => {
+        assertRegexParseError("(?(", "missing closing parenthesis", 3);
+      });
+
+      it("raises on unterminated bare name condition", () => {
+        assertRegexParseError(
+          "(?(x",
+          "syntax error in subpattern name (missing terminator?)",
+          4,
+        );
+      });
+    });
+
     describe("dot", () => {
       it("parses . as dot", () => {
         assert.deepEqual(RegexParser.parse("."), {type: "dot"});

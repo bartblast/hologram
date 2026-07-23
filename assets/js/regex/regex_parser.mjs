@@ -492,6 +492,185 @@ export default class RegexParser {
       : {type: "concatenation", items: items};
   }
 
+  // Parses the condition of a conditional group, with the position just past
+  // the condition's opening parenthesis.
+  #parseCondition(conditionOpenPosition) {
+    if (this.#atEnd()) {
+      throw new RegexParseError("missing closing parenthesis", this.#position);
+    }
+
+    const char = this.#peek();
+
+    // Assertion condition: the condition parentheses are the assertion's own
+    if (char === "?") {
+      const assertion = this.#parseGroupExtension();
+
+      if (assertion.type !== "lookaround") {
+        throw new RegexParseError(
+          "assertion expected after (?( or (?(?C)",
+          conditionOpenPosition,
+        );
+      }
+
+      return {kind: "assertion", assertion: assertion};
+    }
+
+    // Numeric condition, absolute or relative
+    if (
+      this.#isDigit(char) ||
+      ((char === "+" || char === "-") &&
+        this.#isDigit(this.#source[this.#position + 1]))
+    ) {
+      const isRelative = !this.#isDigit(char);
+      const signPosition = this.#position;
+      const number = this.#parseSubroutineNumber();
+
+      if (this.#peek() !== ")") {
+        throw new RegexParseError(
+          "missing closing parenthesis for condition",
+          this.#position,
+        );
+      }
+
+      this.#position++;
+
+      if (isRelative && number <= 0) {
+        throw new RegexParseError(
+          "reference to non-existent subpattern",
+          signPosition,
+        );
+      }
+
+      this.#validateNumericReference(
+        number,
+        isRelative ? signPosition : conditionOpenPosition,
+      );
+
+      return {kind: "group", number: number, name: null};
+    }
+
+    // Delimited name condition
+    if (char === "<" || char === "'") {
+      const terminator = char === "<" ? ">" : "'";
+
+      this.#position++;
+
+      const {name, nameStart} = this.#parseSubpatternName(terminator);
+
+      if (this.#peek() !== ")") {
+        throw new RegexParseError(
+          "missing closing parenthesis for condition",
+          this.#position,
+        );
+      }
+
+      this.#position++;
+      this.#validateNamedReference(name, nameStart);
+
+      return {kind: "group", number: null, name: name};
+    }
+
+    // Bare word: DEFINE, an R recursion form, or a plain group name
+    const wordStart = this.#position;
+
+    while (this.#isWordChar(this.#peek())) this.#position++;
+
+    const word = this.#source.slice(wordStart, this.#position);
+
+    if (word === "DEFINE" && this.#peek() === ")") {
+      this.#position++;
+      return {kind: "define"};
+    }
+
+    if (word === "R" && this.#peek() === ")") {
+      this.#position++;
+      return {kind: "recursion", number: null, name: null};
+    }
+
+    if (word === "R" && this.#peek() === "&") {
+      this.#position++;
+
+      const {name, nameStart} = this.#parseSubpatternName(")");
+      this.#validateNamedReference(name, nameStart);
+
+      return {kind: "recursion", number: null, name: name};
+    }
+
+    if (/^R\d+$/.test(word) && this.#peek() === ")") {
+      const number = Number(word.slice(1));
+
+      this.#position++;
+      this.#validateNumericReference(number, wordStart);
+
+      return {kind: "recursion", number: number, name: null};
+    }
+
+    if (word === "VERSION") {
+      // TODO: remove when VERSION conditions are implemented
+      throw new RegexParseError(
+        "unsupported pattern construct: (?(VERSION",
+        wordStart,
+      );
+    }
+
+    if (word.length === 0) {
+      throw new RegexParseError(
+        "assertion expected after (?( or (?(?C)",
+        conditionOpenPosition,
+      );
+    }
+
+    if (this.#peek() !== ")") {
+      throw new RegexParseError(
+        "syntax error in subpattern name (missing terminator?)",
+        this.#position,
+      );
+    }
+
+    this.#position++;
+    this.#validateNamedReference(word, wordStart);
+
+    return {kind: "group", number: null, name: word};
+  }
+
+  // Parses a conditional group (?(condition)yes|no), with the position
+  // at the condition's opening parenthesis.
+  #parseConditional() {
+    const conditionalStart = this.#position - 2;
+    const conditionOpenPosition = this.#position;
+
+    this.#position++;
+
+    const condition = this.#parseCondition(conditionOpenPosition);
+    const content = this.#parseAlternation();
+
+    this.#requireGroupClose();
+
+    const branches =
+      content.type === "alternation" ? content.branches : [content];
+
+    if (condition.kind === "define") {
+      if (branches.length > 1) {
+        throw new RegexParseError(
+          "DEFINE subpattern contains more than one branch",
+          conditionOpenPosition + 1,
+        );
+      }
+    } else if (branches.length > 2) {
+      throw new RegexParseError(
+        "conditional subpattern contains more than two branches",
+        conditionalStart,
+      );
+    }
+
+    return {
+      type: "conditional",
+      condition: condition,
+      yes: branches[0],
+      no: branches.length > 1 ? branches[1] : null,
+    };
+  }
+
   // Parses a \cx control escape, with the position just past the c.
   #parseControlEscape() {
     if (this.#atEnd()) {
@@ -903,9 +1082,11 @@ export default class RegexParser {
       return {type: "subroutine", number: null, name: name};
     }
 
-    if ("#(+-|^".includes(char) || this.#isAlphanumeric(char)) {
-      // TODO: remove when conditionals, inline options, comments and
-      // branch reset groups are implemented
+    if (char === "(") return this.#parseConditional();
+
+    if ("#+-|^".includes(char) || this.#isAlphanumeric(char)) {
+      // TODO: remove when inline options, comments and branch reset groups
+      // are implemented
       throw new RegexParseError(
         `unsupported pattern construct: (?${char}`,
         this.#position,
