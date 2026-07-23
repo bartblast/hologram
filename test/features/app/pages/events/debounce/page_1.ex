@@ -1,10 +1,10 @@
-defmodule HologramFeatureTests.Events.DebouncePage do
+defmodule HologramFeatureTests.Events.Debounce.Page1 do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  route "/events/debounce"
+  route "/events/debounce/1"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
