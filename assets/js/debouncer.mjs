@@ -11,6 +11,17 @@
 export default class Debouncer {
   static #pendingByElement = new Map();
 
+  // Clears every pending timer and empties the registry without firing anything.
+  static cancelAll() {
+    for (const slots of $.#pendingByElement.values()) {
+      for (const {timerId} of slots.values()) {
+        clearTimeout(timerId);
+      }
+    }
+
+    $.#pendingByElement.clear();
+  }
+
   // Immediately fires and removes all pending entries keyed on the element, in the order their
   // slots were first scheduled. No-op when none are pending. Entries are removed before their
   // callbacks run, so a callback that schedules a new debounced run re-enters cleanly.

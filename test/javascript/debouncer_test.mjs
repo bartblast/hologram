@@ -15,6 +15,50 @@ describe("Debouncer", () => {
     clock.restore();
   });
 
+  describe("cancelAll()", () => {
+    it("drops a pending dispatch, so its delay elapsing fires nothing", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.run(element, "slot", 250, callback);
+      Debouncer.cancelAll();
+      clock.tick(250);
+
+      sinon.assert.notCalled(callback);
+    });
+
+    it("drops pending dispatches across all elements and slots", () => {
+      const elementA = {};
+      const elementB = {};
+      const callbackA = sinon.spy();
+      const callbackB = sinon.spy();
+      const callbackC = sinon.spy();
+
+      Debouncer.run(elementA, "slot-a", 250, callbackA);
+      Debouncer.run(elementA, "slot-b", 250, callbackB);
+      Debouncer.run(elementB, "slot", 250, callbackC);
+      Debouncer.cancelAll();
+      clock.tick(250);
+
+      sinon.assert.notCalled(callbackA);
+      sinon.assert.notCalled(callbackB);
+      sinon.assert.notCalled(callbackC);
+    });
+
+    it("a cancelled slot can be scheduled again", () => {
+      const element = {};
+      const callback = sinon.spy();
+
+      Debouncer.run(element, "slot", 250, callback);
+      Debouncer.cancelAll();
+
+      Debouncer.run(element, "slot", 250, callback);
+      clock.tick(250);
+
+      sinon.assert.calledOnce(callback);
+    });
+  });
+
   describe("flush()", () => {
     it("fires the pending callback immediately", () => {
       const element = {};
