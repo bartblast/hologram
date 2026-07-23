@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.Events.DebouncePage do
 
   def init(_params, component, _server) do
     put_state(component,
+      blurred_value: nil,
       debounced_count: 0,
       debounced_key: nil,
       plain_count: 0,
@@ -32,7 +33,20 @@ defmodule HologramFeatureTests.Events.DebouncePage do
     <p>
       Plain: <strong id="plain_result"><code>{inspect({@plain_count, @plain_key})}</code></strong>
     </p>
+    <p>
+      <input
+        $change.debounce(600000)="record_blurred"
+        id="blur_input"
+        type="text" />
+    </p>
+    <p>
+      Blurred: <strong id="blurred_result"><code>{inspect(@blurred_value)}</code></strong>
+    </p>
     """
+  end
+
+  def action(:record_blurred, params, component) do
+    put_state(component, :blurred_value, params.event.value)
   end
 
   def action(:record_debounced, params, component) do
