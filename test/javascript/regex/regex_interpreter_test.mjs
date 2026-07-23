@@ -35,6 +35,65 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("anchors", () => {
+      it("anchors ^ to the subject start by default", () => {
+        assert.isNull(match("^b", "ab"));
+      });
+
+      it("anchors \\A to the subject start even when scanning", () => {
+        assert.isNull(match("\\Ab", "ab"));
+      });
+
+      it("anchors \\z to the subject end", () => {
+        assert.isNull(match("a\\z", "ab"));
+      });
+
+      it("matches \\Z before a final newline", () => {
+        assert.deepEqual(match("a\\Z", "a\n"), {start: 0, end: 1});
+      });
+
+      it("matches default $ before a final newline", () => {
+        assert.deepEqual(match("a$", "a\n"), {start: 0, end: 1});
+      });
+
+      it("anchors $ to the subject end with dollar_endonly", () => {
+        assert.isNull(match("a$", "a\n", {dollarEndonly: true}));
+      });
+
+      it("matches multiline ^ after a newline", () => {
+        assert.deepEqual(match("^b", "a\nb", {multiline: true}), {
+          start: 2,
+          end: 3,
+        });
+      });
+
+      it("matches multiline $ before a newline", () => {
+        assert.deepEqual(match("a$", "a\nb", {multiline: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("matches word boundary", () => {
+        assert.deepEqual(match("\\bb", "a b"), {start: 2, end: 3});
+      });
+
+      it("matches non-word boundary", () => {
+        assert.deepEqual(match("\\Bb", "ab"), {start: 1, end: 2});
+      });
+
+      it("anchors \\G to the start offset", () => {
+        assert.isNull(match("\\Gb", "ab"));
+      });
+
+      it("matches \\G at a non-zero start offset", () => {
+        assert.deepEqual(match("\\Gb", "ab", {startPosition: 1}), {
+          start: 1,
+          end: 2,
+        });
+      });
+    });
+
     describe("atomic matching", () => {
       it("does not backtrack into atomic group", () => {
         assert.isNull(match("(?>a+)a", "aaa"));
@@ -129,6 +188,75 @@ describe("RegexInterpreter", () => {
           start: 0,
           end: 1,
         });
+      });
+    });
+
+    describe("newline handling", () => {
+      it("excludes the newline from dot", () => {
+        assert.isNull(match(".", "\n"));
+      });
+
+      it("matches newline with dot in dotall mode", () => {
+        assert.deepEqual(match(".", "\n", {dotall: true}), {start: 0, end: 1});
+      });
+
+      it("matches CR with dot under the crlf convention", () => {
+        assert.deepEqual(match(".", "\r", {newline: "crlf"}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("excludes the convention newline from \\N regardless of dotall", () => {
+        assert.isNull(match("\\N", "\n", {dotall: true}));
+      });
+
+      it("matches multiline ^ after a lone CR under anycrlf", () => {
+        assert.deepEqual(
+          match("^b", "a\rb", {multiline: true, newline: "anycrlf"}),
+          {start: 2, end: 3},
+        );
+      });
+
+      it("does not match multiline ^ between CR and LF under anycrlf", () => {
+        assert.isNull(
+          match("^\\n", "a\r\n", {multiline: true, newline: "anycrlf"}),
+        );
+      });
+
+      it("matches \\Z before a final CRLF pair", () => {
+        assert.deepEqual(match("a\\Z", "a\r\n", {newline: "crlf"}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("matches CRLF pair with \\R", () => {
+        assert.deepEqual(match("\\R", "\r\n"), {start: 0, end: 2});
+      });
+
+      it("does not give back the CRLF pair matched by \\R", () => {
+        assert.isNull(match("\\R\\n", "\r\n"));
+      });
+
+      it("excludes vertical tab from \\R with bsr_anycrlf", () => {
+        assert.isNull(match("\\R", "\x0b", {bsrAnycrlf: true}));
+      });
+
+      it("matches vertical tab with \\R by default", () => {
+        assert.deepEqual(match("\\R", "\x0b"), {start: 0, end: 1});
+      });
+
+      it("applies newline convention start verb", () => {
+        assert.deepEqual(match("(*CR).", "\n"), {start: 0, end: 1});
+      });
+
+      it("matches any single char with \\C", () => {
+        assert.deepEqual(match("\\C", "\n"), {start: 0, end: 1});
+      });
+
+      it("does not match \\C at the subject end", () => {
+        assert.isNull(match("a\\C", "a"));
       });
     });
 

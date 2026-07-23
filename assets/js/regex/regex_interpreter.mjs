@@ -2,6 +2,35 @@
 
 import RegexAnalyzer from "./regex_analyzer.mjs";
 
+// Newline conventions with a two-char CR LF sequence.
+const NEWLINE_PAIR_CONVENTIONS = new Set(["any", "anycrlf", "crlf"]);
+
+// Single chars that alone form a complete newline, per convention.
+const NEWLINE_SINGLES = {
+  any: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
+  anycrlf: [0x0a, 0x0d],
+  cr: [0x0d],
+  crlf: [],
+  lf: [0x0a],
+  nul: [0x00],
+};
+
+// Start-of-pattern verbs that select a newline convention.
+const NEWLINE_VERBS = {
+  ANY: "any",
+  ANYCRLF: "anycrlf",
+  CR: "cr",
+  CRLF: "crlf",
+  LF: "lf",
+  NUL: "nul",
+};
+
+// Single chars matched by \R, by bsr mode.
+const NEWLINE_SEQUENCE_SINGLES = {
+  anycrlf: [0x0a, 0x0d],
+  unicode: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
+};
+
 export default class RegexInterpreter {
   // Matches a parsed pattern against a subject string, scanning forward from
   // the start position. Returns {start, end, captures} of the first match,
@@ -15,15 +44,24 @@ export default class RegexInterpreter {
     const groupCount =
       opts.groupCount ?? RegexAnalyzer.buildGroupMap(ast).count;
 
+    const effectiveOpts = $.#mergeStartOptions(ast, opts);
+    const startPosition = opts.startPosition ?? 0;
+
     const state = {
+      bsrAnycrlf: effectiveOpts.bsrAnycrlf === true,
       captures: [],
-      caseless: opts.caseless === true,
+      caseless: effectiveOpts.caseless === true,
+      dollarEndonly: effectiveOpts.dollarEndonly === true,
+      dotall: effectiveOpts.dotall === true,
+      multiline: effectiveOpts.multiline === true,
+      newline: effectiveOpts.newline ?? "lf",
+      startOffset: startPosition,
       subject: subject,
-      ungreedy: opts.ungreedy === true,
-      unicode: opts.unicode === true,
+      ungreedy: effectiveOpts.ungreedy === true,
+      unicode: effectiveOpts.unicode === true,
     };
 
-    let start = opts.startPosition ?? 0;
+    let start = startPosition;
 
     while (start <= subject.length) {
       state.captures = [];
@@ -49,6 +87,36 @@ export default class RegexInterpreter {
     }
 
     return null;
+  }
+
+  // Returns true when a newline sequence ends right before the position,
+  // never matching between the CR and LF of a CRLF pair.
+  static #afterNewline(state, position) {
+    if (position === 0) return false;
+
+    const previous = state.subject.charCodeAt(position - 1);
+
+    if (state.newline === "crlf") {
+      return (
+        position >= 2 &&
+        previous === 0x0a &&
+        state.subject.charCodeAt(position - 2) === 0x0d
+      );
+    }
+
+    if (!NEWLINE_SINGLES[state.newline].includes(previous)) return false;
+
+    // A CR directly followed by LF is the start of a pair, so the position
+    // after it is inside the newline
+    if (
+      previous === 0x0d &&
+      NEWLINE_PAIR_CONVENTIONS.has(state.newline) &&
+      state.subject.charCodeAt(position) === 0x0a
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
   // Returns the state updated by an option setting's letters.
@@ -153,6 +221,86 @@ export default class RegexInterpreter {
     );
   }
 
+  // Returns true at the subject end, or right before a newline sequence that
+  // ends the subject.
+  static #endsBeforeFinalNewline(state, position) {
+    if (position === state.subject.length) return true;
+
+    const newlineLength = $.#newlineLengthAt(state, position);
+
+    return (
+      newlineLength > 0 && position + newlineLength === state.subject.length
+    );
+  }
+
+  static #isWordCodePoint(codePoint) {
+    return (
+      (codePoint >= 0x30 && codePoint <= 0x39) ||
+      (codePoint >= 0x41 && codePoint <= 0x5a) ||
+      codePoint === 0x5f ||
+      (codePoint >= 0x61 && codePoint <= 0x7a)
+    );
+  }
+
+  static #matchAnchor(node, state, position, continuation) {
+    let holds;
+
+    switch (node.kind) {
+      case "lineStart":
+        holds =
+          position === 0 ||
+          (state.multiline && $.#afterNewline(state, position));
+        break;
+
+      case "lineEnd":
+        if (state.multiline) {
+          holds =
+            position === state.subject.length ||
+            $.#newlineStartsAt(state, position);
+        } else if (state.dollarEndonly) {
+          holds = position === state.subject.length;
+        } else {
+          holds = $.#endsBeforeFinalNewline(state, position);
+        }
+        break;
+
+      case "matchStart":
+        holds = position === state.startOffset;
+        break;
+
+      case "nonWordBoundary":
+      case "wordBoundary": {
+        const beforeIsWord =
+          position > 0 &&
+          $.#isWordCodePoint(state.subject.charCodeAt(position - 1));
+
+        const atCodePoint = $.#subjectCodePointAt(state, position);
+        const atIsWord =
+          atCodePoint !== null && $.#isWordCodePoint(atCodePoint);
+
+        holds = (beforeIsWord !== atIsWord) === (node.kind === "wordBoundary");
+        break;
+      }
+
+      case "subjectEnd":
+        holds = position === state.subject.length;
+        break;
+
+      case "subjectEndBeforeFinalNewline":
+        holds = $.#endsBeforeFinalNewline(state, position);
+        break;
+
+      case "subjectStart":
+        holds = position === 0;
+        break;
+
+      default:
+        throw new Error(`unsupported anchor for interpretation: ${node.kind}`);
+    }
+
+    return holds && continuation(position);
+  }
+
   // Runs a matcher once and locks its first match in: the match is never
   // backtracked into, and captures set inside are rolled back when the
   // continuation fails. The matcher receives the continuation to call with
@@ -193,6 +341,9 @@ export default class RegexInterpreter {
         return false;
       }
 
+      case "anchor":
+        return $.#matchAnchor(node, state, position, continuation);
+
       case "atomicGroup":
         return $.#matchAtomically(
           (matcherContinuation) =>
@@ -215,6 +366,21 @@ export default class RegexInterpreter {
 
       case "concatenation":
         return $.#matchSequence(node.items, 0, state, position, continuation);
+
+      case "dot": {
+        const codePoint = $.#subjectCodePointAt(state, position);
+
+        if (codePoint === null) return false;
+
+        if (
+          !state.dotall &&
+          NEWLINE_SINGLES[state.newline].includes(codePoint)
+        ) {
+          return false;
+        }
+
+        return continuation(position + $.#codePointLength(state, codePoint));
+      }
 
       case "group": {
         const previous = state.captures[node.number];
@@ -251,8 +417,41 @@ export default class RegexInterpreter {
         return continuation(position + $.#codePointLength(state, codePoint));
       }
 
+      // \R matches CRLF as a pair or a single vertical whitespace char,
+      // atomically: a matched pair is never given back, matching PCRE2
+      // behavior
+      case "newlineSequence": {
+        if (
+          state.subject.charCodeAt(position) === 0x0d &&
+          state.subject.charCodeAt(position + 1) === 0x0a
+        ) {
+          return continuation(position + 2);
+        }
+
+        const codePoint = $.#subjectCodePointAt(state, position);
+        const singles =
+          NEWLINE_SEQUENCE_SINGLES[state.bsrAnycrlf ? "anycrlf" : "unicode"];
+
+        if (codePoint !== null && singles.includes(codePoint)) {
+          return continuation(position + 1);
+        }
+
+        return false;
+      }
+
       case "nonCapturingGroup":
         return $.#matchNode(node.content, state, position, continuation);
+
+      // \N follows the newline convention like dot, but ignores dotall
+      case "notNewline": {
+        const codePoint = $.#subjectCodePointAt(state, position);
+
+        if (codePoint === null) return false;
+
+        if (NEWLINE_SINGLES[state.newline].includes(codePoint)) return false;
+
+        return continuation(position + $.#codePointLength(state, codePoint));
+      }
 
       case "optionGroup":
         return $.#matchNode(
@@ -264,6 +463,13 @@ export default class RegexInterpreter {
 
       case "quantifier":
         return $.#matchQuantifier(node, state, position, continuation);
+
+      // TODO: in unicode mode \C should consume one UTF-8 byte instead of
+      // one UTF-16 code unit
+      case "singleByte":
+        if (position >= state.subject.length) return false;
+
+        return continuation(position + 1);
 
       // Start options are compile metadata and match nothing
       case "startOption":
@@ -352,6 +558,55 @@ export default class RegexInterpreter {
     return $.#matchNode(item, state, position, (nextPosition) =>
       $.#matchSequence(items, itemIndex + 1, state, nextPosition, continuation),
     );
+  }
+
+  // Merges start-of-pattern option verbs into the match options.
+  static #mergeStartOptions(ast, opts) {
+    const effectiveOpts = {...opts};
+
+    if (ast.type !== "concatenation") return effectiveOpts;
+
+    for (const item of ast.items) {
+      if (item.type !== "startOption") break;
+
+      if (NEWLINE_VERBS[item.name] !== undefined) {
+        effectiveOpts.newline = NEWLINE_VERBS[item.name];
+      } else if (item.name === "BSR_ANYCRLF") {
+        effectiveOpts.bsrAnycrlf = true;
+      } else if (item.name === "BSR_UNICODE") {
+        effectiveOpts.bsrAnycrlf = false;
+      } else if (item.name === "UTF" || item.name === "UTF8") {
+        effectiveOpts.unicode = true;
+      }
+    }
+
+    return effectiveOpts;
+  }
+
+  // Returns the length of the newline sequence starting at the position,
+  // or 0 when there is none.
+  static #newlineLengthAt(state, position) {
+    if (
+      NEWLINE_PAIR_CONVENTIONS.has(state.newline) &&
+      state.subject.charCodeAt(position) === 0x0d &&
+      state.subject.charCodeAt(position + 1) === 0x0a
+    ) {
+      return 2;
+    }
+
+    if (
+      NEWLINE_SINGLES[state.newline].includes(
+        state.subject.charCodeAt(position),
+      )
+    ) {
+      return 1;
+    }
+
+    return 0;
+  }
+
+  static #newlineStartsAt(state, position) {
+    return $.#newlineLengthAt(state, position) > 0;
   }
 
   // Returns the state as updated by option settings lexically contained in
