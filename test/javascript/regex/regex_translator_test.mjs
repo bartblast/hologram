@@ -10,7 +10,13 @@ import RegexTranslator from "../../../assets/js/regex/regex_translator.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-const translate = (source, opts = {}) =>
+const translate = (source, opts = {}) => {
+  const {source: jsSource, flags} = translateFull(source, opts);
+
+  return {source: jsSource, flags: flags};
+};
+
+const translateFull = (source, opts = {}) =>
   RegexTranslator.translate(RegexParser.parse(source, opts), opts);
 
 describe("RegexTranslator", () => {
@@ -53,6 +59,72 @@ describe("RegexTranslator", () => {
           source: "\\ba\\B",
           flags: "",
         });
+      });
+    });
+
+    describe("atomic groups and possessive quantifiers", () => {
+      it("emulates atomic group with capturing lookahead", () => {
+        assert.deepEqual(translate("(?>a+)b"), {
+          source: "(?=(a+))\\1b",
+          flags: "",
+        });
+      });
+
+      it("emulates possessive star", () => {
+        assert.deepEqual(translate("a*+b"), {
+          source: "(?=(a*))\\1b",
+          flags: "",
+        });
+      });
+
+      it("emulates possessive bounded quantifier", () => {
+        assert.deepEqual(translate("a{2,5}+"), {
+          source: "(?=(a{2,5}))\\1",
+          flags: "",
+        });
+      });
+
+      it("renumbers groups after synthetic group", () => {
+        assert.deepEqual(translateFull("(a)(?>b)(c)\\2"), {
+          source: "(a)(?=(b))\\2(c)\\3",
+          flags: "",
+          groupMapping: new Map([
+            [1, 1],
+            [2, 3],
+          ]),
+        });
+      });
+
+      it("numbers groups nested inside atomic group after the synthetic one", () => {
+        assert.deepEqual(translateFull("(?>(a))"), {
+          source: "(?=((a)))\\1",
+          flags: "",
+          groupMapping: new Map([[1, 2]]),
+        });
+      });
+
+      it("keeps named groups and references intact", () => {
+        assert.deepEqual(translate("(?<x>a)(?>b)\\k<x>"), {
+          source: "(?<x>a)(?=(b))\\2\\k<x>",
+          flags: "",
+        });
+      });
+
+      it("returns identity mapping without synthetic groups", () => {
+        assert.deepEqual(
+          translateFull("(a)(b)").groupMapping,
+          new Map([
+            [1, 1],
+            [2, 2],
+          ]),
+        );
+      });
+
+      it("produces a RegExp with atomic semantics", () => {
+        const {source, flags} = translate("(?>a+)a");
+        const regex = new RegExp(source, flags);
+
+        assert.isFalse(regex.test("aaa"));
       });
     });
 

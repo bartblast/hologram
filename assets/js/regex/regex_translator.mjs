@@ -89,8 +89,9 @@ const SHORTHAND_SETS = {
 
 export default class RegexTranslator {
   // Translates a parsed pattern into JS RegExp source and flags with
-  // matching semantics. Only patterns routed to the native engine are
-  // translatable.
+  // matching semantics, plus the mapping from PCRE2 group numbers to JS group
+  // numbers, which diverge when the translation adds synthetic groups.
+  // Only patterns routed to the native engine are translatable.
   static translate(ast, opts = {}) {
     const context = {
       caseless: opts.caseless === true,
@@ -98,6 +99,8 @@ export default class RegexTranslator {
       dotall: opts.dotall === true,
       maxCodePoint: opts.unicode === true ? 0x10ffff : 0xff,
       multiline: opts.multiline === true,
+      // Group numbering state, shared across derived contexts
+      state: {groupMapping: new Map(), jsGroupCount: 0},
       ungreedy: opts.ungreedy === true,
       unicode: opts.unicode === true,
     };
@@ -107,7 +110,11 @@ export default class RegexTranslator {
     if (opts.caseless === true) flags += "i";
     if (opts.unicode === true) flags += "u";
 
-    return {source: $.#translateNode(ast, context), flags: flags};
+    return {
+      source: $.#translateNode(ast, context),
+      flags: flags,
+      groupMapping: context.state.groupMapping,
+    };
   }
 
   // Returns the context updated by an option setting's letters.
@@ -178,6 +185,16 @@ export default class RegexTranslator {
     if (CLASS_METACHARS.has(char)) return `\\${char}`;
 
     return $.#escapeCharCommon(codePoint, char);
+  }
+
+  static #quantifierBounds(node) {
+    if (node.min === 0 && node.max === null) return "*";
+    if (node.min === 1 && node.max === null) return "+";
+    if (node.min === 0 && node.max === 1) return "?";
+    if (node.max === null) return `{${node.min},}`;
+    if (node.min === node.max) return `{${node.min}}`;
+
+    return `{${node.min},${node.max}}`;
   }
 
   static #rangesToClassContent(ranges) {
@@ -286,8 +303,22 @@ export default class RegexTranslator {
       case "anchor":
         return $.#translateAnchor(node, context);
 
+      // Atomic groups are emulated with a capturing lookahead plus a
+      // backreference: JS lookaheads are atomic, and the backreference locks
+      // in the captured text
+      case "atomicGroup": {
+        const jsNumber = ++context.state.jsGroupCount;
+        const content = $.#translateNode(node.content, context);
+
+        return `(?=(${content}))\\${jsNumber}`;
+      }
+
       case "backreference":
-        return node.number !== null ? `\\${node.number}` : `\\k<${node.name}>`;
+        // Native routing guarantees backreferences point to already emitted
+        // groups, so the renumbering is always known here
+        return node.number !== null
+          ? `\\${context.state.groupMapping.get(node.number)}`
+          : `\\k<${node.name}>`;
 
       case "class":
         return $.#translateClass(node, context);
@@ -333,6 +364,10 @@ export default class RegexTranslator {
         return context.dotall ? "[\\s\\S]" : "[^\\n]";
 
       case "group": {
+        const jsNumber = ++context.state.jsGroupCount;
+
+        context.state.groupMapping.set(node.number, jsNumber);
+
         const content = $.#translateNode(node.content, context);
 
         return node.name !== null
@@ -409,27 +444,21 @@ export default class RegexTranslator {
   }
 
   static #translateQuantifier(node, context) {
-    const itemSource = $.#translateNode(node.item, context);
-    let bounds;
-
-    if (node.min === 0 && node.max === null) bounds = "*";
-    else if (node.min === 1 && node.max === null) bounds = "+";
-    else if (node.min === 0 && node.max === 1) bounds = "?";
-    else if (node.max === null) bounds = `{${node.min},}`;
-    else if (node.min === node.max) bounds = `{${node.min}}`;
-    else bounds = `{${node.min},${node.max}}`;
-
+    // A possessive quantifier is an atomic group around the greedy
+    // quantifier, emulated with the capturing lookahead trick
     if (node.mode === "possessive") {
-      // TODO: remove when the possessive lookahead-capture rewrite is implemented
-      throw new Error(
-        "unsupported quantifier mode for native translation: possessive",
-      );
+      const jsNumber = ++context.state.jsGroupCount;
+      const itemSource = $.#translateNode(node.item, context);
+
+      return `(?=(${itemSource}${$.#quantifierBounds(node)}))\\${jsNumber}`;
     }
+
+    const itemSource = $.#translateNode(node.item, context);
 
     // The ungreedy option swaps the meaning of greedy and lazy
     const isLazy = (node.mode === "lazy") !== context.ungreedy;
 
-    return `${itemSource}${bounds}${isLazy ? "?" : ""}`;
+    return `${itemSource}${$.#quantifierBounds(node)}${isLazy ? "?" : ""}`;
   }
 }
 
