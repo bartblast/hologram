@@ -1657,6 +1657,129 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("extended mode", () => {
+      it("ignores whitespace", () => {
+        assert.deepEqual(RegexParser.parse("a b", {extended: true}), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("skips # comment until end of line", () => {
+        assert.deepEqual(RegexParser.parse("a # c\nb", {extended: true}), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("keeps escaped space literal", () => {
+        assert.deepEqual(RegexParser.parse("a\\ b", {extended: true}), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 32},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("keeps space in class literal", () => {
+        assert.deepEqual(RegexParser.parse("[a ]", {extended: true}), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 32},
+          ],
+        });
+      });
+
+      it("applies whitespace before quantifier", () => {
+        assert.deepEqual(RegexParser.parse("a {2}", {extended: true}), {
+          type: "quantifier",
+          min: 2,
+          max: 2,
+          mode: "greedy",
+          item: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("applies whitespace before quantifier mode suffix", () => {
+        assert.deepEqual(RegexParser.parse("a * +", {extended: true}), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "possessive",
+          item: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("starts with inline x setting", () => {
+        assert.deepEqual(RegexParser.parse("(?x)a b"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "x", unset: ""},
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("restores mode after scoped x group", () => {
+        assert.deepEqual(RegexParser.parse("(?x:a b)c d"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "optionGroup",
+              reset: false,
+              set: "x",
+              unset: "",
+              content: {
+                type: "concatenation",
+                items: [
+                  {type: "literal", codePoint: 97},
+                  {type: "literal", codePoint: 98},
+                ],
+              },
+            },
+            {type: "literal", codePoint: 99},
+            {type: "literal", codePoint: 32},
+            {type: "literal", codePoint: 100},
+          ],
+        });
+      });
+
+      it("ignores space in class with inline xx setting", () => {
+        assert.deepEqual(RegexParser.parse("(?xx)[a ]"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "xx", unset: ""},
+            {
+              type: "class",
+              negated: false,
+              items: [{type: "literal", codePoint: 97}],
+            },
+          ],
+        });
+      });
+
+      it("allows spaces in {} bounds regardless of mode", () => {
+        assert.deepEqual(RegexParser.parse("a{1, 2}"), {
+          type: "quantifier",
+          min: 1,
+          max: 2,
+          mode: "greedy",
+          item: {type: "literal", codePoint: 97},
+        });
+      });
+    });
+
     describe("groups", () => {
       it("parses capturing group", () => {
         assert.deepEqual(RegexParser.parse("(a)"), {
@@ -2480,6 +2603,88 @@ describe("RegexParser", () => {
 
       it("raises when number is too big", () => {
         assertRegexParseError("a{65536}", "number too big in {} quantifier", 7);
+      });
+    });
+
+    describe("quoting", () => {
+      it("parses quoted metacharacters as literals", () => {
+        assert.deepEqual(RegexParser.parse("\\Qa*\\E"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 42},
+          ],
+        });
+      });
+
+      it("binds quantifier after \\E to the last quoted char", () => {
+        assert.deepEqual(RegexParser.parse("\\Qab\\E*"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {
+              type: "quantifier",
+              min: 0,
+              max: null,
+              mode: "greedy",
+              item: {type: "literal", codePoint: 98},
+            },
+          ],
+        });
+      });
+
+      it("quotes to the end of pattern without \\E", () => {
+        assert.deepEqual(RegexParser.parse("a\\Qb*"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+            {type: "literal", codePoint: 42},
+          ],
+        });
+      });
+
+      it("ignores \\E without preceding \\Q", () => {
+        assert.deepEqual(RegexParser.parse("a\\Eb"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("quotes group metacharacters", () => {
+        assert.deepEqual(RegexParser.parse("\\Q(\\E"), {
+          type: "literal",
+          codePoint: 40,
+        });
+      });
+
+      it("parses empty quote as nothing", () => {
+        assert.deepEqual(RegexParser.parse("\\Q\\Ea"), {
+          type: "literal",
+          codePoint: 97,
+        });
+      });
+
+      it("preserves whitespace inside quote in extended mode", () => {
+        assert.deepEqual(RegexParser.parse("\\Qa b\\E", {extended: true}), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 32},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("raises when quantifier follows empty quote at pattern start", () => {
+        assertRegexParseError(
+          "\\Q\\E*",
+          "quantifier does not follow a repeatable item",
+          5,
+        );
       });
     });
 

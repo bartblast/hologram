@@ -42,13 +42,16 @@ const ESCAPE_ANCHOR_KINDS = {
   z: "subjectEnd",
 };
 
+// Whitespace chars ignored in extended mode outside character classes.
+const EXTENDED_WHITESPACE = new Set([" ", "\t", "\n", "\v", "\f", "\r"]);
+
 // TODO: shrink as remaining escape sequences (backreferences, Unicode
 // properties, \Q...\E) are implemented
 const FUTURE_CLASS_ESCAPES = new Set([..."EPQp"]);
 
-// TODO: shrink as remaining escape sequences (Unicode properties, \Q...\E)
+// TODO: shrink as remaining escape sequences (Unicode properties)
 // are implemented
-const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EPQp"]);
+const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."Pp"]);
 
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
@@ -117,6 +120,8 @@ const VERB_KINDS = {
 export default class RegexParser {
   #allGroupNames = null;
   #dupnames;
+  #extended;
+  #extendedMore = false;
   #groupCount = 0;
   #groupNames = new Set();
   #noAutoCapture;
@@ -142,6 +147,7 @@ export default class RegexParser {
 
   constructor(source, opts = {}) {
     this.#dupnames = opts.dupnames === true;
+    this.#extended = opts.extended === true;
     this.#noAutoCapture = opts.noAutoCapture === true;
     this.#source = source;
     this.#unicode = opts.unicode === true;
@@ -151,13 +157,8 @@ export default class RegexParser {
   // The i, m, s and U options only affect matching and are handled by the
   // engines from the AST.
   #applyOptionLetters(reset, set, unset) {
-    if (
-      set.includes("x") ||
-      unset.includes("x") ||
-      set.includes("a") ||
-      unset.includes("a")
-    ) {
-      // TODO: remove when extended mode and ASCII option letters are implemented
+    if (set.includes("a") || unset.includes("a")) {
+      // TODO: remove when ASCII option letters are implemented
       throw new RegexParseError(
         `unsupported pattern construct: (?${set}${unset === "" ? "" : "-" + unset}`,
         this.#position,
@@ -165,12 +166,27 @@ export default class RegexParser {
     }
 
     // (?^ resets i, m, n, s and x to their defaults (J is unaffected)
-    if (reset) this.#noAutoCapture = false;
+    if (reset) {
+      this.#extended = false;
+      this.#extendedMore = false;
+      this.#noAutoCapture = false;
+    }
 
     if (set.includes("J")) this.#dupnames = true;
     if (set.includes("n")) this.#noAutoCapture = true;
+
+    if (set.includes("x")) {
+      this.#extended = true;
+      this.#extendedMore = set.includes("xx");
+    }
+
     if (unset.includes("J")) this.#dupnames = false;
     if (unset.includes("n")) this.#noAutoCapture = false;
+
+    if (unset.includes("x")) {
+      this.#extended = false;
+      this.#extendedMore = false;
+    }
   }
 
   #atEnd() {
@@ -386,6 +402,11 @@ export default class RegexParser {
     let isFirstItem = true;
 
     while (true) {
+      // Extended-more mode ignores unescaped spaces and tabs in classes
+      if (this.#extendedMore) {
+        while (this.#peek() === " " || this.#peek() === "\t") this.#position++;
+      }
+
       if (this.#atEnd()) {
         throw new RegexParseError(
           "missing terminating ] for character class",
@@ -539,7 +560,11 @@ export default class RegexParser {
   #parseConcatenation() {
     const items = [];
 
-    while (!this.#atEnd() && this.#peek() !== "|" && this.#peek() !== ")") {
+    while (true) {
+      if (this.#extended) this.#skipExtendedWhitespace();
+
+      if (this.#atEnd() || this.#peek() === "|" || this.#peek() === ")") break;
+
       // Comments are invisible: a quantifier after one applies to the item
       // before it, matching PCRE2 behavior
       if (
@@ -548,6 +573,34 @@ export default class RegexParser {
         this.#source[this.#position + 2] === "#"
       ) {
         this.#skipComment();
+        continue;
+      }
+
+      // \Q...\E quoting: quoted chars are literal atoms, so a quantifier
+      // after \E applies to the last quoted char, matching PCRE2 behavior
+      if (this.#peek() === "\\" && this.#source[this.#position + 1] === "Q") {
+        this.#position += 2;
+
+        while (!this.#atEnd()) {
+          if (
+            this.#peek() === "\\" &&
+            this.#source[this.#position + 1] === "E"
+          ) {
+            this.#position += 2;
+            break;
+          }
+
+          const codePoint = this.#source.codePointAt(this.#position);
+          this.#position += codePoint > 0xffff ? 2 : 1;
+          items.push({type: "literal", codePoint: codePoint});
+        }
+
+        continue;
+      }
+
+      // \E without a preceding \Q is ignored
+      if (this.#peek() === "\\" && this.#source[this.#position + 1] === "E") {
+        this.#position += 2;
         continue;
       }
 
@@ -1016,6 +1069,8 @@ export default class RegexParser {
     if (this.#peek() === "*") return this.#parseVerb();
 
     const savedDupnames = this.#dupnames;
+    const savedExtended = this.#extended;
+    const savedExtendedMore = this.#extendedMore;
     const savedNoAutoCapture = this.#noAutoCapture;
     let node;
 
@@ -1033,6 +1088,8 @@ export default class RegexParser {
     // Inline option settings persist to the end of the enclosing group
     if (node.type !== "optionSetting") {
       this.#dupnames = savedDupnames;
+      this.#extended = savedExtended;
+      this.#extendedMore = savedExtendedMore;
       this.#noAutoCapture = savedNoAutoCapture;
     }
 
@@ -1716,26 +1773,60 @@ export default class RegexParser {
     this.#position++;
   }
 
-  // Scans a {n}, {n,}, {n,m} or {,m} bounds spec.
+  // Skips whitespace and # end-of-line comments in extended mode,
+  // outside character classes.
+  #skipExtendedWhitespace() {
+    while (!this.#atEnd()) {
+      const char = this.#peek();
+
+      if (EXTENDED_WHITESPACE.has(char)) {
+        this.#position++;
+        continue;
+      }
+
+      if (char === "#") {
+        while (!this.#atEnd() && this.#peek() !== "\n") this.#position++;
+        continue;
+      }
+
+      break;
+    }
+  }
+
+  // Scans a {n}, {n,}, {n,m} or {,m} bounds spec. Spaces and tabs around the
+  // numbers are allowed, matching PCRE2 behavior.
   // Returns null (without consuming) when the braces don't form a valid spec,
   // in which case { is a literal, matching PCRE2 behavior.
   #tryParseBraceBounds() {
     const source = this.#source;
     let scanPosition = this.#position + 1;
 
+    const skipSpacesAndTabs = () => {
+      while (source[scanPosition] === " " || source[scanPosition] === "\t") {
+        scanPosition++;
+      }
+    };
+
+    skipSpacesAndTabs();
+
     const minStart = scanPosition;
     while (this.#isDigit(source[scanPosition])) scanPosition++;
     const minDigitCount = scanPosition - minStart;
+
+    skipSpacesAndTabs();
 
     let hasComma = false;
     if (source[scanPosition] === ",") {
       hasComma = true;
       scanPosition++;
+      skipSpacesAndTabs();
     }
 
     const maxStart = scanPosition;
     while (this.#isDigit(source[scanPosition])) scanPosition++;
     const maxDigitCount = scanPosition - maxStart;
+
+    skipSpacesAndTabs();
 
     if (source[scanPosition] !== "}") return null;
 
@@ -1895,6 +1986,8 @@ export default class RegexParser {
     } else {
       return null;
     }
+
+    if (this.#extended) this.#skipExtendedWhitespace();
 
     let mode = "greedy";
 
