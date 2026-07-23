@@ -92,6 +92,78 @@ describe("Debouncer", () => {
     });
   });
 
+  describe("flushWithin()", () => {
+    // Minimal stand-in for a DOM container: contains() covers itself and the given descendants.
+    const buildContainer = (...descendants) => ({
+      nodeType: 1,
+      contains(node) {
+        return node === this || descendants.includes(node);
+      },
+    });
+
+    const buildElement = () => ({nodeType: 1});
+
+    it("fires pending entries on the container's descendants in scheduling order", () => {
+      const elementA = buildElement();
+      const elementB = buildElement();
+      const container = buildContainer(elementA, elementB);
+      const callbackA = sinon.spy();
+      const callbackB = sinon.spy();
+
+      Debouncer.run(elementA, "slot", 250, callbackA);
+      Debouncer.run(elementB, "slot", 250, callbackB);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.calledOnce(callbackA);
+      sinon.assert.calledOnce(callbackB);
+      sinon.assert.callOrder(callbackA, callbackB);
+    });
+
+    it("fires pending entries keyed on the container itself", () => {
+      const container = buildContainer();
+      const callback = sinon.spy();
+
+      Debouncer.run(container, "slot", 250, callback);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.calledOnce(callback);
+    });
+
+    it("leaves elements outside the container untouched", () => {
+      const inside = buildElement();
+      const outside = buildElement();
+      const container = buildContainer(inside);
+      const insideCallback = sinon.spy();
+      const outsideCallback = sinon.spy();
+
+      Debouncer.run(inside, "slot", 250, insideCallback);
+      Debouncer.run(outside, "slot", 250, outsideCallback);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.calledOnce(insideCallback);
+      sinon.assert.notCalled(outsideCallback);
+
+      // The untouched element's timer still fires on its own schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(outsideCallback);
+    });
+
+    it("skips entries keyed on non-node targets", () => {
+      const windowTarget = {};
+      const container = buildContainer(windowTarget);
+      const callback = sinon.spy();
+
+      Debouncer.run(windowTarget, "slot", 250, callback);
+      Debouncer.flushWithin(container);
+
+      sinon.assert.notCalled(callback);
+
+      // The skipped entry's timer still fires on its own schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(callback);
+    });
+  });
+
   describe("run()", () => {
     it("does not call the callback before the delay elapses", () => {
       const element = {};

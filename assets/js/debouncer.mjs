@@ -29,6 +29,19 @@ export default class Debouncer {
     }
   }
 
+  // Immediately fires and removes all pending entries whose element is inside the container
+  // (including the container itself), in the order their slots were first scheduled. Entries keyed
+  // on non-node targets (window and document bindings) are skipped - they have no place in the
+  // element tree, so no container can scope them.
+  static flushWithin(container) {
+    // Keys are copied first: flush deletes entries, and a flushed callback may schedule new ones.
+    for (const element of [...$.#pendingByElement.keys()]) {
+      if (element.nodeType !== undefined && container.contains(element)) {
+        $.flush(element);
+      }
+    }
+  }
+
   // Schedules callback to run after delayMs, canceling any pending run for the same
   // (element, slotKey). Each call restarts the window, so only the final call in a burst fires.
   static run(element, slotKey, delayMs, callback) {
