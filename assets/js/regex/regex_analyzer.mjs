@@ -24,6 +24,10 @@ export default class RegexAnalyzer {
   // construct translates to a JS RegExp with identical semantics (directly or
   // via rewriting), "interpreted" otherwise.
   static route(ast, groupMap, opts = {}) {
+    // TODO: remove when ucp semantics (\d, \w, \b as Unicode sets) are
+    // implemented in the translator
+    if (opts.ucp === true) return "interpreted";
+
     // JS RegExp can't express one name mapping to multiple group numbers
     for (const numbers of groupMap.names.values()) {
       if (numbers.length > 1) return "interpreted";
@@ -208,14 +212,30 @@ export default class RegexAnalyzer {
     return false;
   }
 
+  // An option setting leaks out of an alternation branch unless a group
+  // encloses it within the branch.
+  static #leaksOptionSetting(node) {
+    if (node.type === "optionSetting") return true;
+
+    if (node.type === "concatenation") {
+      return node.items.some((item) => $.#leaksOptionSetting(item));
+    }
+
+    return false;
+  }
+
   static #requiresInterpreter(node, unicode) {
     switch (node.type) {
       case "anchor":
         return node.kind === "matchStart";
 
       case "alternation":
-        return node.branches.some((branch) =>
-          $.#requiresInterpreter(branch, unicode),
+        // Inline option settings leak into subsequent alternation branches
+        // in PCRE2, which the tail-scoped native translation can't express
+        return node.branches.some(
+          (branch) =>
+            $.#requiresInterpreter(branch, unicode) ||
+            $.#leaksOptionSetting(branch),
         );
 
       case "atomicGroup":
@@ -251,8 +271,9 @@ export default class RegexAnalyzer {
         return $.#requiresInterpreter(node.item, unicode);
 
       case "startOption":
-        // Match limits require step counting, which only the interpreter does
-        return node.name.startsWith("LIMIT_");
+        // Match limits require step counting, which only the interpreter
+        // does, and ucp semantics aren't implemented in the translator yet
+        return node.name.startsWith("LIMIT_") || node.name === "UCP";
 
       case "unicodeProperty":
         return !unicode;

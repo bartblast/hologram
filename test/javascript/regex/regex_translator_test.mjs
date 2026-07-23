@@ -273,6 +273,71 @@ describe("RegexTranslator", () => {
       });
     });
 
+    describe("inline options", () => {
+      it("translates caseless option group to modifier group", () => {
+        assert.deepEqual(translate("(?i:a)b"), {
+          source: "(?i:a)b",
+          flags: "",
+        });
+      });
+
+      it("translates caseless-unsetting option group to modifier group", () => {
+        assert.deepEqual(translate("(?-i:a)b", {caseless: true}), {
+          source: "(?-i:a)b",
+          flags: "i",
+        });
+      });
+
+      it("translates multiline option group via anchor rewrites", () => {
+        assert.deepEqual(translate("(?m:^a)$"), {
+          source: "(?:(?:^|(?<=\\n))a)(?=\\n?$)",
+          flags: "",
+        });
+      });
+
+      it("translates dotall option group via dot rewrites", () => {
+        assert.deepEqual(translate("(?s:.)."), {
+          source: "(?:[\\s\\S])[^\\n]",
+          flags: "",
+        });
+      });
+
+      it("translates ungreedy option group via quantifier flips", () => {
+        assert.deepEqual(translate("(?U:a*)a*"), {
+          source: "(?:a*?)a*",
+          flags: "",
+        });
+      });
+
+      it("scopes inline setting to the rest of the pattern", () => {
+        assert.deepEqual(translate("a(?i)bc"), {
+          source: "a(?i:bc)",
+          flags: "",
+        });
+      });
+
+      it("scopes non-caseless inline setting without a wrapper", () => {
+        assert.deepEqual(translate("a(?s).b."), {
+          source: "a[\\s\\S]b[\\s\\S]",
+          flags: "",
+        });
+      });
+
+      it("resets options with inline reset setting", () => {
+        assert.deepEqual(translate("(?i)a(?^)b"), {
+          source: "(?i:a(?-i:b))",
+          flags: "",
+        });
+      });
+
+      it("scopes inline setting to its enclosing group", () => {
+        assert.deepEqual(translate("(?:(?i)a)b"), {
+          source: "(?:(?i:a))b",
+          flags: "",
+        });
+      });
+    });
+
     describe("quantifiers", () => {
       it("translates simple quantifiers", () => {
         assert.deepEqual(translate("a*b+c?"), {source: "a*b+c?", flags: ""});
@@ -287,6 +352,13 @@ describe("RegexTranslator", () => {
 
       it("translates lazy quantifier", () => {
         assert.deepEqual(translate("a*?"), {source: "a*?", flags: ""});
+      });
+
+      it("swaps greediness with ungreedy option", () => {
+        assert.deepEqual(translate("a*b*?", {ungreedy: true}), {
+          source: "a*?b*",
+          flags: "",
+        });
       });
     });
 

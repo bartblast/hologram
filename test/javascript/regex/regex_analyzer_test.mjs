@@ -173,6 +173,22 @@ describe("RegexAnalyzer", () => {
       assert.equal(route("(*LIMIT_MATCH=100)a"), "interpreted");
     });
 
+    it("routes option setting leaking across alternation branches to interpreted", () => {
+      assert.equal(route("a(?i)b|c"), "interpreted");
+    });
+
+    it("routes group-enclosed option setting in alternation to native", () => {
+      assert.equal(route("(?:a(?i)b)|c"), "native");
+    });
+
+    it("routes ucp option to interpreted", () => {
+      assert.equal(route("a", {ucp: true}), "interpreted");
+    });
+
+    it("routes UCP start option to interpreted", () => {
+      assert.equal(route("(*UCP)a"), "interpreted");
+    });
+
     it("routes duplicate names to interpreted", () => {
       assert.equal(route("(?<x>a)(?<x>b)", {dupnames: true}), "interpreted");
     });

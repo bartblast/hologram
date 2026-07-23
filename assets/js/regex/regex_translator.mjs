@@ -93,10 +93,12 @@ export default class RegexTranslator {
   // translatable.
   static translate(ast, opts = {}) {
     const context = {
+      caseless: opts.caseless === true,
       dollarEndonly: opts.dollarEndonly === true,
       dotall: opts.dotall === true,
       maxCodePoint: opts.unicode === true ? 0x10ffff : 0xff,
       multiline: opts.multiline === true,
+      ungreedy: opts.ungreedy === true,
       unicode: opts.unicode === true,
     };
 
@@ -106,6 +108,32 @@ export default class RegexTranslator {
     if (opts.unicode === true) flags += "u";
 
     return {source: $.#translateNode(ast, context), flags: flags};
+  }
+
+  // Returns the context updated by an option setting's letters.
+  // The x, J, n and ASCII option letters only affect parsing and are already
+  // handled by the parser.
+  static #applyOptions(context, node) {
+    const next = {...context};
+
+    // (?^ resets i, m, n, s and x to their defaults
+    if (node.reset) {
+      next.caseless = false;
+      next.dotall = false;
+      next.multiline = false;
+    }
+
+    if (node.set.includes("i")) next.caseless = true;
+    if (node.set.includes("m")) next.multiline = true;
+    if (node.set.includes("s")) next.dotall = true;
+    if (node.set.includes("U")) next.ungreedy = true;
+
+    if (node.unset.includes("i")) next.caseless = false;
+    if (node.unset.includes("m")) next.multiline = false;
+    if (node.unset.includes("s")) next.dotall = false;
+    if (node.unset.includes("U")) next.ungreedy = false;
+
+    return next;
   }
 
   // Returns the ranges of all code points up to maxCodePoint that are not
@@ -264,14 +292,39 @@ export default class RegexTranslator {
       case "class":
         return $.#translateClass(node, context);
 
-      case "concatenation":
-        return node.items
-          .map((item) =>
+      case "concatenation": {
+        let result = "";
+        let currentContext = context;
+
+        for (let index = 0; index < node.items.length; index++) {
+          const item = node.items[index];
+
+          // An inline option setting applies to the rest of the enclosing
+          // group, so the remaining items are translated with the updated
+          // context, in a caseless modifier group when the i option changed
+          if (item.type === "optionSetting") {
+            const nextContext = $.#applyOptions(currentContext, item);
+            const rest = {
+              type: "concatenation",
+              items: node.items.slice(index + 1),
+            };
+            const restSource = $.#translateNode(rest, nextContext);
+
+            if (nextContext.caseless !== currentContext.caseless) {
+              return `${result}(?${nextContext.caseless ? "i" : "-i"}:${restSource})`;
+            }
+
+            return result + restSource;
+          }
+
+          result +=
             item.type === "alternation"
-              ? `(?:${$.#translateNode(item, context)})`
-              : $.#translateNode(item, context),
-          )
-          .join("");
+              ? `(?:${$.#translateNode(item, currentContext)})`
+              : $.#translateNode(item, currentContext);
+        }
+
+        return result;
+      }
 
       // PCRE2 dot excludes only \n, while JS dot also excludes \r and the
       // U+2028 and U+2029 line separators, so dot is always translated to an
@@ -309,6 +362,23 @@ export default class RegexTranslator {
       // \N always excludes only the newline, regardless of dotall
       case "notNewline":
         return "[^\\n]";
+
+      case "optionGroup": {
+        const nextContext = $.#applyOptions(context, node);
+        const content = $.#translateNode(node.content, nextContext);
+
+        // Only caseless needs JS-level support (a modifier group), the other
+        // options are handled by context-sensitive rewrites
+        if (nextContext.caseless !== context.caseless) {
+          return `(?${nextContext.caseless ? "i" : "-i"}:${content})`;
+        }
+
+        return `(?:${content})`;
+      }
+
+      // A standalone option setting has nothing left in its scope
+      case "optionSetting":
+        return "";
 
       case "quantifier":
         return $.#translateQuantifier(node, context);
@@ -356,7 +426,10 @@ export default class RegexTranslator {
       );
     }
 
-    return `${itemSource}${bounds}${node.mode === "lazy" ? "?" : ""}`;
+    // The ungreedy option swaps the meaning of greedy and lazy
+    const isLazy = (node.mode === "lazy") !== context.ungreedy;
+
+    return `${itemSource}${bounds}${isLazy ? "?" : ""}`;
   }
 }
 
