@@ -1,14 +1,22 @@
 "use strict";
 
+import RegexAnalyzer from "./regex_analyzer.mjs";
+
 export default class RegexInterpreter {
   // Matches a parsed pattern against a subject string, scanning forward from
-  // the start position. Returns {start, end} of the first match, or null.
+  // the start position. Returns {start, end, captures} of the first match,
+  // or null. captures[n] holds {start, end} of group n, or null when the
+  // group didn't participate (index 0 is unused).
   //
   // Matching uses continuation-passing style: each node matcher calls the
   // continuation with the position after itself, and returning false makes
   // the caller backtrack to its next alternative.
   static match(ast, subject, opts = {}) {
+    const groupCount =
+      opts.groupCount ?? RegexAnalyzer.buildGroupMap(ast).count;
+
     const state = {
+      captures: [],
       caseless: opts.caseless === true,
       subject: subject,
       ungreedy: opts.ungreedy === true,
@@ -18,6 +26,8 @@ export default class RegexInterpreter {
     let start = opts.startPosition ?? 0;
 
     while (start <= subject.length) {
+      state.captures = [];
+
       let matchEnd = null;
 
       const matched = $.#matchNode(ast, state, start, (position) => {
@@ -25,12 +35,46 @@ export default class RegexInterpreter {
         return true;
       });
 
-      if (matched) return {start: start, end: matchEnd};
+      if (matched) {
+        const captures = [null];
+
+        for (let number = 1; number <= groupCount; number++) {
+          captures.push(state.captures[number] ?? null);
+        }
+
+        return {start: start, end: matchEnd, captures: captures};
+      }
 
       start += start < subject.length ? $.#charLength(state, start) : 1;
     }
 
     return null;
+  }
+
+  // Returns the state updated by an option setting's letters.
+  // The x, J, n and ASCII option letters only affect parsing and are already
+  // handled by the parser.
+  static #applyOptions(state, node) {
+    const next = {...state};
+
+    // (?^ resets i, m, n, s and x to their defaults
+    if (node.reset) {
+      next.caseless = false;
+      next.dotall = false;
+      next.multiline = false;
+    }
+
+    if (node.set.includes("i")) next.caseless = true;
+    if (node.set.includes("m")) next.multiline = true;
+    if (node.set.includes("s")) next.dotall = true;
+    if (node.set.includes("U")) next.ungreedy = true;
+
+    if (node.unset.includes("i")) next.caseless = false;
+    if (node.unset.includes("m")) next.multiline = false;
+    if (node.unset.includes("s")) next.dotall = false;
+    if (node.unset.includes("U")) next.ungreedy = false;
+
+    return next;
   }
 
   // Returns the case-mapped variants of a code point that differ from it.
@@ -109,16 +153,53 @@ export default class RegexInterpreter {
     );
   }
 
+  // Runs a matcher once and locks its first match in: the match is never
+  // backtracked into, and captures set inside are rolled back when the
+  // continuation fails. The matcher receives the continuation to call with
+  // its end position.
+  static #matchAtomically(matcher, state, continuation) {
+    const savedCaptures = [...state.captures];
+    let lockedPosition = null;
+
+    const found = matcher((endPosition) => {
+      lockedPosition = endPosition;
+      return true;
+    });
+
+    if (!found) return false;
+
+    if (continuation(lockedPosition)) return true;
+
+    state.captures.splice(0, state.captures.length, ...savedCaptures);
+
+    return false;
+  }
+
   static #matchNode(node, state, position, continuation) {
     switch (node.type) {
-      case "alternation":
+      case "alternation": {
+        let branchState = state;
+
         for (const branch of node.branches) {
-          if ($.#matchNode(branch, state, position, continuation)) {
+          if ($.#matchNode(branch, branchState, position, continuation)) {
             return true;
           }
+
+          // Option settings leak lexically into subsequent branches,
+          // matching PCRE2 behavior
+          branchState = $.#stateAfterBranchOptions(branch, branchState);
         }
 
         return false;
+      }
+
+      case "atomicGroup":
+        return $.#matchAtomically(
+          (matcherContinuation) =>
+            $.#matchNode(node.content, state, position, matcherContinuation),
+          state,
+          continuation,
+        );
 
       case "class": {
         const codePoint = $.#subjectCodePointAt(state, position);
@@ -135,6 +216,29 @@ export default class RegexInterpreter {
       case "concatenation":
         return $.#matchSequence(node.items, 0, state, position, continuation);
 
+      case "group": {
+        const previous = state.captures[node.number];
+
+        const matched = $.#matchNode(
+          node.content,
+          state,
+          position,
+          (endPosition) => {
+            state.captures[node.number] = {start: position, end: endPosition};
+
+            if (continuation(endPosition)) return true;
+
+            state.captures[node.number] = previous;
+
+            return false;
+          },
+        );
+
+        if (!matched) state.captures[node.number] = previous;
+
+        return matched;
+      }
+
       case "literal": {
         const codePoint = $.#subjectCodePointAt(state, position);
 
@@ -146,6 +250,17 @@ export default class RegexInterpreter {
 
         return continuation(position + $.#codePointLength(state, codePoint));
       }
+
+      case "nonCapturingGroup":
+        return $.#matchNode(node.content, state, position, continuation);
+
+      case "optionGroup":
+        return $.#matchNode(
+          node.content,
+          $.#applyOptions(state, node),
+          position,
+          continuation,
+        );
 
       case "quantifier":
         return $.#matchQuantifier(node, state, position, continuation);
@@ -163,10 +278,20 @@ export default class RegexInterpreter {
   }
 
   static #matchQuantifier(node, state, position, continuation) {
+    // A possessive quantifier is an atomic group around the greedy quantifier
     if (node.mode === "possessive") {
-      // TODO: remove when atomic matching is implemented
-      throw new Error(
-        "unsupported quantifier mode for interpretation: possessive",
+      return $.#matchAtomically(
+        (matcherContinuation) =>
+          $.#matchRepetitions(
+            node,
+            state,
+            position,
+            0,
+            false,
+            matcherContinuation,
+          ),
+        state,
+        continuation,
       );
     }
 
@@ -211,9 +336,40 @@ export default class RegexInterpreter {
   static #matchSequence(items, itemIndex, state, position, continuation) {
     if (itemIndex === items.length) return continuation(position);
 
-    return $.#matchNode(items[itemIndex], state, position, (nextPosition) =>
+    const item = items[itemIndex];
+
+    // An inline option setting applies to the rest of the enclosing group
+    if (item.type === "optionSetting") {
+      return $.#matchSequence(
+        items,
+        itemIndex + 1,
+        $.#applyOptions(state, item),
+        position,
+        continuation,
+      );
+    }
+
+    return $.#matchNode(item, state, position, (nextPosition) =>
       $.#matchSequence(items, itemIndex + 1, state, nextPosition, continuation),
     );
+  }
+
+  // Returns the state as updated by option settings lexically contained in
+  // an alternation branch, at its top concatenation level.
+  static #stateAfterBranchOptions(branch, state) {
+    if (branch.type === "optionSetting") return $.#applyOptions(state, branch);
+
+    if (branch.type === "concatenation") {
+      let currentState = state;
+
+      for (const item of branch.items) {
+        currentState = $.#stateAfterBranchOptions(item, currentState);
+      }
+
+      return currentState;
+    }
+
+    return state;
   }
 
   static #subjectCodePointAt(state, position) {

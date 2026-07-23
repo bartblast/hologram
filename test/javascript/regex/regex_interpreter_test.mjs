@@ -10,7 +10,13 @@ import RegexParser from "../../../assets/js/regex/regex_parser.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-const match = (source, subject, opts = {}) =>
+const match = (source, subject, opts = {}) => {
+  const result = matchFull(source, subject, opts);
+
+  return result === null ? null : {start: result.start, end: result.end};
+};
+
+const matchFull = (source, subject, opts = {}) =>
   RegexInterpreter.match(RegexParser.parse(source, opts), subject, opts);
 
 describe("RegexInterpreter", () => {
@@ -26,6 +32,82 @@ describe("RegexInterpreter", () => {
 
       it("backtracks into later branches", () => {
         assert.deepEqual(match("ab|ac", "ac"), {start: 0, end: 2});
+      });
+    });
+
+    describe("atomic matching", () => {
+      it("does not backtrack into atomic group", () => {
+        assert.isNull(match("(?>a+)a", "aaa"));
+      });
+
+      it("matches atomic group and continues", () => {
+        assert.deepEqual(match("(?>a+)b", "aab"), {start: 0, end: 3});
+      });
+
+      it("rolls back captures locked inside a failed atomic group", () => {
+        assert.deepEqual(matchFull("(?>(a))x|([a-z])y", "ay"), {
+          start: 0,
+          end: 2,
+          captures: [null, null, {start: 0, end: 1}],
+        });
+      });
+
+      it("does not give back possessive repetitions", () => {
+        assert.isNull(match("a*+a", "aaa"));
+      });
+
+      it("matches possessive quantifier and continues", () => {
+        assert.deepEqual(match("a*+b", "aab"), {start: 0, end: 3});
+      });
+    });
+
+    describe("captures", () => {
+      it("captures sequential groups", () => {
+        assert.deepEqual(matchFull("(a)(b)", "ab"), {
+          start: 0,
+          end: 2,
+          captures: [null, {start: 0, end: 1}, {start: 1, end: 2}],
+        });
+      });
+
+      it("captures nested groups", () => {
+        assert.deepEqual(matchFull("((a)b)", "ab"), {
+          start: 0,
+          end: 2,
+          captures: [null, {start: 0, end: 2}, {start: 0, end: 1}],
+        });
+      });
+
+      it("leaves non-participating group unset", () => {
+        assert.deepEqual(matchFull("(a)|(b)", "b"), {
+          start: 0,
+          end: 1,
+          captures: [null, null, {start: 0, end: 1}],
+        });
+      });
+
+      it("leaves skipped optional group unset", () => {
+        assert.deepEqual(matchFull("(a)?b", "b"), {
+          start: 0,
+          end: 1,
+          captures: [null, null],
+        });
+      });
+
+      it("keeps the last iteration of a quantified group", () => {
+        assert.deepEqual(matchFull("([ab])+", "ab"), {
+          start: 0,
+          end: 2,
+          captures: [null, {start: 1, end: 2}],
+        });
+      });
+
+      it("restores captures abandoned by backtracking", () => {
+        assert.deepEqual(matchFull("(a)b|ac", "ac"), {
+          start: 0,
+          end: 2,
+          captures: [null, null],
+        });
       });
     });
 
@@ -106,6 +188,36 @@ describe("RegexInterpreter", () => {
           start: 0,
           end: 4,
         });
+      });
+    });
+
+    describe("groups and options", () => {
+      it("matches quantified non-capturing group", () => {
+        assert.deepEqual(match("(?:ab)+c", "ababc"), {start: 0, end: 5});
+      });
+
+      it("stops empty repetitions of a group", () => {
+        assert.deepEqual(match("(?:a?)*b", "b"), {start: 0, end: 1});
+      });
+
+      it("applies caseless option group within its scope", () => {
+        assert.deepEqual(match("(?i:a)b", "Ab"), {start: 0, end: 2});
+      });
+
+      it("ends caseless option group scope at its close", () => {
+        assert.isNull(match("(?i:a)b", "AB"));
+      });
+
+      it("applies inline option setting to the rest of the group", () => {
+        assert.deepEqual(match("a(?i)b", "aB"), {start: 0, end: 2});
+      });
+
+      it("leaks inline option setting into subsequent branches", () => {
+        assert.deepEqual(match("a(?i)b|c", "C"), {start: 0, end: 1});
+      });
+
+      it("applies scoped ungreedy option", () => {
+        assert.deepEqual(match("(?U:a*)", "aaa"), {start: 0, end: 0});
       });
     });
 
