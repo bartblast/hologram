@@ -5,6 +5,7 @@ import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
 import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PromiseRegistry from "./erts/promise_registry.mjs";
+import RegexPatternRegistry from "./erts/regex_pattern_registry.mjs";
 import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -40,6 +41,8 @@ export default class ERTS {
 
   // Entries are released via takePromise() when Task.await/1 is called.
   static promiseRegistry = PromiseRegistry;
+
+  static regexPatternRegistry = RegexPatternRegistry;
 
   // Sequence for anonymous function `uniq` field.
   // Used to derive fun_info/1 fields: index, new_index, uniq, new_uniq.
