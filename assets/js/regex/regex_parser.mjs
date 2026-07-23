@@ -45,13 +45,56 @@ const ESCAPE_ANCHOR_KINDS = {
 // Whitespace chars ignored in extended mode outside character classes.
 const EXTENDED_WHITESPACE = new Set([" ", "\t", "\n", "\v", "\f", "\r"]);
 
-// TODO: shrink as remaining escape sequences (backreferences, Unicode
-// properties, \Q...\E) are implemented
-const FUTURE_CLASS_ESCAPES = new Set([..."EPQp"]);
+// TODO: remove when \Q...\E quoting inside character classes is implemented
+const FUTURE_CLASS_ESCAPES = new Set([..."EQ"]);
 
-// TODO: shrink as remaining escape sequences (Unicode properties)
-// are implemented
-const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."Pp"]);
+// Unicode general category names and PCRE2 special property names,
+// used to validate one- and two-letter property names.
+const GENERAL_CATEGORIES = new Set([
+  "Any",
+  "C",
+  "Cc",
+  "Cf",
+  "Cn",
+  "Co",
+  "Cs",
+  "L",
+  "LC",
+  "Ll",
+  "Lm",
+  "Lo",
+  "Lt",
+  "Lu",
+  "M",
+  "Mc",
+  "Me",
+  "Mn",
+  "N",
+  "Nd",
+  "Nl",
+  "No",
+  "P",
+  "Pc",
+  "Pd",
+  "Pe",
+  "Pf",
+  "Pi",
+  "Po",
+  "S",
+  "Sc",
+  "Sk",
+  "Sm",
+  "So",
+  "Xan",
+  "Xps",
+  "Xsp",
+  "Xuc",
+  "Xwd",
+  "Z",
+  "Zl",
+  "Zp",
+  "Zs",
+]);
 
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
@@ -432,6 +475,31 @@ export default class RegexParser {
         continue;
       }
 
+      if (
+        char === "\\" &&
+        (this.#source[this.#position + 1] === "p" ||
+          this.#source[this.#position + 1] === "P")
+      ) {
+        this.#position++;
+        items.push(this.#parseUnicodeProperty(this.#peek()));
+
+        // A - after a property forms an invalid range unless it's a literal
+        // before ], matching PCRE2 behavior
+        if (
+          this.#peek() === "-" &&
+          this.#source[this.#position + 1] !== "]" &&
+          this.#position + 1 < this.#source.length
+        ) {
+          this.#position++;
+          throw new RegexParseError(
+            "invalid range in character class",
+            this.#position,
+          );
+        }
+
+        continue;
+      }
+
       if (char === "[" && this.#source[this.#position + 1] === ":") {
         const posixClass = this.#tryParsePosixClass();
 
@@ -466,6 +534,19 @@ export default class RegexParser {
       SHORTHAND_CLASS_LETTERS.has(this.#source[this.#position + 1])
     ) {
       this.#position += 2;
+      throw new RegexParseError(
+        "invalid range in character class",
+        this.#position,
+      );
+    }
+
+    if (
+      this.#peek() === "\\" &&
+      (this.#source[this.#position + 1] === "p" ||
+        this.#source[this.#position + 1] === "P")
+    ) {
+      this.#position++;
+      this.#parseUnicodeProperty(this.#peek());
       throw new RegexParseError(
         "invalid range in character class",
         this.#position,
@@ -918,6 +999,8 @@ export default class RegexParser {
       this.#position++;
       return {type: "matchStartReset"};
     }
+
+    if (char === "p" || char === "P") return this.#parseUnicodeProperty(char);
 
     const codePoint = this.#tryParseCharEscapeCodePoint(false);
 
@@ -1610,6 +1693,67 @@ export default class RegexParser {
     return value;
   }
 
+  // Parses a \p{name}, \P{name}, \p{^name} or single-letter \pX Unicode
+  // property escape, with the position at the p or P.
+  #parseUnicodeProperty(letter) {
+    this.#position++;
+
+    let negated = letter === "P";
+
+    if (this.#peek() !== "{") {
+      if (this.#atEnd()) {
+        throw new RegexParseError(
+          "malformed \\P or \\p sequence",
+          this.#position,
+        );
+      }
+
+      const name = this.#peek();
+      this.#position++;
+
+      if (!GENERAL_CATEGORIES.has(name)) {
+        throw new RegexParseError(
+          "unknown property after \\P or \\p",
+          this.#position,
+        );
+      }
+
+      return {type: "unicodeProperty", name: name, negated: negated};
+    }
+
+    this.#position++;
+
+    if (this.#peek() === "^") {
+      negated = !negated;
+      this.#position++;
+    }
+
+    const nameStart = this.#position;
+
+    while (!this.#atEnd() && this.#peek() !== "}") this.#position++;
+
+    if (this.#atEnd()) {
+      throw new RegexParseError(
+        "malformed \\P or \\p sequence",
+        this.#position,
+      );
+    }
+
+    const name = this.#source.slice(nameStart, this.#position);
+    this.#position++;
+
+    // TODO: validate longer property names (scripts, name=value pairs)
+    // against Unicode tables
+    if (name === "" || (name.length <= 2 && !GENERAL_CATEGORIES.has(name))) {
+      throw new RegexParseError(
+        "unknown property after \\P or \\p",
+        this.#position,
+      );
+    }
+
+    return {type: "unicodeProperty", name: name, negated: negated};
+  }
+
   // Parses a (*VERB) or (*VERB:name) backtracking control verb,
   // with the position at the *.
   #parseVerb() {
@@ -1703,11 +1847,7 @@ export default class RegexParser {
       );
     }
 
-    const futureEscapes = inClass
-      ? FUTURE_CLASS_ESCAPES
-      : FUTURE_TOP_LEVEL_ESCAPES;
-
-    if (futureEscapes.has(char)) {
+    if (inClass && FUTURE_CLASS_ESCAPES.has(char)) {
       // TODO: remove when remaining escape sequences are implemented
       throw new RegexParseError(
         `unsupported pattern construct: \\${char}`,

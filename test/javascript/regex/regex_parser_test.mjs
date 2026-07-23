@@ -2917,6 +2917,117 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("unicode properties", () => {
+      it("parses braced property", () => {
+        assert.deepEqual(RegexParser.parse("\\p{L}"), {
+          type: "unicodeProperty",
+          name: "L",
+          negated: false,
+        });
+      });
+
+      it("parses single-letter property", () => {
+        assert.deepEqual(RegexParser.parse("\\pL"), {
+          type: "unicodeProperty",
+          name: "L",
+          negated: false,
+        });
+      });
+
+      it("parses negated \\P property", () => {
+        assert.deepEqual(RegexParser.parse("\\P{L}"), {
+          type: "unicodeProperty",
+          name: "L",
+          negated: true,
+        });
+      });
+
+      it("parses caret-negated property", () => {
+        assert.deepEqual(RegexParser.parse("\\p{^L}"), {
+          type: "unicodeProperty",
+          name: "L",
+          negated: true,
+        });
+      });
+
+      it("parses double-negated property as positive", () => {
+        assert.deepEqual(RegexParser.parse("\\P{^L}"), {
+          type: "unicodeProperty",
+          name: "L",
+          negated: false,
+        });
+      });
+
+      it("parses script property", () => {
+        assert.deepEqual(RegexParser.parse("\\p{Greek}"), {
+          type: "unicodeProperty",
+          name: "Greek",
+          negated: false,
+        });
+      });
+
+      it("parses name=value property", () => {
+        assert.deepEqual(RegexParser.parse("\\p{sc=Greek}"), {
+          type: "unicodeProperty",
+          name: "sc=Greek",
+          negated: false,
+        });
+      });
+
+      it("parses quantified property", () => {
+        assert.deepEqual(RegexParser.parse("\\p{L}+"), {
+          type: "quantifier",
+          min: 1,
+          max: null,
+          mode: "greedy",
+          item: {type: "unicodeProperty", name: "L", negated: false},
+        });
+      });
+
+      it("parses properties as class members", () => {
+        assert.deepEqual(RegexParser.parse("[\\p{L}\\P{N}]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "unicodeProperty", name: "L", negated: false},
+            {type: "unicodeProperty", name: "N", negated: true},
+          ],
+        });
+      });
+
+      it("raises on bare \\p", () => {
+        assertRegexParseError("\\p", "malformed \\P or \\p sequence", 2);
+      });
+
+      it("raises on unterminated property braces", () => {
+        assertRegexParseError("\\p{L", "malformed \\P or \\p sequence", 4);
+      });
+
+      it("raises on empty property name", () => {
+        assertRegexParseError("\\p{}", "unknown property after \\P or \\p", 4);
+      });
+
+      it("raises on unknown single-letter property", () => {
+        assertRegexParseError("\\pQ", "unknown property after \\P or \\p", 3);
+      });
+
+      it("raises on unknown two-letter property", () => {
+        assertRegexParseError(
+          "\\p{Zz}",
+          "unknown property after \\P or \\p",
+          6,
+        );
+      });
+
+      it("raises on property as range endpoint", () => {
+        assertRegexParseError(
+          "[a-\\p{L}]",
+          "invalid range in character class",
+          8,
+        );
+      });
+    });
+
     describe("verbs", () => {
       it("parses (*FAIL)", () => {
         assert.deepEqual(RegexParser.parse("a(*FAIL)"), {
