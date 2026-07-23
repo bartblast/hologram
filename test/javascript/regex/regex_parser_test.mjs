@@ -1224,6 +1224,22 @@ describe("RegexParser", () => {
         );
       });
 
+      it("raises on \\X in class", () => {
+        assertRegexParseError(
+          "[\\X]",
+          "escape sequence is invalid in character class",
+          3,
+        );
+      });
+
+      it("raises on \\C in class", () => {
+        assertRegexParseError(
+          "[\\C]",
+          "escape sequence is invalid in character class",
+          3,
+        );
+      });
+
       it("raises on octal escape above \\377 in 8-bit mode", () => {
         assertRegexParseError(
           "[\\777]",
@@ -1886,6 +1902,24 @@ describe("RegexParser", () => {
           mode: "greedy",
           item: {type: "newlineSequence"},
         });
+      });
+
+      it("parses \\X as grapheme cluster", () => {
+        assert.deepEqual(RegexParser.parse("\\X"), {type: "graphemeCluster"});
+      });
+
+      it("parses quantified \\X", () => {
+        assert.deepEqual(RegexParser.parse("\\X*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {type: "graphemeCluster"},
+        });
+      });
+
+      it("parses \\C as single byte", () => {
+        assert.deepEqual(RegexParser.parse("\\C"), {type: "singleByte"});
       });
 
       it("parses \\K as match start reset", () => {

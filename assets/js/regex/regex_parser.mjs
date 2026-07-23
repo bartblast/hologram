@@ -287,6 +287,9 @@ export default class RegexParser {
         return sum;
       }
 
+      case "graphemeCluster":
+        return null;
+
       case "newlineSequence":
         return 2;
 
@@ -736,7 +739,7 @@ export default class RegexParser {
       );
     }
 
-    if (char === "R") {
+    if (char === "C" || char === "R" || char === "X") {
       this.#position++;
       throw new RegexParseError(
         "escape sequence is invalid in character class",
@@ -1153,6 +1156,16 @@ export default class RegexParser {
     if (char === "R") {
       this.#position++;
       return {type: "newlineSequence"};
+    }
+
+    if (char === "X") {
+      this.#position++;
+      return {type: "graphemeCluster"};
+    }
+
+    if (char === "C") {
+      this.#position++;
+      return {type: "singleByte"};
     }
 
     if (this.#isDigit(char) && char !== "0") return this.#parseDigitEscape();

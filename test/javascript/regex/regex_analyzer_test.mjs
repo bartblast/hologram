@@ -13,6 +13,12 @@ defineGlobalErlangAndElixirModules();
 const buildGroupMap = (source, opts = {}) =>
   RegexAnalyzer.buildGroupMap(RegexParser.parse(source, opts));
 
+const route = (source, opts = {}) => {
+  const ast = RegexParser.parse(source, opts);
+
+  return RegexAnalyzer.route(ast, RegexAnalyzer.buildGroupMap(ast), opts);
+};
+
 describe("RegexAnalyzer", () => {
   describe("buildGroupMap()", () => {
     it("returns empty map for pattern without groups", () => {
@@ -75,6 +81,112 @@ describe("RegexAnalyzer", () => {
         count: 1,
         names: new Map([["x", [1]]]),
       });
+    });
+  });
+
+  describe("route()", () => {
+    it("routes plain pattern to native", () => {
+      assert.equal(route("^a+[b-z]*(c|d)$"), "native");
+    });
+
+    it("routes safe backreference to native", () => {
+      assert.equal(route("(a)\\1"), "native");
+    });
+
+    it("routes backreference to group with alternation inside to native", () => {
+      assert.equal(route("(a|b)\\1"), "native");
+    });
+
+    it("routes possessive quantifier and atomic group to native", () => {
+      assert.equal(route("a*+(?>b)"), "native");
+    });
+
+    it("routes lookarounds to native", () => {
+      assert.equal(route("(?=a)(?<!b)"), "native");
+    });
+
+    it("routes property escape in unicode mode to native", () => {
+      assert.equal(route("\\p{L}", {unicode: true}), "native");
+    });
+
+    it("routes property escape with UTF start option to native", () => {
+      assert.equal(route("(*UTF)\\p{L}"), "native");
+    });
+
+    it("routes inline options to native", () => {
+      assert.equal(route("(?i)a(?m:b)"), "native");
+    });
+
+    it("routes recursion to interpreted", () => {
+      assert.equal(route("a(?R)?"), "interpreted");
+    });
+
+    it("routes subroutine call to interpreted", () => {
+      assert.equal(route("(a)(?1)"), "interpreted");
+    });
+
+    it("routes conditional to interpreted", () => {
+      assert.equal(route("(a)(?(1)b|c)"), "interpreted");
+    });
+
+    it("routes control verb to interpreted", () => {
+      assert.equal(route("a(*SKIP)b"), "interpreted");
+    });
+
+    it("routes match start reset to interpreted", () => {
+      assert.equal(route("a\\Kb"), "interpreted");
+    });
+
+    it("routes \\G anchor to interpreted", () => {
+      assert.equal(route("\\Ga"), "interpreted");
+    });
+
+    it("routes script run to interpreted", () => {
+      assert.equal(route("(*sr:ab)"), "interpreted");
+    });
+
+    it("routes branch reset group to interpreted", () => {
+      assert.equal(route("(?|(a)|(b))"), "interpreted");
+    });
+
+    it("routes non-atomic lookaround to interpreted", () => {
+      assert.equal(route("(?*a)"), "interpreted");
+    });
+
+    it("routes grapheme cluster to interpreted", () => {
+      assert.equal(route("\\X"), "interpreted");
+    });
+
+    it("routes single byte escape to interpreted", () => {
+      assert.equal(route("\\C"), "interpreted");
+    });
+
+    it("routes property escape in 8-bit mode to interpreted", () => {
+      assert.equal(route("\\p{L}"), "interpreted");
+    });
+
+    it("routes class with property escape in 8-bit mode to interpreted", () => {
+      assert.equal(route("[\\p{L}]"), "interpreted");
+    });
+
+    it("routes match limit start option to interpreted", () => {
+      assert.equal(route("(*LIMIT_MATCH=100)a"), "interpreted");
+    });
+
+    it("routes duplicate names to interpreted", () => {
+      assert.equal(route("(?<x>a)(?<x>b)", {dupnames: true}), "interpreted");
+    });
+
+    it("routes backreference to optional group to interpreted", () => {
+      assert.equal(route("(a)?\\1"), "interpreted");
+    });
+
+    it("routes forward reference to interpreted", () => {
+      assert.equal(route("\\2(a)(b)"), "interpreted");
+    });
+
+    it("routes backreference to group in one alternation branch to interpreted", () => {
+      assert.equal(route("((a)|b)\\2"), "interpreted");
     });
   });
 });
