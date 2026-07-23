@@ -1986,5 +1986,234 @@ describe("RegexParser", () => {
         assertRegexParseError("a{65536}", "number too big in {} quantifier", 7);
       });
     });
+
+    describe("subroutine calls", () => {
+      it("parses (?R) as whole-pattern recursion", () => {
+        assert.deepEqual(RegexParser.parse("(?R)"), {
+          type: "subroutine",
+          number: 0,
+          name: null,
+        });
+      });
+
+      it("parses quantified recursion", () => {
+        assert.deepEqual(RegexParser.parse("a(?R)?"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {
+              type: "quantifier",
+              min: 0,
+              max: 1,
+              mode: "greedy",
+              item: {type: "subroutine", number: 0, name: null},
+            },
+          ],
+        });
+      });
+
+      it("parses (?0) as whole-pattern recursion", () => {
+        assert.deepEqual(RegexParser.parse("(?0)"), {
+          type: "subroutine",
+          number: 0,
+          name: null,
+        });
+      });
+
+      it("parses numeric call", () => {
+        assert.deepEqual(RegexParser.parse("(a)(?1)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "subroutine", number: 1, name: null},
+          ],
+        });
+      });
+
+      it("resolves negative relative call", () => {
+        assert.deepEqual(RegexParser.parse("(a)(?-1)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "subroutine", number: 1, name: null},
+          ],
+        });
+      });
+
+      it("resolves positive relative call", () => {
+        assert.deepEqual(RegexParser.parse("(?+1)(a)"), {
+          type: "concatenation",
+          items: [
+            {type: "subroutine", number: 1, name: null},
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+          ],
+        });
+      });
+
+      it("parses (?&name) call", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)(?&x)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "subroutine", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses (?P>name) call", () => {
+        assert.deepEqual(RegexParser.parse("(?P<x>a)(?P>x)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "subroutine", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("parses \\g with angle-bracketed number", () => {
+        assert.deepEqual(RegexParser.parse("(a)\\g<1>"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "subroutine", number: 1, name: null},
+          ],
+        });
+      });
+
+      it("parses \\g with quoted number", () => {
+        assert.deepEqual(RegexParser.parse("(a)\\g'1'"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "subroutine", number: 1, name: null},
+          ],
+        });
+      });
+
+      it("parses \\g with angle-bracketed name", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)\\g<x>"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {type: "subroutine", number: null, name: "x"},
+          ],
+        });
+      });
+
+      it("resolves \\g with relative angle-bracketed number", () => {
+        assert.deepEqual(RegexParser.parse("\\g<+1>(a)"), {
+          type: "concatenation",
+          items: [
+            {type: "subroutine", number: 1, name: null},
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+          ],
+        });
+      });
+
+      it("raises on (?R without closing parenthesis", () => {
+        assertRegexParseError(
+          "(?R",
+          "(?R (recursive pattern call) must be followed by a closing parenthesis",
+          3,
+        );
+      });
+
+      it("raises on call to non-existent group", () => {
+        assertRegexParseError(
+          "(a)(?2)",
+          "reference to non-existent subpattern",
+          6,
+        );
+      });
+
+      it("raises on relative call before first group", () => {
+        assertRegexParseError(
+          "(?-1)",
+          "reference to non-existent subpattern",
+          4,
+        );
+      });
+
+      it("raises on numeric call without closing parenthesis", () => {
+        assertRegexParseError("(?1x)(a)", "missing closing parenthesis", 3);
+      });
+
+      it("raises on (?&) without name", () => {
+        assertRegexParseError("(?&)", "subpattern name expected", 3);
+      });
+
+      it("raises on (?&name) call to non-existent name", () => {
+        assertRegexParseError(
+          "(?<x>a)(?&y)",
+          "reference to non-existent subpattern",
+          10,
+        );
+      });
+
+      it("raises on \\g<> without name", () => {
+        assertRegexParseError("(a)\\g<>", "subpattern name expected", 6);
+      });
+
+      it("raises on \\g call to non-existent group", () => {
+        assertRegexParseError(
+          "(a)\\g<2>",
+          "reference to non-existent subpattern",
+          8,
+        );
+      });
+
+      it("raises on invalid character in \\g number", () => {
+        assertRegexParseError(
+          "(a)\\g<1x>",
+          "syntax error in subpattern number (missing terminator?)",
+          7,
+        );
+      });
+    });
   });
 });

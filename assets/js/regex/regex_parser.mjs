@@ -684,11 +684,45 @@ export default class RegexParser {
     }
 
     if (this.#peek() === "<" || this.#peek() === "'") {
-      // TODO: remove when subroutine calls are implemented
-      throw new RegexParseError(
-        `unsupported pattern construct: \\g${this.#peek()}`,
-        this.#position,
-      );
+      const terminator = this.#peek() === "<" ? ">" : "'";
+
+      this.#position++;
+
+      const next = this.#peek();
+
+      if (
+        this.#isDigit(next) ||
+        ((next === "+" || next === "-") &&
+          this.#isDigit(this.#source[this.#position + 1]))
+      ) {
+        const isRelative = !this.#isDigit(next);
+        const number = this.#parseSubroutineNumber();
+
+        if (this.#peek() !== terminator) {
+          throw new RegexParseError(
+            "syntax error in subpattern number (missing terminator?)",
+            this.#position,
+          );
+        }
+
+        this.#position++;
+
+        if (isRelative && number <= 0) {
+          throw new RegexParseError(
+            "reference to non-existent subpattern",
+            this.#position,
+          );
+        }
+
+        if (number > 0) this.#validateNumericReference(number, this.#position);
+
+        return {type: "subroutine", number: number, name: null};
+      }
+
+      const {name, nameStart} = this.#parseSubpatternName(terminator);
+      this.#validateNamedReference(name, nameStart);
+
+      return {type: "subroutine", number: null, name: name};
     }
 
     throw new RegexParseError(
@@ -801,11 +835,12 @@ export default class RegexParser {
       }
 
       if (nextChar === ">") {
-        // TODO: remove when subroutine calls are implemented
-        throw new RegexParseError(
-          `unsupported pattern construct: (?P${nextChar}`,
-          this.#position,
-        );
+        this.#position += 2;
+
+        const {name, nameStart} = this.#parseSubpatternName(")");
+        this.#validateNamedReference(name, nameStart);
+
+        return {type: "subroutine", number: null, name: name};
       }
 
       this.#position += 2;
@@ -815,9 +850,62 @@ export default class RegexParser {
       );
     }
 
-    if ("#(&+-|^".includes(char) || this.#isAlphanumeric(char)) {
-      // TODO: remove when conditionals, subroutine calls, inline options,
-      // comments and branch reset groups are implemented
+    if (char === "R") {
+      this.#position++;
+
+      if (this.#peek() !== ")") {
+        throw new RegexParseError(
+          "(?R (recursive pattern call) must be followed by a closing parenthesis",
+          this.#position,
+        );
+      }
+
+      this.#position++;
+
+      return {type: "subroutine", number: 0, name: null};
+    }
+
+    if (
+      this.#isDigit(char) ||
+      ((char === "+" || char === "-") &&
+        this.#isDigit(this.#source[this.#position + 1]))
+    ) {
+      const isRelative = !this.#isDigit(char);
+      const number = this.#parseSubroutineNumber();
+
+      if (this.#peek() !== ")") {
+        throw new RegexParseError(
+          "missing closing parenthesis",
+          this.#position,
+        );
+      }
+
+      if (isRelative && number <= 0) {
+        throw new RegexParseError(
+          "reference to non-existent subpattern",
+          this.#position,
+        );
+      }
+
+      if (number > 0) this.#validateNumericReference(number, this.#position);
+
+      this.#position++;
+
+      return {type: "subroutine", number: number, name: null};
+    }
+
+    if (char === "&") {
+      this.#position++;
+
+      const {name, nameStart} = this.#parseSubpatternName(")");
+      this.#validateNamedReference(name, nameStart);
+
+      return {type: "subroutine", number: null, name: name};
+    }
+
+    if ("#(+-|^".includes(char) || this.#isAlphanumeric(char)) {
+      // TODO: remove when conditionals, inline options, comments and
+      // branch reset groups are implemented
       throw new RegexParseError(
         `unsupported pattern construct: (?${char}`,
         this.#position,
@@ -1093,6 +1181,27 @@ export default class RegexParser {
       name: this.#source.slice(nameStart, nameStart + nameLength),
       nameStart: nameStart,
     };
+  }
+
+  // Scans an optional +/- sign and digits, resolving relative numbers
+  // against the groups opened so far, with the position at the sign or
+  // first digit.
+  #parseSubroutineNumber() {
+    const char = this.#peek();
+    const sign = char === "+" || char === "-" ? char : null;
+
+    if (sign !== null) this.#position++;
+
+    const digitsStart = this.#position;
+
+    while (this.#isDigit(this.#peek())) this.#position++;
+
+    const value = Number(this.#source.slice(digitsStart, this.#position));
+
+    if (sign === "-") return this.#groupCount + 1 - value;
+    if (sign === "+") return this.#groupCount + value;
+
+    return value;
   }
 
   #peek() {
