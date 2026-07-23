@@ -1263,6 +1263,172 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("lookarounds", () => {
+      it("parses positive lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(?=a)"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: false,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses negative lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(?!a)"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: true,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses positive lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(?<=a)"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses negative lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(?<!a)"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: true,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses capturing group inside lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(?=(a))"), {
+          type: "lookaround",
+          direction: "ahead",
+          negated: false,
+          content: {
+            type: "group",
+            number: 1,
+            name: null,
+            content: {type: "literal", codePoint: 97},
+          },
+        });
+      });
+
+      it("parses quantified lookahead", () => {
+        assert.deepEqual(RegexParser.parse("(?=a)*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {
+            type: "lookaround",
+            direction: "ahead",
+            negated: false,
+            content: {type: "literal", codePoint: 97},
+          },
+        });
+      });
+
+      it("parses bounded variable-length lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(?<=a{0,255})"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          content: {
+            type: "quantifier",
+            min: 0,
+            max: 255,
+            mode: "greedy",
+            item: {type: "literal", codePoint: 97},
+          },
+        });
+      });
+
+      it("parses lookbehind with variable-length alternation", () => {
+        assert.deepEqual(RegexParser.parse("(?<=(a|bc))"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          content: {
+            type: "group",
+            number: 1,
+            name: null,
+            content: {
+              type: "alternation",
+              branches: [
+                {type: "literal", codePoint: 97},
+                {
+                  type: "concatenation",
+                  items: [
+                    {type: "literal", codePoint: 98},
+                    {type: "literal", codePoint: 99},
+                  ],
+                },
+              ],
+            },
+          },
+        });
+      });
+
+      it("parses lookahead nested inside lookbehind", () => {
+        assert.deepEqual(RegexParser.parse("(?<=(?=a*)b)"), {
+          type: "lookaround",
+          direction: "behind",
+          negated: false,
+          content: {
+            type: "concatenation",
+            items: [
+              {
+                type: "lookaround",
+                direction: "ahead",
+                negated: false,
+                content: {
+                  type: "quantifier",
+                  min: 0,
+                  max: null,
+                  mode: "greedy",
+                  item: {type: "literal", codePoint: 97},
+                },
+              },
+              {type: "literal", codePoint: 98},
+            ],
+          },
+        });
+      });
+
+      it("raises on unbounded lookbehind", () => {
+        assertRegexParseError(
+          "(?<=a*)b",
+          "length of lookbehind assertion is not limited",
+          0,
+        );
+      });
+
+      it("raises on unbounded lookbehind not at pattern start", () => {
+        assertRegexParseError(
+          "x(?<=a+)b",
+          "length of lookbehind assertion is not limited",
+          1,
+        );
+      });
+
+      it("raises on unbounded negative lookbehind", () => {
+        assertRegexParseError(
+          "(?<!a*)b",
+          "length of lookbehind assertion is not limited",
+          0,
+        );
+      });
+
+      it("raises on too long lookbehind branch", () => {
+        assertRegexParseError(
+          "(?<=a{0,256})b",
+          "branch too long in variable-length lookbehind assertion",
+          0,
+        );
+      });
+    });
+
     describe("quantifiers", () => {
       it("parses * as 0 to unbounded", () => {
         assert.deepEqual(RegexParser.parse("a*"), {

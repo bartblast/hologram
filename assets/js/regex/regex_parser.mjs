@@ -92,6 +92,59 @@ export default class RegexParser {
     };
   }
 
+  // Returns the maximum number of characters a node can match,
+  // or null when the length is unbounded.
+  #calculateMaxBranchLength(node) {
+    switch (node.type) {
+      case "alternation": {
+        let max = 0;
+
+        for (const branch of node.branches) {
+          const branchMax = this.#calculateMaxBranchLength(branch);
+          if (branchMax === null) return null;
+          if (branchMax > max) max = branchMax;
+        }
+
+        return max;
+      }
+
+      case "anchor":
+      case "lookaround":
+        return 0;
+
+      case "atomicGroup":
+      case "group":
+      case "nonCapturingGroup":
+        return this.#calculateMaxBranchLength(node.content);
+
+      case "concatenation": {
+        let sum = 0;
+
+        for (const item of node.items) {
+          const itemMax = this.#calculateMaxBranchLength(item);
+          if (itemMax === null) return null;
+          sum += itemMax;
+        }
+
+        return sum;
+      }
+
+      case "newlineSequence":
+        return 2;
+
+      case "quantifier": {
+        if (node.max === null) return null;
+
+        const itemMax = this.#calculateMaxBranchLength(node.item);
+
+        return itemMax === null ? null : itemMax * node.max;
+      }
+
+      default:
+        return 1;
+    }
+  }
+
   // Validates a code point produced by a \x{}, \o{} or \N{U+} escape,
   // raising at the current position (just past the digits).
   #checkCodePointValue(value) {
@@ -109,6 +162,31 @@ export default class RegexParser {
         "disallowed Unicode code point (>= 0xd800 && <= 0xdfff)",
         this.#position,
       );
+    }
+  }
+
+  // Enforces PCRE2 lookbehind length limits, raising at the position
+  // of the lookbehind's opening parenthesis.
+  #checkLookbehindLength(content, position) {
+    const branches =
+      content.type === "alternation" ? content.branches : [content];
+
+    for (const branch of branches) {
+      const maxLength = this.#calculateMaxBranchLength(branch);
+
+      if (maxLength === null) {
+        throw new RegexParseError(
+          "length of lookbehind assertion is not limited",
+          position,
+        );
+      }
+
+      if (maxLength > 255) {
+        throw new RegexParseError(
+          "branch too long in variable-length lookbehind assertion",
+          position,
+        );
+      }
     }
   }
 
@@ -502,15 +580,36 @@ export default class RegexParser {
       return {type: "atomicGroup", content: content};
     }
 
+    if (char === "=" || char === "!") {
+      this.#position++;
+      const content = this.#parseAlternation();
+      this.#requireGroupClose();
+
+      return {
+        type: "lookaround",
+        direction: "ahead",
+        negated: char === "!",
+        content: content,
+      };
+    }
+
     if (char === "<") {
       const nextChar = this.#source[this.#position + 1];
 
       if (nextChar === "=" || nextChar === "!") {
-        // TODO: remove when lookbehind assertions are implemented
-        throw new RegexParseError(
-          `unsupported pattern construct: (?<${nextChar}`,
-          this.#position,
-        );
+        const lookbehindStart = this.#position - 2;
+
+        this.#position += 2;
+        const content = this.#parseAlternation();
+        this.#requireGroupClose();
+        this.#checkLookbehindLength(content, lookbehindStart);
+
+        return {
+          type: "lookaround",
+          direction: "behind",
+          negated: nextChar === "!",
+          content: content,
+        };
       }
 
       this.#position++;
@@ -545,9 +644,9 @@ export default class RegexParser {
       );
     }
 
-    if ("=!#(&+-|^".includes(char) || this.#isAlphanumeric(char)) {
-      // TODO: remove when lookaheads, conditionals, subroutine calls, inline
-      // options, comments and branch reset groups are implemented
+    if ("#(&+-|^".includes(char) || this.#isAlphanumeric(char)) {
+      // TODO: remove when conditionals, subroutine calls, inline options,
+      // comments and branch reset groups are implemented
       throw new RegexParseError(
         `unsupported pattern construct: (?${char}`,
         this.#position,
