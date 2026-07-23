@@ -1107,9 +1107,70 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses quoted metacharacters as literal members", () => {
+        assert.deepEqual(RegexParser.parse("[\\Qa-b\\E]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 45},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("parses quoted ] as literal member", () => {
+        assert.deepEqual(RegexParser.parse("[\\Q]\\E]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "literal", codePoint: 93}],
+        });
+      });
+
+      it("parses quoted backslash as literal member", () => {
+        assert.deepEqual(RegexParser.parse("[\\Q\\d\\E]"), {
+          type: "class",
+          negated: false,
+          items: [
+            {type: "literal", codePoint: 92},
+            {type: "literal", codePoint: 100},
+          ],
+        });
+      });
+
+      it("parses range with quoted start", () => {
+        assert.deepEqual(RegexParser.parse("[\\Qa\\E-z]"), {
+          type: "class",
+          negated: false,
+          items: [{type: "range", from: 97, to: 122}],
+        });
+      });
+
+      it("keeps quoted space literal in extended-more mode", () => {
+        assert.deepEqual(RegexParser.parse("(?xx)[\\Q \\E]"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "xx", unset: ""},
+            {
+              type: "class",
+              negated: false,
+              items: [{type: "literal", codePoint: 32}],
+            },
+          ],
+        });
+      });
+
       it("raises on unterminated class", () => {
         assertRegexParseError(
           "[abc",
+          "missing terminating ] for character class",
+          4,
+        );
+      });
+
+      it("raises on class unterminated inside quote", () => {
+        assertRegexParseError(
+          "[\\Qa",
           "missing terminating ] for character class",
           4,
         );
@@ -2501,6 +2562,64 @@ describe("RegexParser", () => {
           "((?J))(?<x>a)(?<x>b)",
           "two named subpatterns have the same name (PCRE2_DUPNAMES not set)",
           18,
+        );
+      });
+
+      it("parses ASCII option pair", () => {
+        assert.deepEqual(RegexParser.parse("(?aD)b"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "aD", unset: ""},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("parses bare ASCII option letter", () => {
+        assert.deepEqual(RegexParser.parse("(?a)b"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "a", unset: ""},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("parses unset ASCII option letter", () => {
+        assert.deepEqual(RegexParser.parse("(?-a)b"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "", unset: "a"},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("parses multiple ASCII option pairs", () => {
+        assert.deepEqual(RegexParser.parse("(?aDaW)b"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "aDaW", unset: ""},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("parses ASCII option group", () => {
+        assert.deepEqual(RegexParser.parse("(?aP:b)"), {
+          type: "optionGroup",
+          reset: false,
+          set: "aP",
+          unset: "",
+          content: {type: "literal", codePoint: 98},
+        });
+      });
+
+      it("raises on invalid ASCII option pair", () => {
+        assertRegexParseError(
+          "(?aX)b",
+          "unrecognized character after (? or (?-",
+          4,
         );
       });
 

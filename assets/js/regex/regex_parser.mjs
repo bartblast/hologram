@@ -58,9 +58,6 @@ const ESCAPE_ANCHOR_KINDS = {
 // Whitespace chars ignored in extended mode outside character classes.
 const EXTENDED_WHITESPACE = new Set([" ", "\t", "\n", "\v", "\f", "\r"]);
 
-// TODO: remove when \Q...\E quoting inside character classes is implemented
-const FUTURE_CLASS_ESCAPES = new Set([..."EQ"]);
-
 // Unicode general category names and PCRE2 special property names,
 // used to validate one- and two-letter property names.
 const GENERAL_CATEGORIES = new Set([
@@ -181,6 +178,7 @@ export default class RegexParser {
   #extendedMore = false;
   #groupCount = 0;
   #groupNames = new Set();
+  #inClassQuote = false;
   #noAutoCapture;
   #position = 0;
   #source;
@@ -214,14 +212,6 @@ export default class RegexParser {
   // The i, m, s and U options only affect matching and are handled by the
   // engines from the AST.
   #applyOptionLetters(reset, set, unset) {
-    if (set.includes("a") || unset.includes("a")) {
-      // TODO: remove when ASCII option letters are implemented
-      throw new RegexParseError(
-        `unsupported pattern construct: (?${set}${unset === "" ? "" : "-" + unset}`,
-        this.#position,
-      );
-    }
-
     // (?^ resets i, m, n, s and x to their defaults (J is unaffected)
     if (reset) {
       this.#extended = false;
@@ -536,10 +526,19 @@ export default class RegexParser {
     const items = [];
     let isFirstItem = true;
 
+    this.#inClassQuote = false;
+
     while (true) {
+      this.#skipClassQuoteMarkers();
+
       // Extended-more mode ignores unescaped spaces and tabs in classes
-      if (this.#extendedMore) {
-        while (this.#peek() === " " || this.#peek() === "\t") this.#position++;
+      if (
+        !this.#inClassQuote &&
+        this.#extendedMore &&
+        (this.#peek() === " " || this.#peek() === "\t")
+      ) {
+        this.#position++;
+        continue;
       }
 
       if (this.#atEnd()) {
@@ -547,6 +546,12 @@ export default class RegexParser {
           "missing terminating ] for character class",
           this.#position,
         );
+      }
+
+      if (this.#inClassQuote) {
+        isFirstItem = false;
+        items.push(this.#parseClassCharOrRange());
+        continue;
       }
 
       const char = this.#peek();
@@ -610,8 +615,12 @@ export default class RegexParser {
   #parseClassCharOrRange() {
     const from = this.#parseClassSingleCodePoint();
 
-    // - forms a range only between two members; before ] or at pattern end it's a literal
+    this.#skipClassQuoteMarkers();
+
+    // - forms a range only outside quoting and between two members;
+    // before ] or at pattern end it's a literal
     if (
+      this.#inClassQuote ||
       this.#peek() !== "-" ||
       this.#source[this.#position + 1] === "]" ||
       this.#position + 1 >= this.#source.length
@@ -621,39 +630,43 @@ export default class RegexParser {
 
     this.#position++;
 
-    if (
-      this.#peek() === "\\" &&
-      SHORTHAND_CLASS_LETTERS.has(this.#source[this.#position + 1])
-    ) {
-      this.#position += 2;
-      throw new RegexParseError(
-        "invalid range in character class",
-        this.#position,
-      );
-    }
+    this.#skipClassQuoteMarkers();
 
-    if (
-      this.#peek() === "\\" &&
-      (this.#source[this.#position + 1] === "p" ||
-        this.#source[this.#position + 1] === "P")
-    ) {
-      this.#position++;
-      this.#parseUnicodeProperty(this.#peek());
-      throw new RegexParseError(
-        "invalid range in character class",
-        this.#position,
-      );
-    }
+    if (!this.#inClassQuote) {
+      if (
+        this.#peek() === "\\" &&
+        SHORTHAND_CLASS_LETTERS.has(this.#source[this.#position + 1])
+      ) {
+        this.#position += 2;
+        throw new RegexParseError(
+          "invalid range in character class",
+          this.#position,
+        );
+      }
 
-    if (
-      this.#peek() === "[" &&
-      this.#source[this.#position + 1] === ":" &&
-      this.#tryParsePosixClass() !== null
-    ) {
-      throw new RegexParseError(
-        "invalid range in character class",
-        this.#position,
-      );
+      if (
+        this.#peek() === "\\" &&
+        (this.#source[this.#position + 1] === "p" ||
+          this.#source[this.#position + 1] === "P")
+      ) {
+        this.#position++;
+        this.#parseUnicodeProperty(this.#peek());
+        throw new RegexParseError(
+          "invalid range in character class",
+          this.#position,
+        );
+      }
+
+      if (
+        this.#peek() === "[" &&
+        this.#source[this.#position + 1] === ":" &&
+        this.#tryParsePosixClass() !== null
+      ) {
+        throw new RegexParseError(
+          "invalid range in character class",
+          this.#position,
+        );
+      }
     }
 
     const to = this.#parseClassSingleCodePoint();
@@ -691,7 +704,15 @@ export default class RegexParser {
   }
 
   // Parses a single class member char, either plain or produced by an escape.
+  // Inside \Q...\E quoting every char is taken literally.
   #parseClassSingleCodePoint() {
+    if (this.#inClassQuote) {
+      const codePoint = this.#source.codePointAt(this.#position);
+      this.#position += codePoint > 0xffff ? 2 : 1;
+
+      return codePoint;
+    }
+
     if (this.#peek() !== "\\") {
       const codePoint = this.#source.codePointAt(this.#position);
       this.#position += codePoint > 0xffff ? 2 : 1;
@@ -727,7 +748,7 @@ export default class RegexParser {
 
     if (codePoint !== null) return codePoint;
 
-    this.#raiseEscapeError(true);
+    this.#raiseEscapeError();
   }
 
   #parseConcatenation() {
@@ -1151,7 +1172,7 @@ export default class RegexParser {
 
     if (codePoint !== null) return {type: "literal", codePoint: codePoint};
 
-    this.#raiseEscapeError(false);
+    this.#raiseEscapeError();
   }
 
   // Parses a \g reference (\gn, \g{n}, \g{-n}, \g{+n} or \g{name}),
@@ -2039,21 +2060,13 @@ export default class RegexParser {
 
   // Raises the error PCRE2 produces for an escape with no valid meaning,
   // with the position at the escape char.
-  #raiseEscapeError(inClass) {
+  #raiseEscapeError() {
     const char = this.#peek();
 
     if (UNSUPPORTED_BY_PCRE2_ESCAPES.has(char)) {
       this.#position++;
       throw new RegexParseError(
         "PCRE2 does not support \\F, \\L, \\l, \\N{name}, \\U, or \\u",
-        this.#position,
-      );
-    }
-
-    if (inClass && FUTURE_CLASS_ESCAPES.has(char)) {
-      // TODO: remove when remaining escape sequences are implemented
-      throw new RegexParseError(
-        `unsupported pattern construct: \\${char}`,
         this.#position,
       );
     }
@@ -2098,9 +2111,48 @@ export default class RegexParser {
   #scanOptionLetters() {
     const start = this.#position;
 
-    while ("iJmnsUxa".includes(this.#peek())) this.#position++;
+    while (true) {
+      const char = this.#peek();
+
+      // ASCII option letters: a alone or the aD, aP, aS, aT, aW pairs
+      if (char === "a") {
+        this.#position++;
+        if ("DPSTW".includes(this.#peek())) this.#position++;
+        continue;
+      }
+
+      if (char !== undefined && "iJmnsUx".includes(char)) {
+        this.#position++;
+        continue;
+      }
+
+      break;
+    }
 
     return this.#source.slice(start, this.#position);
+  }
+
+  // Consumes \Q and \E markers inside a class, toggling the quoting state.
+  // \Q inside an active quote is not a marker, because the backslash is
+  // literal there.
+  #skipClassQuoteMarkers() {
+    while (this.#peek() === "\\") {
+      const next = this.#source[this.#position + 1];
+
+      if (next === "Q" && !this.#inClassQuote) {
+        this.#position += 2;
+        this.#inClassQuote = true;
+        continue;
+      }
+
+      if (next === "E") {
+        this.#position += 2;
+        this.#inClassQuote = false;
+        continue;
+      }
+
+      break;
+    }
   }
 
   // Skips a (?#...) comment, with the position at the (.
