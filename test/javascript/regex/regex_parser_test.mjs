@@ -955,6 +955,291 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("groups", () => {
+      it("parses capturing group", () => {
+        assert.deepEqual(RegexParser.parse("(a)"), {
+          type: "group",
+          number: 1,
+          name: null,
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("numbers groups by opening parenthesis order", () => {
+        assert.deepEqual(RegexParser.parse("(a)(b)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "group",
+              number: 2,
+              name: null,
+              content: {type: "literal", codePoint: 98},
+            },
+          ],
+        });
+      });
+
+      it("numbers nested groups outside-in", () => {
+        assert.deepEqual(RegexParser.parse("((a))"), {
+          type: "group",
+          number: 1,
+          name: null,
+          content: {
+            type: "group",
+            number: 2,
+            name: null,
+            content: {type: "literal", codePoint: 97},
+          },
+        });
+      });
+
+      it("parses alternation inside group", () => {
+        assert.deepEqual(RegexParser.parse("(a|b)"), {
+          type: "group",
+          number: 1,
+          name: null,
+          content: {
+            type: "alternation",
+            branches: [
+              {type: "literal", codePoint: 97},
+              {type: "literal", codePoint: 98},
+            ],
+          },
+        });
+      });
+
+      it("parses empty group", () => {
+        assert.deepEqual(RegexParser.parse("()"), {
+          type: "group",
+          number: 1,
+          name: null,
+          content: {type: "concatenation", items: []},
+        });
+      });
+
+      it("parses quantified group", () => {
+        assert.deepEqual(RegexParser.parse("(ab)*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {
+            type: "group",
+            number: 1,
+            name: null,
+            content: {
+              type: "concatenation",
+              items: [
+                {type: "literal", codePoint: 97},
+                {type: "literal", codePoint: 98},
+              ],
+            },
+          },
+        });
+      });
+
+      it("parses non-capturing group", () => {
+        assert.deepEqual(RegexParser.parse("(?:ab)"), {
+          type: "nonCapturingGroup",
+          content: {
+            type: "concatenation",
+            items: [
+              {type: "literal", codePoint: 97},
+              {type: "literal", codePoint: 98},
+            ],
+          },
+        });
+      });
+
+      it("skips non-capturing groups in numbering", () => {
+        assert.deepEqual(RegexParser.parse("(?:a)(b)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "nonCapturingGroup",
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 98},
+            },
+          ],
+        });
+      });
+
+      it("parses atomic group", () => {
+        assert.deepEqual(RegexParser.parse("(?>a+)"), {
+          type: "atomicGroup",
+          content: {
+            type: "quantifier",
+            min: 1,
+            max: null,
+            mode: "greedy",
+            item: {type: "literal", codePoint: 97},
+          },
+        });
+      });
+
+      it("parses named group with angle brackets", () => {
+        assert.deepEqual(RegexParser.parse("(?<x>a)"), {
+          type: "group",
+          number: 1,
+          name: "x",
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses named group with quotes", () => {
+        assert.deepEqual(RegexParser.parse("(?'x'a)"), {
+          type: "group",
+          number: 1,
+          name: "x",
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses named group with P prefix", () => {
+        assert.deepEqual(RegexParser.parse("(?P<x>a)"), {
+          type: "group",
+          number: 1,
+          name: "x",
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("numbers named and unnamed groups together", () => {
+        assert.deepEqual(RegexParser.parse("(a)(?<x>b)"), {
+          type: "concatenation",
+          items: [
+            {
+              type: "group",
+              number: 1,
+              name: null,
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "group",
+              number: 2,
+              name: "x",
+              content: {type: "literal", codePoint: 98},
+            },
+          ],
+        });
+      });
+
+      it("allows duplicate names with dupnames option", () => {
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)(?<x>b)", {dupnames: true}),
+          {
+            type: "concatenation",
+            items: [
+              {
+                type: "group",
+                number: 1,
+                name: "x",
+                content: {type: "literal", codePoint: 97},
+              },
+              {
+                type: "group",
+                number: 2,
+                name: "x",
+                content: {type: "literal", codePoint: 98},
+              },
+            ],
+          },
+        );
+      });
+
+      it("makes plain groups non-capturing with noAutoCapture option", () => {
+        assert.deepEqual(
+          RegexParser.parse("(?<x>a)(b)", {noAutoCapture: true}),
+          {
+            type: "concatenation",
+            items: [
+              {
+                type: "group",
+                number: 1,
+                name: "x",
+                content: {type: "literal", codePoint: 97},
+              },
+              {
+                type: "nonCapturingGroup",
+                content: {type: "literal", codePoint: 98},
+              },
+            ],
+          },
+        );
+      });
+
+      it("raises on missing closing parenthesis", () => {
+        assertRegexParseError("(a", "missing closing parenthesis", 2);
+      });
+
+      it("raises on unmatched closing parenthesis", () => {
+        assertRegexParseError("a)b", "unmatched closing parenthesis", 2);
+      });
+
+      it("raises on unmatched closing parenthesis at pattern start", () => {
+        assertRegexParseError(")", "unmatched closing parenthesis", 1);
+      });
+
+      it("raises on empty group name", () => {
+        assertRegexParseError("(?<>a)", "subpattern name expected", 3);
+      });
+
+      it("raises on group name starting with digit", () => {
+        assertRegexParseError(
+          "(?<1a>x)",
+          "subpattern name must start with a non-digit",
+          4,
+        );
+      });
+
+      it("raises on too long group name", () => {
+        assertRegexParseError(
+          `(?<${"a".repeat(129)}>x)`,
+          "subpattern name is too long (maximum 128 code units)",
+          132,
+        );
+      });
+
+      it("raises on unterminated group name", () => {
+        assertRegexParseError(
+          "(?<ab)x",
+          "syntax error in subpattern name (missing terminator?)",
+          5,
+        );
+      });
+
+      it("raises on duplicate group name", () => {
+        assertRegexParseError(
+          "(?<ab>x)(?<ab>y)",
+          "two named subpatterns have the same name (PCRE2_DUPNAMES not set)",
+          14,
+        );
+      });
+
+      it("raises on unrecognized character after (?P", () => {
+        assertRegexParseError("(?Px)", "unrecognized character after (?P", 4);
+      });
+
+      it("raises on unrecognized character after (?", () => {
+        assertRegexParseError(
+          "(?_x)",
+          "unrecognized character after (? or (?-",
+          3,
+        );
+      });
+    });
+
     describe("literal", () => {
       it("parses ASCII character", () => {
         assert.deepEqual(RegexParser.parse("a"), {
@@ -1192,10 +1477,6 @@ describe("RegexParser", () => {
       it("raises when number is too big", () => {
         assertRegexParseError("a{65536}", "number too big in {} quantifier", 7);
       });
-    });
-
-    it("raises on unsupported construct", () => {
-      assertRegexParseError("a(", "unsupported pattern construct: (", 1);
     });
   });
 });

@@ -59,18 +59,21 @@ const SHORTHAND_CLASS_LETTERS = new Set([..."DHSVWdhsvw"]);
 const UNSUPPORTED_BY_PCRE2_ESCAPES = new Set(["F", "L", "U", "l", "u"]);
 
 export default class RegexParser {
-  // TODO: shrink as remaining pattern constructs (groups) are implemented
-  static #unsupportedChars = new Set(["(", ")"]);
-
+  #dupnames;
+  #groupCount = 0;
+  #groupNames = new Set();
+  #noAutoCapture;
   #position = 0;
   #source;
   #unicode;
 
   static parse(source, opts = {}) {
-    return new RegexParser(source, opts).#parseAlternation();
+    return new RegexParser(source, opts).#parsePattern();
   }
 
   constructor(source, opts = {}) {
+    this.#dupnames = opts.dupnames === true;
+    this.#noAutoCapture = opts.noAutoCapture === true;
     this.#source = source;
     this.#unicode = opts.unicode === true;
   }
@@ -137,6 +140,10 @@ export default class RegexParser {
     return this.#isAlphanumeric(char);
   }
 
+  #isWordChar(char) {
+    return this.#isAlphanumeric(char) || char === "_";
+  }
+
   #parseAlternation() {
     const branches = [this.#parseConcatenation()];
 
@@ -172,18 +179,22 @@ export default class RegexParser {
       return {type: "anchor", kind: "lineEnd"};
     }
 
-    if (RegexParser.#unsupportedChars.has(char)) {
-      // TODO: remove when all pattern constructs are implemented
-      throw new RegexParseError(
-        `unsupported pattern construct: ${char}`,
-        this.#position,
-      );
-    }
+    if (char === "(") return this.#parseGroup();
 
     const codePoint = this.#source.codePointAt(this.#position);
     this.#position += codePoint > 0xffff ? 2 : 1;
 
     return {type: "literal", codePoint: codePoint};
+  }
+
+  #parseCapturingGroup(name) {
+    // Groups are numbered by opening parenthesis order
+    const number = ++this.#groupCount;
+    const content = this.#parseAlternation();
+
+    this.#requireGroupClose();
+
+    return {type: "group", number: number, name: name, content: content};
   }
 
   #parseCharacterClass() {
@@ -355,7 +366,7 @@ export default class RegexParser {
   #parseConcatenation() {
     const items = [];
 
-    while (!this.#atEnd() && this.#peek() !== "|") {
+    while (!this.#atEnd() && this.#peek() !== "|" && this.#peek() !== ")") {
       const quantifier = this.#tryParseQuantifier();
 
       if (quantifier === null) {
@@ -446,6 +457,110 @@ export default class RegexParser {
     this.#raiseEscapeError(false);
   }
 
+  #parseGroup() {
+    this.#position++;
+
+    if (this.#peek() === "?") return this.#parseGroupExtension();
+
+    if (this.#peek() === "*") {
+      // TODO: remove when backtracking control verbs are implemented
+      throw new RegexParseError(
+        "unsupported pattern construct: (*",
+        this.#position,
+      );
+    }
+
+    if (this.#noAutoCapture) {
+      const content = this.#parseAlternation();
+      this.#requireGroupClose();
+
+      return {type: "nonCapturingGroup", content: content};
+    }
+
+    return this.#parseCapturingGroup(null);
+  }
+
+  // Parses a group form starting with (?, with the position at the ?.
+  #parseGroupExtension() {
+    this.#position++;
+
+    const char = this.#peek();
+
+    if (char === ":") {
+      this.#position++;
+      const content = this.#parseAlternation();
+      this.#requireGroupClose();
+
+      return {type: "nonCapturingGroup", content: content};
+    }
+
+    if (char === ">") {
+      this.#position++;
+      const content = this.#parseAlternation();
+      this.#requireGroupClose();
+
+      return {type: "atomicGroup", content: content};
+    }
+
+    if (char === "<") {
+      const nextChar = this.#source[this.#position + 1];
+
+      if (nextChar === "=" || nextChar === "!") {
+        // TODO: remove when lookbehind assertions are implemented
+        throw new RegexParseError(
+          `unsupported pattern construct: (?<${nextChar}`,
+          this.#position,
+        );
+      }
+
+      this.#position++;
+      return this.#parseNamedGroup(">");
+    }
+
+    if (char === "'") {
+      this.#position++;
+      return this.#parseNamedGroup("'");
+    }
+
+    if (char === "P") {
+      const nextChar = this.#source[this.#position + 1];
+
+      if (nextChar === "<") {
+        this.#position += 2;
+        return this.#parseNamedGroup(">");
+      }
+
+      if (nextChar === "=" || nextChar === ">") {
+        // TODO: remove when backreferences and subroutine calls are implemented
+        throw new RegexParseError(
+          `unsupported pattern construct: (?P${nextChar}`,
+          this.#position,
+        );
+      }
+
+      this.#position += 2;
+      throw new RegexParseError(
+        "unrecognized character after (?P",
+        this.#position,
+      );
+    }
+
+    if ("=!#(&+-|^".includes(char) || this.#isAlphanumeric(char)) {
+      // TODO: remove when lookaheads, conditionals, subroutine calls, inline
+      // options, comments and branch reset groups are implemented
+      throw new RegexParseError(
+        `unsupported pattern construct: (?${char}`,
+        this.#position,
+      );
+    }
+
+    this.#position++;
+    throw new RegexParseError(
+      "unrecognized character after (? or (?-",
+      this.#position,
+    );
+  }
+
   // Parses a \xhh or \x{hhh...} hex escape, with the position just past the x.
   #parseHexEscape() {
     if (this.#peek() === "{") {
@@ -494,6 +609,56 @@ export default class RegexParser {
     }
 
     return parseInt(this.#source.slice(digitsStart, this.#position), 16);
+  }
+
+  // Parses a named capturing group, with the position at the name start.
+  #parseNamedGroup(terminator) {
+    const nameStart = this.#position;
+
+    if (this.#isDigit(this.#peek())) {
+      this.#position++;
+      throw new RegexParseError(
+        "subpattern name must start with a non-digit",
+        this.#position,
+      );
+    }
+
+    while (this.#isWordChar(this.#peek())) this.#position++;
+
+    const nameLength = this.#position - nameStart;
+
+    if (nameLength === 0) {
+      throw new RegexParseError("subpattern name expected", this.#position);
+    }
+
+    if (nameLength > 128) {
+      throw new RegexParseError(
+        "subpattern name is too long (maximum 128 code units)",
+        this.#position,
+      );
+    }
+
+    if (this.#peek() !== terminator) {
+      throw new RegexParseError(
+        "syntax error in subpattern name (missing terminator?)",
+        this.#position,
+      );
+    }
+
+    this.#position++;
+
+    const name = this.#source.slice(nameStart, nameStart + nameLength);
+
+    if (!this.#dupnames && this.#groupNames.has(name)) {
+      throw new RegexParseError(
+        "two named subpatterns have the same name (PCRE2_DUPNAMES not set)",
+        this.#position,
+      );
+    }
+
+    this.#groupNames.add(name);
+
+    return this.#parseCapturingGroup(name);
   }
 
   // Parses \N (not-newline) or the \N{U+hhhh} code point form,
@@ -609,6 +774,21 @@ export default class RegexParser {
     return value;
   }
 
+  #parsePattern() {
+    const node = this.#parseAlternation();
+
+    // Only an unmatched ) can stop the top-level alternation before the end
+    if (!this.#atEnd()) {
+      this.#position++;
+      throw new RegexParseError(
+        "unmatched closing parenthesis",
+        this.#position,
+      );
+    }
+
+    return node;
+  }
+
   #peek() {
     return this.#source[this.#position];
   }
@@ -665,6 +845,14 @@ export default class RegexParser {
         scanPosition + 2,
       );
     }
+  }
+
+  #requireGroupClose() {
+    if (this.#peek() !== ")") {
+      throw new RegexParseError("missing closing parenthesis", this.#position);
+    }
+
+    this.#position++;
   }
 
   // Scans a {n}, {n,}, {n,m} or {,m} bounds spec.
