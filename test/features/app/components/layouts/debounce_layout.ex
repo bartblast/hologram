@@ -1,11 +1,11 @@
 defmodule HologramFeatureTests.Components.DebounceLayout do
   use Hologram.Component
 
-  alias Hologram.UI.Runtime
-  alias HologramFeatureTests.Components.CommonLayoutStyles
-
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
+
+  alias Hologram.UI.Runtime
+  alias HologramFeatureTests.Components.CommonLayoutStyles
 
   def init(_params, component, _server) do
     put_state(component, :result, nil)
