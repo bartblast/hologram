@@ -21,4 +21,16 @@ defmodule HologramFeatureTests.Events.DebounceTest do
     |> click(css("#my_input"))
     |> assert_text(css("#blurred_result"), ~s/"holo"/)
   end
+
+  # Submitting via Enter keeps focus in the input, so no blur flush kicks in beforehand - the
+  # submit action can only observe the typed value if the submit flush ran the pending change
+  # dispatch first.
+  feature "submitting the form flushes its pending debounced dispatches first",
+          %{session: session} do
+    session
+    |> visit(DebouncePage)
+    |> fill_in(css("#submit_input"), with: "flush")
+    |> send_keys([:enter])
+    |> assert_text(css("#submitted_result"), ~s/"flush"/)
+  end
 end

@@ -14,7 +14,9 @@ defmodule HologramFeatureTests.Events.DebouncePage do
       debounced_count: 0,
       debounced_key: nil,
       plain_count: 0,
-      plain_key: nil
+      plain_key: nil,
+      submitted_value: nil,
+      synced_value: nil
     )
   end
 
@@ -42,6 +44,16 @@ defmodule HologramFeatureTests.Events.DebouncePage do
     <p>
       Blurred: <strong id="blurred_result"><code>{inspect(@blurred_value)}</code></strong>
     </p>
+    <form $submit="record_submitted">
+      <input
+        $change.debounce(600000)="record_synced"
+        id="submit_input"
+        name="query"
+        type="text" />
+    </form>
+    <p>
+      Submitted: <strong id="submitted_result"><code>{inspect(@submitted_value)}</code></strong>
+    </p>
     """
   end
 
@@ -61,5 +73,15 @@ defmodule HologramFeatureTests.Events.DebouncePage do
       plain_count: component.state.plain_count + 1,
       plain_key: params.event.key
     )
+  end
+
+  # Reads the state written by the debounced :record_synced action, so the recorded value reveals
+  # whether the pending change dispatch ran before the submit dispatch.
+  def action(:record_submitted, _params, component) do
+    put_state(component, :submitted_value, component.state.synced_value)
+  end
+
+  def action(:record_synced, params, component) do
+    put_state(component, :synced_value, params.event.value)
   end
 end
