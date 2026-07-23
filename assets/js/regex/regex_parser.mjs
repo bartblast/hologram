@@ -147,6 +147,32 @@ export default class RegexParser {
     this.#unicode = opts.unicode === true;
   }
 
+  // Applies parse-affecting inline option letters to the parser state.
+  // The i, m, s and U options only affect matching and are handled by the
+  // engines from the AST.
+  #applyOptionLetters(reset, set, unset) {
+    if (
+      set.includes("x") ||
+      unset.includes("x") ||
+      set.includes("a") ||
+      unset.includes("a")
+    ) {
+      // TODO: remove when extended mode and ASCII option letters are implemented
+      throw new RegexParseError(
+        `unsupported pattern construct: (?${set}${unset === "" ? "" : "-" + unset}`,
+        this.#position,
+      );
+    }
+
+    // (?^ resets i, m, n, s and x to their defaults (J is unaffected)
+    if (reset) this.#noAutoCapture = false;
+
+    if (set.includes("J")) this.#dupnames = true;
+    if (set.includes("n")) this.#noAutoCapture = true;
+    if (unset.includes("J")) this.#dupnames = false;
+    if (unset.includes("n")) this.#noAutoCapture = false;
+  }
+
   #atEnd() {
     return this.#position >= this.#source.length;
   }
@@ -514,6 +540,17 @@ export default class RegexParser {
     const items = [];
 
     while (!this.#atEnd() && this.#peek() !== "|" && this.#peek() !== ")") {
+      // Comments are invisible: a quantifier after one applies to the item
+      // before it, matching PCRE2 behavior
+      if (
+        this.#peek() === "(" &&
+        this.#source[this.#position + 1] === "?" &&
+        this.#source[this.#position + 2] === "#"
+      ) {
+        this.#skipComment();
+        continue;
+      }
+
       const quantifier = this.#tryParseQuantifier();
 
       if (quantifier === null) {
@@ -976,18 +1013,30 @@ export default class RegexParser {
   #parseGroup() {
     this.#position++;
 
-    if (this.#peek() === "?") return this.#parseGroupExtension();
-
     if (this.#peek() === "*") return this.#parseVerb();
 
-    if (this.#noAutoCapture) {
+    const savedDupnames = this.#dupnames;
+    const savedNoAutoCapture = this.#noAutoCapture;
+    let node;
+
+    if (this.#peek() === "?") {
+      node = this.#parseGroupExtension();
+    } else if (this.#noAutoCapture) {
       const content = this.#parseAlternation();
       this.#requireGroupClose();
 
-      return {type: "nonCapturingGroup", content: content};
+      node = {type: "nonCapturingGroup", content: content};
+    } else {
+      node = this.#parseCapturingGroup(null);
     }
 
-    return this.#parseCapturingGroup(null);
+    // Inline option settings persist to the end of the enclosing group
+    if (node.type !== "optionSetting") {
+      this.#dupnames = savedDupnames;
+      this.#noAutoCapture = savedNoAutoCapture;
+    }
+
+    return node;
   }
 
   // Parses a group form starting with (?, with the position at the ?.
@@ -1141,9 +1190,10 @@ export default class RegexParser {
 
     if (char === "(") return this.#parseConditional();
 
-    if ("#+-|^".includes(char) || this.#isAlphanumeric(char)) {
-      // TODO: remove when inline options, comments and branch reset groups
-      // are implemented
+    if ("iJmnsUxa^-".includes(char)) return this.#parseOptionSetting();
+
+    if (char === "|") {
+      // TODO: remove when branch reset groups are implemented
       throw new RegexParseError(
         `unsupported pattern construct: (?${char}`,
         this.#position,
@@ -1363,6 +1413,67 @@ export default class RegexParser {
     return value;
   }
 
+  // Parses an inline option setting (?imsx-imsx) or option group
+  // (?imsx-imsx:...), incl. the (?^...) reset forms, with the position
+  // at the first option char.
+  #parseOptionSetting() {
+    let reset = false;
+
+    if (this.#peek() === "^") {
+      reset = true;
+      this.#position++;
+    }
+
+    const set = this.#scanOptionLetters();
+    let unset = "";
+
+    if (this.#peek() === "-") {
+      this.#position++;
+
+      if (reset) {
+        throw new RegexParseError(
+          "invalid hyphen in option setting",
+          this.#position,
+        );
+      }
+
+      unset = this.#scanOptionLetters();
+    }
+
+    if (this.#peek() === ":") {
+      this.#position++;
+      this.#applyOptionLetters(reset, set, unset);
+
+      const content = this.#parseAlternation();
+      this.#requireGroupClose();
+
+      return {
+        type: "optionGroup",
+        reset: reset,
+        set: set,
+        unset: unset,
+        content: content,
+      };
+    }
+
+    if (this.#peek() === ")") {
+      this.#position++;
+      this.#applyOptionLetters(reset, set, unset);
+
+      return {type: "optionSetting", reset: reset, set: set, unset: unset};
+    }
+
+    if (this.#atEnd()) {
+      throw new RegexParseError("missing closing parenthesis", this.#position);
+    }
+
+    this.#position++;
+    throw new RegexParseError(
+      "unrecognized character after (? or (?-",
+      this.#position,
+    );
+  }
+
   #parsePattern() {
     const node = this.#parseAlternation();
 
@@ -1579,6 +1690,27 @@ export default class RegexParser {
   #requireGroupClose() {
     if (this.#peek() !== ")") {
       throw new RegexParseError("missing closing parenthesis", this.#position);
+    }
+
+    this.#position++;
+  }
+
+  #scanOptionLetters() {
+    const start = this.#position;
+
+    while ("iJmnsUxa".includes(this.#peek())) this.#position++;
+
+    return this.#source.slice(start, this.#position);
+  }
+
+  // Skips a (?#...) comment, with the position at the (.
+  #skipComment() {
+    this.#position += 3;
+
+    while (!this.#atEnd() && this.#peek() !== ")") this.#position++;
+
+    if (this.#atEnd()) {
+      throw new RegexParseError("missing ) after (?# comment", this.#position);
     }
 
     this.#position++;

@@ -908,6 +908,42 @@ describe("RegexParser", () => {
       });
     });
 
+    describe("comments", () => {
+      it("skips comment", () => {
+        assert.deepEqual(RegexParser.parse("a(?#c)b"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("skips empty comment", () => {
+        assert.deepEqual(RegexParser.parse("a(?#)b"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
+      it("binds quantifier through comment to preceding item", () => {
+        assert.deepEqual(RegexParser.parse("a(?#c)*"), {
+          type: "quantifier",
+          min: 0,
+          max: null,
+          mode: "greedy",
+          item: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("raises on unterminated comment", () => {
+        assertRegexParseError("a(?#bc", "missing ) after (?# comment", 6);
+      });
+    });
+
     describe("concatenation", () => {
       it("parses two characters", () => {
         assert.deepEqual(RegexParser.parse("ab"), {
@@ -1903,6 +1939,142 @@ describe("RegexParser", () => {
           "unrecognized character after (? or (?-",
           3,
         );
+      });
+    });
+
+    describe("inline options", () => {
+      it("parses option setting", () => {
+        assert.deepEqual(RegexParser.parse("(?i)a"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "i", unset: ""},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses setting and unsetting multiple options", () => {
+        assert.deepEqual(RegexParser.parse("(?im-sU)a"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "im", unset: "sU"},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses option group", () => {
+        assert.deepEqual(RegexParser.parse("(?i:ab)"), {
+          type: "optionGroup",
+          reset: false,
+          set: "i",
+          unset: "",
+          content: {
+            type: "concatenation",
+            items: [
+              {type: "literal", codePoint: 97},
+              {type: "literal", codePoint: 98},
+            ],
+          },
+        });
+      });
+
+      it("parses option group with unset only", () => {
+        assert.deepEqual(RegexParser.parse("(?-i:a)"), {
+          type: "optionGroup",
+          reset: false,
+          set: "",
+          unset: "i",
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses reset setting", () => {
+        assert.deepEqual(RegexParser.parse("(?^)a"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: true, set: "", unset: ""},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("parses reset with following options", () => {
+        assert.deepEqual(RegexParser.parse("(?^i:a)"), {
+          type: "optionGroup",
+          reset: true,
+          set: "i",
+          unset: "",
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses empty unset as no-op", () => {
+        assert.deepEqual(RegexParser.parse("(?-)a"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "", unset: ""},
+            {type: "literal", codePoint: 97},
+          ],
+        });
+      });
+
+      it("allows duplicate names after inline J setting", () => {
+        assert.deepEqual(RegexParser.parse("(?J)(?<x>a)(?<x>b)"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "J", unset: ""},
+            {
+              type: "group",
+              number: 1,
+              name: "x",
+              content: {type: "literal", codePoint: 97},
+            },
+            {
+              type: "group",
+              number: 2,
+              name: "x",
+              content: {type: "literal", codePoint: 98},
+            },
+          ],
+        });
+      });
+
+      it("makes plain groups non-capturing after inline n setting", () => {
+        assert.deepEqual(RegexParser.parse("(?n)(a)"), {
+          type: "concatenation",
+          items: [
+            {type: "optionSetting", reset: false, set: "n", unset: ""},
+            {
+              type: "nonCapturingGroup",
+              content: {type: "literal", codePoint: 97},
+            },
+          ],
+        });
+      });
+
+      it("restores parse options after enclosing group closes", () => {
+        assertRegexParseError(
+          "((?J))(?<x>a)(?<x>b)",
+          "two named subpatterns have the same name (PCRE2_DUPNAMES not set)",
+          18,
+        );
+      });
+
+      it("raises on unrecognized option letter", () => {
+        assertRegexParseError(
+          "(?z)a",
+          "unrecognized character after (? or (?-",
+          3,
+        );
+      });
+
+      it("raises on options at end of pattern", () => {
+        assertRegexParseError("(?i", "missing closing parenthesis", 3);
+      });
+
+      it("raises on hyphen after reset", () => {
+        assertRegexParseError("(?^-i)a", "invalid hyphen in option setting", 4);
       });
     });
 
