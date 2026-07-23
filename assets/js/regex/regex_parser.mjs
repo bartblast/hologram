@@ -2,6 +2,26 @@
 
 import RegexParseError from "./regex_parse_error.mjs";
 
+// TODO: remove when alpha assertions ((*atomic:...), (*pla:...), ...)
+// are implemented
+const ALPHA_ASSERTIONS = new Set([
+  "asr",
+  "atomic",
+  "atomic_script_run",
+  "napla",
+  "naplb",
+  "negative_lookahead",
+  "negative_lookbehind",
+  "nla",
+  "nlb",
+  "pla",
+  "plb",
+  "positive_lookahead",
+  "positive_lookbehind",
+  "script_run",
+  "sr",
+]);
+
 // Simple single-character escapes valid in all contexts.
 const CHAR_ESCAPE_CODE_POINTS = {
   a: 7,
@@ -26,12 +46,36 @@ const ESCAPE_ANCHOR_KINDS = {
 // properties, \Q...\E) are implemented
 const FUTURE_CLASS_ESCAPES = new Set([..."EPQp"]);
 
-// TODO: shrink as remaining escape sequences (Unicode properties, \K, \Q...\E)
+// TODO: shrink as remaining escape sequences (Unicode properties, \Q...\E)
 // are implemented
-const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EKPQp"]);
+const FUTURE_TOP_LEVEL_ESCAPES = new Set([..."EPQp"]);
 
 // The maximum repetition count allowed in a {} quantifier by PCRE2.
 const MAX_QUANTIFIER_BOUND = 65535;
+
+// TODO: remove when start-of-pattern option verbs ((*UTF), (*CR), ...)
+// are implemented
+const OPTION_VERBS = new Set([
+  "ANY",
+  "ANYCRLF",
+  "BSR_ANYCRLF",
+  "BSR_UNICODE",
+  "CR",
+  "CRLF",
+  "LF",
+  "LIMIT_DEPTH",
+  "LIMIT_HEAP",
+  "LIMIT_MATCH",
+  "NO_AUTO_POSSESS",
+  "NO_DOTSTAR_ANCHOR",
+  "NO_JIT",
+  "NO_START_OPT",
+  "NOTEMPTY",
+  "NOTEMPTY_ATSTART",
+  "NUL",
+  "UCP",
+  "UTF",
+]);
 
 // The class names recognized by PCRE2 in [:name:] POSIX class elements.
 const POSIX_CLASS_NAMES = new Set([
@@ -57,6 +101,18 @@ const SHORTHAND_CLASS_LETTERS = new Set([..."DHSVWdhsvw"]);
 
 // Escape letters PCRE2 rejects with a dedicated message.
 const UNSUPPORTED_BY_PCRE2_ESCAPES = new Set(["F", "L", "U", "l", "u"]);
+
+// Backtracking control verb words and the verb kinds they map to.
+const VERB_KINDS = {
+  ACCEPT: "accept",
+  COMMIT: "commit",
+  F: "fail",
+  FAIL: "fail",
+  MARK: "mark",
+  PRUNE: "prune",
+  SKIP: "skip",
+  THEN: "then",
+};
 
 export default class RegexParser {
   #allGroupNames = null;
@@ -470,7 +526,9 @@ export default class RegexParser {
       if (
         lastItem === undefined ||
         lastItem.type === "quantifier" ||
-        lastItem.type === "anchor"
+        lastItem.type === "anchor" ||
+        lastItem.type === "verb" ||
+        lastItem.type === "matchStartReset"
       ) {
         throw new RegexParseError(
           "quantifier does not follow a repeatable item",
@@ -766,6 +824,11 @@ export default class RegexParser {
 
     if (char === "k") return this.#parseKReference();
 
+    if (char === "K") {
+      this.#position++;
+      return {type: "matchStartReset"};
+    }
+
     const codePoint = this.#tryParseCharEscapeCodePoint(false);
 
     if (codePoint !== null) return {type: "literal", codePoint: codePoint};
@@ -915,13 +978,7 @@ export default class RegexParser {
 
     if (this.#peek() === "?") return this.#parseGroupExtension();
 
-    if (this.#peek() === "*") {
-      // TODO: remove when backtracking control verbs are implemented
-      throw new RegexParseError(
-        "unsupported pattern construct: (*",
-        this.#position,
-      );
-    }
+    if (this.#peek() === "*") return this.#parseVerb();
 
     if (this.#noAutoCapture) {
       const content = this.#parseAlternation();
@@ -1383,6 +1440,82 @@ export default class RegexParser {
     if (sign === "+") return this.#groupCount + value;
 
     return value;
+  }
+
+  // Parses a (*VERB) or (*VERB:name) backtracking control verb,
+  // with the position at the *.
+  #parseVerb() {
+    const asteriskPosition = this.#position;
+
+    this.#position++;
+
+    const wordStart = this.#position;
+
+    while (this.#isWordChar(this.#peek())) this.#position++;
+
+    const word = this.#source.slice(wordStart, this.#position);
+
+    // (*) is parsed as a group with a misplaced quantifier, matching PCRE2
+    if (word === "" && this.#peek() !== ":") {
+      throw new RegexParseError(
+        "quantifier does not follow a repeatable item",
+        asteriskPosition + 1,
+      );
+    }
+
+    const kind = word === "" ? "mark" : VERB_KINDS[word];
+
+    if (kind === undefined) {
+      if (OPTION_VERBS.has(word) || ALPHA_ASSERTIONS.has(word)) {
+        // TODO: remove when option verbs and alpha assertions are implemented
+        throw new RegexParseError(
+          `unsupported pattern construct: (*${word}`,
+          wordStart,
+        );
+      }
+
+      if (/[a-z]/.test(word)) {
+        throw new RegexParseError(
+          "(*alpha_assertion) not recognized",
+          this.#position + 1,
+        );
+      }
+
+      throw new RegexParseError(
+        "(*VERB) not recognized or malformed",
+        this.#position,
+      );
+    }
+
+    let name = null;
+
+    if (this.#peek() === ":") {
+      this.#position++;
+
+      const nameStart = this.#position;
+
+      while (!this.#atEnd() && this.#peek() !== ")") this.#position++;
+
+      name = this.#source.slice(nameStart, this.#position);
+    }
+
+    if (kind === "mark" && (name === null || name === "")) {
+      throw new RegexParseError(
+        "(*MARK) must have an argument",
+        this.#position,
+      );
+    }
+
+    if (this.#peek() !== ")") {
+      throw new RegexParseError(
+        "(*VERB) not recognized or malformed",
+        this.#position,
+      );
+    }
+
+    this.#position++;
+
+    return {type: "verb", verb: kind, name: name === "" ? null : name};
   }
 
   #peek() {

@@ -1471,8 +1471,27 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses \\K as match start reset", () => {
+        assert.deepEqual(RegexParser.parse("a\\Kb"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "matchStartReset"},
+            {type: "literal", codePoint: 98},
+          ],
+        });
+      });
+
       it("raises on \\ at end of pattern", () => {
         assertRegexParseError("a\\", "\\ at end of pattern", 2);
+      });
+
+      it("raises when quantifier follows \\K", () => {
+        assertRegexParseError(
+          "a\\K*",
+          "quantifier does not follow a repeatable item",
+          4,
+        );
       });
 
       it("raises on \\x without hex digits", () => {
@@ -2517,6 +2536,115 @@ describe("RegexParser", () => {
           "(a)\\g<1x>",
           "syntax error in subpattern number (missing terminator?)",
           7,
+        );
+      });
+    });
+
+    describe("verbs", () => {
+      it("parses (*FAIL)", () => {
+        assert.deepEqual(RegexParser.parse("a(*FAIL)"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "verb", verb: "fail", name: null},
+          ],
+        });
+      });
+
+      it("parses (*F) as fail", () => {
+        assert.deepEqual(RegexParser.parse("a(*F)"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "verb", verb: "fail", name: null},
+          ],
+        });
+      });
+
+      it("parses all simple verbs", () => {
+        assert.deepEqual(
+          RegexParser.parse("a(*ACCEPT)(*COMMIT)(*PRUNE)(*SKIP)(*THEN)"),
+          {
+            type: "concatenation",
+            items: [
+              {type: "literal", codePoint: 97},
+              {type: "verb", verb: "accept", name: null},
+              {type: "verb", verb: "commit", name: null},
+              {type: "verb", verb: "prune", name: null},
+              {type: "verb", verb: "skip", name: null},
+              {type: "verb", verb: "then", name: null},
+            ],
+          },
+        );
+      });
+
+      it("parses (*MARK:name)", () => {
+        assert.deepEqual(RegexParser.parse("a(*MARK:x)"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "verb", verb: "mark", name: "x"},
+          ],
+        });
+      });
+
+      it("parses (*:name) as mark", () => {
+        assert.deepEqual(RegexParser.parse("a(*:x)"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "verb", verb: "mark", name: "x"},
+          ],
+        });
+      });
+
+      it("parses named (*SKIP:name)", () => {
+        assert.deepEqual(RegexParser.parse("a(*SKIP:x)"), {
+          type: "concatenation",
+          items: [
+            {type: "literal", codePoint: 97},
+            {type: "verb", verb: "skip", name: "x"},
+          ],
+        });
+      });
+
+      it("raises on unrecognized verb", () => {
+        assertRegexParseError(
+          "a(*XYZ)",
+          "(*VERB) not recognized or malformed",
+          6,
+        );
+      });
+
+      it("raises on unrecognized lowercase verb", () => {
+        assertRegexParseError(
+          "a(*fail)",
+          "(*alpha_assertion) not recognized",
+          8,
+        );
+      });
+
+      it("raises on empty (*)", () => {
+        assertRegexParseError(
+          "a(*)",
+          "quantifier does not follow a repeatable item",
+          3,
+        );
+      });
+
+      it("raises on (*MARK) without argument", () => {
+        assertRegexParseError("a(*MARK)", "(*MARK) must have an argument", 7);
+      });
+
+      it("raises on (*MARK:) with empty argument", () => {
+        assertRegexParseError("a(*MARK:)", "(*MARK) must have an argument", 8);
+      });
+
+      it("raises when quantifier follows verb", () => {
+        assertRegexParseError(
+          "a(*FAIL)*",
+          "quantifier does not follow a repeatable item",
+          9,
         );
       });
     });
