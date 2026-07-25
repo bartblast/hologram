@@ -1282,6 +1282,12 @@ Used without a value, `debounce` applies a default window of 250 milliseconds - 
 
 Debouncing works on any event, not only keyboard events, and it combines with key filters - `$key_down.enter.debounce(300)` debounces only the Enter key. Each binding keeps its own timer, so several debounced bindings on one element never interfere. Like key filters, the window is validated at compile time: a non-positive or non-integer value such as `$change.debounce(0)` fails the build rather than misbehaving in the browser.
 
+##### Lifecycle Boundaries
+
+A pending debounced dispatch resolves early at the boundaries where waiting would leave the app in a stale state. When the bound element loses focus, the pending dispatch fires immediately - the burst is definitively over, so nothing is gained by waiting out the rest of the window. When a form is submitted, pending debounced dispatches inside it fire first, so the submit action observes state that already reflects everything typed - and no trailing dispatch fires after the submit to resurrect a value the submit action may have cleared.
+
+Navigating to another page resolves the opposite way: the page a pending dispatch was meant for no longer exists, so it is dropped without firing. Together these rules make `debounce` a pure timing concern - it changes when the dispatch happens, never what the app observes at a boundary.
+
 ##### Debounce vs Delay
 
 Debouncing is easy to confuse with the `delay` option covered in the binding syntax above, but they address different concerns and live in different places by design. `debounce` is an event concern: it shapes the stream of events at the edge, before any action is chosen, so it attaches to the event name as a modifier, like a key filter. `delay` is an action concern: it is a property of the action being dispatched, so it lives in the action specification and can even be set programmatically with `put_action`, where there is no event for a modifier to attach to.
@@ -1303,6 +1309,8 @@ Used without a value, `throttle` applies a default window of 100 milliseconds - 
 ```
 
 Throttling works on any event and combines with key filters, and each binding keeps its own window. Like debouncing, the value is validated at compile time. A binding cannot carry both `throttle` and `debounce` - they are opposite strategies, so combining them fails the build.
+
+Like a pending debounced dispatch, a trailing dispatch held inside an open throttle window is dropped when the user navigates to another page - it never fires into a page it was not meant for.
 
 ##### Throttle vs Debounce
 
