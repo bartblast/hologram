@@ -34,8 +34,17 @@ export default class Debouncer {
 
     $.#pendingByElement.delete(element);
 
+    // Disarm every timer before dispatching anything: a callback runs app code and may throw,
+    // and a half-flushed element must not leave later slots' timers armed to fire after the
+    // boundary the flush resolved.
+    const callbacks = [];
+
     for (const {timerId, callback} of slots.values()) {
       clearTimeout(timerId);
+      callbacks.push(callback);
+    }
+
+    for (const callback of callbacks) {
       callback();
     }
   }

@@ -1,6 +1,6 @@
 "use strict";
 
-import {sinon} from "./support/helpers.mjs";
+import {assert, sinon} from "./support/helpers.mjs";
 
 import Debouncer from "../../assets/js/debouncer.mjs";
 
@@ -133,6 +133,21 @@ describe("Debouncer", () => {
       Debouncer.run(element, "slot", 250, callback);
       clock.tick(250);
       sinon.assert.calledTwice(callback);
+    });
+
+    it("a throwing callback does not leave later slots' timers armed", () => {
+      const element = {};
+      const throwingCallback = sinon.stub().throws(new Error("action failed"));
+      const laterCallback = sinon.spy();
+
+      Debouncer.run(element, "slot-a", 250, throwingCallback);
+      Debouncer.run(element, "slot-b", 250, laterCallback);
+
+      assert.throws(() => Debouncer.flush(element), "action failed");
+
+      // The later slot's timer was disarmed before dispatching began, so nothing fires later.
+      clock.tick(250);
+      sinon.assert.notCalled(laterCallback);
     });
   });
 
