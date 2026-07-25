@@ -36,6 +36,16 @@ defmodule HologramFeatureTests.Events.DebounceTest do
     |> assert_text(css("#submitted_result"), ~s/"flush"/)
   end
 
+  # Positive control for the cancellation scenario below: the same hover schedules a dispatch
+  # that fires when the user stays on the page.
+  feature "a pending debounced dispatch fires when the user stays on the page",
+          %{session: session} do
+    session
+    |> visit(Page2)
+    |> hover(css("#hover_zone"))
+    |> assert_text(css("#layout_result"), ~s/"mouse_moved"/)
+  end
+
   # The pending dispatch is keyed on the hover zone, which never has focus, so no blur flush runs
   # when the link is clicked - the dispatch is still pending when navigation happens. Waiting out
   # the rest of the window on the destination page proves the dispatch was cancelled rather than
