@@ -231,20 +231,6 @@ const Erlang_Re = {
 
   // Start inspect/2
   "inspect/2": (compiledPattern, item) => {
-    const compareByUtf8Bytes = (name1, name2) => {
-      const bytes1 = ERTS.utf8Encoder.encode(name1);
-      const bytes2 = ERTS.utf8Encoder.encode(name2);
-      const minLength = Math.min(bytes1.length, bytes2.length);
-
-      for (let index = 0; index < minLength; index++) {
-        if (bytes1[index] !== bytes2[index]) {
-          return bytes1[index] - bytes2[index];
-        }
-      }
-
-      return bytes1.length - bytes2.length;
-    };
-
     const registryEntry =
       Type.isTuple(compiledPattern) &&
       compiledPattern.data.length === 5 &&
@@ -272,7 +258,7 @@ const Erlang_Re = {
 
     // PCRE2 stores the name table sorted by the byte order of the names
     const names = [...registryEntry.compiled.groupMap.names.keys()].sort(
-      compareByUtf8Bytes,
+      ERTS.regex.compareByUtf8Bytes,
     );
 
     return Type.tuple([

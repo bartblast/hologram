@@ -90,6 +90,25 @@ describe("RegexEngine", () => {
     });
   });
 
+  describe("compareByUtf8Bytes()", () => {
+    it("returns a negative number when the first string sorts lower", () => {
+      assert.isBelow(RegexEngine.compareByUtf8Bytes("aa", "ab"), 0);
+    });
+
+    it("returns zero for equal strings", () => {
+      assert.equal(RegexEngine.compareByUtf8Bytes("abc", "abc"), 0);
+    });
+
+    it("sorts a prefix before its extension", () => {
+      assert.isAbove(RegexEngine.compareByUtf8Bytes("abc", "ab"), 0);
+    });
+
+    it("sorts astral code points after BMP ones, unlike default JS order", () => {
+      assert.isAbove(RegexEngine.compareByUtf8Bytes("\u{10000}", "\uffff"), 0);
+      assert.isTrue("\u{10000}" < "\uffff");
+    });
+  });
+
   describe("compile()", () => {
     it("routes translatable pattern to the native engine", () => {
       const compiled = RegexEngine.compile("a+b");

@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../../bitstring.mjs";
+import ERTS from "../../erts.mjs";
 import Interpreter from "../../interpreter.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
 import RegexInterpreter from "./regex_interpreter.mjs";
@@ -52,6 +53,24 @@ export default class RegexEngine {
     if (Type.isList(charData)) return $.#textFromListCharData(charData);
 
     Interpreter.raiseArgumentError("argument error");
+  }
+
+  // Compares two JS strings by the byte order of their UTF-8 encodings,
+  // usable directly as an Array sort comparator. Differs from the default
+  // JS string order, which compares UTF-16 units and sorts astral code
+  // points before some BMP ones.
+  static compareByUtf8Bytes(text1, text2) {
+    const bytes1 = ERTS.utf8Encoder.encode(text1);
+    const bytes2 = ERTS.utf8Encoder.encode(text2);
+    const minLength = Math.min(bytes1.length, bytes2.length);
+
+    for (let index = 0; index < minLength; index++) {
+      if (bytes1[index] !== bytes2[index]) {
+        return bytes1[index] - bytes2[index];
+      }
+    }
+
+    return bytes1.length - bytes2.length;
   }
 
   // Compiles a PCRE2 pattern source into a matchable entry, routed to the
