@@ -10,7 +10,7 @@ defmodule HologramFeatureTests.Events.MultipleBindingsPage do
 
   def init(_params, component, _server) do
     put_state(component,
-      filter_result: nil,
+      filter_result: [],
       full_value: nil,
       order_result: [],
       quick_value: nil
@@ -52,11 +52,11 @@ defmodule HologramFeatureTests.Events.MultipleBindingsPage do
   end
 
   def action(:record_enter, _params, component) do
-    put_state(component, :filter_result, :enter_matched)
+    put_state(component, :filter_result, component.state.filter_result ++ [:enter_matched])
   end
 
   def action(:record_escape, _params, component) do
-    put_state(component, :filter_result, :escape_matched)
+    put_state(component, :filter_result, component.state.filter_result ++ [:escape_matched])
   end
 
   def action(:record_first, _params, component) do

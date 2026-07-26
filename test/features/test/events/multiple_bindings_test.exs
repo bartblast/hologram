@@ -11,14 +11,16 @@ defmodule HologramFeatureTests.Events.MultipleBindingsTest do
     |> assert_text(css("#order_result"), "[:first, :second]")
   end
 
+  # The result is an append log asserted as an exact sequence, so a filter spuriously firing on
+  # another filter's key shows up as an extra entry instead of hiding behind the last write.
   feature "several key filters on one element each fire only on their own key",
           %{session: session} do
     session
     |> visit(MultipleBindingsPage)
     |> send_keys(css("#filter_input"), [:enter])
-    |> assert_text(css("#filter_result"), ":enter_matched")
+    |> assert_text(css("#filter_result"), "[:enter_matched]")
     |> send_keys(css("#filter_input"), [:escape])
-    |> assert_text(css("#filter_result"), ":escape_matched")
+    |> assert_text(css("#filter_result"), "[:enter_matched, :escape_matched]")
   end
 
   feature "two debounced bindings with different windows on the same event each fire independently",
