@@ -20,6 +20,7 @@ import JsInterop from "./js_interop.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
+import RegexEngine from "./regex/regex_engine.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
 import Sse from "./sse.mjs";
@@ -75,6 +76,7 @@ export default class Hologram {
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,
     MemoryStorage: MemoryStorage,
+    RegexEngine: RegexEngine,
     Type: Type,
     Utils: Utils,
   };
