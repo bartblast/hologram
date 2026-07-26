@@ -14,6 +14,18 @@ defmodule HologramFeatureTests.Events.ThrottleTest do
     |> assert_text(css("#throttled_result"), ~s/{2, "e"}/)
   end
 
+  # Positive control for the cancellation scenario below: the same two hovers queue a trailing
+  # dispatch that fires when the user stays on the page.
+  feature "a held trailing throttled dispatch fires while the user stays on the page",
+          %{session: session} do
+    session
+    |> visit(Page2)
+    |> hover(css("#hover_zone"))
+    |> assert_text(css("#layout_result"), "1")
+    |> hover(css("#hover_zone_inner"))
+    |> assert_text(css("#layout_result"), "2")
+  end
+
   # The result reaching 1 proves the leading edge fired and the window is open, so the second
   # hover is held for the trailing edge. The layout is re-rendered on the destination page with a
   # fresh count, so waiting out the rest of the window there proves the held dispatch was
