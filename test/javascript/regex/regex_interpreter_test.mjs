@@ -458,6 +458,28 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("match limits", () => {
+      it("matches within the default limits", () => {
+        assert.deepEqual(match("a+b", "aaab"), {start: 0, end: 4});
+      });
+
+      it("reports no match when match_limit is exceeded", () => {
+        assert.isNull(match("a+b", "aaab", {matchLimit: 3}));
+      });
+
+      it("reports no match when match_limit_recursion is exceeded", () => {
+        assert.isNull(match("a+b", "aaab", {matchLimitRecursion: 2}));
+      });
+
+      it("caps the limit with the LIMIT_MATCH start verb", () => {
+        assert.isNull(match("(*LIMIT_MATCH=3)a+b", "aaab"));
+      });
+
+      it("reports no match on runaway recursion", () => {
+        assert.isNull(match("(?R)", "a"));
+      });
+    });
+
     describe("newline handling", () => {
       it("excludes the newline from dot", () => {
         assert.isNull(match(".", "\n"));

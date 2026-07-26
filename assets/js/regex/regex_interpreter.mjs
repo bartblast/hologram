@@ -60,6 +60,10 @@ class AcceptSignal {
 
 class CommitSignal {}
 
+// Thrown when a match limit is exceeded; the whole match reports no match,
+// matching Erlang behavior.
+class LimitSignal {}
+
 class PruneSignal {}
 
 class SkipSignal {
@@ -91,15 +95,19 @@ export default class RegexInterpreter {
       callStack: [],
       captures: [],
       caseless: effectiveOpts.caseless === true,
+      depth: 0,
       dollarEndonly: effectiveOpts.dollarEndonly === true,
       dotall: effectiveOpts.dotall === true,
       groupNames: groupMap.names,
       marks: [],
+      matchLimit: effectiveOpts.matchLimit ?? 10_000_000,
+      matchLimitRecursion: effectiveOpts.matchLimitRecursion ?? 10_000_000,
       multiline: effectiveOpts.multiline === true,
       newline: effectiveOpts.newline ?? "lf",
       openGroups: [],
       reportedStart: null,
       startOffset: startPosition,
+      steps: 0,
       subject: subject,
       subroutines: $.#buildSubroutineTable(ast),
       ungreedy: effectiveOpts.ungreedy === true,
@@ -137,6 +145,12 @@ export default class RegexInterpreter {
           signal instanceof ThenSignal
         ) {
           // The attempt at this start position is abandoned
+        } else if (signal instanceof LimitSignal) {
+          return null;
+        } else if (signal instanceof RangeError) {
+          // The continuation-passing depth exceeded the JS stack, which is
+          // treated as an exceeded match limit
+          return null;
         } else {
           throw signal;
         }
@@ -645,6 +659,20 @@ export default class RegexInterpreter {
   }
 
   static #matchNode(node, state, position, continuation) {
+    if (++state.steps > state.matchLimit) throw new LimitSignal();
+
+    if (state.depth >= state.matchLimitRecursion) throw new LimitSignal();
+
+    state.depth++;
+
+    try {
+      return $.#matchNodeDispatch(node, state, position, continuation);
+    } finally {
+      state.depth--;
+    }
+  }
+
+  static #matchNodeDispatch(node, state, position, continuation) {
     switch (node.type) {
       case "alternation": {
         let branchState = state;
@@ -1134,6 +1162,17 @@ export default class RegexInterpreter {
         effectiveOpts.bsrAnycrlf = true;
       } else if (item.name === "BSR_UNICODE") {
         effectiveOpts.bsrAnycrlf = false;
+      } else if (item.name === "LIMIT_DEPTH") {
+        // Limit verbs cap the limits, they can't raise them
+        effectiveOpts.matchLimitRecursion = Math.min(
+          effectiveOpts.matchLimitRecursion ?? Infinity,
+          item.value,
+        );
+      } else if (item.name === "LIMIT_MATCH") {
+        effectiveOpts.matchLimit = Math.min(
+          effectiveOpts.matchLimit ?? Infinity,
+          item.value,
+        );
       } else if (item.name === "UTF" || item.name === "UTF8") {
         effectiveOpts.unicode = true;
       }
