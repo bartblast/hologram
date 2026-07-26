@@ -24,7 +24,9 @@ export default class Debouncer {
 
   // Immediately fires and removes all pending entries keyed on the element, in the order their
   // slots were first scheduled. No-op when none are pending. Entries are removed before their
-  // callbacks run, so a callback that schedules a new debounced run re-enters cleanly.
+  // callbacks run, so a callback that schedules a new debounced run re-enters cleanly. A callback
+  // runs app code and may throw - a throw stops neither the disarming nor the delivery of the
+  // remaining dispatches, and the first error is rethrown once the flush completes.
   static flush(element) {
     const slots = $.#pendingByElement.get(element);
 
@@ -34,8 +36,7 @@ export default class Debouncer {
 
     $.#pendingByElement.delete(element);
 
-    // Disarm every timer before dispatching anything: a callback runs app code and may throw,
-    // and a half-flushed element must not leave later slots' timers armed to fire after the
+    // Disarm every timer before dispatching anything, so no slot is left armed to fire after the
     // boundary the flush resolved.
     const callbacks = [];
 
@@ -44,21 +45,43 @@ export default class Debouncer {
       callbacks.push(callback);
     }
 
+    let firstError;
+
     for (const callback of callbacks) {
-      callback();
+      try {
+        callback();
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
     }
   }
 
   // Immediately fires and removes all pending entries whose element is inside the container
   // (including the container itself), in the order their slots were first scheduled. Entries keyed
   // on non-node targets (window and document bindings) are skipped - they have no place in the
-  // element tree, so no container can scope them.
+  // element tree, so no container can scope them. A throw in one element's flush stops neither
+  // the disarming nor the delivery for the remaining elements, and the first error is rethrown
+  // once the whole container is flushed.
   static flushWithin(container) {
     // Keys are copied first: flush deletes entries, and a flushed callback may schedule new ones.
+    let firstError;
+
     for (const element of [...$.#pendingByElement.keys()]) {
       if (element.nodeType !== undefined && container.contains(element)) {
-        $.flush(element);
+        try {
+          $.flush(element);
+        } catch (error) {
+          firstError ??= error;
+        }
       }
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
     }
   }
 

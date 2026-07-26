@@ -135,7 +135,7 @@ describe("Debouncer", () => {
       sinon.assert.calledTwice(callback);
     });
 
-    it("a throwing callback does not leave later slots' timers armed", () => {
+    it("a throwing callback stops neither the delivery nor the disarming of later slots", () => {
       const element = {};
       const throwingCallback = sinon.stub().throws(new Error("action failed"));
       const laterCallback = sinon.spy();
@@ -143,11 +143,13 @@ describe("Debouncer", () => {
       Debouncer.run(element, "slot-a", 250, throwingCallback);
       Debouncer.run(element, "slot-b", 250, laterCallback);
 
+      // The later slot still fires during the flush, and the first error is rethrown at the end.
       assert.throws(() => Debouncer.flush(element), "action failed");
+      sinon.assert.calledOnce(laterCallback);
 
-      // The later slot's timer was disarmed before dispatching began, so nothing fires later.
+      // The later slot's timer was disarmed, so nothing fires again on the original schedule.
       clock.tick(250);
-      sinon.assert.notCalled(laterCallback);
+      sinon.assert.calledOnce(laterCallback);
     });
   });
 
@@ -220,6 +222,25 @@ describe("Debouncer", () => {
       // The skipped entry's timer still fires on its own schedule.
       clock.tick(250);
       sinon.assert.calledOnce(callback);
+    });
+
+    it("a throwing callback in one element stops neither the delivery nor the disarming of other elements", () => {
+      const elementA = buildElement();
+      const elementB = buildElement();
+      const container = buildContainer(elementA, elementB);
+      const throwingCallback = sinon.stub().throws(new Error("action failed"));
+      const laterCallback = sinon.spy();
+
+      Debouncer.run(elementA, "slot", 250, throwingCallback);
+      Debouncer.run(elementB, "slot", 250, laterCallback);
+
+      // The other element still flushes, and the first error is rethrown at the end.
+      assert.throws(() => Debouncer.flushWithin(container), "action failed");
+      sinon.assert.calledOnce(laterCallback);
+
+      // The other element's timer was disarmed, so nothing fires again on the original schedule.
+      clock.tick(250);
+      sinon.assert.calledOnce(laterCallback);
     });
   });
 
