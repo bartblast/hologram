@@ -46,6 +46,16 @@ defmodule HologramFeatureTests.Events.KeyboardTest do
     )
   end
 
+  feature "several key filters on one element each fire only on their own key",
+          %{session: session} do
+    session
+    |> visit(KeyboardPage)
+    |> send_keys(css("#my_input_multi_filter"), [:enter])
+    |> assert_text(css("#result"), ~r/\{:multi_enter, /)
+    |> send_keys(css("#my_input_multi_filter"), [:escape])
+    |> assert_text(css("#result"), ~r/\{:multi_escape, /)
+  end
+
   feature "keys combo", %{session: session} do
     session
     |> visit(KeyboardPage)
