@@ -48,6 +48,27 @@ const NEWLINE_VERBS = {
 // Cache of Unicode property name → predicate over a code point.
 const propertyMatchers = new Map();
 
+// Signals thrown by backtracking control verbs. They unwind the normal
+// backtracking and are caught at match, subroutine, lookaround or
+// alternation boundaries.
+class AcceptSignal {
+  constructor(position) {
+    this.position = position;
+  }
+}
+
+class CommitSignal {}
+
+class PruneSignal {}
+
+class SkipSignal {
+  constructor(position) {
+    this.position = position;
+  }
+}
+
+class ThenSignal {}
+
 export default class RegexInterpreter {
   // Matches a parsed pattern against a subject string, scanning forward from
   // the start position. Returns {start, end, captures} of the first match,
@@ -72,8 +93,11 @@ export default class RegexInterpreter {
       dollarEndonly: effectiveOpts.dollarEndonly === true,
       dotall: effectiveOpts.dotall === true,
       groupNames: groupMap.names,
+      marks: [],
       multiline: effectiveOpts.multiline === true,
       newline: effectiveOpts.newline ?? "lf",
+      openGroups: [],
+      reportedStart: null,
       startOffset: startPosition,
       subject: subject,
       subroutines: $.#buildSubroutineTable(ast),
@@ -85,13 +109,37 @@ export default class RegexInterpreter {
 
     while (start <= subject.length) {
       state.captures = [];
+      state.marks = [];
+      state.openGroups = [];
+      state.reportedStart = null;
 
+      let matched = false;
       let matchEnd = null;
+      let skipTo = null;
 
-      const matched = $.#matchNode(ast, state, start, (position) => {
-        matchEnd = position;
-        return true;
-      });
+      try {
+        matched = $.#matchNode(ast, state, start, (position) => {
+          matchEnd = position;
+          return true;
+        });
+      } catch (signal) {
+        if (signal instanceof AcceptSignal) {
+          matched = true;
+          matchEnd = signal.position;
+        } else if (signal instanceof CommitSignal) {
+          // (*COMMIT) abandons the whole match
+          return null;
+        } else if (signal instanceof SkipSignal) {
+          skipTo = signal.position;
+        } else if (
+          signal instanceof PruneSignal ||
+          signal instanceof ThenSignal
+        ) {
+          // The attempt at this start position is abandoned
+        } else {
+          throw signal;
+        }
+      }
 
       if (matched) {
         const captures = [null];
@@ -100,10 +148,18 @@ export default class RegexInterpreter {
           captures.push(state.captures[number] ?? null);
         }
 
-        return {start: start, end: matchEnd, captures: captures};
+        return {
+          start: state.reportedStart ?? start,
+          end: matchEnd,
+          captures: captures,
+        };
       }
 
-      start += start < subject.length ? $.#charLength(state, start) : 1;
+      if (skipTo !== null && skipTo > start) {
+        start = skipTo;
+      } else {
+        start += start < subject.length ? $.#charLength(state, start) : 1;
+      }
     }
 
     return null;
@@ -536,10 +592,32 @@ export default class RegexInterpreter {
       return false;
     };
 
+    // Verb signals act only within the assertion: (*ACCEPT) makes it
+    // succeed, the other verbs make it fail
+    const runConfined = (matcher) => {
+      try {
+        return {found: matcher()};
+      } catch (signal) {
+        if (signal instanceof AcceptSignal)
+          return {accepted: true, found: true};
+
+        if (
+          signal instanceof CommitSignal ||
+          signal instanceof PruneSignal ||
+          signal instanceof SkipSignal ||
+          signal instanceof ThenSignal
+        ) {
+          return {found: false};
+        }
+
+        throw signal;
+      }
+    };
+
     if (node.negated) {
       // A negative assertion retains no captures from its content
       const savedCaptures = [...state.captures];
-      const found = assertionMatcher(() => true);
+      const {found} = runConfined(() => assertionMatcher(() => true));
 
       state.captures.splice(0, state.captures.length, ...savedCaptures);
 
@@ -549,7 +627,7 @@ export default class RegexInterpreter {
     if (node.atomic) {
       const savedCaptures = [...state.captures];
 
-      if (!assertionMatcher(() => true)) return false;
+      if (!runConfined(() => assertionMatcher(() => true)).found) return false;
 
       if (continuation(position)) return true;
 
@@ -558,7 +636,11 @@ export default class RegexInterpreter {
       return false;
     }
 
-    return assertionMatcher(() => continuation(position));
+    const result = runConfined(() =>
+      assertionMatcher(() => continuation(position)),
+    );
+
+    return result.accepted === true ? continuation(position) : result.found;
   }
 
   static #matchNode(node, state, position, continuation) {
@@ -567,8 +649,13 @@ export default class RegexInterpreter {
         let branchState = state;
 
         for (const branch of node.branches) {
-          if ($.#matchNode(branch, branchState, position, continuation)) {
-            return true;
+          try {
+            if ($.#matchNode(branch, branchState, position, continuation)) {
+              return true;
+            }
+          } catch (signal) {
+            // (*THEN) skips to the next branch of the innermost alternation
+            if (!(signal instanceof ThenSignal)) throw signal;
           }
 
           // Option settings leak lexically into subsequent branches,
@@ -667,6 +754,9 @@ export default class RegexInterpreter {
       case "group": {
         const previous = state.captures[node.number];
 
+        // Track the open group so (*ACCEPT) can capture it mid-content
+        state.openGroups.push({number: node.number, start: position});
+
         const matched = $.#matchNode(
           node.content,
           state,
@@ -681,6 +771,8 @@ export default class RegexInterpreter {
             return false;
           },
         );
+
+        state.openGroups.pop();
 
         if (!matched) state.captures[node.number] = previous;
 
@@ -701,6 +793,19 @@ export default class RegexInterpreter {
 
       case "lookaround":
         return $.#matchLookaround(node, state, position, continuation);
+
+      // \K resets the reported match start to the current position
+      case "matchStartReset": {
+        const savedReportedStart = state.reportedStart;
+
+        state.reportedStart = position;
+
+        if (continuation(position)) return true;
+
+        state.reportedStart = savedReportedStart;
+
+        return false;
+      }
 
       // \R matches CRLF as a pair or a single vertical whitespace char,
       // atomically: a matched pair is never given back, matching PCRE2
@@ -782,7 +887,7 @@ export default class RegexInterpreter {
 
         state.callStack.push(number);
 
-        const matched = $.#matchNode(target, state, position, (endPosition) => {
+        const callContinuation = (endPosition) => {
           // Captures set inside a completed call are restored on exit,
           // and the call is no longer active during the continuation
           const callCaptures = [...state.captures];
@@ -797,12 +902,36 @@ export default class RegexInterpreter {
           state.callStack.push(number);
 
           return false;
-        });
+        };
+
+        let matched;
+
+        try {
+          matched = $.#matchNode(target, state, position, callContinuation);
+        } catch (signal) {
+          // Verb signals act only within the call: (*ACCEPT) ends it
+          // successfully at its position, the other verbs make it fail
+          if (signal instanceof AcceptSignal) {
+            matched = callContinuation(signal.position);
+          } else if (
+            signal instanceof CommitSignal ||
+            signal instanceof PruneSignal ||
+            signal instanceof SkipSignal ||
+            signal instanceof ThenSignal
+          ) {
+            matched = false;
+          } else {
+            throw signal;
+          }
+        }
 
         if (!matched) state.callStack.pop();
 
         return matched;
       }
+
+      case "verb":
+        return $.#matchVerb(node, state, position, continuation);
 
       case "unicodeProperty": {
         const codePoint = $.#subjectCodePointAt(state, position);
@@ -899,6 +1028,78 @@ export default class RegexInterpreter {
     return $.#matchNode(item, state, position, (nextPosition) =>
       $.#matchSequence(items, itemIndex + 1, state, nextPosition, continuation),
     );
+  }
+
+  // Matches a backtracking control verb. FAIL and MARK act locally, the
+  // other verbs throw signals when backtracked into, unwinding to their
+  // handling boundary.
+  static #matchVerb(node, state, position, continuation) {
+    switch (node.verb) {
+      case "accept": {
+        // Groups still open at this point are captured up to here
+        for (const openGroup of state.openGroups) {
+          if (
+            state.captures[openGroup.number] === undefined ||
+            state.captures[openGroup.number] === null
+          ) {
+            state.captures[openGroup.number] = {
+              start: openGroup.start,
+              end: position,
+            };
+          }
+        }
+
+        throw new AcceptSignal(position);
+      }
+
+      case "commit":
+        if (continuation(position)) return true;
+
+        throw new CommitSignal();
+
+      case "fail":
+        return false;
+
+      case "mark": {
+        state.marks.push({name: node.name, position: position});
+
+        if (continuation(position)) return true;
+
+        state.marks.pop();
+
+        return false;
+      }
+
+      case "prune":
+        if (continuation(position)) return true;
+
+        throw new PruneSignal();
+
+      case "skip": {
+        if (continuation(position)) return true;
+
+        if (node.name !== null) {
+          const mark = state.marks.findLast(
+            (candidate) => candidate.name === node.name,
+          );
+
+          // Without a matching mark, a named (*SKIP) is ignored
+          if (mark === undefined) return false;
+
+          throw new SkipSignal(mark.position);
+        }
+
+        throw new SkipSignal(position);
+      }
+
+      case "then":
+        if (continuation(position)) return true;
+
+        throw new ThenSignal();
+
+      default:
+        throw new Error(`unsupported verb for interpretation: ${node.verb}`);
+    }
   }
 
   // Merges start-of-pattern option verbs into the match options.

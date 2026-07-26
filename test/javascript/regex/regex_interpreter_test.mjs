@@ -448,6 +448,16 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("match start reset", () => {
+      it("resets the reported match start with \\K", () => {
+        assert.deepEqual(match("a\\Kb", "ab"), {start: 1, end: 2});
+      });
+
+      it("discards \\K from an abandoned branch", () => {
+        assert.deepEqual(match("a\\Kx|ab", "ab"), {start: 0, end: 2});
+      });
+    });
+
     describe("newline handling", () => {
       it("excludes the newline from dot", () => {
         assert.isNull(match(".", "\n"));

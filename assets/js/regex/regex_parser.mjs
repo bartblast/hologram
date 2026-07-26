@@ -326,6 +326,17 @@ export default class RegexParser {
     }
   }
 
+  // Enforces the PCRE2 rule that \K is not allowed in lookarounds,
+  // raising at the position after the lookaround's closing parenthesis.
+  #checkLookaroundContent(content) {
+    if (this.#containsMatchStartReset(content)) {
+      throw new RegexParseError(
+        "\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
+        this.#position,
+      );
+    }
+  }
+
   // Enforces PCRE2 lookbehind length limits, raising at the position
   // of the lookbehind's opening parenthesis.
   #checkLookbehindLength(content, position) {
@@ -348,6 +359,41 @@ export default class RegexParser {
           position,
         );
       }
+    }
+  }
+
+  #containsMatchStartReset(node) {
+    switch (node.type) {
+      case "alternation":
+        return node.branches.some((branch) =>
+          this.#containsMatchStartReset(branch),
+        );
+
+      case "atomicGroup":
+      case "branchResetGroup":
+      case "group":
+      case "nonCapturingGroup":
+      case "optionGroup":
+      case "scriptRun":
+        return this.#containsMatchStartReset(node.content);
+
+      case "concatenation":
+        return node.items.some((item) => this.#containsMatchStartReset(item));
+
+      case "conditional":
+        return (
+          this.#containsMatchStartReset(node.yes) ||
+          (node.no !== null && this.#containsMatchStartReset(node.no))
+        );
+
+      case "matchStartReset":
+        return true;
+
+      case "quantifier":
+        return this.#containsMatchStartReset(node.item);
+
+      default:
+        return false;
     }
   }
 
@@ -406,6 +452,8 @@ export default class RegexParser {
 
       default: {
         const {direction, negated, atomic} = ALPHA_LOOKAROUNDS[word];
+
+        this.#checkLookaroundContent(content);
 
         if (direction === "behind") {
           this.#checkLookbehindLength(content, wordStart);
@@ -1384,6 +1432,7 @@ export default class RegexParser {
       this.#position++;
       const content = this.#parseAlternation();
       this.#requireGroupClose();
+      this.#checkLookaroundContent(content);
 
       return {
         type: "lookaround",
@@ -1399,6 +1448,7 @@ export default class RegexParser {
       this.#position++;
       const content = this.#parseAlternation();
       this.#requireGroupClose();
+      this.#checkLookaroundContent(content);
 
       return {
         type: "lookaround",
@@ -1419,6 +1469,7 @@ export default class RegexParser {
         this.#position += 2;
         const content = this.#parseAlternation();
         this.#requireGroupClose();
+        this.#checkLookaroundContent(content);
         this.#checkLookbehindLength(content, lookbehindStart);
 
         return {

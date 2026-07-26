@@ -2871,6 +2871,14 @@ describe("RegexParser", () => {
           0,
         );
       });
+
+      it("raises on \\K inside lookaround", () => {
+        assertRegexParseError(
+          "(?=a\\K)",
+          "\\K is not allowed in lookarounds (but see PCRE2_EXTRA_ALLOW_LOOKAROUND_BSK)",
+          7,
+        );
+      });
     });
 
     describe("quantifiers", () => {
