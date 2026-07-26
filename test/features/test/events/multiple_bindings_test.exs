@@ -26,7 +26,10 @@ defmodule HologramFeatureTests.Events.MultipleBindingsTest do
     session
     |> visit(MultipleBindingsPage)
     |> fill_in(css("#layered_input"), with: "layered")
+    # Observed between the two windows: the quick binding has already fired while the full one is
+    # still pending, proving the windows are distinct rather than both dispatching together.
     |> assert_text(css("#quick_result"), ~s/"layered"/)
+    |> assert_text(css("#full_result"), "nil")
     |> assert_text(css("#full_result"), ~s/"layered"/)
   end
 end

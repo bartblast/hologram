@@ -31,7 +31,7 @@ defmodule HologramFeatureTests.Events.MultipleBindingsPage do
     </p>
     <p>
       <input
-        $change.debounce(1500)="record_full"
+        $change.debounce(3000)="record_full"
         $change.debounce(500)="record_quick"
         id="layered_input"
         type="text" />
