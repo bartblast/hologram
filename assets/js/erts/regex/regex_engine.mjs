@@ -1,13 +1,13 @@
 "use strict";
 
-import Bitstring from "../bitstring.mjs";
-import Interpreter from "../interpreter.mjs";
+import Bitstring from "../../bitstring.mjs";
+import Interpreter from "../../interpreter.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
 import RegexInterpreter from "./regex_interpreter.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {START_OPTION_VERBS} from "./regex_parser.mjs";
 import RegexTranslator, {NEWLINE_VERBS} from "./regex_translator.mjs";
-import Type from "../type.mjs";
+import Type from "../../type.mjs";
 
 // Compile option atoms passed to the engine under the same name.
 const ENGINE_OPT_ATOMS = new Set([

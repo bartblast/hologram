@@ -228,7 +228,6 @@ defmodule Hologram.Compiler do
         HologramInterpreterError,
         Interpreter,
         MemoryStorage,
-        RegexEngine,
         Type,
         Utils,
       } = deps;#{js_bindings_registration_call}#{erlang_function_defs}#{elixir_function_defs}
@@ -267,7 +266,6 @@ defmodule Hologram.Compiler do
     import Interpreter from "#{js_dir}/interpreter.mjs";
     import MemoryStorage from "#{js_dir}/memory_storage.mjs";
     import PerformanceTimer from "#{js_dir}/performance_timer.mjs";
-    import RegexEngine from "#{js_dir}/regex/regex_engine.mjs";
     import Type from "#{js_dir}/type.mjs";
     import Utils from "#{js_dir}/utils.mjs";
 

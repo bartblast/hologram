@@ -4,11 +4,11 @@ import {
   assert,
   assertBoxedError,
   defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+} from "../../support/helpers.mjs";
 
-import Bitstring from "../../../assets/js/bitstring.mjs";
-import RegexEngine from "../../../assets/js/regex/regex_engine.mjs";
-import Type from "../../../assets/js/type.mjs";
+import Bitstring from "../../../../assets/js/bitstring.mjs";
+import RegexEngine from "../../../../assets/js/erts/regex/regex_engine.mjs";
+import Type from "../../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 

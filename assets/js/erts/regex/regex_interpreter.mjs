@@ -1,6 +1,6 @@
 "use strict";
 
-import ERTS from "../erts.mjs";
+import ERTS from "../../erts.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
 
 import {

@@ -3,9 +3,9 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+} from "../../support/helpers.mjs";
 
-import {codePointInRanges} from "../../../assets/js/regex/regex_char_sets.mjs";
+import {codePointInRanges} from "../../../../assets/js/erts/regex/regex_char_sets.mjs";
 
 defineGlobalErlangAndElixirModules();
 

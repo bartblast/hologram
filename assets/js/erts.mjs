@@ -5,6 +5,7 @@ import BinaryPatternRegistry from "./erts/binary_pattern_registry.mjs";
 import NativeObjectRegistry from "./erts/native_object_registry.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PromiseRegistry from "./erts/promise_registry.mjs";
+import RegexEngine from "./erts/regex/regex_engine.mjs";
 import RegexPatternRegistry from "./erts/regex_pattern_registry.mjs";
 import Sequence from "./common/sequence.mjs";
 import Type from "./type.mjs";
@@ -41,6 +42,12 @@ export default class ERTS {
 
   // Entries are released via takePromise() when Task.await/1 is called.
   static promiseRegistry = PromiseRegistry;
+
+  // Lazy getter to avoid referencing the class binding while the module
+  // cycle erts -> regex engine -> bitstring -> erts is still initializing.
+  static get regex() {
+    return RegexEngine;
+  }
 
   static regexPatternRegistry = RegexPatternRegistry;
 

@@ -4,9 +4,9 @@ import {
   assert,
   assertRegexParseError,
   defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+} from "../../support/helpers.mjs";
 
-import RegexParser from "../../../assets/js/regex/regex_parser.mjs";
+import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
 
 defineGlobalErlangAndElixirModules();
 

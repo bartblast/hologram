@@ -1,6 +1,6 @@
 "use strict";
 
-import ERTS from "../erts.mjs";
+import ERTS from "../../erts.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 
 // Alpha assertion names accepted in the (*name:...) form.

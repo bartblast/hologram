@@ -3,10 +3,10 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
-} from "../support/helpers.mjs";
+} from "../../support/helpers.mjs";
 
-import RegexParser from "../../../assets/js/regex/regex_parser.mjs";
-import RegexTranslator from "../../../assets/js/regex/regex_translator.mjs";
+import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
+import RegexTranslator from "../../../../assets/js/erts/regex/regex_translator.mjs";
 
 defineGlobalErlangAndElixirModules();
 

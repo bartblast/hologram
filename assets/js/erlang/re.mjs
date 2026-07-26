@@ -5,7 +5,6 @@ import Erlang from "./erlang.mjs";
 import ERTS from "../erts.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
-import RegexEngine from "../regex/regex_engine.mjs";
 import Type from "../type.mjs";
 
 // IMPORTANT!
@@ -41,7 +40,7 @@ const Erlang_Re = {
       };
 
       for (const option of options.data) {
-        if (RegexEngine.parseCompileOption(option, acc) === "invalid") {
+        if (ERTS.regex.parseCompileOption(option, acc) === "invalid") {
           return null;
         }
       }
@@ -88,7 +87,7 @@ const Erlang_Re = {
         Bitstring.maybeSetBytesFromText(pattern);
         patternBytes = pattern.bytes;
       } else {
-        patternText = RegexEngine.charDataToText(pattern);
+        patternText = ERTS.regex.charDataToText(pattern);
       }
 
       // The option clash beats UTF-8 validation of a binary pattern
@@ -97,16 +96,16 @@ const Erlang_Re = {
       }
 
       if (patternBytes !== null) {
-        result = RegexEngine.compileBytes(patternBytes, engineOpts);
+        result = ERTS.regex.compileBytes(patternBytes, engineOpts);
       } else {
-        result = RegexEngine.compile(patternText, engineOpts);
+        result = ERTS.regex.compile(patternText, engineOpts);
 
         // Error positions are byte offsets in the pattern
         if (result.error) {
           result = {
             error: {
               message: result.error.message,
-              position: RegexEngine.utf16IndexToByteOffset(
+              position: ERTS.regex.utf16IndexToByteOffset(
                 patternText,
                 result.error.position,
               ),
@@ -118,7 +117,7 @@ const Erlang_Re = {
       const binary = Erlang["iolist_to_binary/1"](pattern);
 
       Bitstring.maybeSetBytesFromText(binary);
-      result = RegexEngine.compileBytes(binary.bytes, engineOpts);
+      result = ERTS.regex.compileBytes(binary.bytes, engineOpts);
     }
 
     if (result.error) {
@@ -346,7 +345,7 @@ const Erlang_Re = {
           continue;
         }
 
-        switch (RegexEngine.parseCompileOption(option, acc)) {
+        switch (ERTS.regex.parseCompileOption(option, acc)) {
           case "compile":
             compileOnlyOptionUsed = true;
             break;
@@ -406,7 +405,7 @@ const Erlang_Re = {
       if (patternBinary !== null) {
         Bitstring.maybeSetBytesFromText(patternBinary);
 
-        const result = RegexEngine.compileBytes(
+        const result = ERTS.regex.compileBytes(
           patternBinary.bytes,
           acc.engineOpts,
         );
@@ -480,18 +479,18 @@ const Erlang_Re = {
       acc.engineOpts.unicode = true;
 
       // The subject char data converts before the pattern compiles
-      subjectText = RegexEngine.charDataToText(subject);
+      subjectText = ERTS.regex.charDataToText(subject);
 
-      const patternText = RegexEngine.charDataToText(pattern);
+      const patternText = ERTS.regex.charDataToText(pattern);
 
       // The option clash raises instead of returning a compile error tuple
       if (acc.engineOpts.never_utf) raiseArgumentError();
 
-      const result = RegexEngine.compile(patternText, acc.engineOpts);
+      const result = ERTS.regex.compile(patternText, acc.engineOpts);
 
       if (result.error) {
         // Error positions are byte offsets in the pattern
-        const position = RegexEngine.utf16IndexToByteOffset(
+        const position = ERTS.regex.utf16IndexToByteOffset(
           patternText,
           result.error.position,
         );
@@ -533,16 +532,16 @@ const Erlang_Re = {
 
     if (subjectText === null) {
       if (entry.unicode) {
-        subjectText = RegexEngine.charDataToText(subject);
+        subjectText = ERTS.regex.charDataToText(subject);
       } else {
         Bitstring.maybeSetBytesFromText(subjectBinary);
-        subjectText = RegexEngine.textFromLatin1Bytes(subjectBinary.bytes);
+        subjectText = ERTS.regex.textFromLatin1Bytes(subjectBinary.bytes);
       }
     }
 
     // --- Match ---
 
-    const matchResult = RegexEngine.match(entry.compiled, subjectText, {
+    const matchResult = ERTS.regex.match(entry.compiled, subjectText, {
       anchored: entry.anchored || acc.anchored,
       startPosition: 0,
     });
@@ -553,7 +552,7 @@ const Erlang_Re = {
 
     // In byte mode JS string indices are byte offsets already
     const toByteOffset = entry.unicode
-      ? (index) => RegexEngine.utf16IndexToByteOffset(subjectText, index)
+      ? (index) => ERTS.regex.utf16IndexToByteOffset(subjectText, index)
       : (index) => index;
 
     const groupTuples = [];
