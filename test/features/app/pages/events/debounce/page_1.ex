@@ -13,8 +13,10 @@ defmodule HologramFeatureTests.Events.Debounce.Page1 do
       blurred_value: nil,
       debounced_count: 0,
       debounced_key: nil,
+      full_value: nil,
       plain_count: 0,
       plain_key: nil,
+      quick_value: nil,
       submitted_value: nil,
       synced_value: nil
     )
@@ -54,6 +56,19 @@ defmodule HologramFeatureTests.Events.Debounce.Page1 do
     <p>
       Submitted: <strong id="submitted_result"><code>{inspect(@submitted_value)}</code></strong>
     </p>
+    <p>
+      <input
+        $change.debounce(1500)="record_full"
+        $change.debounce(500)="record_quick"
+        id="layered_input"
+        type="text" />
+    </p>
+    <p>
+      Full: <strong id="full_result"><code>{inspect(@full_value)}</code></strong>
+    </p>
+    <p>
+      Quick: <strong id="quick_result"><code>{inspect(@quick_value)}</code></strong>
+    </p>
     """
   end
 
@@ -68,11 +83,19 @@ defmodule HologramFeatureTests.Events.Debounce.Page1 do
     )
   end
 
+  def action(:record_full, params, component) do
+    put_state(component, :full_value, params.event.value)
+  end
+
   def action(:record_plain, params, component) do
     put_state(component,
       plain_count: component.state.plain_count + 1,
       plain_key: params.event.key
     )
+  end
+
+  def action(:record_quick, params, component) do
+    put_state(component, :quick_value, params.event.value)
   end
 
   # Reads the state written by the debounced :record_synced action, so the recorded value reveals

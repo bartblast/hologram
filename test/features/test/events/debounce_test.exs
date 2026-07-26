@@ -14,6 +14,15 @@ defmodule HologramFeatureTests.Events.DebounceTest do
     |> assert_text(css("#debounced_result"), ~s/{1, "e"}/)
   end
 
+  feature "two debounced bindings with different windows on the same event each fire independently",
+          %{session: session} do
+    session
+    |> visit(Page1)
+    |> fill_in(css("#layered_input"), with: "layered")
+    |> assert_text(css("#quick_result"), ~s/"layered"/)
+    |> assert_text(css("#full_result"), ~s/"layered"/)
+  end
+
   # The debounce window is far longer than the assertion timeout, so the result can only appear
   # through the blur flush, never through the window elapsing.
   feature "blurring the input flushes its pending debounced dispatch", %{session: session} do
