@@ -3,6 +3,7 @@
 import Bitstring from "../bitstring.mjs";
 import Erlang from "./erlang.mjs";
 import ERTS from "../erts.mjs";
+import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import RegexEngine from "../regex/regex_engine.mjs";
 import Type from "../type.mjs";
@@ -20,79 +21,6 @@ const Erlang_Re = {
   // Start compile/2
   "compile/2": (pattern, options) => {
     const CRLF_NEWLINE_TYPES = new Set(["any", "anycrlf", "crlf"]);
-
-    // Compile option atoms passed to the engine under the same name.
-    const ENGINE_OPTS = new Set([
-      "bsr_anycrlf",
-      "caseless",
-      "dollar_endonly",
-      "dotall",
-      "dupnames",
-      "extended",
-      "multiline",
-      "never_utf",
-      "no_auto_capture",
-      "ucp",
-      "ungreedy",
-    ]);
-
-    const NEWLINE_TYPES = new Set([
-      "any",
-      "anycrlf",
-      "cr",
-      "crlf",
-      "lf",
-      "nul",
-    ]);
-
-    // Applies a compile option to the accumulator.
-    // Returns false when the option is not a valid compile option.
-    const applyOption = (option, acc) => {
-      if (Type.isAtom(option)) {
-        if (ENGINE_OPTS.has(option.value)) {
-          acc.engineOpts[option.value] = true;
-          return true;
-        }
-
-        switch (option.value) {
-          case "anchored":
-            acc.anchored = true;
-            return true;
-
-          case "bsr_unicode":
-            acc.engineOpts.bsr_anycrlf = false;
-            return true;
-
-          case "firstline":
-            acc.firstline = true;
-            return true;
-
-          case "no_start_optimize":
-            return true;
-
-          case "unicode":
-            acc.unicodeOption = true;
-            return true;
-
-          default:
-            return false;
-        }
-      }
-
-      if (
-        Type.isTuple(option) &&
-        option.data.length === 2 &&
-        Type.isAtom(option.data[0]) &&
-        option.data[0].value === "newline" &&
-        Type.isAtom(option.data[1]) &&
-        NEWLINE_TYPES.has(option.data[1].value)
-      ) {
-        acc.engineOpts.newline = option.data[1].value;
-        return true;
-      }
-
-      return false;
-    };
 
     const buildErrorTuple = (message, position) =>
       Type.tuple([
@@ -113,68 +41,12 @@ const Erlang_Re = {
       };
 
       for (const option of options.data) {
-        if (!applyOption(option, acc)) return null;
-      }
-
-      return acc;
-    };
-
-    const raiseCharDataError = () => {
-      Interpreter.raiseArgumentError("argument error");
-    };
-
-    // Converts a char data list to a JS string, decoding contained binaries
-    // from UTF-8. An improper char data list may only have a binary tail.
-    const textFromCharData = (list) => {
-      const isProper = Type.isProperList(list);
-      const elementCount = isProper ? list.data.length : list.data.length - 1;
-      let text = "";
-
-      for (let index = 0; index < elementCount; index++) {
-        const element = list.data[index];
-
-        if (Type.isInteger(element)) {
-          const codePoint = Number(element.value);
-
-          if (
-            codePoint < 0 ||
-            codePoint > 0x10ffff ||
-            (codePoint >= 0xd800 && codePoint <= 0xdfff)
-          ) {
-            raiseCharDataError();
-          }
-
-          text += String.fromCodePoint(codePoint);
-        } else if (Type.isBitstring(element)) {
-          text += textFromCharDataBinary(element);
-        } else if (Type.isList(element)) {
-          text += textFromCharData(element);
-        } else {
-          raiseCharDataError();
+        if (RegexEngine.parseCompileOption(option, acc) === "invalid") {
+          return null;
         }
       }
 
-      if (!isProper) {
-        const tail = list.data[list.data.length - 1];
-
-        if (!Type.isBitstring(tail)) raiseCharDataError();
-
-        text += textFromCharDataBinary(tail);
-      }
-
-      return text;
-    };
-
-    const textFromCharDataBinary = (binary) => {
-      if (!Type.isBinary(binary)) raiseCharDataError();
-
-      Bitstring.maybeSetBytesFromText(binary);
-
-      const decoded = RegexEngine.decodeUtf8(binary.bytes);
-
-      if (decoded.error) raiseCharDataError();
-
-      return decoded.text;
+      return acc;
     };
 
     const parsedOptions = parseOptions();
@@ -215,10 +87,8 @@ const Erlang_Re = {
 
         Bitstring.maybeSetBytesFromText(pattern);
         patternBytes = pattern.bytes;
-      } else if (Type.isList(pattern)) {
-        patternText = textFromCharData(pattern);
       } else {
-        raiseCharDataError();
+        patternText = RegexEngine.charDataToText(pattern);
       }
 
       // The option clash beats UTF-8 validation of a binary pattern
@@ -413,6 +283,319 @@ const Erlang_Re = {
   },
   // End inspect/2
   // Deps: []
+
+  // Start run/3
+  "run/3": (subject, pattern, options) => {
+    // Run-only option atoms not yet supported.
+    // TODO: implement the global, notbol, noteol, notempty, notempty_atstart
+    // and report_errors run options.
+    const RUN_ONLY_ATOMS = new Set([
+      "global",
+      "notbol",
+      "noteol",
+      "notempty",
+      "notempty_atstart",
+      "report_errors",
+    ]);
+
+    // Run-only tuple option tags not yet supported.
+    // TODO: implement the capture, offset, match_limit and
+    // match_limit_recursion run options.
+    const RUN_ONLY_TUPLE_TAGS = new Set([
+      "capture",
+      "match_limit",
+      "match_limit_recursion",
+      "offset",
+    ]);
+
+    const raiseArgumentError = () => {
+      Interpreter.raiseArgumentError("argument error");
+    };
+
+    const raiseNotImplemented = (option) => {
+      throw new HologramInterpreterError(
+        `the ${Interpreter.inspect(option)} option is not yet implemented in Hologram`,
+      );
+    };
+
+    // --- Options ---
+
+    const acc = {
+      anchored: false,
+      engineOpts: {},
+      firstline: false,
+      unicodeOption: false,
+    };
+
+    let compileOnlyOptionUsed = false;
+    let notImplementedOption = null;
+    let optionsValid = Type.isProperList(options);
+    let recompileOption = null;
+
+    if (optionsValid) {
+      for (const option of options.data) {
+        const isRunOnly =
+          (Type.isAtom(option) && RUN_ONLY_ATOMS.has(option.value)) ||
+          (Type.isTuple(option) &&
+            (option.data.length === 2 || option.data.length === 3) &&
+            Type.isAtom(option.data[0]) &&
+            RUN_ONLY_TUPLE_TAGS.has(option.data[0].value));
+
+        if (isRunOnly) {
+          notImplementedOption ??= option;
+          continue;
+        }
+
+        switch (RegexEngine.parseCompileOption(option, acc)) {
+          case "compile":
+            compileOnlyOptionUsed = true;
+            break;
+
+          case "dual":
+            recompileOption = option;
+            break;
+
+          case "invalid":
+            optionsValid = false;
+            break;
+        }
+
+        if (!optionsValid) break;
+      }
+    }
+
+    // --- Pattern (validation phase) ---
+
+    const registryEntry =
+      Type.isTuple(pattern) &&
+      pattern.data.length === 5 &&
+      Interpreter.isStrictlyEqual(pattern.data[0], Type.atom("re_pattern"))
+        ? ERTS.regexPatternRegistry.get(pattern.data[4])
+        : null;
+
+    let entry = null;
+    let patternBullet = null;
+    let patternRaisesArgumentError = false;
+
+    if (registryEntry !== null) {
+      entry = {
+        anchored: registryEntry.anchored,
+        compiled: registryEntry.compiled,
+        firstline: registryEntry.firstline,
+        unicode: registryEntry.unicode,
+      };
+    } else if (acc.unicodeOption) {
+      // In unicode mode only the pattern term shape is validated here.
+      // The pattern resolves later, as char data conversion failures raise
+      // plain ArgumentError instead of contributing a bullet.
+      if (!Type.isBinary(pattern) && !Type.isList(pattern)) {
+        patternBullet =
+          "neither an iodata term nor a compiled regular expression";
+      }
+    } else {
+      // In byte mode the pattern resolves during validation
+      let patternBinary = null;
+
+      try {
+        patternBinary = Erlang["iolist_to_binary/1"](pattern);
+      } catch {
+        patternBullet =
+          "neither an iodata term nor a compiled regular expression";
+      }
+
+      if (patternBinary !== null) {
+        Bitstring.maybeSetBytesFromText(patternBinary);
+
+        const result = RegexEngine.compileBytes(
+          patternBinary.bytes,
+          acc.engineOpts,
+        );
+
+        if (result.error) {
+          if (
+            result.error.message === "using UTF is disabled by the application"
+          ) {
+            patternRaisesArgumentError = true;
+          } else {
+            patternBullet = `could not parse regular expression\n${result.error.message} on character ${result.error.position}`;
+          }
+        } else {
+          entry = {
+            anchored: acc.anchored,
+            compiled: result,
+            firstline: acc.firstline,
+            unicode: result.opts.unicode === true,
+          };
+        }
+      }
+    }
+
+    // --- Subject (validation phase) ---
+
+    // The subject is validated as iodata unless it is consumed as char data,
+    // which happens with the unicode option or a unicode compiled pattern
+    const byteModeSubject =
+      !acc.unicodeOption && !(registryEntry !== null && registryEntry.unicode);
+
+    let subjectBinary = null;
+    let subjectBullet = null;
+
+    if (byteModeSubject) {
+      try {
+        subjectBinary = Erlang["iolist_to_binary/1"](subject);
+      } catch {
+        subjectBullet = "not an iodata term";
+      }
+    }
+
+    // --- Combined validation errors ---
+
+    if (subjectBullet !== null || patternBullet !== null || !optionsValid) {
+      const bullets = [
+        subjectBullet === null ? "" : `  * 1st argument: ${subjectBullet}\n`,
+        patternBullet === null ? "" : `  * 2nd argument: ${patternBullet}\n`,
+        optionsValid ? "" : "  * 3rd argument: invalid options\n",
+      ].join("");
+
+      Interpreter.raiseArgumentError(
+        `errors were found at the given arguments:\n\n${bullets}`,
+      );
+    }
+
+    if (patternRaisesArgumentError) raiseArgumentError();
+
+    // Compile options don't apply to an already compiled pattern
+    if (
+      registryEntry !== null &&
+      (compileOnlyOptionUsed || acc.unicodeOption)
+    ) {
+      raiseArgumentError();
+    }
+
+    // --- Pattern (unicode resolution phase) ---
+
+    let subjectText = null;
+
+    if (entry === null) {
+      acc.engineOpts.unicode = true;
+
+      // The subject char data converts before the pattern compiles
+      subjectText = RegexEngine.charDataToText(subject);
+
+      const patternText = RegexEngine.charDataToText(pattern);
+
+      // The option clash raises instead of returning a compile error tuple
+      if (acc.engineOpts.never_utf) raiseArgumentError();
+
+      const result = RegexEngine.compile(patternText, acc.engineOpts);
+
+      if (result.error) {
+        // Error positions are byte offsets in the pattern
+        const position = RegexEngine.utf16IndexToByteOffset(
+          patternText,
+          result.error.position,
+        );
+
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            `could not parse regular expression\n${result.error.message} on character ${position}`,
+          ),
+        );
+      }
+
+      entry = {
+        anchored: acc.anchored,
+        compiled: result,
+        firstline: acc.firstline,
+        unicode: true,
+      };
+    }
+
+    // --- Options not yet supported ---
+
+    if (notImplementedOption !== null) {
+      raiseNotImplemented(notImplementedOption);
+    }
+
+    // TODO: implement re-routing of newline and bsr run options through the
+    // stored AST of an already compiled pattern.
+    if (registryEntry !== null && recompileOption !== null) {
+      raiseNotImplemented(recompileOption);
+    }
+
+    // TODO: implement firstline matching semantics.
+    if (entry.firstline) {
+      raiseNotImplemented(Type.atom("firstline"));
+    }
+
+    // --- Subject resolution ---
+
+    if (subjectText === null) {
+      if (entry.unicode) {
+        subjectText = RegexEngine.charDataToText(subject);
+      } else {
+        Bitstring.maybeSetBytesFromText(subjectBinary);
+        subjectText = RegexEngine.textFromLatin1Bytes(subjectBinary.bytes);
+      }
+    }
+
+    // --- Match ---
+
+    const matchResult = RegexEngine.match(entry.compiled, subjectText, {
+      anchored: entry.anchored || acc.anchored,
+      startPosition: 0,
+    });
+
+    if (matchResult === null) return Type.atom("nomatch");
+
+    // --- Captures (index type) ---
+
+    // In byte mode JS string indices are byte offsets already
+    const toByteOffset = entry.unicode
+      ? (index) => RegexEngine.utf16IndexToByteOffset(subjectText, index)
+      : (index) => index;
+
+    const groupTuples = [];
+
+    for (let number = 1; number <= entry.compiled.groupMap.count; number++) {
+      const capture = matchResult.captures[number];
+
+      if (capture === null) {
+        groupTuples.push(Type.tuple([Type.integer(-1), Type.integer(0)]));
+      } else {
+        const start = toByteOffset(capture.start);
+        const end = toByteOffset(capture.end);
+
+        groupTuples.push(
+          Type.tuple([Type.integer(start), Type.integer(end - start)]),
+        );
+      }
+    }
+
+    // Trailing unset groups are not reported
+    while (
+      groupTuples.length > 0 &&
+      groupTuples[groupTuples.length - 1].data[0].value === -1n
+    ) {
+      groupTuples.pop();
+    }
+
+    const matchStart = toByteOffset(matchResult.start);
+    const matchEnd = toByteOffset(matchResult.end);
+
+    const capturedTuples = [
+      Type.tuple([
+        Type.integer(matchStart),
+        Type.integer(matchEnd - matchStart),
+      ]),
+      ...groupTuples,
+    ];
+
+    return Type.tuple([Type.atom("match"), Type.list(capturedTuples)]);
+  },
+  // End run/3
+  // Deps: [:erlang.iolist_to_binary/1]
 
   // Start version/0
   "version/0": () => {

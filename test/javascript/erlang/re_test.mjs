@@ -760,6 +760,562 @@ describe("Erlang_Re", () => {
     });
   });
 
+  describe("run/3", () => {
+    const run = (subject, pattern, opts = []) =>
+      Erlang_Re["run/3"](subject, pattern, Type.list(opts));
+
+    const compilePattern = (source, opts = []) => {
+      const result = Erlang_Re["compile/2"](
+        Type.bitstring(source),
+        Type.list(opts),
+      );
+
+      return result.data[1];
+    };
+
+    const assertMatchResult = (result, indexPairs) => {
+      assert.deepEqual(
+        result,
+        Type.tuple([
+          Type.atom("match"),
+          Type.list(
+            indexPairs.map(([start, length]) =>
+              Type.tuple([Type.integer(start), Type.integer(length)]),
+            ),
+          ),
+        ]),
+      );
+    };
+
+    it("matches with a raw binary pattern", () => {
+      const result = run(Type.bitstring("abbc"), Type.bitstring("b+"));
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("matches with a raw charlist pattern", () => {
+      const result = run(Type.bitstring("abbc"), Type.charlist("b+"));
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("matches with a compiled pattern", () => {
+      const result = run(Type.bitstring("abbc"), compilePattern("b+"));
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("matches at the leftmost position", () => {
+      const result = run(Type.bitstring("abbb"), Type.bitstring("b+"));
+
+      assertMatchResult(result, [[1, 3]]);
+    });
+
+    it("matches on the interpreter route", () => {
+      const result = run(Type.bitstring("abc"), Type.bitstring("b\\Kc"));
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("matches an iodata subject", () => {
+      const subject = Type.improperList([
+        Type.bitstring("ab"),
+        Type.bitstring("bc"),
+      ]);
+
+      const result = run(subject, Type.bitstring("b+"));
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("matches an empty pattern on an empty subject", () => {
+      const result = run(Type.bitstring(""), Type.bitstring(""));
+
+      assertMatchResult(result, [[0, 0]]);
+    });
+
+    it("returns nomatch without a match", () => {
+      const result = run(Type.bitstring("abc"), Type.bitstring("x"));
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("returns capture group index tuples", () => {
+      const result = run(Type.bitstring("abc"), Type.bitstring("(a)(b)(c)"));
+
+      assertMatchResult(result, [
+        [0, 3],
+        [0, 1],
+        [1, 1],
+        [2, 1],
+      ]);
+    });
+
+    it("returns {-1, 0} for unset group before a set group", () => {
+      const result = run(Type.bitstring("b"), Type.bitstring("(a)|(b)"));
+
+      assertMatchResult(result, [
+        [0, 1],
+        [-1, 0],
+        [0, 1],
+      ]);
+    });
+
+    it("omits trailing unset groups", () => {
+      const result = run(
+        Type.bitstring("ab"),
+        Type.bitstring("(a)(b)(x)?(y)?"),
+      );
+
+      assertMatchResult(result, [
+        [0, 2],
+        [0, 1],
+        [1, 1],
+      ]);
+    });
+
+    it("compiles a raw pattern with compile options", () => {
+      const result = run(Type.bitstring("ABC"), Type.bitstring("abc"), [
+        Type.atom("caseless"),
+      ]);
+
+      assertMatchResult(result, [[0, 3]]);
+    });
+
+    it("anchored option matches at the start", () => {
+      const result = run(Type.bitstring("abc"), Type.bitstring("a"), [
+        Type.atom("anchored"),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("anchored option pins the match to the start", () => {
+      const result = run(Type.bitstring("abc"), Type.bitstring("b"), [
+        Type.atom("anchored"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("anchored option works with a compiled pattern", () => {
+      const result = run(Type.bitstring("abc"), compilePattern("b"), [
+        Type.atom("anchored"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("compile-time anchored pattern matches at the start", () => {
+      const compiled = compilePattern("b", [Type.atom("anchored")]);
+
+      const result = run(Type.bitstring("bbc"), compiled);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("compile-time anchored pattern pins the match", () => {
+      const compiled = compilePattern("b", [Type.atom("anchored")]);
+
+      const result = run(Type.bitstring("abc"), compiled);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("returns byte offsets with the unicode option", () => {
+      const result = run(Type.bitstring("éb"), Type.bitstring("b"), [
+        Type.atom("unicode"),
+      ]);
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("decodes the subject with a unicode compiled pattern", () => {
+      const compiled = compilePattern("é", [Type.atom("unicode")]);
+
+      const result = run(Type.bitstring("aéb"), compiled);
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("accepts unicode char data subject", () => {
+      const subject = Type.list([Type.integer(233), Type.integer(98)]);
+
+      const result = run(subject, Type.bitstring("b"), [Type.atom("unicode")]);
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("raises ArgumentError on non-iodata subject", () => {
+      assertBoxedError(
+        () => run(Type.atom("abc"), Type.bitstring("a")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    });
+
+    it("raises ArgumentError on non-binary bitstring subject", () => {
+      assertBoxedError(
+        () => run(Type.bitstring([1]), Type.bitstring("a")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    });
+
+    it("raises ArgumentError on subject code point above 255 in byte mode", () => {
+      assertBoxedError(
+        () => run(Type.list([Type.integer(256)]), Type.bitstring("a")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    });
+
+    it("raises ArgumentError on non-iodata pattern", () => {
+      assertBoxedError(
+        () => run(Type.bitstring("x"), Type.atom("foo")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "neither an iodata term nor a compiled regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on non-binary bitstring pattern", () => {
+      assertBoxedError(
+        () => run(Type.bitstring("x"), Type.bitstring([1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "neither an iodata term nor a compiled regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on pattern code point above 255 in byte mode", () => {
+      assertBoxedError(
+        () => run(Type.bitstring("x"), Type.list([Type.integer(256)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "neither an iodata term nor a compiled regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on unknown compiled pattern reference", () => {
+      const rePattern = Type.tuple([
+        Type.atom("re_pattern"),
+        Type.integer(0),
+        Type.integer(0),
+        Type.integer(0),
+        Erlang["make_ref/0"](),
+      ]);
+
+      assertBoxedError(
+        () => run(Type.bitstring("x"), rePattern),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "neither an iodata term nor a compiled regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on non-chardata pattern with the unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.atom("foo"), [Type.atom("unicode")]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "neither an iodata term nor a compiled regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid raw pattern", () => {
+      assertBoxedError(
+        () => run(Type.bitstring("abc"), Type.bitstring("a{2,1}")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "could not parse regular expression\nnumbers out of order in {} quantifier on character 5",
+        ),
+      );
+    });
+
+    it("raises ArgumentError with byte error position in unicode mode", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.bitstring("é("), [
+            Type.atom("unicode"),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "could not parse regular expression\nmissing closing parenthesis on character 3",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid UTF-8 after a UTF pattern verb", () => {
+      const pattern = Type.improperList([
+        Type.bitstring("(*UTF)"),
+        Bitstring.fromBytes([255]),
+      ]);
+
+      assertBoxedError(
+        () => run(Type.bitstring("x"), pattern),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "could not parse regular expression\nUTF-8 error: illegal byte (0xfe or 0xff) on character 6",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid option", () => {
+      assertBoxedError(
+        () => run(Type.bitstring("x"), Type.bitstring("a"), [Type.atom("bad")]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on non-list options", () => {
+      assertBoxedError(
+        () =>
+          Erlang_Re["run/3"](
+            Type.bitstring("x"),
+            Type.bitstring("a"),
+            Type.atom("bad"),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on improper options list", () => {
+      const options = Type.improperList([
+        Type.atom("anchored"),
+        Type.atom("bad"),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Erlang_Re["run/3"](Type.bitstring("x"), Type.bitstring("a"), options),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("combines subject and pattern errors", () => {
+      assertBoxedError(
+        () => run(Type.atom("a"), Type.atom("b")),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 2nd argument: neither an iodata term nor a compiled regular expression\n",
+      );
+    });
+
+    it("combines pattern and options errors", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.bitstring("a{2,1}"), [
+            Type.atom("bad"),
+          ]),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 2nd argument: could not parse regular expression\nnumbers out of order in {} quantifier on character 5\n  * 3rd argument: invalid options\n",
+      );
+    });
+
+    it("combines subject and options errors", () => {
+      assertBoxedError(
+        () => run(Type.atom("a"), Type.bitstring("ok"), [Type.atom("bad")]),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 3rd argument: invalid options\n",
+      );
+    });
+
+    it("combines subject, pattern and options errors", () => {
+      assertBoxedError(
+        () => run(Type.atom("a"), Type.atom("b"), [Type.atom("bad")]),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 2nd argument: neither an iodata term nor a compiled regular expression\n  * 3rd argument: invalid options\n",
+      );
+    });
+
+    it("combines pattern shape and options errors with the unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.atom("foo"), [
+            Type.atom("unicode"),
+            Type.atom("bad"),
+          ]),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 2nd argument: neither an iodata term nor a compiled regular expression\n  * 3rd argument: invalid options\n",
+      );
+    });
+
+    it("subject error wins over compile option error with a compiled pattern", () => {
+      assertBoxedError(
+        () =>
+          run(Type.atom("abc"), compilePattern("b"), [Type.atom("caseless")]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iodata term"),
+      );
+    });
+
+    it("options error wins over unicode conversion errors", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Bitstring.fromBytes([255]), [
+            Type.atom("unicode"),
+            Type.atom("bad"),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises plain ArgumentError on compile option with a compiled pattern", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), compilePattern("b"), [
+            Type.atom("caseless"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on unicode option with a compiled pattern", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), compilePattern("b"), [Type.atom("unicode")]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid UTF-8 pattern with the unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Bitstring.fromBytes([255]), [
+            Type.atom("unicode"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid pattern char data with the unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.list([Type.atom("bad")]), [
+            Type.atom("unicode"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on surrogate pattern code point with the unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.list([Type.integer(0xd800)]), [
+            Type.atom("unicode"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on never_utf and unicode option clash", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.bitstring("a"), [
+            Type.atom("unicode"),
+            Type.atom("never_utf"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on UTF pattern verb with never_utf option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("x"), Type.bitstring("(*UTF)a"), [
+            Type.atom("never_utf"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on bad subject with parse error and unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.atom("abc"), Type.bitstring("a{2,1}"), [
+            Type.atom("unicode"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on non-chardata subject with the unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.atom("abc"), Type.bitstring("a"), [Type.atom("unicode")]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on surrogate subject code point with the unicode option", () => {
+      assertBoxedError(
+        () =>
+          run(Type.list([Type.integer(0xd800)]), Type.bitstring("a"), [
+            Type.atom("unicode"),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid UTF-8 subject with a unicode compiled pattern", () => {
+      const compiled = compilePattern("é", [Type.atom("unicode")]);
+
+      const subject = Bitstring.fromBytes([255, 97, 98]);
+
+      assertBoxedError(
+        () => run(subject, compiled),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on non-iodata subject with a unicode compiled pattern", () => {
+      const compiled = compilePattern("é", [Type.atom("unicode")]);
+
+      assertBoxedError(
+        () => run(Type.atom("abc"), compiled),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on invalid UTF-8 subject with a UTF verb pattern", () => {
+      assertBoxedError(
+        () => run(Bitstring.fromBytes([255]), Type.bitstring("(*UTF)é")),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+  });
+
   describe("version/0", () => {
     const version = Erlang_Re["version/0"];
 

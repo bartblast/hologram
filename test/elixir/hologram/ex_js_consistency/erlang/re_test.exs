@@ -416,6 +416,374 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                      fn -> :re.inspect(:foo, :bar) end
       end
     end
+
+    describe "run/3" do
+      test "matches with a raw binary pattern" do
+        assert :re.run("abbc", "b+", []) == {:match, [{1, 2}]}
+      end
+
+      test "matches with a raw charlist pattern" do
+        assert :re.run("abbc", ~c"b+", []) == {:match, [{1, 2}]}
+      end
+
+      test "matches with a compiled pattern" do
+        {:ok, compiled} = :re.compile("b+")
+
+        assert :re.run("abbc", compiled, []) == {:match, [{1, 2}]}
+      end
+
+      test "matches at the leftmost position" do
+        assert :re.run("abbb", "b+", []) == {:match, [{1, 3}]}
+      end
+
+      test "matches on the interpreter route" do
+        assert :re.run("abc", "b\\Kc", []) == {:match, [{2, 1}]}
+      end
+
+      test "matches an iodata subject" do
+        assert :re.run(["ab" | "bc"], "b+", []) == {:match, [{1, 2}]}
+      end
+
+      test "matches an empty pattern on an empty subject" do
+        assert :re.run("", "", []) == {:match, [{0, 0}]}
+      end
+
+      test "returns nomatch without a match" do
+        assert :re.run("abc", "x", []) == :nomatch
+      end
+
+      test "returns capture group index tuples" do
+        assert :re.run("abc", "(a)(b)(c)", []) ==
+                 {:match, [{0, 3}, {0, 1}, {1, 1}, {2, 1}]}
+      end
+
+      test "returns {-1, 0} for unset group before a set group" do
+        assert :re.run("b", "(a)|(b)", []) == {:match, [{0, 1}, {-1, 0}, {0, 1}]}
+      end
+
+      test "omits trailing unset groups" do
+        assert :re.run("ab", "(a)(b)(x)?(y)?", []) ==
+                 {:match, [{0, 2}, {0, 1}, {1, 1}]}
+      end
+
+      test "compiles a raw pattern with compile options" do
+        assert :re.run("ABC", "abc", [:caseless]) == {:match, [{0, 3}]}
+      end
+
+      test "anchored option matches at the start" do
+        assert :re.run("abc", "a", [:anchored]) == {:match, [{0, 1}]}
+      end
+
+      test "anchored option pins the match to the start" do
+        assert :re.run("abc", "b", [:anchored]) == :nomatch
+      end
+
+      test "anchored option works with a compiled pattern" do
+        {:ok, compiled} = :re.compile("b")
+
+        assert :re.run("abc", compiled, [:anchored]) == :nomatch
+      end
+
+      test "compile-time anchored pattern matches at the start" do
+        {:ok, compiled} = :re.compile("b", [:anchored])
+
+        assert :re.run("bbc", compiled, []) == {:match, [{0, 1}]}
+      end
+
+      test "compile-time anchored pattern pins the match" do
+        {:ok, compiled} = :re.compile("b", [:anchored])
+
+        assert :re.run("abc", compiled, []) == :nomatch
+      end
+
+      test "returns byte offsets with the unicode option" do
+        assert :re.run("éb", "b", [:unicode]) == {:match, [{2, 1}]}
+      end
+
+      test "decodes the subject with a unicode compiled pattern" do
+        {:ok, compiled} = :re.compile("é", [:unicode])
+
+        assert :re.run("aéb", compiled, []) == {:match, [{1, 2}]}
+      end
+
+      test "accepts unicode char data subject" do
+        assert :re.run([233, ?b], "b", [:unicode]) == {:match, [{2, 1}]}
+      end
+
+      test "raises ArgumentError on non-iodata subject" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an iodata term"),
+                     fn -> :re.run(:abc, "a", []) end
+      end
+
+      test "raises ArgumentError on non-binary bitstring subject" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an iodata term"),
+                     fn -> :re.run(<<1::1>>, "a", []) end
+      end
+
+      test "raises ArgumentError on subject code point above 255 in byte mode" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an iodata term"),
+                     fn -> :re.run([256], "a", []) end
+      end
+
+      test "raises ArgumentError on non-iodata pattern" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(
+                       2,
+                       "neither an iodata term nor a compiled regular expression"
+                     ),
+                     fn -> :re.run("x", :foo, []) end
+      end
+
+      test "raises ArgumentError on non-binary bitstring pattern" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(
+                       2,
+                       "neither an iodata term nor a compiled regular expression"
+                     ),
+                     fn -> :re.run("x", <<1::1>>, []) end
+      end
+
+      test "raises ArgumentError on pattern code point above 255 in byte mode" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(
+                       2,
+                       "neither an iodata term nor a compiled regular expression"
+                     ),
+                     fn -> :re.run("x", [256], []) end
+      end
+
+      test "raises ArgumentError on unknown compiled pattern reference" do
+        re_pattern = {:re_pattern, 0, 0, 0, make_ref()}
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(
+                       2,
+                       "neither an iodata term nor a compiled regular expression"
+                     ),
+                     fn -> :re.run("x", re_pattern, []) end
+      end
+
+      test "raises ArgumentError on non-chardata pattern with the unicode option" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(
+                       2,
+                       "neither an iodata term nor a compiled regular expression"
+                     ),
+                     fn -> :re.run("x", :foo, [:unicode]) end
+      end
+
+      test "raises ArgumentError on invalid raw pattern" do
+        expected_msg =
+          build_argument_error_msg(
+            2,
+            "could not parse regular expression\nnumbers out of order in {} quantifier on character 5"
+          )
+
+        assert_error ArgumentError, expected_msg, fn -> :re.run("abc", "a{2,1}", []) end
+      end
+
+      test "raises ArgumentError with byte error position in unicode mode" do
+        expected_msg =
+          build_argument_error_msg(
+            2,
+            "could not parse regular expression\nmissing closing parenthesis on character 3"
+          )
+
+        assert_error ArgumentError, expected_msg, fn -> :re.run("x", "é(", [:unicode]) end
+      end
+
+      test "raises ArgumentError on invalid UTF-8 after a UTF pattern verb" do
+        expected_msg =
+          build_argument_error_msg(
+            2,
+            "could not parse regular expression\nUTF-8 error: illegal byte (0xfe or 0xff) on character 6"
+          )
+
+        assert_error ArgumentError, expected_msg, fn ->
+          :re.run("x", ["(*UTF)" | <<255>>], [])
+        end
+      end
+
+      test "raises ArgumentError on invalid option" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("x", "a", [:bad]) end
+      end
+
+      test "raises ArgumentError on non-list options" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("x", "a", :bad) end
+      end
+
+      test "raises ArgumentError on improper options list" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("x", "a", [:anchored | :bad]) end
+      end
+
+      test "combines subject and pattern errors" do
+        expected_msg = """
+        errors were found at the given arguments:
+
+          * 1st argument: not an iodata term
+          * 2nd argument: neither an iodata term nor a compiled regular expression
+        """
+
+        assert_error ArgumentError, expected_msg, fn -> :re.run(:a, :b, []) end
+      end
+
+      test "combines pattern and options errors" do
+        expected_msg = """
+        errors were found at the given arguments:
+
+          * 2nd argument: could not parse regular expression
+        numbers out of order in {} quantifier on character 5
+          * 3rd argument: invalid options
+        """
+
+        assert_error ArgumentError, expected_msg, fn -> :re.run("x", "a{2,1}", [:bad]) end
+      end
+
+      test "combines subject and options errors" do
+        expected_msg = """
+        errors were found at the given arguments:
+
+          * 1st argument: not an iodata term
+          * 3rd argument: invalid options
+        """
+
+        assert_error ArgumentError, expected_msg, fn -> :re.run(:a, "ok", [:bad]) end
+      end
+
+      test "combines subject, pattern and options errors" do
+        expected_msg = """
+        errors were found at the given arguments:
+
+          * 1st argument: not an iodata term
+          * 2nd argument: neither an iodata term nor a compiled regular expression
+          * 3rd argument: invalid options
+        """
+
+        assert_error ArgumentError, expected_msg, fn -> :re.run(:a, :b, [:bad]) end
+      end
+
+      test "combines pattern shape and options errors with the unicode option" do
+        expected_msg = """
+        errors were found at the given arguments:
+
+          * 2nd argument: neither an iodata term nor a compiled regular expression
+          * 3rd argument: invalid options
+        """
+
+        assert_error ArgumentError, expected_msg, fn ->
+          :re.run("x", :foo, [:unicode, :bad])
+        end
+      end
+
+      test "subject error wins over compile option error with a compiled pattern" do
+        {:ok, compiled} = :re.compile("b")
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an iodata term"),
+                     fn -> :re.run(:abc, compiled, [:caseless]) end
+      end
+
+      test "options error wins over unicode conversion errors" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("x", <<255>>, [:unicode, :bad]) end
+      end
+
+      test "raises plain ArgumentError on compile option with a compiled pattern" do
+        {:ok, compiled} = :re.compile("b")
+
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("x", compiled, [:caseless])
+        end
+      end
+
+      test "raises plain ArgumentError on unicode option with a compiled pattern" do
+        {:ok, compiled} = :re.compile("b")
+
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("x", compiled, [:unicode])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid UTF-8 pattern with the unicode option" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("x", <<255>>, [:unicode])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid pattern char data with the unicode option" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("x", [:bad], [:unicode])
+        end
+      end
+
+      test "raises plain ArgumentError on surrogate pattern code point with the unicode option" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("x", [0xD800], [:unicode])
+        end
+      end
+
+      test "raises plain ArgumentError on never_utf and unicode option clash" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("x", "a", [:unicode, :never_utf])
+        end
+      end
+
+      test "raises plain ArgumentError on UTF pattern verb with never_utf option" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("x", "(*UTF)a", [:never_utf])
+        end
+      end
+
+      test "raises plain ArgumentError on bad subject with parse error and unicode option" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run(:abc, "a{2,1}", [:unicode])
+        end
+      end
+
+      test "raises plain ArgumentError on non-chardata subject with the unicode option" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run(:abc, "a", [:unicode])
+        end
+      end
+
+      test "raises plain ArgumentError on surrogate subject code point with the unicode option" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run([0xD800], "a", [:unicode])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid UTF-8 subject with a unicode compiled pattern" do
+        {:ok, compiled} = :re.compile("é", [:unicode])
+
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run(<<255, "ab">>, compiled, [])
+        end
+      end
+
+      test "raises plain ArgumentError on non-iodata subject with a unicode compiled pattern" do
+        {:ok, compiled} = :re.compile("é", [:unicode])
+
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run(:abc, compiled, [])
+        end
+      end
+
+      test "raises plain ArgumentError on invalid UTF-8 subject with a UTF verb pattern" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run(<<255>>, "(*UTF)é", [])
+        end
+      end
+    end
   end
 
   describe "version/0" do
