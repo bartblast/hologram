@@ -3272,6 +3272,33 @@ describe("RegexParser", () => {
           13,
         );
       });
+
+      it("raises on UTF verb with never UTF option", () => {
+        assertRegexParseError(
+          "(*UTF)a",
+          "using UTF is disabled by the application",
+          6,
+          {neverUtf: true},
+        );
+      });
+
+      it("raises on UTF8 verb with never UTF option", () => {
+        assertRegexParseError(
+          "(*UTF8)a",
+          "using UTF is disabled by the application",
+          7,
+          {neverUtf: true},
+        );
+      });
+
+      it("raises on UTF verb preceded by other verbs with never UTF option", () => {
+        assertRegexParseError(
+          "(*CRLF)(*UTF)a",
+          "using UTF is disabled by the application",
+          13,
+          {neverUtf: true},
+        );
+      });
     });
 
     describe("subroutine calls", () => {

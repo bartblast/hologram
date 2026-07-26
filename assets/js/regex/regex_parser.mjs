@@ -179,6 +179,7 @@ export default class RegexParser {
   #groupCount = 0;
   #groupNames = new Set();
   #inClassQuote = false;
+  #neverUtf;
   #noAutoCapture;
   #position = 0;
   #source;
@@ -203,6 +204,7 @@ export default class RegexParser {
   constructor(source, opts = {}) {
     this.#dupnames = opts.dupnames === true;
     this.#extended = opts.extended === true;
+    this.#neverUtf = opts.neverUtf === true;
     this.#noAutoCapture = opts.noAutoCapture === true;
     this.#source = source;
     this.#unicode = opts.unicode === true;
@@ -1913,7 +1915,16 @@ export default class RegexParser {
 
       this.#position = scanPosition + 1;
 
-      if (word === "UTF" || word === "UTF8") this.#unicode = true;
+      if (word === "UTF" || word === "UTF8") {
+        if (this.#neverUtf) {
+          throw new RegexParseError(
+            "using UTF is disabled by the application",
+            this.#position,
+          );
+        }
+
+        this.#unicode = true;
+      }
 
       options.push({type: "startOption", name: word, value: value});
     }
