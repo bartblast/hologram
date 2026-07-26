@@ -281,6 +281,85 @@ const Erlang_Re = {
   // End compile/2
   // Deps: [:erlang.iolist_to_binary/1, :erlang.make_ref/0]
 
+  // Start import/1
+  "import/1": (exportedPattern) => {
+    const raiseNotExported = () => {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not an exported regular expression",
+        ),
+      );
+    };
+
+    const hasMagicPrefix = (binary, magic) => {
+      if (!Type.isBinary(binary)) return false;
+
+      Bitstring.maybeSetBytesFromText(binary);
+
+      if (binary.bytes.length < magic.length) return false;
+
+      return magic.every((byte, index) => binary.bytes[index] === byte);
+    };
+
+    if (
+      !Type.isTuple(exportedPattern) ||
+      exportedPattern.data.length !== 5 ||
+      !Interpreter.isStrictlyEqual(
+        exportedPattern.data[0],
+        Type.atom("re_exported_pattern"),
+      )
+    ) {
+      raiseNotExported();
+    }
+
+    const [_tag, header, source, options, code] = exportedPattern.data;
+
+    // The header and code blobs carry PCRE2-native serialization the client
+    // can't execute - the pattern is recompiled from source and options
+    // instead, so blob validation is limited to the serialization magic
+    // bytes ("re-PCRE2" and "S2RP") and the header size.
+    if (
+      !hasMagicPrefix(
+        header,
+        [..."re-PCRE2"].map((c) => c.charCodeAt(0)),
+      ) ||
+      header.bytes.length < 14 ||
+      !hasMagicPrefix(
+        code,
+        [..."S2RP"].map((c) => c.charCodeAt(0)),
+      )
+    ) {
+      raiseNotExported();
+    }
+
+    if (!Type.isProperList(options)) raiseNotExported();
+
+    const compileOptions = Type.list(
+      options.data.filter(
+        (option) => !(Type.isAtom(option) && option.value === "export"),
+      ),
+    );
+
+    let result;
+
+    try {
+      result = Erlang_Re["compile/2"](source, compileOptions);
+    } catch {
+      raiseNotExported();
+    }
+
+    // A compile error tuple can only come from a tampered source, since the
+    // exported source has already compiled successfully
+    if (!Interpreter.isStrictlyEqual(result.data[0], Type.atom("ok"))) {
+      raiseNotExported();
+    }
+
+    return result.data[1];
+  },
+  // End import/1
+  // Deps: [:re.compile/2]
+
   // Start version/0
   "version/0": () => {
     // TODO: Replace hardcoded PCRE version with version captured from system at runtime

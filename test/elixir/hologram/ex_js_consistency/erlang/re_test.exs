@@ -10,7 +10,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
   @moduletag :consistency
 
   defp assert_ok_result(result, capture_count, unicode_flag, use_crlf) do
-    assert {:ok, {:re_pattern, ^capture_count, ^unicode_flag, ^use_crlf, _code}} = result
+    assert {:ok, re_pattern} = result
+    assert_re_pattern(re_pattern, capture_count, unicode_flag, use_crlf)
+  end
+
+  defp assert_re_pattern(re_pattern, capture_count, unicode_flag, use_crlf) do
+    assert {:re_pattern, ^capture_count, ^unicode_flag, ^use_crlf, _code} = re_pattern
   end
 
   # The client runtime targets PCRE2 semantics, available on the server since OTP 28
@@ -274,6 +279,85 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
         """
 
         assert_error ArgumentError, expected_msg, fn -> :re.compile(:abc, [:bad]) end
+      end
+    end
+  end
+
+  # :re.import/1 is available since OTP 28.1. Feature detection instead of a
+  # version check, because System.otp_release/0 returns only the major version,
+  # and reading the minor version from the OTP_VERSION release file is more
+  # brittle. Code.ensure_loaded?/1 is required, because this runs at compile
+  # time, when :re may not be loaded yet, and function_exported?/3 returns
+  # false for unloaded modules.
+  if Code.ensure_loaded?(:re) and function_exported?(:re, :import, 1) do
+    describe "import/1" do
+      test "imports an exported pattern" do
+        {:ok, exported} = :re.compile("(a)b", [:export, :caseless])
+
+        assert_re_pattern(:re.import(exported), 1, 0, 0)
+      end
+
+      test "sets the unicode flag from the exported options" do
+        {:ok, exported} = :re.compile("(a)é", [:export, :unicode])
+
+        assert_re_pattern(:re.import(exported), 1, 1, 0)
+      end
+
+      test "sets the use_crlf flag from the exported options" do
+        {:ok, exported} = :re.compile("a", [:export, {:newline, :crlf}])
+
+        assert_re_pattern(:re.import(exported), 0, 0, 1)
+      end
+
+      test "raises ArgumentError on non-tuple term" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an exported regular expression"),
+                     fn -> :re.import(:foo) end
+      end
+
+      test "raises ArgumentError on wrong tuple tag" do
+        {:ok, exported} = :re.compile("ab", [:export])
+        tampered = :erlang.setelement(1, exported, :bad)
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an exported regular expression"),
+                     fn -> :re.import(tampered) end
+      end
+
+      test "raises ArgumentError on wrong tuple size" do
+        {:ok, exported} = :re.compile("ab", [:export])
+        truncated = :erlang.delete_element(5, exported)
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an exported regular expression"),
+                     fn -> :re.import(truncated) end
+      end
+
+      test "raises ArgumentError on tampered header magic" do
+        {:ok, exported} = :re.compile("ab", [:export])
+        tampered = :erlang.setelement(2, exported, <<"XX-PCRE2", 0, 0, 0, 0, 0, 0>>)
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an exported regular expression"),
+                     fn -> :re.import(tampered) end
+      end
+
+      test "raises ArgumentError on truncated header" do
+        {:ok, exported} = :re.compile("ab", [:export])
+        tampered = :erlang.setelement(2, exported, "re-PCRE2")
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an exported regular expression"),
+                     fn -> :re.import(tampered) end
+      end
+
+      test "raises ArgumentError on tampered code blob" do
+        {:ok, exported} = :re.compile("ab", [:export])
+        tampered = :erlang.setelement(5, exported, <<1, 2, 3>>)
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not an exported regular expression"),
+                     fn -> :re.import(tampered) end
       end
     end
   end

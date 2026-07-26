@@ -34,8 +34,11 @@ const assertOkResult = (result, captureCount, unicodeFlag, useCrlf) => {
   assert.equal(result.data.length, 2);
   assert.deepEqual(result.data[0], Type.atom("ok"));
 
-  const rePattern = result.data[1];
+  return assertRePattern(result.data[1], captureCount, unicodeFlag, useCrlf);
+};
 
+// Asserts a {:re_pattern, _, _, _, ref} tuple and returns the ref.
+const assertRePattern = (rePattern, captureCount, unicodeFlag, useCrlf) => {
   assert.isTrue(Type.isTuple(rePattern));
   assert.equal(rePattern.data.length, 5);
   assert.deepEqual(rePattern.data[0], Type.atom("re_pattern"));
@@ -498,6 +501,154 @@ describe("Erlang_Re", () => {
         () => compileWithOpts(Type.atom("abc"), [Type.atom("bad")]),
         "ArgumentError",
         "errors were found at the given arguments:\n\n  * 1st argument: not an iodata term\n  * 2nd argument: invalid options\n",
+      );
+    });
+  });
+
+  describe("import/1", () => {
+    const importPattern = Erlang_Re["import/1"];
+
+    // The client validates only the serialization magic bytes of the header
+    // and code blobs, so synthetic blobs stand in for PCRE2-native ones.
+    const header = Bitstring.fromBytes([
+      ...[..."re-PCRE2"].map((char) => char.charCodeAt(0)),
+      207,
+      31,
+      115,
+      169,
+      1,
+      0,
+    ]);
+
+    const code = Bitstring.fromBytes([
+      ...[..."S2RP"].map((char) => char.charCodeAt(0)),
+      1,
+      2,
+      3,
+    ]);
+
+    const buildExported = (source, opts) =>
+      Type.tuple([
+        Type.atom("re_exported_pattern"),
+        header,
+        Type.bitstring(source),
+        Type.list(opts),
+        code,
+      ]);
+
+    it("imports an exported pattern", () => {
+      const result = importPattern(
+        buildExported("(a)b", [Type.atom("export"), Type.atom("caseless")]),
+      );
+
+      assertRePattern(result, 1, 0, 0);
+    });
+
+    it("sets the unicode flag from the exported options", () => {
+      const result = importPattern(
+        buildExported("(a)é", [Type.atom("export"), Type.atom("unicode")]),
+      );
+
+      assertRePattern(result, 1, 1, 0);
+    });
+
+    it("sets the use_crlf flag from the exported options", () => {
+      const result = importPattern(
+        buildExported("a", [
+          Type.atom("export"),
+          Type.tuple([Type.atom("newline"), Type.atom("crlf")]),
+        ]),
+      );
+
+      assertRePattern(result, 0, 0, 1);
+    });
+
+    it("raises ArgumentError on non-tuple term", () => {
+      assertBoxedError(
+        () => importPattern(Type.atom("foo")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not an exported regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on wrong tuple tag", () => {
+      const exported = buildExported("ab", [Type.atom("export")]);
+      exported.data[0] = Type.atom("bad");
+
+      assertBoxedError(
+        () => importPattern(exported),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not an exported regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on wrong tuple size", () => {
+      const exported = buildExported("ab", [Type.atom("export")]);
+      const truncated = Type.tuple(exported.data.slice(0, 4));
+
+      assertBoxedError(
+        () => importPattern(truncated),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not an exported regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on tampered header magic", () => {
+      const exported = buildExported("ab", [Type.atom("export")]);
+      exported.data[1] = Bitstring.fromBytes([
+        ...[..."XX-PCRE2"].map((char) => char.charCodeAt(0)),
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+      ]);
+
+      assertBoxedError(
+        () => importPattern(exported),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not an exported regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on truncated header", () => {
+      const exported = buildExported("ab", [Type.atom("export")]);
+      exported.data[1] = Type.bitstring("re-PCRE2");
+
+      assertBoxedError(
+        () => importPattern(exported),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not an exported regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on tampered code blob", () => {
+      const exported = buildExported("ab", [Type.atom("export")]);
+      exported.data[4] = Bitstring.fromBytes([1, 2, 3]);
+
+      assertBoxedError(
+        () => importPattern(exported),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not an exported regular expression",
+        ),
       );
     });
   });
