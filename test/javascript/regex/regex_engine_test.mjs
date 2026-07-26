@@ -6,7 +6,6 @@ import {
 } from "../support/helpers.mjs";
 
 import RegexEngine from "../../../assets/js/regex/regex_engine.mjs";
-import RegexParseError from "../../../assets/js/regex/regex_parse_error.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -14,6 +13,12 @@ const match = (source, subject, opts = {}, runOpts = {}) =>
   RegexEngine.match(RegexEngine.compile(source, opts), subject, runOpts);
 
 describe("RegexEngine", () => {
+  describe("byteOffsetToUtf16Index()", () => {
+    it("converts a byte offset to a JS string index", () => {
+      assert.equal(RegexEngine.byteOffsetToUtf16Index("aé", 3), 2);
+    });
+  });
+
   describe("compile()", () => {
     it("routes translatable pattern to the native engine", () => {
       const compiled = RegexEngine.compile("a+b");
@@ -29,8 +34,10 @@ describe("RegexEngine", () => {
       assert.isNull(compiled.regexp);
     });
 
-    it("raises RegexParseError on invalid pattern", () => {
-      assert.throws(() => RegexEngine.compile("a{2,1}"), RegexParseError);
+    it("returns the parse error as data on invalid pattern", () => {
+      assert.deepEqual(RegexEngine.compile("a{2,1}"), {
+        error: {message: "numbers out of order in {} quantifier", position: 5},
+      });
     });
   });
 
@@ -113,6 +120,12 @@ describe("RegexEngine", () => {
         end: 3,
         captures: [null],
       });
+    });
+  });
+
+  describe("utf16IndexToByteOffset()", () => {
+    it("converts a JS string index to a byte offset", () => {
+      assert.equal(RegexEngine.utf16IndexToByteOffset("aé", 2), 3);
     });
   });
 });
