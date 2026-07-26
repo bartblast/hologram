@@ -9,17 +9,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
   @moduletag :consistency
 
-  defp assert_ok_result(result, capture_count, unicode_flag, use_crlf) do
-    assert {:ok, re_pattern} = result
-    assert_re_pattern(re_pattern, capture_count, unicode_flag, use_crlf)
-  end
-
-  defp assert_re_pattern(re_pattern, capture_count, unicode_flag, use_crlf) do
-    assert {:re_pattern, ^capture_count, ^unicode_flag, ^use_crlf, _code} = re_pattern
-  end
-
   # The client runtime targets PCRE2 semantics, available on the server since OTP 28
   if String.to_integer(System.otp_release()) >= 28 do
+    defp assert_ok_result(result, capture_count, unicode_flag, use_crlf) do
+      assert {:ok, re_pattern} = result
+      assert_re_pattern(re_pattern, capture_count, unicode_flag, use_crlf)
+    end
+
+    defp assert_re_pattern(re_pattern, capture_count, unicode_flag, use_crlf) do
+      assert {:re_pattern, ^capture_count, ^unicode_flag, ^use_crlf, _code} = re_pattern
+    end
+
     describe "compile/1" do
       test "compiles a pattern with default options" do
         assert_ok_result(:re.compile("(a)b"), 1, 0, 0)
