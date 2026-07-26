@@ -91,12 +91,12 @@ export default class RegexInterpreter {
     const startPosition = opts.startPosition ?? 0;
 
     const state = {
-      bsrAnycrlf: effectiveOpts.bsrAnycrlf === true,
+      bsrAnycrlf: effectiveOpts.bsr_anycrlf === true,
       callStack: [],
       captures: [],
       caseless: effectiveOpts.caseless === true,
       depth: 0,
-      dollarEndonly: effectiveOpts.dollarEndonly === true,
+      dollarEndonly: effectiveOpts.dollar_endonly === true,
       dotall: effectiveOpts.dotall === true,
       groupNames: groupMap.names,
       marks: [],
@@ -1159,9 +1159,9 @@ export default class RegexInterpreter {
       if (NEWLINE_VERBS[item.name] !== undefined) {
         effectiveOpts.newline = NEWLINE_VERBS[item.name];
       } else if (item.name === "BSR_ANYCRLF") {
-        effectiveOpts.bsrAnycrlf = true;
+        effectiveOpts.bsr_anycrlf = true;
       } else if (item.name === "BSR_UNICODE") {
-        effectiveOpts.bsrAnycrlf = false;
+        effectiveOpts.bsr_anycrlf = false;
       } else if (item.name === "LIMIT_DEPTH") {
         // Limit verbs cap the limits, they can't raise them
         effectiveOpts.matchLimitRecursion = Math.min(

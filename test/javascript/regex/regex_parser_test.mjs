@@ -2398,9 +2398,9 @@ describe("RegexParser", () => {
         );
       });
 
-      it("makes plain groups non-capturing with noAutoCapture option", () => {
+      it("makes plain groups non-capturing with no_auto_capture option", () => {
         assert.deepEqual(
-          RegexParser.parse("(?<x>a)(b)", {noAutoCapture: true}),
+          RegexParser.parse("(?<x>a)(b)", {no_auto_capture: true}),
           {
             type: "concatenation",
             items: [
@@ -3278,7 +3278,7 @@ describe("RegexParser", () => {
           "(*UTF)a",
           "using UTF is disabled by the application",
           6,
-          {neverUtf: true},
+          {never_utf: true},
         );
       });
 
@@ -3287,7 +3287,7 @@ describe("RegexParser", () => {
           "(*UTF8)a",
           "using UTF is disabled by the application",
           7,
-          {neverUtf: true},
+          {never_utf: true},
         );
       });
 
@@ -3296,7 +3296,7 @@ describe("RegexParser", () => {
           "(*CRLF)(*UTF)a",
           "using UTF is disabled by the application",
           13,
-          {neverUtf: true},
+          {never_utf: true},
         );
       });
     });

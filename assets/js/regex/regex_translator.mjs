@@ -53,7 +53,7 @@ const NEWLINE_VARIANTS = {
 };
 
 // Start-of-pattern verbs that select a newline convention.
-const NEWLINE_VERBS = {
+export const NEWLINE_VERBS = {
   ANY: "any",
   ANYCRLF: "anycrlf",
   CR: "cr",
@@ -71,9 +71,9 @@ export default class RegexTranslator {
     const effectiveOpts = $.#mergeStartOptions(ast, opts);
 
     const context = {
-      bsrAnycrlf: effectiveOpts.bsrAnycrlf === true,
+      bsrAnycrlf: effectiveOpts.bsr_anycrlf === true,
       caseless: effectiveOpts.caseless === true,
-      dollarEndonly: effectiveOpts.dollarEndonly === true,
+      dollarEndonly: effectiveOpts.dollar_endonly === true,
       dotall: effectiveOpts.dotall === true,
       maxCodePoint: effectiveOpts.unicode === true ? 0x10ffff : 0xff,
       multiline: effectiveOpts.multiline === true,
@@ -178,9 +178,9 @@ export default class RegexTranslator {
       if (NEWLINE_VERBS[item.name] !== undefined) {
         effectiveOpts.newline = NEWLINE_VERBS[item.name];
       } else if (item.name === "BSR_ANYCRLF") {
-        effectiveOpts.bsrAnycrlf = true;
+        effectiveOpts.bsr_anycrlf = true;
       } else if (item.name === "BSR_UNICODE") {
-        effectiveOpts.bsrAnycrlf = false;
+        effectiveOpts.bsr_anycrlf = false;
       } else if (item.name === "UTF" || item.name === "UTF8") {
         effectiveOpts.unicode = true;
       }

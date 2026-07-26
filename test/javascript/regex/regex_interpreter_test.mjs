@@ -57,7 +57,7 @@ describe("RegexInterpreter", () => {
       });
 
       it("anchors $ to the subject end with dollar_endonly", () => {
-        assert.isNull(match("a$", "a\n", {dollarEndonly: true}));
+        assert.isNull(match("a$", "a\n", {dollar_endonly: true}));
       });
 
       it("matches multiline ^ after a newline", () => {
@@ -529,7 +529,7 @@ describe("RegexInterpreter", () => {
       });
 
       it("excludes vertical tab from \\R with bsr_anycrlf", () => {
-        assert.isNull(match("\\R", "\x0b", {bsrAnycrlf: true}));
+        assert.isNull(match("\\R", "\x0b", {bsr_anycrlf: true}));
       });
 
       it("matches vertical tab with \\R by default", () => {

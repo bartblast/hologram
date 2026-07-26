@@ -61,9 +61,125 @@ describe("RegexEngine", () => {
       assert.isNull(compiled.regexp);
     });
 
+    it("defaults the newline type to lf", () => {
+      assert.equal(RegexEngine.compile("ab").newlineType, "lf");
+    });
+
+    it("takes the newline type from the newline option", () => {
+      assert.equal(
+        RegexEngine.compile("ab", {newline: "crlf"}).newlineType,
+        "crlf",
+      );
+    });
+
+    it("newline verb beats the newline option", () => {
+      assert.equal(
+        RegexEngine.compile("(*LF)ab", {newline: "crlf"}).newlineType,
+        "lf",
+      );
+    });
+
+    it("last newline verb wins", () => {
+      assert.equal(RegexEngine.compile("(*CRLF)(*LF)ab").newlineType, "lf");
+    });
+
     it("returns the parse error as data on invalid pattern", () => {
       assert.deepEqual(RegexEngine.compile("a{2,1}"), {
         error: {message: "numbers out of order in {} quantifier", position: 5},
+      });
+    });
+  });
+
+  describe("compileBytes()", () => {
+    // (*UTF)é: ASCII verb bytes followed by the 2-byte UTF-8 encoding of é
+    const utfVerbBytes = [0x28, 0x2a, 0x55, 0x54, 0x46, 0x29];
+
+    it("expands bytes as latin-1 without the unicode option", () => {
+      const compiled = RegexEngine.compileBytes(
+        new Uint8Array([0x61, 0xe9]),
+        {},
+      );
+
+      assert.equal(compiled.source, "aé");
+      assert.isUndefined(compiled.opts.unicode);
+    });
+
+    it("decodes bytes as UTF-8 with the unicode option", () => {
+      const compiled = RegexEngine.compileBytes(new Uint8Array([0xc3, 0xa9]), {
+        unicode: true,
+      });
+
+      assert.equal(compiled.source, "é");
+      assert.isTrue(compiled.opts.unicode);
+    });
+
+    it("switches to UTF-8 with a UTF start option verb", () => {
+      const compiled = RegexEngine.compileBytes(
+        new Uint8Array([...utfVerbBytes, 0xc3, 0xa9]),
+        {},
+      );
+
+      assert.equal(compiled.source, "(*UTF)é");
+      assert.isTrue(compiled.opts.unicode);
+    });
+
+    it("keeps latin-1 with a UTF start option verb when UTF is disabled", () => {
+      const result = RegexEngine.compileBytes(
+        new Uint8Array([...utfVerbBytes, 0x61]),
+        {never_utf: true},
+      );
+
+      assert.deepEqual(result, {
+        error: {
+          message: "using UTF is disabled by the application",
+          position: 6,
+        },
+      });
+    });
+
+    it("returns a UTF-8 error with byte position in unicode mode", () => {
+      const result = RegexEngine.compileBytes(new Uint8Array([0x61, 0xff]), {
+        unicode: true,
+      });
+
+      assert.deepEqual(result, {
+        error: {
+          message: "UTF-8 error: illegal byte (0xfe or 0xff)",
+          position: 1,
+        },
+      });
+    });
+
+    it("returns a UTF-8 error from the UTF start option verb switch", () => {
+      const result = RegexEngine.compileBytes(
+        new Uint8Array([...utfVerbBytes, 0xff]),
+        {},
+      );
+
+      assert.deepEqual(result, {
+        error: {
+          message: "UTF-8 error: illegal byte (0xfe or 0xff)",
+          position: 6,
+        },
+      });
+    });
+
+    it("converts parse error positions to byte offsets in unicode mode", () => {
+      const result = RegexEngine.compileBytes(
+        new Uint8Array([0xc3, 0xa9, 0x28]),
+        {unicode: true},
+      );
+
+      assert.deepEqual(result, {
+        error: {message: "missing closing parenthesis", position: 3},
+      });
+    });
+
+    it("keeps parse error positions as byte offsets in latin-1 mode", () => {
+      const result = RegexEngine.compileBytes(new Uint8Array([0xe9, 0x28]), {});
+
+      assert.deepEqual(result, {
+        error: {message: "missing closing parenthesis", position: 2},
       });
     });
   });

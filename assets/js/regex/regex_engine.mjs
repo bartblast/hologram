@@ -4,7 +4,7 @@ import RegexAnalyzer from "./regex_analyzer.mjs";
 import RegexInterpreter from "./regex_interpreter.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {START_OPTION_VERBS} from "./regex_parser.mjs";
-import RegexTranslator from "./regex_translator.mjs";
+import RegexTranslator, {NEWLINE_VERBS} from "./regex_translator.mjs";
 
 // Facade over the regex machinery: compiles PCRE2 patterns into matchable
 // entries and matches them against JS strings, hiding the native/interpreted
@@ -40,6 +40,48 @@ export default class RegexEngine {
 
       throw error;
     }
+  }
+
+  // Compiles a PCRE2 pattern from its bytes: UTF-8 when opts.unicode is set
+  // and latin-1 otherwise, switching to UTF-8 when the pattern enables UTF
+  // mode with a start option verb - unless UTF is disabled, then parsing
+  // raises the disabled error at the verb. Error positions are byte offsets.
+  static compileBytes(bytes, opts) {
+    let effectiveOpts = opts;
+    let source;
+
+    if (opts.unicode === true) {
+      const decoded = $.decodeUtf8(bytes);
+
+      if (decoded.error) return decoded;
+
+      source = decoded.text;
+    } else {
+      source = $.#textFromLatin1Bytes(bytes);
+
+      if (opts.never_utf !== true && $.hasUtfStartOption(source)) {
+        const decoded = $.decodeUtf8(bytes);
+
+        if (decoded.error) return decoded;
+
+        source = decoded.text;
+        effectiveOpts = {...opts, unicode: true};
+      }
+    }
+
+    const compiled = $.compile(source, effectiveOpts);
+
+    // In latin-1 source the JS string indices are byte offsets already
+    if (compiled.error && effectiveOpts.unicode === true) {
+      return {
+        error: {
+          message: compiled.error.message,
+          position: $.utf16IndexToByteOffset(source, compiled.error.position),
+        },
+      };
+    }
+
+    return compiled;
   }
 
   // Decodes UTF-8 bytes to a JS string, validating with PCRE2 semantics.
@@ -290,6 +332,7 @@ export default class RegexEngine {
       ast: ast,
       groupMap: groupMap,
       groupMapping: null,
+      newlineType: $.#effectiveNewlineType(ast, opts),
       opts: opts,
       regexp: null,
       source: source,
@@ -306,6 +349,37 @@ export default class RegexEngine {
     }
 
     return compiled;
+  }
+
+  // A newline convention verb in the pattern beats the newline option,
+  // and the last verb wins.
+  static #effectiveNewlineType(ast, opts) {
+    let newlineType = opts.newline ?? "lf";
+
+    if (ast.type === "concatenation") {
+      for (const item of ast.items) {
+        if (item.type !== "startOption") break;
+
+        const verbNewlineType = NEWLINE_VERBS[item.name];
+
+        if (verbNewlineType !== undefined) newlineType = verbNewlineType;
+      }
+    }
+
+    return newlineType;
+  }
+
+  // Maps every byte to one JS char, so JS string indices are byte offsets
+  // and matching is byte-faithful even for non-UTF-8 binaries.
+  static #textFromLatin1Bytes(bytes) {
+    let text = "";
+
+    // Chunked to stay within the argument count limit of fromCharCode()
+    for (let start = 0; start < bytes.length; start += 4096) {
+      text += String.fromCharCode(...bytes.subarray(start, start + 4096));
+    }
+
+    return text;
   }
 
   static #utf8Error(detail, position) {

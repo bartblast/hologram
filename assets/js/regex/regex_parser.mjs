@@ -204,8 +204,8 @@ export default class RegexParser {
   constructor(source, opts = {}) {
     this.#dupnames = opts.dupnames === true;
     this.#extended = opts.extended === true;
-    this.#neverUtf = opts.neverUtf === true;
-    this.#noAutoCapture = opts.noAutoCapture === true;
+    this.#neverUtf = opts.never_utf === true;
+    this.#noAutoCapture = opts.no_auto_capture === true;
     this.#source = source;
     this.#unicode = opts.unicode === true;
   }

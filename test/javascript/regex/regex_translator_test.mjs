@@ -41,7 +41,7 @@ describe("RegexTranslator", () => {
       });
 
       it("translates $ with dollar_endonly", () => {
-        assert.deepEqual(translate("a$", {dollarEndonly: true}), {
+        assert.deepEqual(translate("a$", {dollar_endonly: true}), {
           source: "a$",
           flags: "",
         });
@@ -471,7 +471,7 @@ describe("RegexTranslator", () => {
       });
 
       it("restricts \\R with bsr_anycrlf", () => {
-        assert.deepEqual(translate("\\R", {bsrAnycrlf: true}), {
+        assert.deepEqual(translate("\\R", {bsr_anycrlf: true}), {
           source: "(?:\\r\\n|[\\r\\n])",
           flags: "",
         });
