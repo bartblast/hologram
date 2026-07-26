@@ -71,6 +71,7 @@ export default class RegexInterpreter {
       newline: effectiveOpts.newline ?? "lf",
       startOffset: startPosition,
       subject: subject,
+      subroutines: $.#buildSubroutineTable(ast),
       ungreedy: effectiveOpts.ungreedy === true,
       unicode: effectiveOpts.unicode === true,
     };
@@ -159,6 +160,17 @@ export default class RegexInterpreter {
     return next;
   }
 
+  // Builds the subroutine call table: group number → group node, with 0
+  // mapping to the whole pattern. The first definition wins for numbers
+  // repeated in branch reset groups.
+  static #buildSubroutineTable(ast) {
+    const table = new Map([[0, ast]]);
+
+    $.#collectSubroutines(ast, table);
+
+    return table;
+  }
+
   // Returns the case-mapped variants of a code point that differ from it.
   static #caseVariants(codePoint) {
     const char = String.fromCodePoint(codePoint);
@@ -242,6 +254,54 @@ export default class RegexInterpreter {
     }
 
     return false;
+  }
+
+  static #collectSubroutines(node, table) {
+    switch (node.type) {
+      case "alternation":
+        for (const branch of node.branches) {
+          $.#collectSubroutines(branch, table);
+        }
+        break;
+
+      case "atomicGroup":
+      case "branchResetGroup":
+      case "lookaround":
+      case "nonCapturingGroup":
+      case "optionGroup":
+      case "scriptRun":
+        $.#collectSubroutines(node.content, table);
+        break;
+
+      case "concatenation":
+        for (const item of node.items) {
+          $.#collectSubroutines(item, table);
+        }
+        break;
+
+      case "conditional":
+        if (node.condition.kind === "assertion") {
+          $.#collectSubroutines(node.condition.assertion, table);
+        }
+
+        $.#collectSubroutines(node.yes, table);
+
+        if (node.no !== null) $.#collectSubroutines(node.no, table);
+        break;
+
+      case "group":
+        if (!table.has(node.number)) table.set(node.number, node);
+
+        $.#collectSubroutines(node.content, table);
+        break;
+
+      case "quantifier":
+        $.#collectSubroutines(node.item, table);
+        break;
+
+      default:
+        break;
+    }
   }
 
   static #codePointLength(state, codePoint) {
@@ -631,6 +691,26 @@ export default class RegexInterpreter {
       // Start options are compile metadata and match nothing
       case "startOption":
         return continuation(position);
+
+      case "subroutine": {
+        const number = node.number ?? state.groupNames.get(node.name)[0];
+        const target = state.subroutines.get(number);
+        const savedCaptures = [...state.captures];
+
+        return $.#matchNode(target, state, position, (endPosition) => {
+          // Captures set inside a completed call are restored on exit
+          const callCaptures = [...state.captures];
+
+          state.captures.splice(0, state.captures.length, ...savedCaptures);
+
+          if (continuation(endPosition)) return true;
+
+          // Calls are not atomic: restore the call state to backtrack into it
+          state.captures.splice(0, state.captures.length, ...callCaptures);
+
+          return false;
+        });
+      }
 
       case "unicodeProperty": {
         const codePoint = $.#subjectCodePointAt(state, position);

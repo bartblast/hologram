@@ -462,6 +462,59 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("subroutine calls", () => {
+      it("matches the called group content", () => {
+        assert.deepEqual(match("(a)(?1)", "aa"), {start: 0, end: 2});
+      });
+
+      it("fails when the called content doesn't match", () => {
+        assert.isNull(match("(a)(?1)", "ab"));
+      });
+
+      it("restores captures on call exit", () => {
+        assert.deepEqual(matchFull("(a)(?1)", "aa"), {
+          start: 0,
+          end: 2,
+          captures: [null, {start: 0, end: 1}],
+        });
+      });
+
+      it("matches whole-pattern recursion", () => {
+        assert.deepEqual(match("a(?R)?", "aaa"), {start: 0, end: 3});
+      });
+
+      it("binds anchors to the subject inside recursion", () => {
+        assert.isNull(match("^a(?R)?$", "aa"));
+      });
+
+      it("matches anchored recursion base case", () => {
+        assert.deepEqual(match("^a(?R)?$", "a"), {start: 0, end: 1});
+      });
+
+      it("matches balanced parentheses recursively", () => {
+        assert.deepEqual(match("\\((?:[^()]|(?R))*\\)", "(a(b))"), {
+          start: 0,
+          end: 6,
+        });
+      });
+
+      it("matches named call", () => {
+        assert.deepEqual(match("(?<x>a)(?&x)", "aa"), {start: 0, end: 2});
+      });
+
+      it("backtracks into a call when the continuation fails", () => {
+        assert.deepEqual(match("(a|ab)(?1)c", "aabc"), {start: 0, end: 4});
+      });
+
+      it("references outer captures after a call", () => {
+        assert.deepEqual(matchFull("((a)|b)(?1)\\2", "aba"), {
+          start: 0,
+          end: 3,
+          captures: [null, {start: 0, end: 1}, {start: 0, end: 1}],
+        });
+      });
+    });
+
     describe("quantifiers", () => {
       it("matches greedily by default", () => {
         assert.deepEqual(match("a*", "aaa"), {start: 0, end: 3});
