@@ -133,7 +133,7 @@ const SHORTHAND_CLASS_LETTERS = new Set([..."DHSVWdhsvw"]);
 
 // Option verbs recognized at the start of a pattern.
 // The LIMIT_ verbs take an =number value.
-const START_OPTION_VERBS = new Set([
+export const START_OPTION_VERBS = new Set([
   "ANY",
   "ANYCRLF",
   "BSR_ANYCRLF",

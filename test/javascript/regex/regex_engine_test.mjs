@@ -238,6 +238,60 @@ describe("RegexEngine", () => {
     });
   });
 
+  describe("hasUtfStartOption()", () => {
+    it("returns true for UTF verb at pattern start", () => {
+      assert.isTrue(RegexEngine.hasUtfStartOption("(*UTF)a"));
+    });
+
+    it("returns true for UTF8 alias", () => {
+      assert.isTrue(RegexEngine.hasUtfStartOption("(*UTF8)a"));
+    });
+
+    it("returns true for UTF verb after other option verbs", () => {
+      assert.isTrue(RegexEngine.hasUtfStartOption("(*UCP)(*CRLF)(*UTF)a"));
+    });
+
+    it("returns true for UTF verb after limit verb with value", () => {
+      assert.isTrue(RegexEngine.hasUtfStartOption("(*LIMIT_MATCH=100)(*UTF)a"));
+    });
+
+    it("returns false without UTF verb", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("abc"));
+    });
+
+    it("returns false for other option verbs only", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("(*CRLF)a"));
+    });
+
+    it("returns false for UTF verb after backtracking verb", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("(*COMMIT)(*UTF)a"));
+    });
+
+    it("returns false for UTF verb after unknown verb", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("(*FOO)(*UTF)a"));
+    });
+
+    it("returns false for UTF verb not at pattern start", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("a(*UTF)"));
+    });
+
+    it("returns false for unterminated verb", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("(*UTF"));
+    });
+
+    it("returns false for UTF verb after limit verb without value", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("(*LIMIT_MATCH)(*UTF)a"));
+    });
+
+    it("returns false for UTF verb after option verb with unexpected value", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption("(*CRLF=5)(*UTF)a"));
+    });
+
+    it("returns false for empty source", () => {
+      assert.isFalse(RegexEngine.hasUtfStartOption(""));
+    });
+  });
+
   describe("match()", () => {
     it("matches on the native engine", () => {
       assert.deepEqual(match("b+c", "abbc"), {
