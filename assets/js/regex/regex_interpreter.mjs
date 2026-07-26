@@ -54,8 +54,8 @@ export default class RegexInterpreter {
   // continuation with the position after itself, and returning false makes
   // the caller backtrack to its next alternative.
   static match(ast, subject, opts = {}) {
-    const groupCount =
-      opts.groupCount ?? RegexAnalyzer.buildGroupMap(ast).count;
+    const groupMap = opts.groupMap ?? RegexAnalyzer.buildGroupMap(ast);
+    const groupCount = groupMap.count;
 
     const effectiveOpts = $.#mergeStartOptions(ast, opts);
     const startPosition = opts.startPosition ?? 0;
@@ -66,6 +66,7 @@ export default class RegexInterpreter {
       caseless: effectiveOpts.caseless === true,
       dollarEndonly: effectiveOpts.dollarEndonly === true,
       dotall: effectiveOpts.dotall === true,
+      groupNames: groupMap.names,
       multiline: effectiveOpts.multiline === true,
       newline: effectiveOpts.newline ?? "lf",
       startOffset: startPosition,
@@ -360,6 +361,29 @@ export default class RegexInterpreter {
     return false;
   }
 
+  // Matches the text of a capture at the given position, honoring caseless
+  // matching. Returns the end position, or null without a match.
+  static #matchCapturedText(state, capture, position) {
+    let capturePosition = capture.start;
+    let subjectPosition = position;
+
+    while (capturePosition < capture.end) {
+      const capturedCodePoint = $.#subjectCodePointAt(state, capturePosition);
+      const subjectCodePoint = $.#subjectCodePointAt(state, subjectPosition);
+
+      if (subjectCodePoint === null) return null;
+
+      if (!$.#codePointsEqual(capturedCodePoint, subjectCodePoint, state)) {
+        return null;
+      }
+
+      capturePosition += $.#codePointLength(state, capturedCodePoint);
+      subjectPosition += $.#codePointLength(state, subjectCodePoint);
+    }
+
+    return subjectPosition;
+  }
+
   // Matches a lookaround assertion. All lookarounds are zero-width: the
   // continuation runs at the original position. Atomic lookarounds lock the
   // first internal match in, non-atomic ones retry internal alternatives
@@ -441,6 +465,31 @@ export default class RegexInterpreter {
           state,
           continuation,
         );
+
+      case "backreference": {
+        const numbers =
+          node.number !== null
+            ? [node.number]
+            : (state.groupNames.get(node.name) ?? []);
+
+        // A reference by a duplicate name uses the first participating group
+        for (const number of numbers) {
+          const capture = state.captures[number];
+
+          if (capture === undefined || capture === null) continue;
+
+          const endPosition = $.#matchCapturedText(state, capture, position);
+
+          return endPosition === null ? false : continuation(endPosition);
+        }
+
+        // A reference to a group that didn't participate fails,
+        // unlike in JS, where it matches empty
+        return false;
+      }
+
+      case "branchResetGroup":
+        return $.#matchNode(node.content, state, position, continuation);
 
       case "class": {
         const codePoint = $.#subjectCodePointAt(state, position);

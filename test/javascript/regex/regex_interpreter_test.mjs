@@ -120,6 +120,54 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("backreferences", () => {
+      it("matches captured text", () => {
+        assert.deepEqual(match("(a)\\1", "aa"), {start: 0, end: 2});
+      });
+
+      it("fails when captured text differs", () => {
+        assert.isNull(match("(ab)\\1", "abac"));
+      });
+
+      it("fails on reference to non-participating group", () => {
+        assert.isNull(match("(a)?\\1", "b"));
+      });
+
+      it("matches reference to participating optional group", () => {
+        assert.deepEqual(match("(a)?\\1", "aa"), {start: 0, end: 2});
+      });
+
+      it("matches captured text caselessly", () => {
+        assert.deepEqual(match("(a)\\1", "aA", {caseless: true}), {
+          start: 0,
+          end: 2,
+        });
+      });
+
+      it("matches named reference", () => {
+        assert.deepEqual(match("(?<x>a)\\k<x>", "aa"), {start: 0, end: 2});
+      });
+
+      it("uses the first participating group for duplicate names", () => {
+        assert.deepEqual(
+          match("(?<x>a)(?<x>b)\\k<x>", "aba", {dupnames: true}),
+          {start: 0, end: 3},
+        );
+      });
+
+      it("sees captures from earlier quantifier iterations", () => {
+        assert.deepEqual(match("^(a|b\\1)+$", "aba"), {start: 0, end: 3});
+      });
+
+      it("fails through an atomic lookahead capture", () => {
+        assert.isNull(match("(?=(a|ab))\\1x", "abx"));
+      });
+
+      it("retries a non-atomic lookahead capture", () => {
+        assert.deepEqual(match("(?*(a|ab))\\1x", "abx"), {start: 0, end: 3});
+      });
+    });
+
     describe("captures", () => {
       it("captures sequential groups", () => {
         assert.deepEqual(matchFull("(a)(b)", "ab"), {
