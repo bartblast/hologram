@@ -8,6 +8,14 @@ import {
   SHORTHAND_SETS,
 } from "./regex_char_sets.mjs";
 
+// The PCRE2 version emulated by the (?(VERSION condition, matching the
+// version Erlang/OTP ships.
+const EMULATED_PCRE2_VERSION = {major: 10, minor: 47};
+
+// How far a lookbehind scans back for its content start: parsing limits
+// lookbehind branches to 255 chars, each at most 2 UTF-16 units.
+const LOOKBEHIND_MAX_UNITS = 510;
+
 // Newline conventions with a two-char CR LF sequence.
 const NEWLINE_PAIR_CONVENTIONS = new Set(["any", "anycrlf", "crlf"]);
 
@@ -21,6 +29,12 @@ const NEWLINE_SINGLES = {
   nul: [0x00],
 };
 
+// Single chars matched by \R, by bsr mode.
+const NEWLINE_SEQUENCE_SINGLES = {
+  anycrlf: [0x0a, 0x0d],
+  unicode: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
+};
+
 // Start-of-pattern verbs that select a newline convention.
 const NEWLINE_VERBS = {
   ANY: "any",
@@ -30,16 +44,6 @@ const NEWLINE_VERBS = {
   LF: "lf",
   NUL: "nul",
 };
-
-// Single chars matched by \R, by bsr mode.
-const NEWLINE_SEQUENCE_SINGLES = {
-  anycrlf: [0x0a, 0x0d],
-  unicode: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
-};
-
-// How far a lookbehind scans back for its content start: parsing limits
-// lookbehind branches to 255 chars, each at most 2 UTF-16 units.
-const LOOKBEHIND_MAX_UNITS = 510;
 
 // Cache of Unicode property name → predicate over a code point.
 const propertyMatchers = new Map();
@@ -62,6 +66,7 @@ export default class RegexInterpreter {
 
     const state = {
       bsrAnycrlf: effectiveOpts.bsrAnycrlf === true,
+      callStack: [],
       captures: [],
       caseless: effectiveOpts.caseless === true,
       dollarEndonly: effectiveOpts.dollarEndonly === true,
@@ -256,6 +261,21 @@ export default class RegexInterpreter {
     return false;
   }
 
+  static #codePointLength(state, codePoint) {
+    return state.unicode && codePoint > 0xffff ? 2 : 1;
+  }
+
+  static #codePointsEqual(expected, actual, state) {
+    if (expected === actual) return true;
+
+    if (!state.caseless) return false;
+
+    return (
+      String.fromCodePoint(expected).toLowerCase() ===
+      String.fromCodePoint(actual).toLowerCase()
+    );
+  }
+
   static #collectSubroutines(node, table) {
     switch (node.type) {
       case "alternation":
@@ -304,19 +324,63 @@ export default class RegexInterpreter {
     }
   }
 
-  static #codePointLength(state, codePoint) {
-    return state.unicode && codePoint > 0xffff ? 2 : 1;
-  }
+  // Evaluates a conditional's condition at the given position.
+  static #conditionHolds(condition, state, position) {
+    switch (condition.kind) {
+      case "assertion":
+        return $.#matchNode(condition.assertion, state, position, () => true);
 
-  static #codePointsEqual(expected, actual, state) {
-    if (expected === actual) return true;
+      // A DEFINE condition is never true, its content is only callable
+      case "define":
+        return false;
 
-    if (!state.caseless) return false;
+      case "group": {
+        const numbers =
+          condition.number !== null
+            ? [condition.number]
+            : (state.groupNames.get(condition.name) ?? []);
 
-    return (
-      String.fromCodePoint(expected).toLowerCase() ===
-      String.fromCodePoint(actual).toLowerCase()
-    );
+        return numbers.some(
+          (number) =>
+            state.captures[number] !== undefined &&
+            state.captures[number] !== null,
+        );
+      }
+
+      case "recursion": {
+        if (condition.number === null && condition.name === null) {
+          return state.callStack.length > 0;
+        }
+
+        const currentCall = state.callStack.at(-1);
+
+        if (condition.number !== null) {
+          return currentCall === condition.number;
+        }
+
+        return (state.groupNames.get(condition.name) ?? []).includes(
+          currentCall,
+        );
+      }
+
+      case "version": {
+        const {major, minor} = EMULATED_PCRE2_VERSION;
+
+        if (condition.gte) {
+          return (
+            major > condition.major ||
+            (major === condition.major && minor >= condition.minor)
+          );
+        }
+
+        return major === condition.major && minor === condition.minor;
+      }
+
+      default:
+        throw new Error(
+          `unsupported condition for interpretation: ${condition.kind}`,
+        );
+    }
   }
 
   // Returns true at the subject end, or right before a newline sequence that
@@ -566,6 +630,25 @@ export default class RegexInterpreter {
       case "concatenation":
         return $.#matchSequence(node.items, 0, state, position, continuation);
 
+      case "conditional": {
+        const savedCaptures = [...state.captures];
+        const branch = $.#conditionHolds(node.condition, state, position)
+          ? node.yes
+          : node.no;
+
+        const matched =
+          branch === null
+            ? continuation(position)
+            : $.#matchNode(branch, state, position, continuation);
+
+        // Roll back captures set by an assertion condition on failure
+        if (!matched) {
+          state.captures.splice(0, state.captures.length, ...savedCaptures);
+        }
+
+        return matched;
+      }
+
       case "dot": {
         const codePoint = $.#subjectCodePointAt(state, position);
 
@@ -697,19 +780,28 @@ export default class RegexInterpreter {
         const target = state.subroutines.get(number);
         const savedCaptures = [...state.captures];
 
-        return $.#matchNode(target, state, position, (endPosition) => {
-          // Captures set inside a completed call are restored on exit
+        state.callStack.push(number);
+
+        const matched = $.#matchNode(target, state, position, (endPosition) => {
+          // Captures set inside a completed call are restored on exit,
+          // and the call is no longer active during the continuation
           const callCaptures = [...state.captures];
 
           state.captures.splice(0, state.captures.length, ...savedCaptures);
+          state.callStack.pop();
 
           if (continuation(endPosition)) return true;
 
           // Calls are not atomic: restore the call state to backtrack into it
           state.captures.splice(0, state.captures.length, ...callCaptures);
+          state.callStack.push(number);
 
           return false;
         });
+
+        if (!matched) state.callStack.pop();
+
+        return matched;
       }
 
       case "unicodeProperty": {

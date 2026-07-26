@@ -259,6 +259,61 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("conditionals", () => {
+      it("takes the yes branch when the group participated", () => {
+        assert.deepEqual(match("(a)?(?(1)b|c)", "ab"), {start: 0, end: 2});
+      });
+
+      it("takes the no branch when the group didn't participate", () => {
+        assert.deepEqual(match("(a)?(?(1)b|c)", "c"), {start: 0, end: 1});
+      });
+
+      it("matches empty without a no branch", () => {
+        assert.deepEqual(match("(a)?(?(1)b)", "x"), {start: 0, end: 0});
+      });
+
+      it("evaluates named group condition", () => {
+        assert.deepEqual(match("(?<x>a)?(?(<x>)b|c)", "ab"), {
+          start: 0,
+          end: 2,
+        });
+      });
+
+      it("evaluates whole-pattern recursion condition", () => {
+        assert.deepEqual(match("(?(R)a|b(?R))", "ba"), {start: 0, end: 2});
+      });
+
+      it("evaluates numbered recursion condition", () => {
+        assert.deepEqual(match("^(a(?(R1)b|c))(?1)$", "acab"), {
+          start: 0,
+          end: 4,
+        });
+      });
+
+      it("never takes the DEFINE branch directly", () => {
+        assert.deepEqual(match("(?(DEFINE)(?<x>a))(?&x)", "a"), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("evaluates assertion condition", () => {
+        assert.deepEqual(match("(?(?=a)ab|cd)", "ab"), {start: 0, end: 2});
+      });
+
+      it("takes the no branch when the assertion fails", () => {
+        assert.deepEqual(match("(?(?=a)ab|cd)", "cd"), {start: 0, end: 2});
+      });
+
+      it("evaluates version condition", () => {
+        assert.deepEqual(match("(?(VERSION>=10)a|b)", "a"), {start: 0, end: 1});
+      });
+
+      it("fails version condition beyond the emulated version", () => {
+        assert.deepEqual(match("(?(VERSION>=99)a|b)", "b"), {start: 0, end: 1});
+      });
+    });
+
     describe("escape sets", () => {
       it("matches digits with \\d", () => {
         assert.deepEqual(match("\\d+", "ab12"), {start: 2, end: 4});
