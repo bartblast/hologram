@@ -35,6 +35,26 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("anchored matching", () => {
+      it("matches at the start position", () => {
+        assert.deepEqual(match("a", "ab", {anchored: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("attempts only the start position", () => {
+        assert.isNull(match("b", "ab", {anchored: true}));
+      });
+
+      it("honors a non-zero start position", () => {
+        assert.deepEqual(match("b", "ab", {anchored: true, startPosition: 1}), {
+          start: 1,
+          end: 2,
+        });
+      });
+    });
+
     describe("anchors", () => {
       it("anchors ^ to the subject start by default", () => {
         assert.isNull(match("^b", "ab"));

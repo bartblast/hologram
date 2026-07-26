@@ -170,6 +170,9 @@ export default class RegexInterpreter {
         };
       }
 
+      // Anchored matching attempts only the start position
+      if (opts.anchored === true) return null;
+
       if (skipTo !== null && skipTo > start) {
         start = skipTo;
       } else {

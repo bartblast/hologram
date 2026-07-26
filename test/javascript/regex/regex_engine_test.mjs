@@ -473,6 +473,48 @@ describe("RegexEngine", () => {
       });
     });
 
+    it("anchored matches at the start position on the native engine", () => {
+      assert.deepEqual(match("a", "ab", {}, {anchored: true}), {
+        start: 0,
+        end: 1,
+        captures: [null],
+      });
+    });
+
+    it("anchored matches at the start position on the interpreter", () => {
+      assert.deepEqual(match("a\\Kb", "ab", {}, {anchored: true}), {
+        start: 1,
+        end: 2,
+        captures: [null],
+      });
+    });
+
+    it("anchored returns null off the start position on the native engine", () => {
+      assert.isNull(match("b", "ab", {}, {anchored: true}));
+    });
+
+    it("anchored returns null off the start position on the interpreter", () => {
+      assert.isNull(match("b\\K", "ab", {}, {anchored: true}));
+    });
+
+    it("anchored honors the start position on the native engine", () => {
+      assert.deepEqual(
+        match("b", "ab", {}, {anchored: true, startPosition: 1}),
+        {
+          start: 1,
+          end: 2,
+          captures: [null],
+        },
+      );
+    });
+
+    it("anchored honors the start position on the interpreter", () => {
+      assert.deepEqual(
+        match("b\\K", "ab", {}, {anchored: true, startPosition: 1}),
+        {start: 2, end: 2, captures: [null]},
+      );
+    });
+
     it("scans from the start position on the native engine", () => {
       assert.deepEqual(match("a", "aba", {}, {startPosition: 1}), {
         start: 2,

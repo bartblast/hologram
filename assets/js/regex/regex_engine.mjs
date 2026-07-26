@@ -259,15 +259,19 @@ export default class RegexEngine {
   }
 
   // Matches a compiled entry against a subject string, scanning forward from
-  // the start position. Returns {start, end, captures} with PCRE2 group
-  // numbering, or null. Positions are JS string indices.
+  // the start position, or only at the start position when anchored.
+  // Returns {start, end, captures} with PCRE2 group numbering, or null.
+  // Positions are JS string indices.
   static match(compiled, subject, runOpts = {}) {
+    const anchored = runOpts.anchored === true;
     const startPosition = runOpts.startPosition ?? 0;
 
     if (compiled.strategy === "native") {
-      compiled.regexp.lastIndex = startPosition;
+      const regexp = anchored ? $.#stickyRegexp(compiled) : compiled.regexp;
 
-      const jsMatch = compiled.regexp.exec(subject);
+      regexp.lastIndex = startPosition;
+
+      const jsMatch = regexp.exec(subject);
 
       if (jsMatch === null) return null;
 
@@ -291,6 +295,7 @@ export default class RegexEngine {
 
     return RegexInterpreter.match(compiled.ast, subject, {
       ...compiled.opts,
+      anchored: anchored,
       groupMap: compiled.groupMap,
       startPosition: startPosition,
     });
@@ -335,6 +340,7 @@ export default class RegexEngine {
       newlineType: $.#effectiveNewlineType(ast, opts),
       opts: opts,
       regexp: null,
+      regexpSticky: null,
       source: source,
       strategy: strategy,
     };
@@ -367,6 +373,20 @@ export default class RegexEngine {
     }
 
     return newlineType;
+  }
+
+  // The y flag makes the match start exactly at lastIndex instead of
+  // scanning forward from it. Built lazily, as most patterns are never
+  // matched anchored.
+  static #stickyRegexp(compiled) {
+    if (compiled.regexpSticky === null) {
+      compiled.regexpSticky = new RegExp(
+        compiled.regexp.source,
+        compiled.regexp.flags.replace("g", "y"),
+      );
+    }
+
+    return compiled.regexpSticky;
   }
 
   // Maps every byte to one JS char, so JS string indices are byte offsets
