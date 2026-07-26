@@ -639,6 +639,34 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("grapheme clusters", () => {
+      it("matches a single char as one cluster", () => {
+        assert.deepEqual(match("\\X", "ab"), {start: 0, end: 1});
+      });
+
+      it("matches a CRLF pair as one cluster in byte mode", () => {
+        assert.deepEqual(match("^\\X$", "\r\n"), {start: 0, end: 2});
+      });
+
+      it("matches a combining sequence as one cluster", () => {
+        assert.deepEqual(match("^\\X$", "é", {unicode: true}), {
+          start: 0,
+          end: 2,
+        });
+      });
+
+      it("matches quantified clusters", () => {
+        assert.deepEqual(match("^\\X{2}$", "éx", {unicode: true}), {
+          start: 0,
+          end: 3,
+        });
+      });
+
+      it("does not match at the subject end", () => {
+        assert.isNull(match("a\\X", "a"));
+      });
+    });
+
     describe("groups and options", () => {
       it("matches quantified non-capturing group", () => {
         assert.deepEqual(match("(?:ab)+c", "ababc"), {start: 0, end: 5});

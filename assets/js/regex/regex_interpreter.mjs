@@ -1,5 +1,6 @@
 "use strict";
 
+import ERTS from "../erts.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
 
 import {
@@ -749,6 +750,22 @@ export default class RegexInterpreter {
         }
 
         return continuation(position + $.#codePointLength(state, codePoint));
+      }
+
+      // \X matches one extended grapheme cluster, in byte mode too,
+      // where a CRLF pair still forms a single cluster
+      case "graphemeCluster": {
+        if (position >= state.subject.length) return false;
+
+        if (state.graphemeSegments === undefined) {
+          state.graphemeSegments = ERTS.graphemeSegmenter.segment(
+            state.subject,
+          );
+        }
+
+        const segment = state.graphemeSegments.containing(position);
+
+        return continuation(segment.index + segment.segment.length);
       }
 
       case "group": {
