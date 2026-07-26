@@ -362,6 +362,62 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
     end
   end
 
+  if String.to_integer(System.otp_release()) >= 28 do
+    describe "inspect/2" do
+      test "returns an empty namelist without named groups" do
+        {:ok, compiled} = :re.compile("(a)(b)")
+
+        assert :re.inspect(compiled, :namelist) == {:namelist, []}
+      end
+
+      test "returns group names sorted by byte order" do
+        {:ok, compiled} = :re.compile("(?<zz>a)(?<aa>b)(?<mm>c)")
+
+        assert :re.inspect(compiled, :namelist) == {:namelist, ["aa", "mm", "zz"]}
+      end
+
+      test "deduplicates names with the dupnames option" do
+        {:ok, compiled} = :re.compile("(?<x>a)|(?<x>b)", [:dupnames])
+
+        assert :re.inspect(compiled, :namelist) == {:namelist, ["x"]}
+      end
+
+      test "returns unicode group names" do
+        {:ok, compiled} = :re.compile("(?<héé>a)", [:unicode])
+
+        assert :re.inspect(compiled, :namelist) == {:namelist, ["héé"]}
+      end
+
+      test "raises ArgumentError on non-tuple pattern" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not a compiled regular expression"),
+                     fn -> :re.inspect(:foo, :namelist) end
+      end
+
+      test "raises ArgumentError on unknown pattern reference" do
+        re_pattern = {:re_pattern, 0, 0, 0, make_ref()}
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not a compiled regular expression"),
+                     fn -> :re.inspect(re_pattern, :namelist) end
+      end
+
+      test "raises ArgumentError on invalid item" do
+        {:ok, compiled} = :re.compile("ab")
+
+        assert_error ArgumentError,
+                     build_argument_error_msg(2, "not a valid item"),
+                     fn -> :re.inspect(compiled, :foo) end
+      end
+
+      test "raises ArgumentError on bad pattern before bad item" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(1, "not a compiled regular expression"),
+                     fn -> :re.inspect(:foo, :bar) end
+      end
+    end
+  end
+
   describe "version/0" do
     test "returns supported PCRE version" do
       assert :re.version() =~ ~r/^\d+\.\d+ \d{4}-\d{2}-\d{2}$/

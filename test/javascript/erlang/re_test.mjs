@@ -7,6 +7,7 @@ import {
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
+import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Re from "../../../assets/js/erlang/re.mjs";
 import ERTS from "../../../assets/js/erts.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -648,6 +649,112 @@ describe("Erlang_Re", () => {
         Interpreter.buildArgumentErrorMsg(
           1,
           "not an exported regular expression",
+        ),
+      );
+    });
+  });
+
+  describe("inspect/2", () => {
+    const compile = Erlang_Re["compile/2"];
+    const inspect = Erlang_Re["inspect/2"];
+
+    const compilePattern = (source, opts = []) => {
+      const result = compile(Type.bitstring(source), Type.list(opts));
+      return result.data[1];
+    };
+
+    it("returns an empty namelist without named groups", () => {
+      const compiled = compilePattern("(a)(b)");
+
+      assert.deepEqual(
+        inspect(compiled, Type.atom("namelist")),
+        Type.tuple([Type.atom("namelist"), Type.list([])]),
+      );
+    });
+
+    it("returns group names sorted by byte order", () => {
+      const compiled = compilePattern("(?<zz>a)(?<aa>b)(?<mm>c)");
+
+      assert.deepEqual(
+        inspect(compiled, Type.atom("namelist")),
+        Type.tuple([
+          Type.atom("namelist"),
+          Type.list([
+            Type.bitstring("aa"),
+            Type.bitstring("mm"),
+            Type.bitstring("zz"),
+          ]),
+        ]),
+      );
+    });
+
+    it("deduplicates names with the dupnames option", () => {
+      const compiled = compilePattern("(?<x>a)|(?<x>b)", [
+        Type.atom("dupnames"),
+      ]);
+
+      assert.deepEqual(
+        inspect(compiled, Type.atom("namelist")),
+        Type.tuple([Type.atom("namelist"), Type.list([Type.bitstring("x")])]),
+      );
+    });
+
+    it("returns unicode group names", () => {
+      const compiled = compilePattern("(?<héé>a)", [Type.atom("unicode")]);
+
+      assert.deepEqual(
+        inspect(compiled, Type.atom("namelist")),
+        Type.tuple([Type.atom("namelist"), Type.list([Type.bitstring("héé")])]),
+      );
+    });
+
+    it("raises ArgumentError on non-tuple pattern", () => {
+      assertBoxedError(
+        () => inspect(Type.atom("foo"), Type.atom("namelist")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a compiled regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on unknown pattern reference", () => {
+      const rePattern = Type.tuple([
+        Type.atom("re_pattern"),
+        Type.integer(0),
+        Type.integer(0),
+        Type.integer(0),
+        Erlang["make_ref/0"](),
+      ]);
+
+      assertBoxedError(
+        () => inspect(rePattern, Type.atom("namelist")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a compiled regular expression",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on invalid item", () => {
+      const compiled = compilePattern("ab");
+
+      assertBoxedError(
+        () => inspect(compiled, Type.atom("foo")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a valid item"),
+      );
+    });
+
+    it("raises ArgumentError on bad pattern before bad item", () => {
+      assertBoxedError(
+        () => inspect(Type.atom("foo"), Type.atom("bar")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a compiled regular expression",
         ),
       );
     });

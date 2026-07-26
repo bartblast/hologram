@@ -360,6 +360,60 @@ const Erlang_Re = {
   // End import/1
   // Deps: [:re.compile/2]
 
+  // Start inspect/2
+  "inspect/2": (compiledPattern, item) => {
+    const compareByUtf8Bytes = (name1, name2) => {
+      const bytes1 = ERTS.utf8Encoder.encode(name1);
+      const bytes2 = ERTS.utf8Encoder.encode(name2);
+      const minLength = Math.min(bytes1.length, bytes2.length);
+
+      for (let index = 0; index < minLength; index++) {
+        if (bytes1[index] !== bytes2[index]) {
+          return bytes1[index] - bytes2[index];
+        }
+      }
+
+      return bytes1.length - bytes2.length;
+    };
+
+    const registryEntry =
+      Type.isTuple(compiledPattern) &&
+      compiledPattern.data.length === 5 &&
+      Interpreter.isStrictlyEqual(
+        compiledPattern.data[0],
+        Type.atom("re_pattern"),
+      )
+        ? ERTS.regexPatternRegistry.get(compiledPattern.data[4])
+        : null;
+
+    if (registryEntry === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a compiled regular expression",
+        ),
+      );
+    }
+
+    if (!Interpreter.isStrictlyEqual(item, Type.atom("namelist"))) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid item"),
+      );
+    }
+
+    // PCRE2 stores the name table sorted by the byte order of the names
+    const names = [...registryEntry.compiled.groupMap.names.keys()].sort(
+      compareByUtf8Bytes,
+    );
+
+    return Type.tuple([
+      Type.atom("namelist"),
+      Type.list(names.map((name) => Type.bitstring(name))),
+    ]);
+  },
+  // End inspect/2
+  // Deps: []
+
   // Start version/0
   "version/0": () => {
     // TODO: Replace hardcoded PCRE version with version captured from system at runtime
