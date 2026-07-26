@@ -36,13 +36,6 @@ defmodule HologramFeatureTests.Events.KeyboardPage do
       <input $key_down.slash="handle_slash" id="my_input_slash" type="text" />
     </p>
     <p>
-      <input
-        $key_down.enter="handle_multi_enter"
-        $key_down.escape="handle_multi_escape"
-        id="my_input_multi_filter"
-        type="text" />
-    </p>
-    <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
@@ -70,14 +63,6 @@ defmodule HologramFeatureTests.Events.KeyboardPage do
 
   def action(:handle_key_up_arrow_up, params, component) do
     put_state(component, :result, {:key_up_arrow_up, params})
-  end
-
-  def action(:handle_multi_enter, params, component) do
-    put_state(component, :result, {:multi_enter, params})
-  end
-
-  def action(:handle_multi_escape, params, component) do
-    put_state(component, :result, {:multi_escape, params})
   end
 
   def action(:handle_slash, params, component) do
