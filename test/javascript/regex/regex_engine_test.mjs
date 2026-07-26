@@ -2,10 +2,13 @@
 
 import {
   assert,
+  assertBoxedError,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import RegexEngine from "../../../assets/js/regex/regex_engine.mjs";
+import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -43,6 +46,47 @@ describe("RegexEngine", () => {
 
     it("returns 0 for empty text", () => {
       assert.equal(RegexEngine.byteOffsetToUtf16Index("", 3), 0);
+    });
+  });
+
+  describe("charDataToText()", () => {
+    it("converts a binary, decoding UTF-8", () => {
+      assert.equal(RegexEngine.charDataToText(Type.bitstring("aé")), "aé");
+    });
+
+    it("converts a nested list with an improper binary tail", () => {
+      const charData = Type.improperList([
+        Type.integer(97),
+        Type.list([Type.integer(233)]),
+        Type.bitstring("b"),
+        Type.bitstring("c"),
+      ]);
+
+      assert.equal(RegexEngine.charDataToText(charData), "aébc");
+    });
+
+    it("raises ArgumentError on an invalid code point", () => {
+      assertBoxedError(
+        () => RegexEngine.charDataToText(Type.list([Type.integer(0x110000)])),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError on a non-UTF-8 binary", () => {
+      assertBoxedError(
+        () => RegexEngine.charDataToText(Bitstring.fromBytes([255])),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError on a term that is not char data", () => {
+      assertBoxedError(
+        () => RegexEngine.charDataToText(Type.atom("abc")),
+        "ArgumentError",
+        "argument error",
+      );
     });
   });
 
@@ -529,6 +573,127 @@ describe("RegexEngine", () => {
         end: 3,
         captures: [null],
       });
+    });
+  });
+
+  describe("parseCompileOption()", () => {
+    const buildAcc = () => ({
+      anchored: false,
+      engineOpts: {},
+      firstline: false,
+      unicodeOption: false,
+    });
+
+    it("classifies an engine option atom as compile and enables the engine opt", () => {
+      const acc = buildAcc();
+      const kind = RegexEngine.parseCompileOption(Type.atom("caseless"), acc);
+
+      assert.equal(kind, "compile");
+      assert.deepEqual(acc.engineOpts, {caseless: true});
+    });
+
+    it("classifies anchored and sets the anchored flag", () => {
+      const acc = buildAcc();
+      const kind = RegexEngine.parseCompileOption(Type.atom("anchored"), acc);
+
+      assert.equal(kind, "anchored");
+      assert.isTrue(acc.anchored);
+      assert.deepEqual(acc.engineOpts, {});
+    });
+
+    it("classifies firstline as compile and sets the firstline flag", () => {
+      const acc = buildAcc();
+      const kind = RegexEngine.parseCompileOption(Type.atom("firstline"), acc);
+
+      assert.equal(kind, "compile");
+      assert.isTrue(acc.firstline);
+      assert.deepEqual(acc.engineOpts, {});
+    });
+
+    it("classifies no_start_optimize as compile without engine opts", () => {
+      const acc = buildAcc();
+
+      const kind = RegexEngine.parseCompileOption(
+        Type.atom("no_start_optimize"),
+        acc,
+      );
+
+      assert.equal(kind, "compile");
+      assert.deepEqual(acc.engineOpts, {});
+    });
+
+    it("classifies unicode as compile and sets the unicode option flag", () => {
+      const acc = buildAcc();
+      const kind = RegexEngine.parseCompileOption(Type.atom("unicode"), acc);
+
+      assert.equal(kind, "compile");
+      assert.isTrue(acc.unicodeOption);
+      assert.deepEqual(acc.engineOpts, {});
+    });
+
+    it("classifies bsr_anycrlf as dual and enables the engine opt", () => {
+      const acc = buildAcc();
+
+      const kind = RegexEngine.parseCompileOption(
+        Type.atom("bsr_anycrlf"),
+        acc,
+      );
+
+      assert.equal(kind, "dual");
+      assert.deepEqual(acc.engineOpts, {bsr_anycrlf: true});
+    });
+
+    it("classifies bsr_unicode as dual and disables the bsr_anycrlf engine opt", () => {
+      const acc = buildAcc();
+
+      const kind = RegexEngine.parseCompileOption(
+        Type.atom("bsr_unicode"),
+        acc,
+      );
+
+      assert.equal(kind, "dual");
+      assert.deepEqual(acc.engineOpts, {bsr_anycrlf: false});
+    });
+
+    it("classifies a newline tuple as dual and sets the newline type", () => {
+      const acc = buildAcc();
+      const option = Type.tuple([Type.atom("newline"), Type.atom("crlf")]);
+      const kind = RegexEngine.parseCompileOption(option, acc);
+
+      assert.equal(kind, "dual");
+      assert.deepEqual(acc.engineOpts, {newline: "crlf"});
+    });
+
+    it("returns invalid for an unknown atom", () => {
+      const kind = RegexEngine.parseCompileOption(Type.atom("bam"), buildAcc());
+
+      assert.equal(kind, "invalid");
+    });
+
+    it("returns invalid for a newline tuple with an invalid type", () => {
+      const option = Type.tuple([Type.atom("newline"), Type.atom("abc")]);
+      const kind = RegexEngine.parseCompileOption(option, buildAcc());
+
+      assert.equal(kind, "invalid");
+    });
+
+    it("returns invalid for a term that is not an atom or a tuple", () => {
+      const kind = RegexEngine.parseCompileOption(Type.integer(1), buildAcc());
+
+      assert.equal(kind, "invalid");
+    });
+  });
+
+  describe("textFromLatin1Bytes()", () => {
+    it("maps every byte to one JS char", () => {
+      assert.equal(
+        RegexEngine.textFromLatin1Bytes(new Uint8Array([0x61, 0xe9, 0xff])),
+        "aéÿ",
+      );
+    });
+
+    it("returns empty text for empty bytes", () => {
+      assert.equal(RegexEngine.textFromLatin1Bytes(new Uint8Array([])), "");
     });
   });
 

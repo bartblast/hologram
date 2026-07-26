@@ -1,15 +1,34 @@
 "use strict";
 
+import Bitstring from "../bitstring.mjs";
+import Interpreter from "../interpreter.mjs";
 import RegexAnalyzer from "./regex_analyzer.mjs";
 import RegexInterpreter from "./regex_interpreter.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {START_OPTION_VERBS} from "./regex_parser.mjs";
 import RegexTranslator, {NEWLINE_VERBS} from "./regex_translator.mjs";
+import Type from "../type.mjs";
+
+// Compile option atoms passed to the engine under the same name.
+const ENGINE_OPT_ATOMS = new Set([
+  "caseless",
+  "dollar_endonly",
+  "dotall",
+  "dupnames",
+  "extended",
+  "multiline",
+  "never_utf",
+  "no_auto_capture",
+  "ucp",
+  "ungreedy",
+]);
+
+const NEWLINE_TYPES = new Set(["any", "anycrlf", "cr", "crlf", "lf", "nul"]);
 
 // Facade over the regex machinery: compiles PCRE2 patterns into matchable
 // entries and matches them against JS strings, hiding the native/interpreted
-// engine split. Byte-level subject encoding and Erlang term shaping are the
-// callers' concern.
+// engine split. Also bridges boxed Erlang terms to engine inputs: char data
+// conversion and :re compile option parsing.
 export default class RegexEngine {
   // Converts a UTF-8 byte offset to a JS string index.
   static byteOffsetToUtf16Index(text, byteOffset) {
@@ -23,6 +42,16 @@ export default class RegexEngine {
     }
 
     return utf16Index;
+  }
+
+  // Converts char data (a binary or a possibly nested list of code points
+  // and binaries, with an improper binary tail allowed) to a JS string,
+  // decoding binaries from UTF-8. Raises Erlang ArgumentError on any failure.
+  static charDataToText(charData) {
+    if (Type.isBitstring(charData)) return $.#textFromBinaryCharData(charData);
+    if (Type.isList(charData)) return $.#textFromListCharData(charData);
+
+    Interpreter.raiseArgumentError("argument error");
   }
 
   // Compiles a PCRE2 pattern source into a matchable entry, routed to the
@@ -57,7 +86,7 @@ export default class RegexEngine {
 
       source = decoded.text;
     } else {
-      source = $.#textFromLatin1Bytes(bytes);
+      source = $.textFromLatin1Bytes(bytes);
 
       if (opts.never_utf !== true && $.hasUtfStartOption(source)) {
         const decoded = $.decodeUtf8(bytes);
@@ -301,6 +330,73 @@ export default class RegexEngine {
     });
   }
 
+  // Applies a :re compile option to the accumulator and returns the option
+  // kind: "anchored", "compile" (compile-only), "dual" (also a run option),
+  // or "invalid".
+  static parseCompileOption(option, acc) {
+    if (Type.isAtom(option)) {
+      if (ENGINE_OPT_ATOMS.has(option.value)) {
+        acc.engineOpts[option.value] = true;
+        return "compile";
+      }
+
+      switch (option.value) {
+        case "anchored":
+          acc.anchored = true;
+          return "anchored";
+
+        case "bsr_anycrlf":
+          acc.engineOpts.bsr_anycrlf = true;
+          return "dual";
+
+        case "bsr_unicode":
+          acc.engineOpts.bsr_anycrlf = false;
+          return "dual";
+
+        case "firstline":
+          acc.firstline = true;
+          return "compile";
+
+        case "no_start_optimize":
+          return "compile";
+
+        case "unicode":
+          acc.unicodeOption = true;
+          return "compile";
+
+        default:
+          return "invalid";
+      }
+    }
+
+    if (
+      Type.isTuple(option) &&
+      option.data.length === 2 &&
+      Type.isAtom(option.data[0]) &&
+      option.data[0].value === "newline" &&
+      Type.isAtom(option.data[1]) &&
+      NEWLINE_TYPES.has(option.data[1].value)
+    ) {
+      acc.engineOpts.newline = option.data[1].value;
+      return "dual";
+    }
+
+    return "invalid";
+  }
+
+  // Maps every byte to one JS char, so JS string indices are byte offsets
+  // and matching is byte-faithful even for non-UTF-8 binaries.
+  static textFromLatin1Bytes(bytes) {
+    let text = "";
+
+    // Chunked to stay within the argument count limit of fromCharCode()
+    for (let start = 0; start < bytes.length; start += 4096) {
+      text += String.fromCharCode(...bytes.subarray(start, start + 4096));
+    }
+
+    return text;
+  }
+
   // Converts a JS string index to a UTF-8 byte offset.
   static utf16IndexToByteOffset(text, utf16Index) {
     let byteOffset = 0;
@@ -389,14 +485,59 @@ export default class RegexEngine {
     return compiled.regexpSticky;
   }
 
-  // Maps every byte to one JS char, so JS string indices are byte offsets
-  // and matching is byte-faithful even for non-UTF-8 binaries.
-  static #textFromLatin1Bytes(bytes) {
+  static #textFromBinaryCharData(binary) {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+
+    const decoded = $.decodeUtf8(binary.bytes);
+
+    if (decoded.error) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return decoded.text;
+  }
+
+  static #textFromListCharData(list) {
+    const isProper = Type.isProperList(list);
+    const elementCount = isProper ? list.data.length : list.data.length - 1;
     let text = "";
 
-    // Chunked to stay within the argument count limit of fromCharCode()
-    for (let start = 0; start < bytes.length; start += 4096) {
-      text += String.fromCharCode(...bytes.subarray(start, start + 4096));
+    for (let index = 0; index < elementCount; index++) {
+      const element = list.data[index];
+
+      if (Type.isInteger(element)) {
+        const codePoint = Number(element.value);
+
+        if (
+          codePoint < 0 ||
+          codePoint > 0x10ffff ||
+          (codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ) {
+          Interpreter.raiseArgumentError("argument error");
+        }
+
+        text += String.fromCodePoint(codePoint);
+      } else if (Type.isBitstring(element)) {
+        text += $.#textFromBinaryCharData(element);
+      } else if (Type.isList(element)) {
+        text += $.#textFromListCharData(element);
+      } else {
+        Interpreter.raiseArgumentError("argument error");
+      }
+    }
+
+    if (!isProper) {
+      const tail = list.data[list.data.length - 1];
+
+      if (!Type.isBitstring(tail)) {
+        Interpreter.raiseArgumentError("argument error");
+      }
+
+      text += $.#textFromBinaryCharData(tail);
     }
 
     return text;
