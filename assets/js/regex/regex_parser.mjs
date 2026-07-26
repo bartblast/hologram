@@ -1,5 +1,6 @@
 "use strict";
 
+import ERTS from "../erts.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 
 // Alpha assertion names accepted in the (*name:...) form.
@@ -417,6 +418,24 @@ export default class RegexParser {
       (char >= "a" && char <= "f") ||
       (char >= "A" && char <= "F")
     );
+  }
+
+  // In UTF mode PCRE2 extends subpattern name syntax beyond ASCII word chars
+  // to all Unicode letters and decimal digits.
+  #isNameCharCodePoint(codePoint) {
+    const char = String.fromCodePoint(codePoint);
+
+    if (this.#isWordChar(char)) return true;
+
+    return this.#unicode && /[\p{L}\p{Nd}]/u.test(char);
+  }
+
+  #isNameDigitCodePoint(codePoint) {
+    const char = String.fromCodePoint(codePoint);
+
+    if (this.#isDigit(char)) return true;
+
+    return this.#unicode && /\p{Nd}/u.test(char);
   }
 
   #isOctalDigit(char) {
@@ -1936,24 +1955,37 @@ export default class RegexParser {
   // with the position at the name start.
   #parseSubpatternName(terminator) {
     const nameStart = this.#position;
+    const firstCodePoint = this.#source.codePointAt(this.#position);
 
-    if (this.#isDigit(this.#peek())) {
-      this.#position++;
+    if (
+      firstCodePoint !== undefined &&
+      this.#isNameDigitCodePoint(firstCodePoint)
+    ) {
+      this.#position += firstCodePoint > 0xffff ? 2 : 1;
       throw new RegexParseError(
         "subpattern name must start with a non-digit",
         this.#position,
       );
     }
 
-    while (this.#isWordChar(this.#peek())) this.#position++;
+    while (!this.#atEnd()) {
+      const codePoint = this.#source.codePointAt(this.#position);
 
-    const nameLength = this.#position - nameStart;
+      if (!this.#isNameCharCodePoint(codePoint)) break;
 
-    if (nameLength === 0) {
+      this.#position += codePoint > 0xffff ? 2 : 1;
+    }
+
+    const name = this.#source.slice(nameStart, this.#position);
+
+    if (name.length === 0) {
       throw new RegexParseError("subpattern name expected", this.#position);
     }
 
-    if (nameLength > 128) {
+    // PCRE2 counts the limit in code units of its own encoding, which is
+    // UTF-8 bytes on the BEAM. Non-unicode names are ASCII-only, so their
+    // UTF-8 byte count equals their char count.
+    if (ERTS.utf8Encoder.encode(name).length > 128) {
       throw new RegexParseError(
         "subpattern name is too long (maximum 128 code units)",
         this.#position,
@@ -1969,10 +2001,7 @@ export default class RegexParser {
 
     this.#position++;
 
-    return {
-      name: this.#source.slice(nameStart, nameStart + nameLength),
-      nameStart: nameStart,
-    };
+    return {name: name, nameStart: nameStart};
   }
 
   // Scans an optional +/- sign and digits, resolving relative numbers

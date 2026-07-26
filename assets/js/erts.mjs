@@ -58,6 +58,7 @@ export default class ERTS {
   static referenceSequence = new Sequence();
   static uniqueIntegerSequence = new Sequence();
   static utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+  static utf8Encoder = new TextEncoder();
 
   static registerNativeObject(object) {
     const ref = $.uniqueReference();

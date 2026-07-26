@@ -2355,6 +2355,36 @@ describe("RegexParser", () => {
         });
       });
 
+      it("parses unicode letters in group name in unicode mode", () => {
+        assert.deepEqual(RegexParser.parse("(?<héé>a)", {unicode: true}), {
+          type: "group",
+          number: 1,
+          name: "héé",
+          content: {type: "literal", codePoint: 97},
+        });
+      });
+
+      it("parses supplementary letter in group name in unicode mode", () => {
+        assert.deepEqual(
+          RegexParser.parse("(?<\u{1d400}>a)", {unicode: true}),
+          {
+            type: "group",
+            number: 1,
+            name: "\u{1d400}",
+            content: {type: "literal", codePoint: 97},
+          },
+        );
+      });
+
+      it("parses unicode digit after first char in group name in unicode mode", () => {
+        assert.deepEqual(RegexParser.parse("(?<a١>b)", {unicode: true}), {
+          type: "group",
+          number: 1,
+          name: "a١",
+          content: {type: "literal", codePoint: 98},
+        });
+      });
+
       it("numbers named and unnamed groups together", () => {
         assert.deepEqual(RegexParser.parse("(a)(?<x>b)"), {
           type: "concatenation",
@@ -2443,11 +2473,46 @@ describe("RegexParser", () => {
         );
       });
 
+      it("raises on group name starting with unicode digit in unicode mode", () => {
+        assertRegexParseError(
+          "(?<١x>a)",
+          "subpattern name must start with a non-digit",
+          4,
+          {unicode: true},
+        );
+      });
+
+      it("raises on unicode letter in group name without unicode mode", () => {
+        assertRegexParseError(
+          "(?<héé>a)",
+          "syntax error in subpattern name (missing terminator?)",
+          4,
+        );
+      });
+
+      it("raises on unicode symbol in group name in unicode mode", () => {
+        assertRegexParseError(
+          "(?<a★b>x)",
+          "syntax error in subpattern name (missing terminator?)",
+          4,
+          {unicode: true},
+        );
+      });
+
       it("raises on too long group name", () => {
         assertRegexParseError(
           `(?<${"a".repeat(129)}>x)`,
           "subpattern name is too long (maximum 128 code units)",
           132,
+        );
+      });
+
+      it("raises on too long group name counted in UTF-8 bytes in unicode mode", () => {
+        assertRegexParseError(
+          `(?<${"é".repeat(65)}>x)`,
+          "subpattern name is too long (maximum 128 code units)",
+          68,
+          {unicode: true},
         );
       });
 
