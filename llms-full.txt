@@ -1184,6 +1184,18 @@ The rule covers every expression form: a `nil` whole value like `$click={nil}`, 
 
 Note that `{if @editable, do: :save}` is invalid inside template braces (they are tuple braces, so Elixir requires parentheses or a `do...end` block for the ambiguous call) - use the `do...end` form shown above.
 
+##### Multiple Bindings per Element
+
+An element can carry any number of event bindings, including several for the same event - each `$event` attribute is an independent binding with its own modifiers and its own operation. When the event fires, every binding for it runs through its own modifier pipeline in the order the attributes are written, so one binding can react instantly while another debounces, or several keyboard filters can route different keys to different actions.
+
+The classic use is pairing a plain binding with a debounced one: the plain `$change` keeps state current on every keystroke, while the debounced one triggers only the expensive work once typing settles:
+
+```holo
+<input $change="update_query" $change.debounce(300)="run_search" />
+```
+
+The paired bindings can even differ only in their windows - `$change.debounce(250)` next to `$change.debounce(1000)` stages the work: a quick, cheap search shortly after typing pauses, then the full one.
+
 #### Event Targets
 
 By default, events are handled by the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for handling the event using the `target` parameter:
@@ -1224,7 +1236,7 @@ Combine modifier keys with the key using `+` to match keyboard shortcuts:
 <input $key_down.ctrl+enter="send_message" />
 ```
 
-Filters work on both `$key_down` and `$key_up`, and you can place several filtered bindings on one element - each fires only on its own key or combination. Keys are matched case-insensitively, so `$key_down.k` also matches `Shift`+`K`.
+Filters work on both `$key_down` and `$key_up`, and you can place several filtered bindings on one element - each fires only on its own key or combination, as described in the "Multiple Bindings per Element" section above. Keys are matched case-insensitively, so `$key_down.k` also matches `Shift`+`K`.
 
 A filter matches as long as the keys it lists are pressed - any extra modifiers held at the same time do not prevent it. So `$key_down.ctrl+enter` still fires when `Shift` is also down, and `$key_down.enter` fires whether or not a modifier is held.
 
@@ -1280,7 +1292,7 @@ Used without a value, `debounce` applies a default window of 250 milliseconds - 
 <input $key_down.debounce="handle_key" />
 ```
 
-Debouncing works on any event, not only keyboard events, and it combines with key filters - `$key_down.enter.debounce(300)` debounces only the Enter key. Each binding keeps its own timer, so several debounced bindings on one element never interfere. Like key filters, the window is validated at compile time: a non-positive or non-integer value such as `$change.debounce(0)` fails the build rather than misbehaving in the browser.
+Debouncing works on any event and combines with key filters - `$key_down.enter.debounce(300)` debounces only the Enter key. Each binding keeps its own timer, so several debounced bindings on one element never interfere - including several for the same event, as in the typeahead pattern from the "Multiple Bindings per Element" section above. Like key filters, the window is validated at compile time: a non-positive or non-integer value such as `$change.debounce(0)` fails the build rather than misbehaving in the browser.
 
 ##### Lifecycle Boundaries
 
