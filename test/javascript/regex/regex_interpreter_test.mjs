@@ -279,6 +279,72 @@ describe("RegexInterpreter", () => {
       });
     });
 
+    describe("lookarounds", () => {
+      it("matches positive lookahead without consuming", () => {
+        assert.deepEqual(match("a(?=b)", "ab"), {start: 0, end: 1});
+      });
+
+      it("keeps captures from positive lookahead", () => {
+        assert.deepEqual(matchFull("a(?=(b))", "ab"), {
+          start: 0,
+          end: 1,
+          captures: [null, {start: 1, end: 2}],
+        });
+      });
+
+      it("matches negative lookahead", () => {
+        assert.deepEqual(match("a(?!b)", "ac"), {start: 0, end: 1});
+      });
+
+      it("fails negative lookahead when content matches", () => {
+        assert.isNull(match("a(?!b)", "ab"));
+      });
+
+      it("retains no captures from negative lookahead", () => {
+        assert.deepEqual(matchFull("a(?!(x))", "ab"), {
+          start: 0,
+          end: 1,
+          captures: [null, null],
+        });
+      });
+
+      it("matches positive lookbehind", () => {
+        assert.deepEqual(match("(?<=a)b", "ab"), {start: 1, end: 2});
+      });
+
+      it("fails positive lookbehind without preceding content", () => {
+        assert.isNull(match("(?<=x)b", "ab"));
+      });
+
+      it("matches variable-length lookbehind", () => {
+        assert.deepEqual(match("(?<=a{1,3})b", "aaab"), {start: 3, end: 4});
+      });
+
+      it("matches negative lookbehind", () => {
+        assert.deepEqual(match("(?<!a)b", "cb"), {start: 1, end: 2});
+      });
+
+      it("fails negative lookbehind when content precedes", () => {
+        assert.isNull(match("(?<!a)b", "ab"));
+      });
+
+      it("matches negative lookbehind at the subject start", () => {
+        assert.deepEqual(match("(?<!a)b", "b"), {start: 0, end: 1});
+      });
+
+      it("matches lookahead nested inside lookbehind", () => {
+        assert.deepEqual(match("(?<=(?=ab)a)b", "ab"), {start: 1, end: 2});
+      });
+
+      it("matches non-atomic lookahead", () => {
+        assert.deepEqual(match("(?*a)a", "a"), {start: 0, end: 1});
+      });
+
+      it("matches alpha assertion lookaround", () => {
+        assert.deepEqual(match("a(*pla:b)", "ab"), {start: 0, end: 1});
+      });
+    });
+
     describe("newline handling", () => {
       it("excludes the newline from dot", () => {
         assert.isNull(match(".", "\n"));

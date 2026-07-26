@@ -37,6 +37,10 @@ const NEWLINE_SEQUENCE_SINGLES = {
   unicode: [0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029],
 };
 
+// How far a lookbehind scans back for its content start: parsing limits
+// lookbehind branches to 255 chars, each at most 2 UTF-16 units.
+const LOOKBEHIND_MAX_UNITS = 510;
+
 // Cache of Unicode property name → predicate over a code point.
 const propertyMatchers = new Map();
 
@@ -356,6 +360,59 @@ export default class RegexInterpreter {
     return false;
   }
 
+  // Matches a lookaround assertion. All lookarounds are zero-width: the
+  // continuation runs at the original position. Atomic lookarounds lock the
+  // first internal match in, non-atomic ones retry internal alternatives
+  // when the continuation fails.
+  static #matchLookaround(node, state, position, continuation) {
+    const assertionMatcher = (innerContinuation) => {
+      if (node.direction === "ahead") {
+        return $.#matchNode(node.content, state, position, innerContinuation);
+      }
+
+      // Lookbehind: the content must match ending exactly at the position
+      const lowerBound = Math.max(0, position - LOOKBEHIND_MAX_UNITS);
+
+      for (let from = lowerBound; from <= position; from++) {
+        const matched = $.#matchNode(
+          node.content,
+          state,
+          from,
+          (endPosition) =>
+            endPosition === position && innerContinuation(endPosition),
+        );
+
+        if (matched) return true;
+      }
+
+      return false;
+    };
+
+    if (node.negated) {
+      // A negative assertion retains no captures from its content
+      const savedCaptures = [...state.captures];
+      const found = assertionMatcher(() => true);
+
+      state.captures.splice(0, state.captures.length, ...savedCaptures);
+
+      return !found && continuation(position);
+    }
+
+    if (node.atomic) {
+      const savedCaptures = [...state.captures];
+
+      if (!assertionMatcher(() => true)) return false;
+
+      if (continuation(position)) return true;
+
+      state.captures.splice(0, state.captures.length, ...savedCaptures);
+
+      return false;
+    }
+
+    return assertionMatcher(() => continuation(position));
+  }
+
   static #matchNode(node, state, position, continuation) {
     switch (node.type) {
       case "alternation": {
@@ -449,6 +506,9 @@ export default class RegexInterpreter {
 
         return continuation(position + $.#codePointLength(state, codePoint));
       }
+
+      case "lookaround":
+        return $.#matchLookaround(node, state, position, continuation);
 
       // \R matches CRLF as a pair or a single vertical whitespace char,
       // atomically: a matched pair is never given back, matching PCRE2
