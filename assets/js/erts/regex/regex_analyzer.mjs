@@ -1,5 +1,7 @@
 "use strict";
 
+import {startOptions} from "./regex_options.mjs";
+
 export default class RegexAnalyzer {
   // Builds the capture group map for a parsed pattern: the total group count
   // and the mapping from group names to sorted, unique group numbers.
@@ -201,11 +203,7 @@ export default class RegexAnalyzer {
   }
 
   static #hasUtfStartOption(ast) {
-    if (ast.type !== "concatenation") return false;
-
-    for (const item of ast.items) {
-      if (item.type !== "startOption") break;
-
+    for (const item of startOptions(ast)) {
       if (item.name === "UTF" || item.name === "UTF8") return true;
     }
 

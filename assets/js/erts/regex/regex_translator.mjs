@@ -1,8 +1,7 @@
 "use strict";
 
 import {POSIX_SETS, SHORTHAND_SETS} from "./regex_char_sets.mjs";
-import {NEWLINE_VERBS} from "./regex_newlines.mjs";
-import {applyOptionSetting} from "./regex_options.mjs";
+import {applyOptionSetting, mergeStartOptions} from "./regex_options.mjs";
 
 // Chars that must be escaped inside a character class.
 const CLASS_METACHARS = new Set([..."\\]^-"]);
@@ -60,7 +59,7 @@ export default class RegexTranslator {
   // numbers, which diverge when the translation adds synthetic groups.
   // Only patterns routed to the native engine are translatable.
   static translate(ast, opts = {}) {
-    const effectiveOpts = $.#mergeStartOptions(ast, opts);
+    const effectiveOpts = mergeStartOptions(ast, opts);
 
     const context = {
       bsrAnycrlf: effectiveOpts.bsr_anycrlf === true,
@@ -130,29 +129,6 @@ export default class RegexTranslator {
     if (CLASS_METACHARS.has(char)) return `\\${char}`;
 
     return $.#escapeCharCommon(codePoint, char);
-  }
-
-  // Merges start-of-pattern option verbs into the compile options.
-  static #mergeStartOptions(ast, opts) {
-    const effectiveOpts = {...opts};
-
-    if (ast.type !== "concatenation") return effectiveOpts;
-
-    for (const item of ast.items) {
-      if (item.type !== "startOption") break;
-
-      if (NEWLINE_VERBS[item.name] !== undefined) {
-        effectiveOpts.newline = NEWLINE_VERBS[item.name];
-      } else if (item.name === "BSR_ANYCRLF") {
-        effectiveOpts.bsr_anycrlf = true;
-      } else if (item.name === "BSR_UNICODE") {
-        effectiveOpts.bsr_anycrlf = false;
-      } else if (item.name === "UTF" || item.name === "UTF8") {
-        effectiveOpts.unicode = true;
-      }
-    }
-
-    return effectiveOpts;
   }
 
   static #quantifierBounds(node) {

@@ -14,10 +14,9 @@ import {
   NEWLINE_PAIR_CONVENTIONS,
   NEWLINE_SEQUENCE_SINGLES,
   NEWLINE_SINGLES,
-  NEWLINE_VERBS,
 } from "./regex_newlines.mjs";
 
-import {applyOptionSetting} from "./regex_options.mjs";
+import {applyOptionSetting, mergeStartOptions} from "./regex_options.mjs";
 
 // The PCRE2 version emulated by the (?(VERSION condition, matching the
 // version Erlang/OTP ships.
@@ -74,7 +73,7 @@ export default class RegexInterpreter {
     const groupMap = opts.groupMap ?? RegexAnalyzer.buildGroupMap(ast);
     const groupCount = groupMap.count;
 
-    const effectiveOpts = $.#mergeStartOptions(ast, opts);
+    const effectiveOpts = mergeStartOptions(ast, opts);
     const startPosition = opts.startPosition ?? 0;
 
     const maxStartPosition = Math.min(
@@ -1134,40 +1133,6 @@ export default class RegexInterpreter {
       default:
         throw new Error(`unsupported verb for interpretation: ${node.verb}`);
     }
-  }
-
-  // Merges start-of-pattern option verbs into the match options.
-  static #mergeStartOptions(ast, opts) {
-    const effectiveOpts = {...opts};
-
-    if (ast.type !== "concatenation") return effectiveOpts;
-
-    for (const item of ast.items) {
-      if (item.type !== "startOption") break;
-
-      if (NEWLINE_VERBS[item.name] !== undefined) {
-        effectiveOpts.newline = NEWLINE_VERBS[item.name];
-      } else if (item.name === "BSR_ANYCRLF") {
-        effectiveOpts.bsr_anycrlf = true;
-      } else if (item.name === "BSR_UNICODE") {
-        effectiveOpts.bsr_anycrlf = false;
-      } else if (item.name === "LIMIT_DEPTH") {
-        // Limit verbs cap the limits, they can't raise them
-        effectiveOpts.matchLimitRecursion = Math.min(
-          effectiveOpts.matchLimitRecursion ?? Infinity,
-          item.value,
-        );
-      } else if (item.name === "LIMIT_MATCH") {
-        effectiveOpts.matchLimit = Math.min(
-          effectiveOpts.matchLimit ?? Infinity,
-          item.value,
-        );
-      } else if (item.name === "UTF" || item.name === "UTF8") {
-        effectiveOpts.unicode = true;
-      }
-    }
-
-    return effectiveOpts;
   }
 
   // Returns the state as updated by option settings lexically contained in

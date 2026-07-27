@@ -12,6 +12,7 @@ import {
   NEWLINE_VERBS,
 } from "./regex_newlines.mjs";
 
+import {mergeStartOptions} from "./regex_options.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {scanStartOptions} from "./regex_parser.mjs";
 import RegexTranslator from "./regex_translator.mjs";
@@ -527,19 +528,7 @@ export default class RegexEngine {
   // A newline convention verb in the pattern beats the newline option,
   // and the last verb wins.
   static #effectiveNewlineType(ast, opts) {
-    let newlineType = opts.newline ?? "lf";
-
-    if (ast.type === "concatenation") {
-      for (const item of ast.items) {
-        if (item.type !== "startOption") break;
-
-        const verbNewlineType = NEWLINE_VERBS[item.name];
-
-        if (verbNewlineType !== undefined) newlineType = verbNewlineType;
-      }
-    }
-
-    return newlineType;
+    return mergeStartOptions(ast, opts).newline ?? "lf";
   }
 
   // Returns the position where the first newline sequence at or after the
