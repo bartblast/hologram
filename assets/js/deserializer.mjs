@@ -139,7 +139,7 @@ export default class Deserializer {
   }
 
   static #regexStructField(map, key) {
-    return map.data[Type.encodeMapKey(Type.atom(key))]?.[1];
+    return map.data[Type.encodeMapKey(Type.atom(key))][1];
   }
 }
 
