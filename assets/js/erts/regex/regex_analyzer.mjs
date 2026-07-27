@@ -2,6 +2,15 @@
 
 import {startOptions} from "./regex_options.mjs";
 
+// Resolves a reference by group number or name to its group numbers.
+// A name maps to multiple numbers with dupnames, and an unknown name maps
+// to no numbers.
+export function resolveGroupNumbers(reference, names) {
+  return reference.number !== null
+    ? [reference.number]
+    : (names.get(reference.name) ?? []);
+}
+
 // Walks the AST pre-order, calling visit on every node and recursing into
 // all child nodes.
 export function walkAst(node, visit) {
@@ -121,10 +130,7 @@ export default class RegexAnalyzer {
         );
 
       case "backreference": {
-        const numbers =
-          node.number !== null
-            ? [node.number]
-            : (groupMap.names.get(node.name) ?? []);
+        const numbers = resolveGroupNumbers(node, groupMap.names);
 
         if (!numbers.every((n) => definite.has(n))) state.unsafe = true;
 

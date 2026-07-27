@@ -6,6 +6,7 @@ import {
 } from "../../support/helpers.mjs";
 
 import RegexAnalyzer, {
+  resolveGroupNumbers,
   walkAst,
 } from "../../../../assets/js/erts/regex/regex_analyzer.mjs";
 
@@ -84,6 +85,41 @@ describe("RegexAnalyzer", () => {
         count: 1,
         names: new Map([["x", [1]]]),
       });
+    });
+  });
+
+  describe("resolveGroupNumbers()", () => {
+    const names = new Map([
+      ["x", [1]],
+      ["y", [2, 3]],
+    ]);
+
+    it("resolves a reference by number", () => {
+      assert.deepEqual(
+        resolveGroupNumbers({number: 2, name: null}, names),
+        [2],
+      );
+    });
+
+    it("resolves a reference by name", () => {
+      assert.deepEqual(
+        resolveGroupNumbers({number: null, name: "x"}, names),
+        [1],
+      );
+    });
+
+    it("resolves a duplicate name to all its numbers", () => {
+      assert.deepEqual(
+        resolveGroupNumbers({number: null, name: "y"}, names),
+        [2, 3],
+      );
+    });
+
+    it("resolves an unknown name to no numbers", () => {
+      assert.deepEqual(
+        resolveGroupNumbers({number: null, name: "z"}, names),
+        [],
+      );
     });
   });
 

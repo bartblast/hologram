@@ -1,7 +1,10 @@
 "use strict";
 
 import ERTS from "../../erts.mjs";
-import RegexAnalyzer, {walkAst} from "./regex_analyzer.mjs";
+import RegexAnalyzer, {
+  resolveGroupNumbers,
+  walkAst,
+} from "./regex_analyzer.mjs";
 
 import {
   codePointInRanges,
@@ -351,10 +354,7 @@ export default class RegexInterpreter {
         return false;
 
       case "group": {
-        const numbers =
-          condition.number !== null
-            ? [condition.number]
-            : (state.groupNames.get(condition.name) ?? []);
+        const numbers = resolveGroupNumbers(condition, state.groupNames);
 
         return numbers.some(
           (number) =>
@@ -368,14 +368,8 @@ export default class RegexInterpreter {
           return state.callStack.length > 0;
         }
 
-        const currentCall = state.callStack.at(-1);
-
-        if (condition.number !== null) {
-          return currentCall === condition.number;
-        }
-
-        return (state.groupNames.get(condition.name) ?? []).includes(
-          currentCall,
+        return resolveGroupNumbers(condition, state.groupNames).includes(
+          state.callStack.at(-1),
         );
       }
 
@@ -646,10 +640,7 @@ export default class RegexInterpreter {
         );
 
       case "backreference": {
-        const numbers =
-          node.number !== null
-            ? [node.number]
-            : (state.groupNames.get(node.name) ?? []);
+        const numbers = resolveGroupNumbers(node, state.groupNames);
 
         // A reference by a duplicate name uses the first participating group
         for (const number of numbers) {
@@ -845,7 +836,7 @@ export default class RegexInterpreter {
         return continuation(position);
 
       case "subroutine": {
-        const number = node.number ?? state.groupNames.get(node.name)[0];
+        const number = resolveGroupNumbers(node, state.groupNames)[0];
         const target = state.subroutines.get(number);
         const savedCaptures = [...state.captures];
 
