@@ -577,10 +577,7 @@ export default class RegexParser {
 
     if (char === "(") return this.#parseGroup();
 
-    const codePoint = this.#source.codePointAt(this.#position);
-    this.#position += codePoint > 0xffff ? 2 : 1;
-
-    return {type: "literal", codePoint: codePoint};
+    return {type: "literal", codePoint: this.#takeCodePoint()};
   }
 
   // Parses a (?|...) branch reset group, with the position at the |.
@@ -827,18 +824,8 @@ export default class RegexParser {
   // Parses a single class member char, either plain or produced by an escape.
   // Inside \Q...\E quoting every char is taken literally.
   #parseClassSingleCodePoint() {
-    if (this.#inClassQuote) {
-      const codePoint = this.#source.codePointAt(this.#position);
-      this.#position += codePoint > 0xffff ? 2 : 1;
-
-      return codePoint;
-    }
-
-    if (this.#peek() !== "\\") {
-      const codePoint = this.#source.codePointAt(this.#position);
-      this.#position += codePoint > 0xffff ? 2 : 1;
-
-      return codePoint;
+    if (this.#inClassQuote || this.#peek() !== "\\") {
+      return this.#takeCodePoint();
     }
 
     this.#position++;
@@ -905,9 +892,7 @@ export default class RegexParser {
             break;
           }
 
-          const codePoint = this.#source.codePointAt(this.#position);
-          this.#position += codePoint > 0xffff ? 2 : 1;
-          items.push({type: "literal", codePoint: codePoint});
+          items.push({type: "literal", codePoint: this.#takeCodePoint()});
         }
 
         continue;
@@ -1193,8 +1178,7 @@ export default class RegexParser {
       throw new RegexParseError("\\c at end of pattern", this.#position);
     }
 
-    const codePoint = this.#source.codePointAt(this.#position);
-    this.#position += codePoint > 0xffff ? 2 : 1;
+    const codePoint = this.#takeCodePoint();
 
     if (codePoint < 32 || codePoint > 126) {
       throw new RegexParseError(
@@ -1982,7 +1966,7 @@ export default class RegexParser {
       firstCodePoint !== undefined &&
       this.#isNameDigitCodePoint(firstCodePoint)
     ) {
-      this.#position += firstCodePoint > 0xffff ? 2 : 1;
+      this.#takeCodePoint();
       throw new RegexParseError(
         "subpattern name must start with a non-digit",
         this.#position,
@@ -1994,7 +1978,7 @@ export default class RegexParser {
 
       if (!this.#isNameCharCodePoint(codePoint)) break;
 
-      this.#position += codePoint > 0xffff ? 2 : 1;
+      this.#takeCodePoint();
     }
 
     const name = this.#source.slice(nameStart, this.#position);
@@ -2317,6 +2301,14 @@ export default class RegexParser {
   // numbers are allowed, matching PCRE2 behavior.
   // Returns null (without consuming) when the braces don't form a valid spec,
   // in which case { is a literal, matching PCRE2 behavior.
+  // Reads the code point at the position and advances past it.
+  #takeCodePoint() {
+    const codePoint = this.#source.codePointAt(this.#position);
+    this.#position += codePoint > 0xffff ? 2 : 1;
+
+    return codePoint;
+  }
+
   #tryParseBraceBounds() {
     const source = this.#source;
     let scanPosition = this.#position + 1;
@@ -2444,12 +2436,7 @@ export default class RegexParser {
       return this.#parseOctalEscape();
     }
 
-    if (!this.#isAlphanumeric(char)) {
-      const codePoint = this.#source.codePointAt(this.#position);
-      this.#position += codePoint > 0xffff ? 2 : 1;
-
-      return codePoint;
-    }
+    if (!this.#isAlphanumeric(char)) return this.#takeCodePoint();
 
     return null;
   }
