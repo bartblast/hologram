@@ -580,13 +580,40 @@ defmodule Hologram.Compiler.IR do
     %IR.ListType{data: data}
   end
 
-  def for_term!(term) when is_map(term) do
-    data =
-      term
-      |> Map.to_list()
-      |> Enum.map(fn {key, value} -> {for_term!(key), for_term!(value)} end)
+  def for_term!(%Regex{} = term) do
+    # A compiled pattern exists only inside the runtime that compiled it, so
+    # the client rebuilds it through the same pathway as regex literals: an
+    # exported pattern imported with :re.import/1, which registers the
+    # compiled pattern in the client runtime. Erlang/OTP versions without
+    # :re.import/1 keep the plain struct encoding.
+    if function_exported?(:re, :import, 1) do
+      {:ok, exported} = :re.compile(term.source, [:export | term.opts])
 
-    %IR.MapType{data: data}
+      import_call_ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :re},
+        function: :import,
+        args: [for_term!(exported)]
+      }
+
+      data =
+        term
+        |> Map.to_list()
+        |> Enum.map(fn
+          {:re_pattern, _compiled_pattern} ->
+            {%IR.AtomType{value: :re_pattern}, import_call_ir}
+
+          {key, value} ->
+            {for_term!(key), for_term!(value)}
+        end)
+
+      %IR.MapType{data: data}
+    else
+      build_map_type_ir(term)
+    end
+  end
+
+  def for_term!(term) when is_map(term) do
+    build_map_type_ir(term)
   end
 
   def for_term!(term) when is_tuple(term) do
@@ -653,5 +680,14 @@ defmodule Hologram.Compiler.IR do
     |> Transformer.transform(%Context{})
     |> Map.put(:captured_module, module)
     |> Map.put(:captured_function, function)
+  end
+
+  defp build_map_type_ir(term) do
+    data =
+      term
+      |> Map.to_list()
+      |> Enum.map(fn {key, value} -> {for_term!(key), for_term!(value)} end)
+
+    %IR.MapType{data: data}
   end
 end

@@ -1248,6 +1248,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     assert {Hologram.Router.Helpers, :page_path, 1} in result
 
+    assert {:re, :import, 1} in result
+
     refute {:unicode, :characters_to_binary, 1} in result
     refute {Hologram.Router.Helpers, :asset_path, 1} in result
   end

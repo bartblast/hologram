@@ -354,6 +354,28 @@ defmodule Hologram.Compiler.IRTest do
       assert for_term!(term) == %IR.ReferenceType{value: term}
     end
 
+    # :re.import/1 is available on Erlang/OTP 28.1+
+    if function_exported?(:re, :import, 1) do
+      test "Regex struct" do
+        term = ~r/a(b+)/
+        {:ok, exported} = :re.compile(term.source, [:export | term.opts])
+
+        assert %IR.MapType{data: data} = for_term!(term)
+
+        data_map = Map.new(data)
+
+        assert data_map[%IR.AtomType{value: :__struct__}] == %IR.AtomType{value: Regex}
+        assert data_map[%IR.AtomType{value: :opts}] == %IR.ListType{data: []}
+        assert data_map[%IR.AtomType{value: :source}] == for_term!("a(b+)")
+
+        assert data_map[%IR.AtomType{value: :re_pattern}] == %IR.RemoteFunctionCall{
+                 module: %IR.AtomType{value: :re},
+                 function: :import,
+                 args: [for_term!(exported)]
+               }
+      end
+    end
+
     test "tuple" do
       term = {123, :abc}
 

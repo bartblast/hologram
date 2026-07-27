@@ -370,6 +370,12 @@ defmodule Hologram.Compiler.CallGraph do
     ]
   ]
 
+  # MFAs called by the JavaScript that Encoder emits for encoded terms.
+  @mfas_used_by_encoded_terms [
+    # Encoded Regex terms rebuild their compiled patterns on evaluation.
+    {:re, :import, 1}
+  ]
+
   @doc """
   Adds an edge between two vertices in the call graph.
   Automatically adds vertices if they don't exist.
@@ -766,8 +772,8 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_runtime_entry_mfas :: [mfa]
   def list_runtime_entry_mfas do
     @mfas_used_by_client_runtime
-    |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
-      mfas ++ acc
+    |> Enum.reduce(@mfas_used_by_all_pages_and_components ++ @mfas_used_by_encoded_terms, fn
+      {_key, mfas}, acc -> mfas ++ acc
     end)
     |> Enum.uniq()
     |> Enum.sort()
