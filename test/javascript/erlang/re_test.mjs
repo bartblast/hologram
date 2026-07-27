@@ -1007,6 +1007,98 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[2, 1]]);
     });
 
+    it("caseless unicode matches a literal across a folding class", () => {
+      // The subject is long s, which folds together with S and s
+      const result = run(Type.bitstring("ſ"), Type.bitstring("s"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assertMatchResult(result, [[0, 2]]);
+    });
+
+    it("caseless unicode matches a literal across a folding class when interpreted", () => {
+      // The subject is long s, which folds together with S and s
+      const result = run(
+        Type.bitstring("ſ"),
+        Type.bitstring("(*LIMIT_MATCH=1000)s"),
+        [Type.atom("caseless"), Type.atom("unicode")],
+      );
+
+      assertMatchResult(result, [[0, 2]]);
+    });
+
+    it("caseless unicode matches a range across a folding class", () => {
+      // The subject is the Kelvin sign, which folds together with K and k
+      const result = run(Type.bitstring("K"), Type.bitstring("[f-m]"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assertMatchResult(result, [[0, 3]]);
+    });
+
+    it("caseless unicode matches a range across a folding class when interpreted", () => {
+      // The subject is the Kelvin sign, which folds together with K and k
+      const result = run(
+        Type.bitstring("K"),
+        Type.bitstring("(*LIMIT_MATCH=1000)[f-m]"),
+        [Type.atom("caseless"), Type.atom("unicode")],
+      );
+
+      assertMatchResult(result, [[0, 3]]);
+    });
+
+    it("caseless unicode does not match a char that folds only to itself", () => {
+      // The subject is dotless i, which neither I nor i folds to
+      const result = run(Type.bitstring("ı"), Type.bitstring("I"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("caseless unicode does not match a char that folds only to itself when interpreted", () => {
+      // The subject is dotless i, which neither I nor i folds to
+      const result = run(
+        Type.bitstring("ı"),
+        Type.bitstring("(*LIMIT_MATCH=1000)I"),
+        [Type.atom("caseless"), Type.atom("unicode")],
+      );
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("caseless unicode matches a backreference across a folding class", () => {
+      // The second subject char is the Kelvin sign, which folds together
+      // with K and k
+      const result = run(Type.bitstring("kK"), Type.bitstring("(k)\\1"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assertMatchResult(result, [
+        [0, 4],
+        [0, 1],
+      ]);
+    });
+
+    it("caseless unicode matches a backreference across a folding class when interpreted", () => {
+      // The second subject char is the Kelvin sign, which folds together
+      // with K and k
+      const result = run(
+        Type.bitstring("kK"),
+        Type.bitstring("(*LIMIT_MATCH=1000)(k)\\1"),
+        [Type.atom("caseless"), Type.atom("unicode")],
+      );
+
+      assertMatchResult(result, [
+        [0, 4],
+        [0, 1],
+      ]);
+    });
+
     it("defaults the capture type to index", () => {
       const result = run(Type.bitstring("abbc"), Type.bitstring("a(b+)"), [
         captureOption(Type.atom("all")),

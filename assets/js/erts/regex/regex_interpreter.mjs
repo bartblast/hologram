@@ -6,6 +6,8 @@ import RegexAnalyzer, {
   walkAst,
 } from "./regex_analyzer.mjs";
 
+import {caseVariants} from "./regex_case_folding.mjs";
+
 import {
   codePointInRanges,
   isWordCodePoint,
@@ -235,25 +237,6 @@ export default class RegexInterpreter {
     return table;
   }
 
-  // Returns the case-mapped variants of a code point that differ from it.
-  static #caseVariants(codePoint) {
-    const char = String.fromCodePoint(codePoint);
-    const variants = [];
-
-    for (const mapped of [char.toLowerCase(), char.toUpperCase()]) {
-      const mappedCodePoint = mapped.codePointAt(0);
-
-      if (
-        mapped.length === String.fromCodePoint(mappedCodePoint).length &&
-        mappedCodePoint !== codePoint
-      ) {
-        variants.push(mappedCodePoint);
-      }
-    }
-
-    return variants;
-  }
-
   static #charLength(state, position) {
     if (!state.unicode) return 1;
 
@@ -312,7 +295,7 @@ export default class RegexInterpreter {
     if ($.#classItemsMatch(node.items, codePoint)) return true;
 
     if (state.caseless) {
-      for (const variant of $.#caseVariants(codePoint)) {
+      for (const variant of caseVariants(codePoint)) {
         if ($.#classItemsMatch(node.items, variant)) return true;
       }
     }
@@ -324,15 +307,15 @@ export default class RegexInterpreter {
     return state.unicode && codePoint > 0xffff ? 2 : 1;
   }
 
+  // Caseless equality follows Unicode simple case folding, which matches
+  // both the PCRE2 caseless sets and the native JS /iu path, for literals
+  // and backreferences alike.
   static #codePointsEqual(expected, actual, state) {
     if (expected === actual) return true;
 
     if (!state.caseless) return false;
 
-    return (
-      String.fromCodePoint(expected).toLowerCase() ===
-      String.fromCodePoint(actual).toLowerCase()
-    );
+    return caseVariants(actual).includes(expected);
   }
 
   static #collectSubroutines(node, table) {

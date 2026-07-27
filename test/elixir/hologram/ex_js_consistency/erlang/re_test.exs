@@ -507,6 +507,48 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run([233, ?b], "b", [:unicode]) == {:match, [{2, 1}]}
     end
 
+    test "caseless unicode matches a literal across a folding class" do
+      # The subject is long s, which folds together with S and s
+      assert :re.run("ſ", "s", [:caseless, :unicode]) == {:match, [{0, 2}]}
+    end
+
+    test "caseless unicode matches a literal across a folding class when interpreted" do
+      # The subject is long s, which folds together with S and s
+      assert :re.run("ſ", "(*LIMIT_MATCH=1000)s", [:caseless, :unicode]) == {:match, [{0, 2}]}
+    end
+
+    test "caseless unicode matches a range across a folding class" do
+      # The subject is the Kelvin sign, which folds together with K and k
+      assert :re.run("K", "[f-m]", [:caseless, :unicode]) == {:match, [{0, 3}]}
+    end
+
+    test "caseless unicode matches a range across a folding class when interpreted" do
+      # The subject is the Kelvin sign, which folds together with K and k
+      assert :re.run("K", "(*LIMIT_MATCH=1000)[f-m]", [:caseless, :unicode]) ==
+               {:match, [{0, 3}]}
+    end
+
+    test "caseless unicode does not match a char that folds only to itself" do
+      # The subject is dotless i, which neither I nor i folds to
+      assert :re.run("ı", "I", [:caseless, :unicode]) == :nomatch
+    end
+
+    test "caseless unicode does not match a char that folds only to itself when interpreted" do
+      # The subject is dotless i, which neither I nor i folds to
+      assert :re.run("ı", "(*LIMIT_MATCH=1000)I", [:caseless, :unicode]) == :nomatch
+    end
+
+    test "caseless unicode matches a backreference across a folding class" do
+      # The second subject char is the Kelvin sign, which folds together with K and k
+      assert :re.run("kK", "(k)\\1", [:caseless, :unicode]) == {:match, [{0, 4}, {0, 1}]}
+    end
+
+    test "caseless unicode matches a backreference across a folding class when interpreted" do
+      # The second subject char is the Kelvin sign, which folds together with K and k
+      assert :re.run("kK", "(*LIMIT_MATCH=1000)(k)\\1", [:caseless, :unicode]) ==
+               {:match, [{0, 4}, {0, 1}]}
+    end
+
     test "defaults the capture type to index" do
       assert :re.run("abbc", "a(b+)", [{:capture, :all}]) == {:match, [{0, 3}, {1, 2}]}
     end

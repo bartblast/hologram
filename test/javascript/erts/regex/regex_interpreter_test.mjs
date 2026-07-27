@@ -164,6 +164,15 @@ describe("RegexInterpreter", () => {
         });
       });
 
+      // The second subject char is the Kelvin sign, which folds together
+      // with K and k
+      it("matches captured text across a multi-member folding class", () => {
+        assert.deepEqual(
+          match("(k)\\1", "kK", {caseless: true, unicode: true}),
+          {start: 0, end: 2},
+        );
+      });
+
       it("matches named reference", () => {
         assert.deepEqual(match("(?<x>a)\\k<x>", "aa"), {start: 0, end: 2});
       });
@@ -256,6 +265,26 @@ describe("RegexInterpreter", () => {
           start: 0,
           end: 1,
         });
+      });
+
+      it("matches caseless class member across a multi-member folding class", () => {
+        // The subject is the Kelvin sign, which folds together with K and k
+        assert.deepEqual(match("[K]", "K", {caseless: true, unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("matches caseless range member across a multi-member folding class", () => {
+        // The subject is the Kelvin sign, which folds together with K and k
+        assert.deepEqual(match("[f-m]", "K", {caseless: true, unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("does not match caseless class member that folds only to itself", () => {
+        assert.isNull(match("[I]", "ı", {caseless: true, unicode: true}));
       });
 
       it("matches shorthand member", () => {
@@ -761,6 +790,17 @@ describe("RegexInterpreter", () => {
           start: 1,
           end: 4,
         });
+      });
+
+      it("matches caseless literal across a multi-member folding class", () => {
+        assert.deepEqual(match("s", "ſ", {caseless: true, unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
+      it("does not match caseless literal that folds only to itself", () => {
+        assert.isNull(match("I", "ı", {caseless: true, unicode: true}));
       });
 
       it("matches non-ASCII literal in unicode mode", () => {
