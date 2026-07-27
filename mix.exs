@@ -148,7 +148,7 @@ defmodule Hologram.MixProject do
         ],
         source_ref: "v#{@version}"
       ],
-      elixir: "~> 1.15",
+      elixir: "~> 1.19",
       elixirc_options: [
         # These modules are used only in tests to test whether Hex.Solver's implementations
         # for Inspect and String.Chars protocols are excluded when building runtime and pages JavaScript files.
