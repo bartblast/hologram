@@ -281,28 +281,27 @@ const Erlang_Re = {
 
     const CAPTURE_TYPE_ATOMS = new Set(["binary", "index", "list"]);
 
-    // Group indices are limited to the positive range of a 32-bit integer
-    const MAX_CAPTURE_INDEX = 2_147_483_647n;
+    // Group indices and offsets are limited to the positive range of a
+    // 32-bit integer
+    const MAX_INT32 = 2_147_483_647n;
+
+    // Scan flag option atoms mapped to engine run option names.
+    const RUN_FLAG_KEYS = {
+      notbol: "notbol",
+      noteol: "noteol",
+      notempty: "notempty",
+      notempty_atstart: "notemptyAtStart",
+    };
 
     // Run-only option atoms not yet supported.
-    // TODO: implement the global, notbol, noteol, notempty, notempty_atstart
-    // and report_errors run options.
-    const RUN_ONLY_ATOMS = new Set([
-      "global",
-      "notbol",
-      "noteol",
-      "notempty",
-      "notempty_atstart",
-      "report_errors",
-    ]);
+    // TODO: implement the global and report_errors run options.
+    const RUN_ONLY_ATOMS = new Set(["global", "report_errors"]);
 
     // Run-only tuple option tags not yet supported.
-    // TODO: implement the match_limit, match_limit_recursion and offset
-    // run options.
+    // TODO: implement the match_limit and match_limit_recursion run options.
     const RUN_ONLY_TUPLE_TAGS = new Set([
       "match_limit",
       "match_limit_recursion",
-      "offset",
     ]);
 
     const raiseArgumentError = () => {
@@ -324,14 +323,27 @@ const Erlang_Re = {
       unicodeOption: false,
     };
 
+    const runFlags = {
+      notbol: false,
+      noteol: false,
+      notempty: false,
+      notemptyAtStart: false,
+    };
+
     let captureOption = null;
     let compileOnlyOptionUsed = false;
     let notImplementedOption = null;
+    let offsetOption = null;
     let optionsValid = Type.isProperList(options);
     let recompileOption = null;
 
     if (optionsValid) {
       for (const option of options.data) {
+        if (Type.isAtom(option) && Object.hasOwn(RUN_FLAG_KEYS, option.value)) {
+          runFlags[RUN_FLAG_KEYS[option.value]] = true;
+          continue;
+        }
+
         const isCapture =
           Type.isTuple(option) &&
           (option.data.length === 2 || option.data.length === 3) &&
@@ -340,6 +352,28 @@ const Erlang_Re = {
         // The last capture option wins
         if (isCapture) {
           captureOption = option;
+          continue;
+        }
+
+        const isOffset =
+          Type.isTuple(option) &&
+          option.data.length === 2 &&
+          Interpreter.isStrictlyEqual(option.data[0], Type.atom("offset"));
+
+        if (isOffset) {
+          const value = option.data[1];
+
+          if (
+            !Type.isInteger(value) ||
+            value.value < 0n ||
+            value.value > MAX_INT32
+          ) {
+            optionsValid = false;
+            break;
+          }
+
+          // The last offset option wins
+          offsetOption = Number(value.value);
           continue;
         }
 
@@ -549,7 +583,7 @@ const Erlang_Re = {
 
         captureTargets = valueSpec.data.map((element) => {
           if (Type.isInteger(element)) {
-            if (element.value < 0n || element.value > MAX_CAPTURE_INDEX) {
+            if (element.value < 0n || element.value > MAX_INT32) {
               raiseArgumentError();
             }
 
@@ -593,11 +627,6 @@ const Erlang_Re = {
       raiseNotImplemented(recompileOption);
     }
 
-    // TODO: implement firstline matching semantics.
-    if (entry.firstline) {
-      raiseNotImplemented(Type.atom("firstline"));
-    }
-
     // --- Subject resolution ---
 
     if (subjectText === null) {
@@ -609,11 +638,43 @@ const Erlang_Re = {
       }
     }
 
+    // --- Start position ---
+
+    // The offset is a byte offset into the subject
+    let startPosition = 0;
+
+    if (offsetOption !== null) {
+      if (entry.unicode) {
+        startPosition = ERTS.regex.byteOffsetToUtf16Index(
+          subjectText,
+          offsetOption,
+        );
+
+        // The offset must land on a character boundary within the subject
+        if (
+          ERTS.regex.utf16IndexToByteOffset(subjectText, startPosition) !==
+          offsetOption
+        ) {
+          raiseArgumentError();
+        }
+      } else {
+        // In byte mode JS string indices are byte offsets already
+        if (offsetOption > subjectText.length) raiseArgumentError();
+
+        startPosition = offsetOption;
+      }
+    }
+
     // --- Match ---
 
     const matchResult = ERTS.regex.match(entry.compiled, subjectText, {
       anchored: entry.anchored || acc.anchored,
-      startPosition: 0,
+      firstline: entry.firstline,
+      notbol: runFlags.notbol,
+      noteol: runFlags.noteol,
+      notempty: runFlags.notempty,
+      notemptyAtStart: runFlags.notemptyAtStart,
+      startPosition: startPosition,
     });
 
     if (matchResult === null) return Type.atom("nomatch");

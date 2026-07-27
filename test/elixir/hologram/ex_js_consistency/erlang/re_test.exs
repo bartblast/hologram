@@ -655,6 +655,126 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                  {:match, ["bb"]}
       end
 
+      test "starts matching at the offset" do
+        assert :re.run("abab", "ab", [{:offset, 1}]) == {:match, [{2, 2}]}
+      end
+
+      test "matches an empty pattern at the end offset" do
+        assert :re.run("ab", "", [{:offset, 2}]) == {:match, [{2, 0}]}
+      end
+
+      test "uses the last offset option" do
+        assert :re.run("aba", "a", [{:offset, 1}, {:offset, 0}]) == {:match, [{0, 1}]}
+      end
+
+      test "^ doesn't match at the offset" do
+        assert :re.run("ab", "^b", [{:offset, 1}]) == :nomatch
+      end
+
+      test "^ matches after a newline before the offset with multiline" do
+        assert :re.run("ab\ncd", "^c", [{:offset, 3}, :multiline]) == {:match, [{3, 1}]}
+      end
+
+      test "\\A doesn't match at the offset" do
+        assert :re.run("aa", "\\Aa", [{:offset, 1}]) == :nomatch
+      end
+
+      test "\\G matches at the offset" do
+        assert :re.run("aba", "\\Ga", [{:offset, 2}]) == {:match, [{2, 1}]}
+      end
+
+      test "a lookbehind sees before the offset" do
+        assert :re.run("ab", "(?<=a)b", [{:offset, 1}]) == {:match, [{1, 1}]}
+      end
+
+      test "offset counts bytes in unicode mode" do
+        assert :re.run("éb", "b", [:unicode, {:offset, 2}]) == {:match, [{2, 1}]}
+      end
+
+      test "anchored pins the match to the offset" do
+        assert :re.run("abb", "b", [:anchored, {:offset, 1}]) == {:match, [{1, 1}]}
+      end
+
+      test "notbol makes ^ fail at the subject start" do
+        assert :re.run("ab", "^a", [:notbol]) == :nomatch
+      end
+
+      test "notbol keeps ^ matching after an internal newline" do
+        assert :re.run("a\nb", "^b", [:multiline, :notbol]) == {:match, [{2, 1}]}
+      end
+
+      test "notbol doesn't affect \\A" do
+        assert :re.run("ab", "\\Aa", [:notbol]) == {:match, [{0, 1}]}
+      end
+
+      test "notbol works with a compiled pattern" do
+        {:ok, compiled} = :re.compile("^a")
+
+        assert :re.run("ab", compiled, [:notbol]) == :nomatch
+      end
+
+      test "noteol makes $ fail at the subject end" do
+        assert :re.run("ab", "b$", [:noteol]) == :nomatch
+      end
+
+      test "noteol makes $ fail before a final newline" do
+        assert :re.run("ab\n", "b$", [:noteol]) == :nomatch
+      end
+
+      test "noteol keeps $ matching before an internal newline" do
+        assert :re.run("a\nb", "a$", [:multiline, :noteol]) == {:match, [{0, 1}]}
+      end
+
+      test "noteol doesn't affect \\z" do
+        assert :re.run("ab", "b\\z", [:noteol]) == {:match, [{1, 1}]}
+      end
+
+      test "notempty backtracks to a non-empty match" do
+        assert :re.run("a", "|a", [:notempty]) == {:match, [{0, 1}]}
+      end
+
+      test "notempty rejects empty matches at every position" do
+        assert :re.run("b", "a*", [:notempty]) == :nomatch
+      end
+
+      test "notempty scans past rejected empty matches" do
+        assert :re.run("ba", "a*", [:notempty]) == {:match, [{1, 1}]}
+      end
+
+      test "notempty_atstart rejects an empty match at the start position" do
+        assert :re.run("ba", "a*", [:notempty_atstart]) == {:match, [{1, 1}]}
+      end
+
+      test "notempty_atstart allows an empty match past the offset" do
+        assert :re.run("ba", "b*", [:notempty_atstart, {:offset, 1}]) == {:match, [{2, 0}]}
+      end
+
+      test "firstline rejects a match past the first newline" do
+        assert :re.run("a\nb", "b", [:firstline]) == :nomatch
+      end
+
+      test "firstline allows a match before the first newline" do
+        assert :re.run("ab\ncd", "b", [:firstline]) == {:match, [{1, 1}]}
+      end
+
+      test "firstline allows a match crossing the first newline" do
+        assert :re.run("ab\ncd", "b\\nc", [:firstline]) == {:match, [{1, 3}]}
+      end
+
+      test "firstline uses the newline convention" do
+        assert :re.run("a\rb", "b", [:firstline, {:newline, :anycrlf}]) == :nomatch
+      end
+
+      test "firstline counts newlines from the offset" do
+        assert :re.run("a\nb", "b", [:firstline, {:offset, 2}]) == {:match, [{2, 1}]}
+      end
+
+      test "compile-time firstline pattern applies when running" do
+        {:ok, compiled} = :re.compile("b", [:firstline])
+
+        assert :re.run("a\nb", compiled, []) == :nomatch
+      end
+
       test "raises ArgumentError on non-iodata subject" do
         assert_error ArgumentError,
                      build_argument_error_msg(1, "not an iodata term"),
@@ -1028,6 +1148,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
         assert_error ArgumentError, expected_msg, fn ->
           :re.run("x", "(", [:unicode, {:capture, :bogus}])
+        end
+      end
+
+      test "raises ArgumentError on negative offset" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("ab", "a", [{:offset, -1}]) end
+      end
+
+      test "raises ArgumentError on non-integer offset" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("ab", "a", [{:offset, :x}]) end
+      end
+
+      test "raises ArgumentError on offset above the 32-bit range" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("ab", "a", [{:offset, 2_147_483_648}]) end
+      end
+
+      test "raises ArgumentError on offset tuple with extra elements" do
+        assert_error ArgumentError,
+                     build_argument_error_msg(3, "invalid options"),
+                     fn -> :re.run("ab", "a", [{:offset, 1, 2}]) end
+      end
+
+      test "raises plain ArgumentError on offset beyond the subject" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("ab", "a", [{:offset, 3}])
+        end
+      end
+
+      test "raises plain ArgumentError on maximum offset beyond the subject" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("ab", "a", [{:offset, 2_147_483_647}])
+        end
+      end
+
+      test "raises plain ArgumentError on offset inside a character" do
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("éb", "b", [:unicode, {:offset, 1}])
+        end
+      end
+
+      test "raises plain ArgumentError on firstline with a compiled pattern" do
+        {:ok, compiled} = :re.compile("b")
+
+        assert_error ArgumentError, "argument error", fn ->
+          :re.run("a\nb", compiled, [:firstline])
         end
       end
     end

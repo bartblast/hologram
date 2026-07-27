@@ -795,6 +795,9 @@ describe("Erlang_Re", () => {
     const matchTuple = (values) =>
       Type.tuple([Type.atom("match"), Type.list(values)]);
 
+    const offsetOption = (offset) =>
+      Type.tuple([Type.atom("offset"), Type.integer(offset)]);
+
     it("matches with a raw binary pattern", () => {
       const result = run(Type.bitstring("abbc"), Type.bitstring("b+"));
 
@@ -1275,6 +1278,247 @@ describe("Erlang_Re", () => {
       ]);
 
       assert.deepEqual(result, matchTuple([Bitstring.fromBytes([98, 98])]));
+    });
+
+    it("starts matching at the offset", () => {
+      const result = run(Type.bitstring("abab"), Type.bitstring("ab"), [
+        offsetOption(1),
+      ]);
+
+      assertMatchResult(result, [[2, 2]]);
+    });
+
+    it("matches an empty pattern at the end offset", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring(""), [
+        offsetOption(2),
+      ]);
+
+      assertMatchResult(result, [[2, 0]]);
+    });
+
+    it("uses the last offset option", () => {
+      const result = run(Type.bitstring("aba"), Type.bitstring("a"), [
+        offsetOption(1),
+        offsetOption(0),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("^ doesn't match at the offset", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("^b"), [
+        offsetOption(1),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("^ matches after a newline before the offset with multiline", () => {
+      const result = run(Type.bitstring("ab\ncd"), Type.bitstring("^c"), [
+        offsetOption(3),
+        Type.atom("multiline"),
+      ]);
+
+      assertMatchResult(result, [[3, 1]]);
+    });
+
+    it("\\A doesn't match at the offset", () => {
+      const result = run(Type.bitstring("aa"), Type.bitstring("\\Aa"), [
+        offsetOption(1),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("\\G matches at the offset", () => {
+      const result = run(Type.bitstring("aba"), Type.bitstring("\\Ga"), [
+        offsetOption(2),
+      ]);
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("a lookbehind sees before the offset", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("(?<=a)b"), [
+        offsetOption(1),
+      ]);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("offset counts bytes in unicode mode", () => {
+      const result = run(Type.bitstring("éb"), Type.bitstring("b"), [
+        Type.atom("unicode"),
+        offsetOption(2),
+      ]);
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("anchored pins the match to the offset", () => {
+      const result = run(Type.bitstring("abb"), Type.bitstring("b"), [
+        Type.atom("anchored"),
+        offsetOption(1),
+      ]);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("notbol makes ^ fail at the subject start", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("^a"), [
+        Type.atom("notbol"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("notbol keeps ^ matching after an internal newline", () => {
+      const result = run(Type.bitstring("a\nb"), Type.bitstring("^b"), [
+        Type.atom("multiline"),
+        Type.atom("notbol"),
+      ]);
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("notbol doesn't affect \\A", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("\\Aa"), [
+        Type.atom("notbol"),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("notbol works with a compiled pattern", () => {
+      const result = run(Type.bitstring("ab"), compilePattern("^a"), [
+        Type.atom("notbol"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("noteol makes $ fail at the subject end", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("b$"), [
+        Type.atom("noteol"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("noteol makes $ fail before a final newline", () => {
+      const result = run(Type.bitstring("ab\n"), Type.bitstring("b$"), [
+        Type.atom("noteol"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("noteol keeps $ matching before an internal newline", () => {
+      const result = run(Type.bitstring("a\nb"), Type.bitstring("a$"), [
+        Type.atom("multiline"),
+        Type.atom("noteol"),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("noteol doesn't affect \\z", () => {
+      const result = run(Type.bitstring("ab"), Type.bitstring("b\\z"), [
+        Type.atom("noteol"),
+      ]);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("notempty backtracks to a non-empty match", () => {
+      const result = run(Type.bitstring("a"), Type.bitstring("|a"), [
+        Type.atom("notempty"),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("notempty rejects empty matches at every position", () => {
+      const result = run(Type.bitstring("b"), Type.bitstring("a*"), [
+        Type.atom("notempty"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("notempty scans past rejected empty matches", () => {
+      const result = run(Type.bitstring("ba"), Type.bitstring("a*"), [
+        Type.atom("notempty"),
+      ]);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("notempty_atstart rejects an empty match at the start position", () => {
+      const result = run(Type.bitstring("ba"), Type.bitstring("a*"), [
+        Type.atom("notempty_atstart"),
+      ]);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("notempty_atstart allows an empty match past the offset", () => {
+      const result = run(Type.bitstring("ba"), Type.bitstring("b*"), [
+        Type.atom("notempty_atstart"),
+        offsetOption(1),
+      ]);
+
+      assertMatchResult(result, [[2, 0]]);
+    });
+
+    it("firstline rejects a match past the first newline", () => {
+      const result = run(Type.bitstring("a\nb"), Type.bitstring("b"), [
+        Type.atom("firstline"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("firstline allows a match before the first newline", () => {
+      const result = run(Type.bitstring("ab\ncd"), Type.bitstring("b"), [
+        Type.atom("firstline"),
+      ]);
+
+      assertMatchResult(result, [[1, 1]]);
+    });
+
+    it("firstline allows a match crossing the first newline", () => {
+      const result = run(Type.bitstring("ab\ncd"), Type.bitstring("b\\nc"), [
+        Type.atom("firstline"),
+      ]);
+
+      assertMatchResult(result, [[1, 3]]);
+    });
+
+    it("firstline uses the newline convention", () => {
+      const result = run(Type.bitstring("a\rb"), Type.bitstring("b"), [
+        Type.atom("firstline"),
+        Type.tuple([Type.atom("newline"), Type.atom("anycrlf")]),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("firstline counts newlines from the offset", () => {
+      const result = run(Type.bitstring("a\nb"), Type.bitstring("b"), [
+        Type.atom("firstline"),
+        offsetOption(2),
+      ]);
+
+      assertMatchResult(result, [[2, 1]]);
+    });
+
+    it("compile-time firstline pattern applies when running", () => {
+      const compiled = compilePattern("b", [Type.atom("firstline")]);
+
+      const result = run(Type.bitstring("a\nb"), compiled, []);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
     });
 
     it("raises ArgumentError on non-iodata subject", () => {
@@ -1836,6 +2080,90 @@ describe("Erlang_Re", () => {
           2,
           "could not parse regular expression\nmissing closing parenthesis on character 1",
         ),
+      );
+    });
+
+    it("raises ArgumentError on negative offset", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("ab"), Type.bitstring("a"), [offsetOption(-1)]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on non-integer offset", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("ab"), Type.bitstring("a"), [
+            Type.tuple([Type.atom("offset"), Type.atom("x")]),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on offset above the 32-bit range", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("ab"), Type.bitstring("a"), [
+            offsetOption(2_147_483_648n),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises ArgumentError on offset tuple with extra elements", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("ab"), Type.bitstring("a"), [
+            Type.tuple([Type.atom("offset"), Type.integer(1), Type.integer(2)]),
+          ]),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "invalid options"),
+      );
+    });
+
+    it("raises plain ArgumentError on offset beyond the subject", () => {
+      assertBoxedError(
+        () => run(Type.bitstring("ab"), Type.bitstring("a"), [offsetOption(3)]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on maximum offset beyond the subject", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("ab"), Type.bitstring("a"), [
+            offsetOption(2_147_483_647),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on offset inside a character", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("éb"), Type.bitstring("b"), [
+            Type.atom("unicode"),
+            offsetOption(1),
+          ]),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises plain ArgumentError on firstline with a compiled pattern", () => {
+      assertBoxedError(
+        () =>
+          run(Type.bitstring("a\nb"), compilePattern("b"), [
+            Type.atom("firstline"),
+          ]),
+        "ArgumentError",
+        "argument error",
       );
     });
   });
