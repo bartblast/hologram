@@ -2,6 +2,7 @@
 
 import {POSIX_SETS, SHORTHAND_SETS} from "./regex_char_sets.mjs";
 import {NEWLINE_VERBS} from "./regex_newlines.mjs";
+import {applyOptionSetting} from "./regex_options.mjs";
 
 // Chars that must be escaped inside a character class.
 const CLASS_METACHARS = new Set([..."\\]^-"]);
@@ -85,32 +86,6 @@ export default class RegexTranslator {
       flags: flags,
       groupMapping: context.state.groupMapping,
     };
-  }
-
-  // Returns the context updated by an option setting's letters.
-  // The x, J, n and ASCII option letters only affect parsing and are already
-  // handled by the parser.
-  static #applyOptions(context, node) {
-    const next = {...context};
-
-    // (?^ resets i, m, n, s and x to their defaults
-    if (node.reset) {
-      next.caseless = false;
-      next.dotall = false;
-      next.multiline = false;
-    }
-
-    if (node.set.includes("i")) next.caseless = true;
-    if (node.set.includes("m")) next.multiline = true;
-    if (node.set.includes("s")) next.dotall = true;
-    if (node.set.includes("U")) next.ungreedy = true;
-
-    if (node.unset.includes("i")) next.caseless = false;
-    if (node.unset.includes("m")) next.multiline = false;
-    if (node.unset.includes("s")) next.dotall = false;
-    if (node.unset.includes("U")) next.ungreedy = false;
-
-    return next;
   }
 
   // Returns the ranges of all code points up to maxCodePoint that are not
@@ -329,11 +304,13 @@ export default class RegexTranslator {
           // group, so the remaining items are translated with the updated
           // context, in a caseless modifier group when the i option changed
           if (item.type === "optionSetting") {
-            const nextContext = $.#applyOptions(currentContext, item);
+            const nextContext = applyOptionSetting(currentContext, item);
+
             const rest = {
               type: "concatenation",
               items: node.items.slice(index + 1),
             };
+
             const restSource = $.#translateNode(rest, nextContext);
 
             if (nextContext.caseless !== currentContext.caseless) {
@@ -399,7 +376,7 @@ export default class RegexTranslator {
         return NEWLINE_VARIANTS[context.newline].dot;
 
       case "optionGroup": {
-        const nextContext = $.#applyOptions(context, node);
+        const nextContext = applyOptionSetting(context, node);
         const content = $.#translateNode(node.content, nextContext);
 
         // Only caseless needs JS-level support (a modifier group), the other

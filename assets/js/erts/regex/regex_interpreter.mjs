@@ -17,6 +17,8 @@ import {
   NEWLINE_VERBS,
 } from "./regex_newlines.mjs";
 
+import {applyOptionSetting} from "./regex_options.mjs";
+
 // The PCRE2 version emulated by the (?(VERSION condition, matching the
 // version Erlang/OTP ships.
 const EMULATED_PCRE2_VERSION = {major: 10, minor: 47};
@@ -217,32 +219,6 @@ export default class RegexInterpreter {
     }
 
     return true;
-  }
-
-  // Returns the state updated by an option setting's letters.
-  // The x, J, n and ASCII option letters only affect parsing and are already
-  // handled by the parser.
-  static #applyOptions(state, node) {
-    const next = {...state};
-
-    // (?^ resets i, m, n, s and x to their defaults
-    if (node.reset) {
-      next.caseless = false;
-      next.dotall = false;
-      next.multiline = false;
-    }
-
-    if (node.set.includes("i")) next.caseless = true;
-    if (node.set.includes("m")) next.multiline = true;
-    if (node.set.includes("s")) next.dotall = true;
-    if (node.set.includes("U")) next.ungreedy = true;
-
-    if (node.unset.includes("i")) next.caseless = false;
-    if (node.unset.includes("m")) next.multiline = false;
-    if (node.unset.includes("s")) next.dotall = false;
-    if (node.unset.includes("U")) next.ungreedy = false;
-
-    return next;
   }
 
   // Builds the subroutine call table: group number → group node, with 0
@@ -904,7 +880,7 @@ export default class RegexInterpreter {
       case "optionGroup":
         return $.#matchNode(
           node.content,
-          $.#applyOptions(state, node),
+          applyOptionSetting(state, node),
           position,
           continuation,
         );
@@ -1077,7 +1053,7 @@ export default class RegexInterpreter {
       return $.#matchSequence(
         items,
         itemIndex + 1,
-        $.#applyOptions(state, item),
+        applyOptionSetting(state, item),
         position,
         continuation,
       );
@@ -1197,7 +1173,8 @@ export default class RegexInterpreter {
   // Returns the state as updated by option settings lexically contained in
   // an alternation branch, at its top concatenation level.
   static #stateAfterBranchOptions(branch, state) {
-    if (branch.type === "optionSetting") return $.#applyOptions(state, branch);
+    if (branch.type === "optionSetting")
+      return applyOptionSetting(state, branch);
 
     if (branch.type === "concatenation") {
       let currentState = state;
