@@ -152,6 +152,36 @@ describe("RegexAnalyzer", () => {
       assert.equal(route("(*UTF)\\p{L}"), "native");
     });
 
+    it("routes caseless unicode word shorthand to the interpreter", () => {
+      assert.equal(
+        route("\\w", {caseless: true, unicode: true}),
+        "interpreted",
+      );
+    });
+
+    it("routes inline caseless unicode word boundary to the interpreter", () => {
+      assert.equal(route("(?i)a\\b", {unicode: true}), "interpreted");
+    });
+
+    it("routes caseless unicode POSIX class to the interpreter", () => {
+      assert.equal(
+        route("[[:alpha:]]", {caseless: true, unicode: true}),
+        "interpreted",
+      );
+    });
+
+    it("routes caseless word shorthand without unicode to native", () => {
+      assert.equal(route("\\w", {caseless: true}), "native");
+    });
+
+    it("routes unicode word shorthand without caseless to native", () => {
+      assert.equal(route("\\w", {unicode: true}), "native");
+    });
+
+    it("routes caseless unicode digit shorthand to native", () => {
+      assert.equal(route("\\d", {caseless: true, unicode: true}), "native");
+    });
+
     it("routes inline options to native", () => {
       assert.equal(route("(?i)a(?m:b)"), "native");
     });

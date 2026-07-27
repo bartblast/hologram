@@ -1106,6 +1106,46 @@ describe("Erlang_Re", () => {
       ]);
     });
 
+    it("caseless unicode keeps \\w fold-free", () => {
+      // The subject is long s, which folds together with S and s
+      const result = run(Type.bitstring("ſ"), Type.bitstring("\\w"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("caseless unicode keeps a word boundary fold-free", () => {
+      // The subject ends with long s, which folds together with S and s
+      const result = run(Type.bitstring("aſ"), Type.bitstring("a\\b"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assertMatchResult(result, [[0, 1]]);
+    });
+
+    it("caseless unicode keeps a shorthand class member fold-free", () => {
+      // The subject is long s, which folds together with S and s
+      const result = run(Type.bitstring("ſ"), Type.bitstring("[\\w]"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
+    it("caseless unicode keeps a POSIX class member fold-free", () => {
+      // The subject is long s, which folds together with S and s
+      const result = run(Type.bitstring("ſ"), Type.bitstring("[[:alpha:]]"), [
+        Type.atom("caseless"),
+        Type.atom("unicode"),
+      ]);
+
+      assert.deepEqual(result, Type.atom("nomatch"));
+    });
+
     it("matches a literal digit after an atomic group", () => {
       const result = run(Type.bitstring("a1"), Type.bitstring("(?>a)1"), []);
 

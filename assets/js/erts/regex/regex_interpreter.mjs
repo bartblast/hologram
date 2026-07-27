@@ -298,8 +298,14 @@ export default class RegexInterpreter {
     if ($.#classItemsMatch(node.items, codePoint)) return true;
 
     if (state.caseless) {
+      // PCRE2 caseless classes fold literal, range and property members,
+      // while shorthand and POSIX members stay fold-free type checks
+      const foldableItems = node.items.filter(
+        (item) => item.type !== "shorthand" && item.type !== "posixClass",
+      );
+
       for (const variant of caseVariants(codePoint)) {
-        if ($.#classItemsMatch(node.items, variant)) return true;
+        if ($.#classItemsMatch(foldableItems, variant)) return true;
       }
     }
 

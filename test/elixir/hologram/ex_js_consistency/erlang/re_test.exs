@@ -549,6 +549,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                {:match, [{0, 4}, {0, 1}]}
     end
 
+    test "caseless unicode keeps \\w fold-free" do
+      # The subject is long s, which folds together with S and s
+      assert :re.run("ſ", "\\w", [:caseless, :unicode]) == :nomatch
+    end
+
+    test "caseless unicode keeps a word boundary fold-free" do
+      # The subject ends with long s, which folds together with S and s
+      assert :re.run("aſ", "a\\b", [:caseless, :unicode]) == {:match, [{0, 1}]}
+    end
+
+    test "caseless unicode keeps a shorthand class member fold-free" do
+      # The subject is long s, which folds together with S and s
+      assert :re.run("ſ", "[\\w]", [:caseless, :unicode]) == :nomatch
+    end
+
+    test "caseless unicode keeps a POSIX class member fold-free" do
+      # The subject is long s, which folds together with S and s
+      assert :re.run("ſ", "[[:alpha:]]", [:caseless, :unicode]) == :nomatch
+    end
+
     test "matches a literal digit after an atomic group" do
       assert :re.run("a1", "(?>a)1", []) == {:match, [{0, 2}]}
     end

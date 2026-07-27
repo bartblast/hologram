@@ -2,6 +2,20 @@
 
 import {startOptions} from "./regex_options.mjs";
 
+// POSIX classes whose ASCII set contains a simple-fold target of U+017F or
+// U+212A (s or k), so JS /iu canonicalization would fold those chars into
+// the emitted ranges while PCRE2 keeps the class a fold-free type check.
+const FOLD_SENSITIVE_POSIX_NAMES = new Set([
+  "alnum",
+  "alpha",
+  "ascii",
+  "graph",
+  "lower",
+  "print",
+  "upper",
+  "word",
+]);
+
 // Resolves a reference by group number or name to its group numbers.
 // A name maps to multiple numbers with dupnames, and an unknown name maps
 // to no numbers.
@@ -88,6 +102,17 @@ export default class RegexAnalyzer {
     }
 
     const unicode = opts.unicode === true || $.#hasUtfStartOption(ast);
+
+    // JS /iu canonicalization folds U+017F and U+212A into the ASCII word
+    // set, while PCRE2 keeps \w, \b and POSIX classes as fold-free type
+    // checks under caseless matching
+    if (
+      unicode &&
+      $.#hasCaselessScope(ast, opts) &&
+      $.#hasFoldSensitiveWordSet(ast)
+    ) {
+      return "interpreted";
+    }
 
     if ($.#requiresInterpreter(ast, unicode)) return "interpreted";
 
@@ -201,6 +226,55 @@ export default class RegexAnalyzer {
         groupMap.names.get(visited.name).push(visited.number);
       }
     });
+  }
+
+  // Returns true when any part of the pattern can match caselessly: via the
+  // caseless compile option or an inline option setting turning i on.
+  static #hasCaselessScope(ast, opts) {
+    if (opts.caseless === true) return true;
+
+    let found = false;
+
+    walkAst(ast, (node) => {
+      if (
+        (node.type === "optionSetting" || node.type === "optionGroup") &&
+        node.set.includes("i")
+      ) {
+        found = true;
+      }
+    });
+
+    return found;
+  }
+
+  // Returns true when the pattern contains a word-set construct that PCRE2
+  // matches as a fold-free type check: \w, \W, \b, \B, or a class with a
+  // \w member or a fold-sensitive POSIX class.
+  static #hasFoldSensitiveWordSet(ast) {
+    let found = false;
+
+    walkAst(ast, (node) => {
+      if (node.type === "anchor") {
+        if (node.kind === "wordBoundary" || node.kind === "nonWordBoundary") {
+          found = true;
+        }
+      } else if (node.type === "shorthand") {
+        if (node.letter === "w") found = true;
+      } else if (node.type === "class") {
+        for (const item of node.items) {
+          if (item.type === "shorthand" && item.letter === "w") {
+            found = true;
+          } else if (
+            item.type === "posixClass" &&
+            FOLD_SENSITIVE_POSIX_NAMES.has(item.name)
+          ) {
+            found = true;
+          }
+        }
+      }
+    });
+
+    return found;
   }
 
   static #hasUnsafeBackreference(ast, groupMap) {

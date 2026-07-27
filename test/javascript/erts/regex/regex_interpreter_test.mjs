@@ -102,6 +102,14 @@ describe("RegexInterpreter", () => {
         assert.deepEqual(match("\\Bb", "ab"), {start: 1, end: 2});
       });
 
+      it("keeps a word boundary fold-free under caseless", () => {
+        // The subject ends with long s, which folds together with S and s
+        assert.deepEqual(match("a\\b", "aſ", {caseless: true, unicode: true}), {
+          start: 0,
+          end: 1,
+        });
+      });
+
       it("anchors \\G to the start offset", () => {
         assert.isNull(match("\\Gb", "ab"));
       });
@@ -287,6 +295,25 @@ describe("RegexInterpreter", () => {
         assert.isNull(match("[I]", "ı", {caseless: true, unicode: true}));
       });
 
+      it("keeps a shorthand class member fold-free under caseless", () => {
+        // The subject is long s, which folds together with S and s
+        assert.isNull(match("[\\w]", "ſ", {caseless: true, unicode: true}));
+      });
+
+      it("keeps a POSIX class member fold-free under caseless", () => {
+        // The subject is long s, which folds together with S and s
+        assert.isNull(
+          match("[[:alpha:]]", "ſ", {caseless: true, unicode: true}),
+        );
+      });
+
+      it("folds a char into a property class member under caseless", () => {
+        assert.deepEqual(
+          match("[\\p{Lu}]", "a", {caseless: true, unicode: true}),
+          {start: 0, end: 1},
+        );
+      });
+
       it("matches shorthand member", () => {
         assert.deepEqual(match("[\\d-]", "-"), {start: 0, end: 1});
       });
@@ -390,6 +417,11 @@ describe("RegexInterpreter", () => {
 
       it("matches word chars with \\w", () => {
         assert.deepEqual(match("\\w+", "!a_1"), {start: 1, end: 4});
+      });
+
+      it("keeps \\w fold-free under caseless", () => {
+        // The subject is long s, which folds together with S and s
+        assert.isNull(match("\\w", "ſ", {caseless: true, unicode: true}));
       });
 
       it("matches letter with \\p{L}", () => {
