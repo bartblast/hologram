@@ -199,6 +199,17 @@ export default class RegexTranslator {
     }
   }
 
+  // Emulates atomic matching with a capturing lookahead plus a
+  // backreference: JS lookaheads are atomic, and the backreference locks in
+  // the captured text. The synthetic group is numbered before the content
+  // is translated, because its parenthesis opens first.
+  static #translateAtomic(innerNode, context, bounds = "") {
+    const jsNumber = ++context.state.jsGroupCount;
+    const source = $.#translateNode(innerNode, context);
+
+    return `(?=(${source}${bounds}))\\${jsNumber}`;
+  }
+
   static #translateClass(node, context) {
     let members = "";
 
@@ -249,15 +260,8 @@ export default class RegexTranslator {
       case "anchor":
         return $.#translateAnchor(node, context);
 
-      // Atomic groups are emulated with a capturing lookahead plus a
-      // backreference: JS lookaheads are atomic, and the backreference locks
-      // in the captured text
-      case "atomicGroup": {
-        const jsNumber = ++context.state.jsGroupCount;
-        const content = $.#translateNode(node.content, context);
-
-        return `(?=(${content}))\\${jsNumber}`;
-      }
+      case "atomicGroup":
+        return $.#translateAtomic(node.content, context);
 
       case "backreference":
         // Native routing guarantees backreferences point to already emitted
@@ -289,11 +293,10 @@ export default class RegexTranslator {
 
             const restSource = $.#translateNode(rest, nextContext);
 
-            if (nextContext.caseless !== currentContext.caseless) {
-              return `${result}(?${nextContext.caseless ? "i" : "-i"}:${restSource})`;
-            }
-
-            return result + restSource;
+            return (
+              result +
+              $.#wrapCaselessChange(restSource, currentContext, nextContext)
+            );
           }
 
           result +=
@@ -358,7 +361,7 @@ export default class RegexTranslator {
         // Only caseless needs JS-level support (a modifier group), the other
         // options are handled by context-sensitive rewrites
         if (nextContext.caseless !== context.caseless) {
-          return `(?${nextContext.caseless ? "i" : "-i"}:${content})`;
+          return $.#wrapCaselessChange(content, context, nextContext);
         }
 
         return `(?:${content})`;
@@ -398,12 +401,9 @@ export default class RegexTranslator {
 
   static #translateQuantifier(node, context) {
     // A possessive quantifier is an atomic group around the greedy
-    // quantifier, emulated with the capturing lookahead trick
+    // quantifier
     if (node.mode === "possessive") {
-      const jsNumber = ++context.state.jsGroupCount;
-      const itemSource = $.#translateNode(node.item, context);
-
-      return `(?=(${itemSource}${$.#quantifierBounds(node)}))\\${jsNumber}`;
+      return $.#translateAtomic(node.item, context, $.#quantifierBounds(node));
     }
 
     const itemSource = $.#translateNode(node.item, context);
@@ -412,6 +412,14 @@ export default class RegexTranslator {
     const isLazy = (node.mode === "lazy") !== context.ungreedy;
 
     return `${itemSource}${$.#quantifierBounds(node)}${isLazy ? "?" : ""}`;
+  }
+
+  // Wraps the source in a caseless modifier group when the i option differs
+  // between the two contexts, returning it unchanged otherwise.
+  static #wrapCaselessChange(source, context, nextContext) {
+    if (nextContext.caseless === context.caseless) return source;
+
+    return `(?${nextContext.caseless ? "i" : "-i"}:${source})`;
   }
 }
 
