@@ -154,12 +154,10 @@ defmodule Hologram.Runtime.Deserializer do
   end
 
   def deserialize(version, %{"t" => "m", "d" => data}) when version in [3, 2] do
-    map =
-      data
-      |> Enum.map(fn [key, value] -> {deserialize(version, key), deserialize(version, value)} end)
-      |> Enum.into(%{})
-
-    maybe_recompile_regex(map)
+    data
+    |> Enum.map(fn [key, value] -> {deserialize(version, key), deserialize(version, value)} end)
+    |> Enum.into(%{})
+    |> maybe_recompile_regex()
   end
 
   def deserialize(version, "o" <> data) when version in [3, 2] do
