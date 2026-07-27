@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import ERTS from "./erts.mjs";
 import Interpreter from "./interpreter.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -62,8 +63,12 @@ export default class Deserializer {
       case "l":
         return Type.list(obj.d);
 
-      case "m":
-        return Type.map(obj.d);
+      case "m": {
+        const map = Type.map(obj.d);
+        $.#maybeRegisterRegexPattern(map);
+
+        return map;
+      }
 
       case "r":
         return Type.reference(obj.n, obj.c, obj.i);
@@ -108,6 +113,49 @@ export default class Deserializer {
     }
 
     return serialized;
+  }
+
+  // A Regex struct carries its pattern source and compile options, so the
+  // compiled pattern registered on the sender side is rebuilt here under
+  // the same ref. Registration is skipped when the ref is already known,
+  // which makes round-tripped client structs a no-op.
+  static #maybeRegisterRegexPattern(map) {
+    const structModule = $.#regexStructField(map, "__struct__");
+
+    if (
+      structModule?.type !== "atom" ||
+      structModule.value !== "Elixir.Regex"
+    ) {
+      return;
+    }
+
+    const rePattern = $.#regexStructField(map, "re_pattern");
+
+    if (rePattern?.type !== "tuple" || rePattern.data.length !== 5) return;
+
+    const ref = rePattern.data[4];
+
+    if (ERTS.regexPatternRegistry.get(ref) !== null) return;
+
+    const source = $.#regexStructField(map, "source");
+    const opts = $.#regexStructField(map, "opts");
+
+    const result = Interpreter.moduleProxy("re")["compile/2"](source, opts);
+
+    // The source and options compiled on the sender side, so anything else
+    // is a tampered payload left unregistered
+    if (!Interpreter.isStrictlyEqual(result.data[0], Type.atom("ok"))) return;
+
+    const compiledRef = result.data[1].data[4];
+
+    ERTS.regexPatternRegistry.put(
+      ref,
+      ERTS.regexPatternRegistry.get(compiledRef),
+    );
+  }
+
+  static #regexStructField(map, key) {
+    return map.data[Type.encodeMapKey(Type.atom(key))]?.[1];
   }
 }
 
