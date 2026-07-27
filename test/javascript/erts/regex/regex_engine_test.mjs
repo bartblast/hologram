@@ -743,6 +743,128 @@ describe("RegexEngine", () => {
     });
   });
 
+  describe("matchGlobal()", () => {
+    const matchGlobal = (source, subject, opts = {}, runOpts = {}) =>
+      RegexEngine.matchGlobal(
+        RegexEngine.compile(source, opts),
+        subject,
+        runOpts,
+      );
+
+    it("collects successive matches", () => {
+      assert.deepEqual(matchGlobal("a", "abab"), [
+        {start: 0, end: 1, captures: [null]},
+        {start: 2, end: 3, captures: [null]},
+      ]);
+    });
+
+    it("collects captures per match", () => {
+      assert.deepEqual(matchGlobal("a(b)", "abab"), [
+        {start: 0, end: 2, captures: [null, {start: 1, end: 2}]},
+        {start: 2, end: 4, captures: [null, {start: 3, end: 4}]},
+      ]);
+    });
+
+    it("returns an empty array without a match", () => {
+      assert.deepEqual(matchGlobal("x", "ab"), []);
+    });
+
+    it("continues at the previous match end", () => {
+      assert.deepEqual(matchGlobal("a\\Kb", "abab"), [
+        {start: 1, end: 2, captures: [null]},
+        {start: 3, end: 4, captures: [null]},
+      ]);
+    });
+
+    it("advances past an empty match", () => {
+      assert.deepEqual(matchGlobal("a*", "ab"), [
+        {start: 0, end: 1, captures: [null]},
+        {start: 1, end: 1, captures: [null]},
+        {start: 2, end: 2, captures: [null]},
+      ]);
+    });
+
+    it("reports a successful anchored retry after an empty match", () => {
+      assert.deepEqual(matchGlobal("|a", "a"), [
+        {start: 0, end: 0, captures: [null]},
+        {start: 0, end: 1, captures: [null]},
+        {start: 1, end: 1, captures: [null]},
+      ]);
+    });
+
+    it("matches once on an empty subject", () => {
+      assert.deepEqual(matchGlobal("", ""), [
+        {start: 0, end: 0, captures: [null]},
+      ]);
+    });
+
+    it("advances over a CRLF pair as one newline", () => {
+      assert.deepEqual(matchGlobal("", "\r\n", {newline: "crlf"}), [
+        {start: 0, end: 0, captures: [null]},
+        {start: 2, end: 2, captures: [null]},
+      ]);
+    });
+
+    it("advances into a CRLF pair with the lf convention", () => {
+      assert.deepEqual(matchGlobal("", "\r\n"), [
+        {start: 0, end: 0, captures: [null]},
+        {start: 1, end: 1, captures: [null]},
+        {start: 2, end: 2, captures: [null]},
+      ]);
+    });
+
+    it("advances over an astral character in unicode mode", () => {
+      assert.deepEqual(matchGlobal("x*", "😀", {unicode: true}), [
+        {start: 0, end: 0, captures: [null]},
+        {start: 2, end: 2, captures: [null]},
+      ]);
+    });
+
+    it("anchored continues while matches are adjacent", () => {
+      assert.deepEqual(matchGlobal("a", "aab", {}, {anchored: true}), [
+        {start: 0, end: 1, captures: [null]},
+        {start: 1, end: 2, captures: [null]},
+      ]);
+    });
+
+    it("anchored stops at the first failed position", () => {
+      assert.deepEqual(matchGlobal("a", "aba", {}, {anchored: true}), [
+        {start: 0, end: 1, captures: [null]},
+      ]);
+    });
+
+    it("anchored still advances past a rejected empty retry", () => {
+      assert.deepEqual(matchGlobal("a*", "ab", {}, {anchored: true}), [
+        {start: 0, end: 1, captures: [null]},
+        {start: 1, end: 1, captures: [null]},
+        {start: 2, end: 2, captures: [null]},
+      ]);
+    });
+
+    it("starts at the start position", () => {
+      assert.deepEqual(matchGlobal("a", "abab", {}, {startPosition: 1}), [
+        {start: 2, end: 3, captures: [null]},
+      ]);
+    });
+
+    it("returns an empty array with the start position past the subject", () => {
+      assert.deepEqual(matchGlobal("a", "ab", {}, {startPosition: 3}), []);
+    });
+
+    it("applies scan flags to every attempt", () => {
+      assert.deepEqual(matchGlobal("a*", "ab", {}, {notempty: true}), [
+        {start: 0, end: 1, captures: [null]},
+      ]);
+    });
+
+    it("recomputes the firstline bound per attempt", () => {
+      assert.deepEqual(matchGlobal("[a-d]", "ab\ncd", {}, {firstline: true}), [
+        {start: 0, end: 1, captures: [null]},
+        {start: 1, end: 2, captures: [null]},
+      ]);
+    });
+  });
+
   describe("parseCompileOption()", () => {
     const buildAcc = () => ({
       anchored: false,

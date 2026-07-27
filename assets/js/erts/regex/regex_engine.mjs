@@ -380,6 +380,52 @@ export default class RegexEngine {
     });
   }
 
+  // Matches a compiled entry repeatedly with PCRE global scan semantics:
+  // each attempt continues at the previous match end, and after an empty
+  // match the same position is retried anchored with another empty match
+  // rejected - a successful retry counts as an additional match, a failed
+  // one advances the scan by one character (a CRLF pair when the newline
+  // convention treats it as one newline, a surrogate pair in unicode mode).
+  // Returns an array of match results, empty when there is no match.
+  // Scan flags in runOpts apply to every attempt.
+  static matchGlobal(compiled, subject, runOpts = {}) {
+    const results = [];
+    let position = runOpts.startPosition ?? 0;
+
+    while (position <= subject.length) {
+      const result = $.match(compiled, subject, {
+        ...runOpts,
+        startPosition: position,
+      });
+
+      if (result === null) break;
+
+      results.push(result);
+
+      if (result.end > result.start) {
+        position = result.end;
+        continue;
+      }
+
+      const retry = $.match(compiled, subject, {
+        ...runOpts,
+        anchored: true,
+        notemptyAtStart: true,
+        startPosition: result.start,
+      });
+
+      if (retry !== null) {
+        results.push(retry);
+        position = retry.end;
+      } else {
+        position =
+          result.start + $.#scanAdvance(compiled, subject, result.start);
+      }
+    }
+
+    return results;
+  }
+
   // Applies a :re compile option to the accumulator and returns the option
   // kind: "anchored", "compile" (compile-only), "dual" (also a run option),
   // or "invalid".
@@ -539,6 +585,27 @@ export default class RegexEngine {
     }
 
     return Infinity;
+  }
+
+  // Returns how many UTF-16 units the global scan advances over the
+  // character at the position.
+  static #scanAdvance(compiled, subject, position) {
+    if (
+      NEWLINE_PAIR_CONVENTIONS.has(compiled.newlineType) &&
+      subject.charCodeAt(position) === 0x0d &&
+      subject.charCodeAt(position + 1) === 0x0a
+    ) {
+      return 2;
+    }
+
+    if (
+      compiled.opts.unicode === true &&
+      subject.codePointAt(position) > 0xffff
+    ) {
+      return 2;
+    }
+
+    return 1;
   }
 
   // The y flag makes the match start exactly at lastIndex instead of
