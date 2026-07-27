@@ -1,7 +1,7 @@
 "use strict";
 
 import ERTS from "../../erts.mjs";
-import RegexAnalyzer from "./regex_analyzer.mjs";
+import RegexAnalyzer, {walkAst} from "./regex_analyzer.mjs";
 
 import {
   codePointInRanges,
@@ -332,51 +332,11 @@ export default class RegexInterpreter {
   }
 
   static #collectSubroutines(node, table) {
-    switch (node.type) {
-      case "alternation":
-        for (const branch of node.branches) {
-          $.#collectSubroutines(branch, table);
-        }
-        break;
-
-      case "atomicGroup":
-      case "branchResetGroup":
-      case "lookaround":
-      case "nonCapturingGroup":
-      case "optionGroup":
-      case "scriptRun":
-        $.#collectSubroutines(node.content, table);
-        break;
-
-      case "concatenation":
-        for (const item of node.items) {
-          $.#collectSubroutines(item, table);
-        }
-        break;
-
-      case "conditional":
-        if (node.condition.kind === "assertion") {
-          $.#collectSubroutines(node.condition.assertion, table);
-        }
-
-        $.#collectSubroutines(node.yes, table);
-
-        if (node.no !== null) $.#collectSubroutines(node.no, table);
-        break;
-
-      case "group":
-        if (!table.has(node.number)) table.set(node.number, node);
-
-        $.#collectSubroutines(node.content, table);
-        break;
-
-      case "quantifier":
-        $.#collectSubroutines(node.item, table);
-        break;
-
-      default:
-        break;
-    }
+    walkAst(node, (visited) => {
+      if (visited.type === "group" && !table.has(visited.number)) {
+        table.set(visited.number, visited);
+      }
+    });
   }
 
   // Evaluates a conditional's condition at the given position.

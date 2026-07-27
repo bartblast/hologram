@@ -2,6 +2,49 @@
 
 import {startOptions} from "./regex_options.mjs";
 
+// Walks the AST pre-order, calling visit on every node and recursing into
+// all child nodes.
+export function walkAst(node, visit) {
+  visit(node);
+
+  switch (node.type) {
+    case "alternation":
+      for (const branch of node.branches) walkAst(branch, visit);
+      break;
+
+    case "atomicGroup":
+    case "branchResetGroup":
+    case "group":
+    case "lookaround":
+    case "nonCapturingGroup":
+    case "optionGroup":
+    case "scriptRun":
+      walkAst(node.content, visit);
+      break;
+
+    case "concatenation":
+      for (const item of node.items) walkAst(item, visit);
+      break;
+
+    case "conditional":
+      if (node.condition.kind === "assertion") {
+        walkAst(node.condition.assertion, visit);
+      }
+
+      walkAst(node.yes, visit);
+
+      if (node.no !== null) walkAst(node.no, visit);
+      break;
+
+    case "quantifier":
+      walkAst(node.item, visit);
+      break;
+
+    default:
+      break;
+  }
+}
+
 export default class RegexAnalyzer {
   // Builds the capture group map for a parsed pattern: the total group count
   // and the mapping from group names to sorted, unique group numbers.
@@ -139,59 +182,19 @@ export default class RegexAnalyzer {
   }
 
   static #collectGroups(node, groupMap) {
-    switch (node.type) {
-      case "alternation":
-        for (const branch of node.branches) {
-          $.#collectGroups(branch, groupMap);
-        }
-        break;
+    walkAst(node, (visited) => {
+      if (visited.type !== "group") return;
 
-      case "atomicGroup":
-      case "branchResetGroup":
-      case "lookaround":
-      case "nonCapturingGroup":
-      case "optionGroup":
-      case "scriptRun":
-        $.#collectGroups(node.content, groupMap);
-        break;
+      if (visited.number > groupMap.count) groupMap.count = visited.number;
 
-      case "concatenation":
-        for (const item of node.items) {
-          $.#collectGroups(item, groupMap);
-        }
-        break;
-
-      case "conditional":
-        if (node.condition.kind === "assertion") {
-          $.#collectGroups(node.condition.assertion, groupMap);
+      if (visited.name !== null) {
+        if (!groupMap.names.has(visited.name)) {
+          groupMap.names.set(visited.name, []);
         }
 
-        $.#collectGroups(node.yes, groupMap);
-
-        if (node.no !== null) $.#collectGroups(node.no, groupMap);
-        break;
-
-      case "group":
-        if (node.number > groupMap.count) groupMap.count = node.number;
-
-        if (node.name !== null) {
-          if (!groupMap.names.has(node.name)) {
-            groupMap.names.set(node.name, []);
-          }
-
-          groupMap.names.get(node.name).push(node.number);
-        }
-
-        $.#collectGroups(node.content, groupMap);
-        break;
-
-      case "quantifier":
-        $.#collectGroups(node.item, groupMap);
-        break;
-
-      default:
-        break;
-    }
+        groupMap.names.get(visited.name).push(visited.number);
+      }
+    });
   }
 
   static #hasUnsafeBackreference(ast, groupMap) {

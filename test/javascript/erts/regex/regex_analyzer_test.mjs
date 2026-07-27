@@ -5,7 +5,10 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../../support/helpers.mjs";
 
-import RegexAnalyzer from "../../../../assets/js/erts/regex/regex_analyzer.mjs";
+import RegexAnalyzer, {
+  walkAst,
+} from "../../../../assets/js/erts/regex/regex_analyzer.mjs";
+
 import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -203,6 +206,110 @@ describe("RegexAnalyzer", () => {
 
     it("routes backreference to group in one alternation branch to interpreted", () => {
       assert.equal(route("((a)|b)\\2"), "interpreted");
+    });
+  });
+
+  describe("walkAst()", () => {
+    const visitedTypes = (source) => {
+      const types = [];
+
+      walkAst(RegexParser.parse(source), (node) => types.push(node.type));
+
+      return types;
+    };
+
+    it("visits a leaf pattern", () => {
+      assert.deepEqual(visitedTypes("a"), ["literal"]);
+    });
+
+    it("visits alternation branches in order", () => {
+      assert.deepEqual(visitedTypes("a|b"), [
+        "alternation",
+        "literal",
+        "literal",
+      ]);
+    });
+
+    it("visits atomic group content", () => {
+      assert.deepEqual(visitedTypes("(?>a)"), ["atomicGroup", "literal"]);
+    });
+
+    it("visits branch reset group content", () => {
+      assert.deepEqual(visitedTypes("(?|(a))"), [
+        "branchResetGroup",
+        "group",
+        "literal",
+      ]);
+    });
+
+    it("visits concatenation items in order", () => {
+      assert.deepEqual(visitedTypes("ab"), [
+        "concatenation",
+        "literal",
+        "literal",
+      ]);
+    });
+
+    it("visits conditional assertion condition, yes and no branches", () => {
+      assert.deepEqual(visitedTypes("(?(?=x)a|b)"), [
+        "conditional",
+        "lookaround",
+        "literal",
+        "literal",
+        "literal",
+      ]);
+    });
+
+    it("visits conditional group condition branches only", () => {
+      assert.deepEqual(visitedTypes("(x)(?(1)a|b)"), [
+        "concatenation",
+        "group",
+        "literal",
+        "conditional",
+        "literal",
+        "literal",
+      ]);
+    });
+
+    it("visits conditional without no branch", () => {
+      assert.deepEqual(visitedTypes("(?(?=x)a)"), [
+        "conditional",
+        "lookaround",
+        "literal",
+        "literal",
+      ]);
+    });
+
+    it("visits group content after the group itself", () => {
+      assert.deepEqual(visitedTypes("(ab)"), [
+        "group",
+        "concatenation",
+        "literal",
+        "literal",
+      ]);
+    });
+
+    it("visits lookaround content", () => {
+      assert.deepEqual(visitedTypes("(?=a)"), ["lookaround", "literal"]);
+    });
+
+    it("visits non-capturing group content", () => {
+      assert.deepEqual(visitedTypes("(?:a)"), ["nonCapturingGroup", "literal"]);
+    });
+
+    it("visits option group content", () => {
+      assert.deepEqual(visitedTypes("(?i:a)"), ["optionGroup", "literal"]);
+    });
+
+    it("visits quantifier item", () => {
+      assert.deepEqual(visitedTypes("a+"), ["quantifier", "literal"]);
+    });
+
+    it("visits script run content", () => {
+      assert.deepEqual(visitedTypes("(*script_run:a)"), [
+        "scriptRun",
+        "literal",
+      ]);
     });
   });
 });
