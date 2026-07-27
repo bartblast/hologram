@@ -10,6 +10,16 @@ import RegexParser from "../../../../assets/js/erts/regex/regex_parser.mjs";
 
 defineGlobalErlangAndElixirModules();
 
+// Factories for common AST nodes, keeping expected trees compact.
+// Assertions about code point values keep raw node objects instead.
+const lit = (char) => ({type: "literal", codePoint: char.codePointAt(0)});
+
+const range = (from, to) => ({
+  type: "range",
+  from: from.codePointAt(0),
+  to: to.codePointAt(0),
+});
+
 describe("RegexParser", () => {
   describe("parse()", () => {
     describe("alpha assertions", () => {
@@ -24,10 +34,10 @@ describe("RegexParser", () => {
                 min: 1,
                 max: null,
                 mode: "greedy",
-                item: {type: "literal", codePoint: 97},
+                item: lit("a"),
               },
             },
-            {type: "literal", codePoint: 98},
+            lit("b"),
           ],
         });
       });
@@ -38,7 +48,7 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: false,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -48,7 +58,7 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: false,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -58,7 +68,7 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: true,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -68,7 +78,7 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: false,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -78,7 +88,7 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: true,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -88,7 +98,7 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: false,
           atomic: false,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -98,7 +108,7 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: false,
           atomic: false,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -108,7 +118,7 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: false,
           atomic: false,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -118,7 +128,7 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: false,
           atomic: false,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -128,10 +138,7 @@ describe("RegexParser", () => {
           atomic: false,
           content: {
             type: "concatenation",
-            items: [
-              {type: "literal", codePoint: 97},
-              {type: "literal", codePoint: 98},
-            ],
+            items: [lit("a"), lit("b")],
           },
         });
       });
@@ -142,10 +149,7 @@ describe("RegexParser", () => {
           atomic: true,
           content: {
             type: "concatenation",
-            items: [
-              {type: "literal", codePoint: 97},
-              {type: "literal", codePoint: 98},
-            ],
+            items: [lit("a"), lit("b")],
           },
         });
       });
@@ -237,7 +241,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "anchor", kind: "lineStart"},
-            {type: "literal", codePoint: 97},
+            lit("a"),
             {type: "anchor", kind: "lineEnd"},
           ],
         });
@@ -264,21 +268,14 @@ describe("RegexParser", () => {
       it("parses two branches", () => {
         assert.deepEqual(RegexParser.parse("a|b"), {
           type: "alternation",
-          branches: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          branches: [lit("a"), lit("b")],
         });
       });
 
       it("parses three branches as a flat list", () => {
         assert.deepEqual(RegexParser.parse("a|b|c"), {
           type: "alternation",
-          branches: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-            {type: "literal", codePoint: 99},
-          ],
+          branches: [lit("a"), lit("b"), lit("c")],
         });
       });
 
@@ -288,17 +285,11 @@ describe("RegexParser", () => {
           branches: [
             {
               type: "concatenation",
-              items: [
-                {type: "literal", codePoint: 97},
-                {type: "literal", codePoint: 98},
-              ],
+              items: [lit("a"), lit("b")],
             },
             {
               type: "concatenation",
-              items: [
-                {type: "literal", codePoint: 99},
-                {type: "literal", codePoint: 100},
-              ],
+              items: [lit("c"), lit("d")],
             },
           ],
         });
@@ -307,20 +298,14 @@ describe("RegexParser", () => {
       it("parses empty leading branch", () => {
         assert.deepEqual(RegexParser.parse("|a"), {
           type: "alternation",
-          branches: [
-            {type: "concatenation", items: []},
-            {type: "literal", codePoint: 97},
-          ],
+          branches: [{type: "concatenation", items: []}, lit("a")],
         });
       });
 
       it("parses empty trailing branch", () => {
         assert.deepEqual(RegexParser.parse("a|"), {
           type: "alternation",
-          branches: [
-            {type: "literal", codePoint: 97},
-            {type: "concatenation", items: []},
-          ],
+          branches: [lit("a"), {type: "concatenation", items: []}],
         });
       });
     });
@@ -334,7 +319,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: 1, name: null},
           ],
@@ -350,13 +335,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "group",
               number: 2,
               name: null,
-              content: {type: "literal", codePoint: 98},
+              content: lit("b"),
             },
           ],
         });
@@ -367,7 +352,7 @@ describe("RegexParser", () => {
           type: "group",
           number: index + 1,
           name: null,
-          content: {type: "literal", codePoint: char.codePointAt(0)},
+          content: lit(char),
         }));
 
         assert.deepEqual(
@@ -389,10 +374,7 @@ describe("RegexParser", () => {
       it("stops octal fallback at non-octal digit", () => {
         assert.deepEqual(RegexParser.parse("\\19"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 1},
-            {type: "literal", codePoint: 57},
-          ],
+          items: [{type: "literal", codePoint: 1}, lit("9")],
         });
       });
 
@@ -406,7 +388,7 @@ describe("RegexParser", () => {
               min: 0,
               max: null,
               mode: "greedy",
-              item: {type: "literal", codePoint: 57},
+              item: lit("9"),
             },
           ],
         });
@@ -427,7 +409,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: 1, name: null},
           ],
@@ -442,7 +424,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: 1, name: null},
           ],
@@ -457,13 +439,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "group",
               number: 2,
               name: null,
-              content: {type: "literal", codePoint: 98},
+              content: lit("b"),
             },
             {type: "backreference", number: 2, name: null},
           ],
@@ -479,7 +461,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
           ],
         });
@@ -493,7 +475,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: null, name: "x"},
           ],
@@ -508,7 +490,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: null, name: "x"},
           ],
@@ -523,7 +505,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: null, name: "x"},
           ],
@@ -538,7 +520,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: null, name: "x"},
           ],
@@ -553,7 +535,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "backreference", number: null, name: "x"},
           ],
@@ -569,7 +551,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
           ],
         });
@@ -667,13 +649,13 @@ describe("RegexParser", () => {
                 type: "group",
                 number: 1,
                 name: null,
-                content: {type: "literal", codePoint: 97},
+                content: lit("a"),
               },
               {
                 type: "group",
                 number: 1,
                 name: null,
-                content: {type: "literal", codePoint: 98},
+                content: lit("b"),
               },
             ],
           },
@@ -696,13 +678,13 @@ describe("RegexParser", () => {
                         type: "group",
                         number: 1,
                         name: null,
-                        content: {type: "literal", codePoint: 97},
+                        content: lit("a"),
                       },
                       {
                         type: "group",
                         number: 2,
                         name: null,
-                        content: {type: "literal", codePoint: 98},
+                        content: lit("b"),
                       },
                     ],
                   },
@@ -710,7 +692,7 @@ describe("RegexParser", () => {
                     type: "group",
                     number: 1,
                     name: null,
-                    content: {type: "literal", codePoint: 99},
+                    content: lit("c"),
                   },
                 ],
               },
@@ -719,7 +701,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 3,
               name: null,
-              content: {type: "literal", codePoint: 100},
+              content: lit("d"),
             },
           ],
         });
@@ -732,7 +714,7 @@ describe("RegexParser", () => {
             type: "group",
             number: 1,
             name: null,
-            content: {type: "literal", codePoint: 97},
+            content: lit("a"),
           },
         });
       });
@@ -747,13 +729,13 @@ describe("RegexParser", () => {
                 type: "group",
                 number: 1,
                 name: "x",
-                content: {type: "literal", codePoint: 97},
+                content: lit("a"),
               },
               {
                 type: "group",
                 number: 1,
                 name: "x",
-                content: {type: "literal", codePoint: 98},
+                content: lit("b"),
               },
             ],
           },
@@ -774,11 +756,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[abc]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-            {type: "literal", codePoint: 99},
-          ],
+          items: [lit("a"), lit("b"), lit("c")],
         });
       });
 
@@ -786,10 +764,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[^ab]"), {
           type: "class",
           negated: true,
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("b")],
         });
       });
 
@@ -797,7 +772,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[a-z]"), {
           type: "class",
           negated: false,
-          items: [{type: "range", from: 97, to: 122}],
+          items: [range("a", "z")],
         });
       });
 
@@ -805,10 +780,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[a-z0]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "range", from: 97, to: 122},
-            {type: "literal", codePoint: 48},
-          ],
+          items: [range("a", "z"), lit("0")],
         });
       });
 
@@ -832,10 +804,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[-a]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 45},
-            {type: "literal", codePoint: 97},
-          ],
+          items: [lit("-"), lit("a")],
         });
       });
 
@@ -843,10 +812,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[a-]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 45},
-          ],
+          items: [lit("a"), lit("-")],
         });
       });
 
@@ -854,11 +820,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[a-z-0]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "range", from: 97, to: 122},
-            {type: "literal", codePoint: 45},
-            {type: "literal", codePoint: 48},
-          ],
+          items: [range("a", "z"), lit("-"), lit("0")],
         });
       });
 
@@ -866,10 +828,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[]a]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 93},
-            {type: "literal", codePoint: 97},
-          ],
+          items: [lit("]"), lit("a")],
         });
       });
 
@@ -877,10 +836,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[^]a]"), {
           type: "class",
           negated: true,
-          items: [
-            {type: "literal", codePoint: 93},
-            {type: "literal", codePoint: 97},
-          ],
+          items: [lit("]"), lit("a")],
         });
       });
 
@@ -888,7 +844,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[]-a]"), {
           type: "class",
           negated: false,
-          items: [{type: "range", from: 93, to: 97}],
+          items: [range("]", "a")],
         });
       });
 
@@ -896,10 +852,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[a^]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 94},
-          ],
+          items: [lit("a"), lit("^")],
         });
       });
 
@@ -907,7 +860,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[[]"), {
           type: "class",
           negated: false,
-          items: [{type: "literal", codePoint: 91}],
+          items: [lit("[")],
         });
       });
 
@@ -915,10 +868,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[*+]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 42},
-            {type: "literal", codePoint: 43},
-          ],
+          items: [lit("*"), lit("+")],
         });
       });
 
@@ -926,11 +876,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[.$^]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 46},
-            {type: "literal", codePoint: 36},
-            {type: "literal", codePoint: 94},
-          ],
+          items: [lit("."), lit("$"), lit("^")],
         });
       });
 
@@ -943,10 +889,7 @@ describe("RegexParser", () => {
           item: {
             type: "class",
             negated: false,
-            items: [
-              {type: "literal", codePoint: 97},
-              {type: "literal", codePoint: 98},
-            ],
+            items: [lit("a"), lit("b")],
           },
         });
       });
@@ -985,13 +928,9 @@ describe("RegexParser", () => {
             {
               type: "class",
               negated: false,
-              items: [
-                {type: "literal", codePoint: 91},
-                {type: "literal", codePoint: 58},
-                {type: "literal", codePoint: 97},
-              ],
+              items: [lit("["), lit(":"), lit("a")],
             },
-            {type: "literal", codePoint: 93},
+            lit("]"),
           ],
         });
       });
@@ -1019,7 +958,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\x41]"), {
           type: "class",
           negated: false,
-          items: [{type: "literal", codePoint: 65}],
+          items: [lit("A")],
         });
       });
 
@@ -1027,7 +966,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\101]"), {
           type: "class",
           negated: false,
-          items: [{type: "literal", codePoint: 65}],
+          items: [lit("A")],
         });
       });
 
@@ -1043,10 +982,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\8\\9]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 56},
-            {type: "literal", codePoint: 57},
-          ],
+          items: [lit("8"), lit("9")],
         });
       });
 
@@ -1054,10 +990,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\g\\k]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 103},
-            {type: "literal", codePoint: 107},
-          ],
+          items: [lit("g"), lit("k")],
         });
       });
 
@@ -1065,7 +998,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\-]"), {
           type: "class",
           negated: false,
-          items: [{type: "literal", codePoint: 45}],
+          items: [lit("-")],
         });
       });
 
@@ -1100,10 +1033,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\s-]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "shorthand", letter: "s", negated: false},
-            {type: "literal", codePoint: 45},
-          ],
+          items: [{type: "shorthand", letter: "s", negated: false}, lit("-")],
         });
       });
 
@@ -1111,11 +1041,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\Qa-b\\E]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 45},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("-"), lit("b")],
         });
       });
 
@@ -1123,7 +1049,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\Q]\\E]"), {
           type: "class",
           negated: false,
-          items: [{type: "literal", codePoint: 93}],
+          items: [lit("]")],
         });
       });
 
@@ -1131,10 +1057,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\Q\\d\\E]"), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 92},
-            {type: "literal", codePoint: 100},
-          ],
+          items: [lit("\\"), lit("d")],
         });
       });
 
@@ -1142,7 +1065,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[\\Qa\\E-z]"), {
           type: "class",
           negated: false,
-          items: [{type: "range", from: 97, to: 122}],
+          items: [range("a", "z")],
         });
       });
 
@@ -1154,7 +1077,7 @@ describe("RegexParser", () => {
             {
               type: "class",
               negated: false,
-              items: [{type: "literal", codePoint: 32}],
+              items: [lit(" ")],
             },
           ],
         });
@@ -1265,20 +1188,14 @@ describe("RegexParser", () => {
       it("skips comment", () => {
         assert.deepEqual(RegexParser.parse("a(?#c)b"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("b")],
         });
       });
 
       it("skips empty comment", () => {
         assert.deepEqual(RegexParser.parse("a(?#)b"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("b")],
         });
       });
 
@@ -1288,7 +1205,7 @@ describe("RegexParser", () => {
           min: 0,
           max: null,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -1301,21 +1218,14 @@ describe("RegexParser", () => {
       it("parses two characters", () => {
         assert.deepEqual(RegexParser.parse("ab"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("b")],
         });
       });
 
       it("parses three characters as a flat list", () => {
         assert.deepEqual(RegexParser.parse("abc"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-            {type: "literal", codePoint: 99},
-          ],
+          items: [lit("a"), lit("b"), lit("c")],
         });
       });
     });
@@ -1329,13 +1239,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "group", number: 1, name: null},
-              yes: {type: "literal", codePoint: 98},
-              no: {type: "literal", codePoint: 99},
+              yes: lit("b"),
+              no: lit("c"),
             },
           ],
         });
@@ -1349,12 +1259,12 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "group", number: 1, name: null},
-              yes: {type: "literal", codePoint: 98},
+              yes: lit("b"),
               no: null,
             },
           ],
@@ -1369,13 +1279,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "group", number: 1, name: null},
-              yes: {type: "literal", codePoint: 98},
-              no: {type: "literal", codePoint: 99},
+              yes: lit("b"),
+              no: lit("c"),
             },
           ],
         });
@@ -1389,13 +1299,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "group", number: null, name: "x"},
-              yes: {type: "literal", codePoint: 98},
-              no: {type: "literal", codePoint: 99},
+              yes: lit("b"),
+              no: lit("c"),
             },
           ],
         });
@@ -1409,13 +1319,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "group", number: null, name: "x"},
-              yes: {type: "literal", codePoint: 98},
-              no: {type: "literal", codePoint: 99},
+              yes: lit("b"),
+              no: lit("c"),
             },
           ],
         });
@@ -1429,13 +1339,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "Rx",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "group", number: null, name: "Rx"},
-              yes: {type: "literal", codePoint: 98},
-              no: {type: "literal", codePoint: 99},
+              yes: lit("b"),
+              no: lit("c"),
             },
           ],
         });
@@ -1449,13 +1359,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "recursion", number: null, name: null},
-              yes: {type: "literal", codePoint: 98},
-              no: {type: "literal", codePoint: 99},
+              yes: lit("b"),
+              no: lit("c"),
             },
           ],
         });
@@ -1469,19 +1379,19 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "group",
               number: 2,
               name: null,
-              content: {type: "literal", codePoint: 98},
+              content: lit("b"),
             },
             {
               type: "conditional",
               condition: {kind: "recursion", number: 2, name: null},
-              yes: {type: "literal", codePoint: 99},
-              no: {type: "literal", codePoint: 100},
+              yes: lit("c"),
+              no: lit("d"),
             },
           ],
         });
@@ -1495,13 +1405,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "conditional",
               condition: {kind: "recursion", number: null, name: "x"},
-              yes: {type: "literal", codePoint: 98},
-              no: {type: "literal", codePoint: 99},
+              yes: lit("b"),
+              no: lit("c"),
             },
           ],
         });
@@ -1518,7 +1428,7 @@ describe("RegexParser", () => {
                 type: "group",
                 number: 1,
                 name: "x",
-                content: {type: "literal", codePoint: 97},
+                content: lit("a"),
               },
               no: null,
             },
@@ -1537,22 +1447,16 @@ describe("RegexParser", () => {
               direction: "ahead",
               negated: false,
               atomic: true,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
           },
           yes: {
             type: "concatenation",
-            items: [
-              {type: "literal", codePoint: 97},
-              {type: "literal", codePoint: 98},
-            ],
+            items: [lit("a"), lit("b")],
           },
           no: {
             type: "concatenation",
-            items: [
-              {type: "literal", codePoint: 99},
-              {type: "literal", codePoint: 100},
-            ],
+            items: [lit("c"), lit("d")],
           },
         });
       });
@@ -1561,8 +1465,8 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("(?(VERSION>=10.4)a|b)"), {
           type: "conditional",
           condition: {kind: "version", gte: true, major: 10, minor: 4},
-          yes: {type: "literal", codePoint: 97},
-          no: {type: "literal", codePoint: 98},
+          yes: lit("a"),
+          no: lit("b"),
         });
       });
 
@@ -1570,8 +1474,8 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("(?(VERSION=10.4)a|b)"), {
           type: "conditional",
           condition: {kind: "version", gte: false, major: 10, minor: 4},
-          yes: {type: "literal", codePoint: 97},
-          no: {type: "literal", codePoint: 98},
+          yes: lit("a"),
+          no: lit("b"),
         });
       });
 
@@ -1579,7 +1483,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("(?(VERSION>=10)a)"), {
           type: "conditional",
           condition: {kind: "version", gte: true, major: 10, minor: 0},
-          yes: {type: "literal", codePoint: 97},
+          yes: lit("a"),
           no: null,
         });
       });
@@ -1710,10 +1614,10 @@ describe("RegexParser", () => {
       });
 
       it("parses \\N{U+hhhh} in unicode mode", () => {
-        assert.deepEqual(RegexParser.parse("\\N{U+41}", {unicode: true}), {
-          type: "literal",
-          codePoint: 65,
-        });
+        assert.deepEqual(
+          RegexParser.parse("\\N{U+41}", {unicode: true}),
+          lit("A"),
+        );
       });
 
       it("parses simple character escapes", () => {
@@ -1738,27 +1642,18 @@ describe("RegexParser", () => {
       });
 
       it("parses \\x with two hex digits", () => {
-        assert.deepEqual(RegexParser.parse("\\x41"), {
-          type: "literal",
-          codePoint: 65,
-        });
+        assert.deepEqual(RegexParser.parse("\\x41"), lit("A"));
       });
 
       it("stops \\x after two hex digits", () => {
         assert.deepEqual(RegexParser.parse("\\x411"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 65},
-            {type: "literal", codePoint: 49},
-          ],
+          items: [lit("A"), lit("1")],
         });
       });
 
       it("parses \\x{hhh...}", () => {
-        assert.deepEqual(RegexParser.parse("\\x{41}"), {
-          type: "literal",
-          codePoint: 65,
-        });
+        assert.deepEqual(RegexParser.parse("\\x{41}"), lit("A"));
       });
 
       it("parses \\x{hhh...} up to 0xff in 8-bit mode", () => {
@@ -1792,18 +1687,12 @@ describe("RegexParser", () => {
       it("stops \\0 octal after three digits", () => {
         assert.deepEqual(RegexParser.parse("\\0123"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 10},
-            {type: "literal", codePoint: 51},
-          ],
+          items: [{type: "literal", codePoint: 10}, lit("3")],
         });
       });
 
       it("parses \\o{ddd...}", () => {
-        assert.deepEqual(RegexParser.parse("\\o{101}"), {
-          type: "literal",
-          codePoint: 65,
-        });
+        assert.deepEqual(RegexParser.parse("\\o{101}"), lit("A"));
       });
 
       it("parses \\c with uppercase letter", () => {
@@ -1828,17 +1717,11 @@ describe("RegexParser", () => {
       });
 
       it("parses escaped metacharacter as literal", () => {
-        assert.deepEqual(RegexParser.parse("\\."), {
-          type: "literal",
-          codePoint: 46,
-        });
+        assert.deepEqual(RegexParser.parse("\\."), lit("."));
       });
 
       it("parses escaped backslash as literal", () => {
-        assert.deepEqual(RegexParser.parse("\\\\"), {
-          type: "literal",
-          codePoint: 92,
-        });
+        assert.deepEqual(RegexParser.parse("\\\\"), lit("\\"));
       });
 
       it("parses escaped non-alphanumeric non-ASCII as literal", () => {
@@ -1925,11 +1808,7 @@ describe("RegexParser", () => {
       it("parses \\K as match start reset", () => {
         assert.deepEqual(RegexParser.parse("a\\Kb"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "matchStartReset"},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), {type: "matchStartReset"}, lit("b")],
         });
       });
 
@@ -2076,31 +1955,21 @@ describe("RegexParser", () => {
       it("ignores whitespace", () => {
         assert.deepEqual(RegexParser.parse("a b", {extended: true}), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("b")],
         });
       });
 
       it("skips # comment until end of line", () => {
         assert.deepEqual(RegexParser.parse("a # c\nb", {extended: true}), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("b")],
         });
       });
 
       it("keeps escaped space literal", () => {
         assert.deepEqual(RegexParser.parse("a\\ b", {extended: true}), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 32},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit(" "), lit("b")],
         });
       });
 
@@ -2108,10 +1977,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("[a ]", {extended: true}), {
           type: "class",
           negated: false,
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 32},
-          ],
+          items: [lit("a"), lit(" ")],
         });
       });
 
@@ -2121,7 +1987,7 @@ describe("RegexParser", () => {
           min: 2,
           max: 2,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -2131,7 +1997,7 @@ describe("RegexParser", () => {
           min: 0,
           max: null,
           mode: "possessive",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -2140,8 +2006,8 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "x", unset: ""},
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
+            lit("a"),
+            lit("b"),
           ],
         });
       });
@@ -2157,15 +2023,12 @@ describe("RegexParser", () => {
               unset: "",
               content: {
                 type: "concatenation",
-                items: [
-                  {type: "literal", codePoint: 97},
-                  {type: "literal", codePoint: 98},
-                ],
+                items: [lit("a"), lit("b")],
               },
             },
-            {type: "literal", codePoint: 99},
-            {type: "literal", codePoint: 32},
-            {type: "literal", codePoint: 100},
+            lit("c"),
+            lit(" "),
+            lit("d"),
           ],
         });
       });
@@ -2178,7 +2041,7 @@ describe("RegexParser", () => {
             {
               type: "class",
               negated: false,
-              items: [{type: "literal", codePoint: 97}],
+              items: [lit("a")],
             },
           ],
         });
@@ -2190,7 +2053,7 @@ describe("RegexParser", () => {
           min: 1,
           max: 2,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
     });
@@ -2201,7 +2064,7 @@ describe("RegexParser", () => {
           type: "group",
           number: 1,
           name: null,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2213,13 +2076,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "group",
               number: 2,
               name: null,
-              content: {type: "literal", codePoint: 98},
+              content: lit("b"),
             },
           ],
         });
@@ -2234,7 +2097,7 @@ describe("RegexParser", () => {
             type: "group",
             number: 2,
             name: null,
-            content: {type: "literal", codePoint: 97},
+            content: lit("a"),
           },
         });
       });
@@ -2246,10 +2109,7 @@ describe("RegexParser", () => {
           name: null,
           content: {
             type: "alternation",
-            branches: [
-              {type: "literal", codePoint: 97},
-              {type: "literal", codePoint: 98},
-            ],
+            branches: [lit("a"), lit("b")],
           },
         });
       });
@@ -2275,10 +2135,7 @@ describe("RegexParser", () => {
             name: null,
             content: {
               type: "concatenation",
-              items: [
-                {type: "literal", codePoint: 97},
-                {type: "literal", codePoint: 98},
-              ],
+              items: [lit("a"), lit("b")],
             },
           },
         });
@@ -2289,10 +2146,7 @@ describe("RegexParser", () => {
           type: "nonCapturingGroup",
           content: {
             type: "concatenation",
-            items: [
-              {type: "literal", codePoint: 97},
-              {type: "literal", codePoint: 98},
-            ],
+            items: [lit("a"), lit("b")],
           },
         });
       });
@@ -2303,13 +2157,13 @@ describe("RegexParser", () => {
           items: [
             {
               type: "nonCapturingGroup",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 98},
+              content: lit("b"),
             },
           ],
         });
@@ -2323,7 +2177,7 @@ describe("RegexParser", () => {
             min: 1,
             max: null,
             mode: "greedy",
-            item: {type: "literal", codePoint: 97},
+            item: lit("a"),
           },
         });
       });
@@ -2333,7 +2187,7 @@ describe("RegexParser", () => {
           type: "group",
           number: 1,
           name: "x",
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2342,7 +2196,7 @@ describe("RegexParser", () => {
           type: "group",
           number: 1,
           name: "x",
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2351,7 +2205,7 @@ describe("RegexParser", () => {
           type: "group",
           number: 1,
           name: "x",
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2360,7 +2214,7 @@ describe("RegexParser", () => {
           type: "group",
           number: 1,
           name: "héé",
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2371,7 +2225,7 @@ describe("RegexParser", () => {
             type: "group",
             number: 1,
             name: "\u{1d400}",
-            content: {type: "literal", codePoint: 97},
+            content: lit("a"),
           },
         );
       });
@@ -2381,7 +2235,7 @@ describe("RegexParser", () => {
           type: "group",
           number: 1,
           name: "a١",
-          content: {type: "literal", codePoint: 98},
+          content: lit("b"),
         });
       });
 
@@ -2393,13 +2247,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "group",
               number: 2,
               name: "x",
-              content: {type: "literal", codePoint: 98},
+              content: lit("b"),
             },
           ],
         });
@@ -2415,13 +2269,13 @@ describe("RegexParser", () => {
                 type: "group",
                 number: 1,
                 name: "x",
-                content: {type: "literal", codePoint: 97},
+                content: lit("a"),
               },
               {
                 type: "group",
                 number: 2,
                 name: "x",
-                content: {type: "literal", codePoint: 98},
+                content: lit("b"),
               },
             ],
           },
@@ -2438,11 +2292,11 @@ describe("RegexParser", () => {
                 type: "group",
                 number: 1,
                 name: "x",
-                content: {type: "literal", codePoint: 97},
+                content: lit("a"),
               },
               {
                 type: "nonCapturingGroup",
-                content: {type: "literal", codePoint: 98},
+                content: lit("b"),
               },
             ],
           },
@@ -2551,7 +2405,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "i", unset: ""},
-            {type: "literal", codePoint: 97},
+            lit("a"),
           ],
         });
       });
@@ -2561,7 +2415,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "im", unset: "sU"},
-            {type: "literal", codePoint: 97},
+            lit("a"),
           ],
         });
       });
@@ -2574,10 +2428,7 @@ describe("RegexParser", () => {
           unset: "",
           content: {
             type: "concatenation",
-            items: [
-              {type: "literal", codePoint: 97},
-              {type: "literal", codePoint: 98},
-            ],
+            items: [lit("a"), lit("b")],
           },
         });
       });
@@ -2588,7 +2439,7 @@ describe("RegexParser", () => {
           reset: false,
           set: "",
           unset: "i",
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2597,7 +2448,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: true, set: "", unset: ""},
-            {type: "literal", codePoint: 97},
+            lit("a"),
           ],
         });
       });
@@ -2608,7 +2459,7 @@ describe("RegexParser", () => {
           reset: true,
           set: "i",
           unset: "",
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2617,7 +2468,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "", unset: ""},
-            {type: "literal", codePoint: 97},
+            lit("a"),
           ],
         });
       });
@@ -2631,13 +2482,13 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {
               type: "group",
               number: 2,
               name: "x",
-              content: {type: "literal", codePoint: 98},
+              content: lit("b"),
             },
           ],
         });
@@ -2650,7 +2501,7 @@ describe("RegexParser", () => {
             {type: "optionSetting", reset: false, set: "n", unset: ""},
             {
               type: "nonCapturingGroup",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
           ],
         });
@@ -2669,7 +2520,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "aD", unset: ""},
-            {type: "literal", codePoint: 98},
+            lit("b"),
           ],
         });
       });
@@ -2679,7 +2530,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "a", unset: ""},
-            {type: "literal", codePoint: 98},
+            lit("b"),
           ],
         });
       });
@@ -2689,7 +2540,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "", unset: "a"},
-            {type: "literal", codePoint: 98},
+            lit("b"),
           ],
         });
       });
@@ -2699,7 +2550,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "optionSetting", reset: false, set: "aDaW", unset: ""},
-            {type: "literal", codePoint: 98},
+            lit("b"),
           ],
         });
       });
@@ -2710,7 +2561,7 @@ describe("RegexParser", () => {
           reset: false,
           set: "aP",
           unset: "",
-          content: {type: "literal", codePoint: 98},
+          content: lit("b"),
         });
       });
 
@@ -2741,10 +2592,7 @@ describe("RegexParser", () => {
 
     describe("literal", () => {
       it("parses ASCII character", () => {
-        assert.deepEqual(RegexParser.parse("a"), {
-          type: "literal",
-          codePoint: 97,
-        });
+        assert.deepEqual(RegexParser.parse("a"), lit("a"));
       });
 
       it("parses non-ASCII BMP character", () => {
@@ -2769,7 +2617,7 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: false,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2779,7 +2627,7 @@ describe("RegexParser", () => {
           direction: "ahead",
           negated: true,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2789,7 +2637,7 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: false,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2799,7 +2647,7 @@ describe("RegexParser", () => {
           direction: "behind",
           negated: true,
           atomic: true,
-          content: {type: "literal", codePoint: 97},
+          content: lit("a"),
         });
       });
 
@@ -2813,7 +2661,7 @@ describe("RegexParser", () => {
             type: "group",
             number: 1,
             name: null,
-            content: {type: "literal", codePoint: 97},
+            content: lit("a"),
           },
         });
       });
@@ -2829,7 +2677,7 @@ describe("RegexParser", () => {
             direction: "ahead",
             negated: false,
             atomic: true,
-            content: {type: "literal", codePoint: 97},
+            content: lit("a"),
           },
         });
       });
@@ -2845,7 +2693,7 @@ describe("RegexParser", () => {
             min: 0,
             max: 255,
             mode: "greedy",
-            item: {type: "literal", codePoint: 97},
+            item: lit("a"),
           },
         });
       });
@@ -2863,13 +2711,10 @@ describe("RegexParser", () => {
             content: {
               type: "alternation",
               branches: [
-                {type: "literal", codePoint: 97},
+                lit("a"),
                 {
                   type: "concatenation",
-                  items: [
-                    {type: "literal", codePoint: 98},
-                    {type: "literal", codePoint: 99},
-                  ],
+                  items: [lit("b"), lit("c")],
                 },
               ],
             },
@@ -2896,10 +2741,10 @@ describe("RegexParser", () => {
                   min: 0,
                   max: null,
                   mode: "greedy",
-                  item: {type: "literal", codePoint: 97},
+                  item: lit("a"),
                 },
               },
-              {type: "literal", codePoint: 98},
+              lit("b"),
             ],
           },
         });
@@ -2953,7 +2798,7 @@ describe("RegexParser", () => {
           min: 0,
           max: null,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -2963,7 +2808,7 @@ describe("RegexParser", () => {
           min: 1,
           max: null,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -2973,7 +2818,7 @@ describe("RegexParser", () => {
           min: 0,
           max: 1,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -2983,7 +2828,7 @@ describe("RegexParser", () => {
           min: 3,
           max: 3,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -2993,7 +2838,7 @@ describe("RegexParser", () => {
           min: 2,
           max: null,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -3003,7 +2848,7 @@ describe("RegexParser", () => {
           min: 2,
           max: 5,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -3013,7 +2858,7 @@ describe("RegexParser", () => {
           min: 0,
           max: 5,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -3023,7 +2868,7 @@ describe("RegexParser", () => {
           min: 0,
           max: null,
           mode: "lazy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -3033,7 +2878,7 @@ describe("RegexParser", () => {
           min: 1,
           max: null,
           mode: "possessive",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -3043,7 +2888,7 @@ describe("RegexParser", () => {
           min: 2,
           max: 5,
           mode: "lazy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -3053,7 +2898,7 @@ describe("RegexParser", () => {
           min: 2,
           max: 5,
           mode: "possessive",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
@@ -3061,13 +2906,13 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("ab*"), {
           type: "concatenation",
           items: [
-            {type: "literal", codePoint: 97},
+            lit("a"),
             {
               type: "quantifier",
               min: 0,
               max: null,
               mode: "greedy",
-              item: {type: "literal", codePoint: 98},
+              item: lit("b"),
             },
           ],
         });
@@ -3089,39 +2934,28 @@ describe("RegexParser", () => {
           min: 65535,
           max: 65535,
           mode: "greedy",
-          item: {type: "literal", codePoint: 97},
+          item: lit("a"),
         });
       });
 
       it("parses { without bounds as literal", () => {
         assert.deepEqual(RegexParser.parse("a{"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 123},
-          ],
+          items: [lit("a"), lit("{")],
         });
       });
 
       it("parses incomplete bounds as literals", () => {
         assert.deepEqual(RegexParser.parse("a{2,"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 123},
-            {type: "literal", codePoint: 50},
-            {type: "literal", codePoint: 44},
-          ],
+          items: [lit("a"), lit("{"), lit("2"), lit(",")],
         });
       });
 
       it("parses unmatched } as literal", () => {
         assert.deepEqual(RegexParser.parse("a}"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 125},
-          ],
+          items: [lit("a"), lit("}")],
         });
       });
 
@@ -3166,10 +3000,7 @@ describe("RegexParser", () => {
       it("parses quoted metacharacters as literals", () => {
         assert.deepEqual(RegexParser.parse("\\Qa*\\E"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 42},
-          ],
+          items: [lit("a"), lit("*")],
         });
       });
 
@@ -3177,13 +3008,13 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("\\Qab\\E*"), {
           type: "concatenation",
           items: [
-            {type: "literal", codePoint: 97},
+            lit("a"),
             {
               type: "quantifier",
               min: 0,
               max: null,
               mode: "greedy",
-              item: {type: "literal", codePoint: 98},
+              item: lit("b"),
             },
           ],
         });
@@ -3192,46 +3023,29 @@ describe("RegexParser", () => {
       it("quotes to the end of pattern without \\E", () => {
         assert.deepEqual(RegexParser.parse("a\\Qb*"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-            {type: "literal", codePoint: 42},
-          ],
+          items: [lit("a"), lit("b"), lit("*")],
         });
       });
 
       it("ignores \\E without preceding \\Q", () => {
         assert.deepEqual(RegexParser.parse("a\\Eb"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit("b")],
         });
       });
 
       it("quotes group metacharacters", () => {
-        assert.deepEqual(RegexParser.parse("\\Q(\\E"), {
-          type: "literal",
-          codePoint: 40,
-        });
+        assert.deepEqual(RegexParser.parse("\\Q(\\E"), lit("("));
       });
 
       it("parses empty quote as nothing", () => {
-        assert.deepEqual(RegexParser.parse("\\Q\\Ea"), {
-          type: "literal",
-          codePoint: 97,
-        });
+        assert.deepEqual(RegexParser.parse("\\Q\\Ea"), lit("a"));
       });
 
       it("preserves whitespace inside quote in extended mode", () => {
         assert.deepEqual(RegexParser.parse("\\Qa b\\E", {extended: true}), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "literal", codePoint: 32},
-            {type: "literal", codePoint: 98},
-          ],
+          items: [lit("a"), lit(" "), lit("b")],
         });
       });
 
@@ -3248,10 +3062,7 @@ describe("RegexParser", () => {
       it("parses option verb", () => {
         assert.deepEqual(RegexParser.parse("(*UTF)a"), {
           type: "concatenation",
-          items: [
-            {type: "startOption", name: "UTF", value: null},
-            {type: "literal", codePoint: 97},
-          ],
+          items: [{type: "startOption", name: "UTF", value: null}, lit("a")],
         });
       });
 
@@ -3261,7 +3072,7 @@ describe("RegexParser", () => {
           items: [
             {type: "startOption", name: "UTF", value: null},
             {type: "startOption", name: "UCP", value: null},
-            {type: "literal", codePoint: 97},
+            lit("a"),
           ],
         });
       });
@@ -3269,20 +3080,14 @@ describe("RegexParser", () => {
       it("parses UTF8 alias", () => {
         assert.deepEqual(RegexParser.parse("(*UTF8)a"), {
           type: "concatenation",
-          items: [
-            {type: "startOption", name: "UTF8", value: null},
-            {type: "literal", codePoint: 97},
-          ],
+          items: [{type: "startOption", name: "UTF8", value: null}, lit("a")],
         });
       });
 
       it("parses newline convention verb", () => {
         assert.deepEqual(RegexParser.parse("(*CR)a"), {
           type: "concatenation",
-          items: [
-            {type: "startOption", name: "CR", value: null},
-            {type: "literal", codePoint: 97},
-          ],
+          items: [{type: "startOption", name: "CR", value: null}, lit("a")],
         });
       });
 
@@ -3291,7 +3096,7 @@ describe("RegexParser", () => {
           type: "concatenation",
           items: [
             {type: "startOption", name: "LIMIT_MATCH", value: 1000},
-            {type: "literal", codePoint: 97},
+            lit("a"),
           ],
         });
       });
@@ -3313,10 +3118,7 @@ describe("RegexParser", () => {
             {type: "startOption", name: "UTF", value: null},
             {
               type: "alternation",
-              branches: [
-                {type: "literal", codePoint: 97},
-                {type: "literal", codePoint: 98},
-              ],
+              branches: [lit("a"), lit("b")],
             },
           ],
         });
@@ -3379,7 +3181,7 @@ describe("RegexParser", () => {
         assert.deepEqual(RegexParser.parse("a(?R)?"), {
           type: "concatenation",
           items: [
-            {type: "literal", codePoint: 97},
+            lit("a"),
             {
               type: "quantifier",
               min: 0,
@@ -3407,7 +3209,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "subroutine", number: 1, name: null},
           ],
@@ -3422,7 +3224,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "subroutine", number: 1, name: null},
           ],
@@ -3438,7 +3240,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
           ],
         });
@@ -3452,7 +3254,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "subroutine", number: null, name: "x"},
           ],
@@ -3467,7 +3269,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "subroutine", number: null, name: "x"},
           ],
@@ -3482,7 +3284,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "subroutine", number: 1, name: null},
           ],
@@ -3497,7 +3299,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "subroutine", number: 1, name: null},
           ],
@@ -3512,7 +3314,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: "x",
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
             {type: "subroutine", number: null, name: "x"},
           ],
@@ -3528,7 +3330,7 @@ describe("RegexParser", () => {
               type: "group",
               number: 1,
               name: null,
-              content: {type: "literal", codePoint: 97},
+              content: lit("a"),
             },
           ],
         });
@@ -3710,20 +3512,14 @@ describe("RegexParser", () => {
       it("parses (*FAIL)", () => {
         assert.deepEqual(RegexParser.parse("a(*FAIL)"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "verb", verb: "fail", name: null},
-          ],
+          items: [lit("a"), {type: "verb", verb: "fail", name: null}],
         });
       });
 
       it("parses (*F) as fail", () => {
         assert.deepEqual(RegexParser.parse("a(*F)"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "verb", verb: "fail", name: null},
-          ],
+          items: [lit("a"), {type: "verb", verb: "fail", name: null}],
         });
       });
 
@@ -3733,7 +3529,7 @@ describe("RegexParser", () => {
           {
             type: "concatenation",
             items: [
-              {type: "literal", codePoint: 97},
+              lit("a"),
               {type: "verb", verb: "accept", name: null},
               {type: "verb", verb: "commit", name: null},
               {type: "verb", verb: "prune", name: null},
@@ -3747,30 +3543,21 @@ describe("RegexParser", () => {
       it("parses (*MARK:name)", () => {
         assert.deepEqual(RegexParser.parse("a(*MARK:x)"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "verb", verb: "mark", name: "x"},
-          ],
+          items: [lit("a"), {type: "verb", verb: "mark", name: "x"}],
         });
       });
 
       it("parses (*:name) as mark", () => {
         assert.deepEqual(RegexParser.parse("a(*:x)"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "verb", verb: "mark", name: "x"},
-          ],
+          items: [lit("a"), {type: "verb", verb: "mark", name: "x"}],
         });
       });
 
       it("parses named (*SKIP:name)", () => {
         assert.deepEqual(RegexParser.parse("a(*SKIP:x)"), {
           type: "concatenation",
-          items: [
-            {type: "literal", codePoint: 97},
-            {type: "verb", verb: "skip", name: "x"},
-          ],
+          items: [lit("a"), {type: "verb", verb: "skip", name: "x"}],
         });
       });
 
