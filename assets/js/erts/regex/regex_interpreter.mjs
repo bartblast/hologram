@@ -472,7 +472,7 @@ export default class RegexInterpreter {
   // continuation fails. The matcher receives the continuation to call with
   // its end position.
   static #matchAtomically(matcher, state, continuation) {
-    const savedCaptures = [...state.captures];
+    const savedCaptures = $.#saveCaptures(state);
     let lockedPosition = null;
 
     const found = matcher((endPosition) => {
@@ -484,7 +484,7 @@ export default class RegexInterpreter {
 
     if (continuation(lockedPosition)) return true;
 
-    state.captures.splice(0, state.captures.length, ...savedCaptures);
+    $.#restoreCaptures(state, savedCaptures);
 
     return false;
   }
@@ -564,22 +564,22 @@ export default class RegexInterpreter {
 
     if (node.negated) {
       // A negative assertion retains no captures from its content
-      const savedCaptures = [...state.captures];
+      const savedCaptures = $.#saveCaptures(state);
       const {found} = runConfined(() => assertionMatcher(() => true));
 
-      state.captures.splice(0, state.captures.length, ...savedCaptures);
+      $.#restoreCaptures(state, savedCaptures);
 
       return !found && continuation(position);
     }
 
     if (node.atomic) {
-      const savedCaptures = [...state.captures];
+      const savedCaptures = $.#saveCaptures(state);
 
       if (!runConfined(() => assertionMatcher(() => true)).found) return false;
 
       if (continuation(position)) return true;
 
-      state.captures.splice(0, state.captures.length, ...savedCaptures);
+      $.#restoreCaptures(state, savedCaptures);
 
       return false;
     }
@@ -674,7 +674,7 @@ export default class RegexInterpreter {
         return $.#matchSequence(node.items, 0, state, position, continuation);
 
       case "conditional": {
-        const savedCaptures = [...state.captures];
+        const savedCaptures = $.#saveCaptures(state);
         const branch = $.#conditionHolds(node.condition, state, position)
           ? node.yes
           : node.no;
@@ -686,7 +686,7 @@ export default class RegexInterpreter {
 
         // Roll back captures set by an assertion condition on failure
         if (!matched) {
-          state.captures.splice(0, state.captures.length, ...savedCaptures);
+          $.#restoreCaptures(state, savedCaptures);
         }
 
         return matched;
@@ -838,22 +838,22 @@ export default class RegexInterpreter {
       case "subroutine": {
         const number = resolveGroupNumbers(node, state.groupNames)[0];
         const target = state.subroutines.get(number);
-        const savedCaptures = [...state.captures];
+        const savedCaptures = $.#saveCaptures(state);
 
         state.callStack.push(number);
 
         const callContinuation = (endPosition) => {
           // Captures set inside a completed call are restored on exit,
           // and the call is no longer active during the continuation
-          const callCaptures = [...state.captures];
+          const callCaptures = $.#saveCaptures(state);
 
-          state.captures.splice(0, state.captures.length, ...savedCaptures);
+          $.#restoreCaptures(state, savedCaptures);
           state.callStack.pop();
 
           if (continuation(endPosition)) return true;
 
           // Calls are not atomic: restore the call state to backtrack into it
-          state.captures.splice(0, state.captures.length, ...callCaptures);
+          $.#restoreCaptures(state, callCaptures);
           state.callStack.push(number);
 
           return false;
@@ -1064,6 +1064,17 @@ export default class RegexInterpreter {
       default:
         throw new Error(`unsupported verb for interpretation: ${node.verb}`);
     }
+  }
+
+  // Restores a capture snapshot in place, because the captures array is
+  // shared by reference across continuations.
+  static #restoreCaptures(state, saved) {
+    state.captures.splice(0, state.captures.length, ...saved);
+  }
+
+  // Snapshots the capture list for a later rollback.
+  static #saveCaptures(state) {
+    return [...state.captures];
   }
 
   // Returns the state as updated by option settings lexically contained in
