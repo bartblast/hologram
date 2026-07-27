@@ -13,7 +13,7 @@ import {
 } from "./regex_newlines.mjs";
 
 import RegexParseError from "./regex_parse_error.mjs";
-import RegexParser, {START_OPTION_VERBS} from "./regex_parser.mjs";
+import RegexParser, {scanStartOptions} from "./regex_parser.mjs";
 import RegexTranslator from "./regex_translator.mjs";
 import Type from "../../type.mjs";
 
@@ -262,52 +262,12 @@ export default class RegexEngine {
   }
 
   // Reports whether the pattern source enables UTF mode with a (*UTF) or
-  // (*UTF8) verb within the start-of-pattern option settings. Replicates the
-  // parser's start option recognition without a full parse, because byte
-  // input must be rerouted to UTF-8 decoding before the pattern is parsed.
+  // (*UTF8) verb within the start-of-pattern option settings. Scans without
+  // a full parse, because byte input must be rerouted to UTF-8 decoding
+  // before the pattern is parsed.
   static hasUtfStartOption(source) {
-    const isWordChar = (char) =>
-      (char >= "a" && char <= "z") ||
-      (char >= "A" && char <= "Z") ||
-      (char >= "0" && char <= "9") ||
-      char === "_";
-
-    let position = 0;
-
-    while (source[position] === "(" && source[position + 1] === "*") {
-      const wordStart = position + 2;
-      let scanPosition = wordStart;
-
-      while (isWordChar(source[scanPosition])) scanPosition++;
-
-      const word = source.slice(wordStart, scanPosition);
-
-      if (!START_OPTION_VERBS.has(word)) return false;
-
-      let hasValue = false;
-
-      if (source[scanPosition] === "=") {
-        scanPosition++;
-
-        const digitsStart = scanPosition;
-
-        while (source[scanPosition] >= "0" && source[scanPosition] <= "9") {
-          scanPosition++;
-        }
-
-        if (scanPosition === digitsStart) return false;
-
-        hasValue = true;
-      }
-
-      if (source[scanPosition] !== ")") return false;
-
-      // The LIMIT_ verbs require a value, the other verbs don't take one
-      if (word.startsWith("LIMIT_") !== hasValue) return false;
-
-      if (word === "UTF" || word === "UTF8") return true;
-
-      position = scanPosition + 1;
+    for (const {name} of scanStartOptions(source)) {
+      if (name === "UTF" || name === "UTF8") return true;
     }
 
     return false;

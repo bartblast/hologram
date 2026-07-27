@@ -172,6 +172,55 @@ const VERB_KINDS = {
   THEN: "then",
 };
 
+// Scans the (*VERB) option settings at the start of a pattern without a
+// full parse, yielding {name, value, endPosition} for each valid one and
+// stopping at the first construct that isn't a valid start option.
+export function* scanStartOptions(source) {
+  const isWordChar = (char) =>
+    (char >= "a" && char <= "z") ||
+    (char >= "A" && char <= "Z") ||
+    (char >= "0" && char <= "9") ||
+    char === "_";
+
+  let position = 0;
+
+  while (source[position] === "(" && source[position + 1] === "*") {
+    const wordStart = position + 2;
+    let scanPosition = wordStart;
+
+    while (isWordChar(source[scanPosition])) scanPosition++;
+
+    const word = source.slice(wordStart, scanPosition);
+
+    if (!START_OPTION_VERBS.has(word)) return;
+
+    let value = null;
+
+    if (source[scanPosition] === "=") {
+      scanPosition++;
+
+      const digitsStart = scanPosition;
+
+      while (source[scanPosition] >= "0" && source[scanPosition] <= "9") {
+        scanPosition++;
+      }
+
+      if (scanPosition === digitsStart) return;
+
+      value = Number(source.slice(digitsStart, scanPosition));
+    }
+
+    if (source[scanPosition] !== ")") return;
+
+    // The LIMIT_ verbs require a value, the other verbs don't take one
+    if (word.startsWith("LIMIT_") !== (value !== null)) return;
+
+    position = scanPosition + 1;
+
+    yield {name: word, value: value, endPosition: position};
+  }
+}
+
 export default class RegexParser {
   #allGroupNames = null;
   #dupnames;
@@ -1903,38 +1952,10 @@ export default class RegexParser {
   #parseStartOptions() {
     const options = [];
 
-    while (this.#peek() === "(" && this.#source[this.#position + 1] === "*") {
-      const wordStart = this.#position + 2;
-      let scanPosition = wordStart;
+    for (const {name, value, endPosition} of scanStartOptions(this.#source)) {
+      this.#position = endPosition;
 
-      while (this.#isWordChar(this.#source[scanPosition])) scanPosition++;
-
-      const word = this.#source.slice(wordStart, scanPosition);
-
-      if (!START_OPTION_VERBS.has(word)) break;
-
-      let value = null;
-
-      if (this.#source[scanPosition] === "=") {
-        scanPosition++;
-
-        const digitsStart = scanPosition;
-
-        while (this.#isDigit(this.#source[scanPosition])) scanPosition++;
-
-        if (scanPosition === digitsStart) break;
-
-        value = Number(this.#source.slice(digitsStart, scanPosition));
-      }
-
-      if (this.#source[scanPosition] !== ")") break;
-
-      // The LIMIT_ verbs require a value, the other verbs don't take one
-      if (word.startsWith("LIMIT_") !== (value !== null)) break;
-
-      this.#position = scanPosition + 1;
-
-      if (word === "UTF" || word === "UTF8") {
+      if (name === "UTF" || name === "UTF8") {
         if (this.#neverUtf) {
           throw new RegexParseError(
             "using UTF is disabled by the application",
@@ -1945,7 +1966,7 @@ export default class RegexParser {
         this.#unicode = true;
       }
 
-      options.push({type: "startOption", name: word, value: value});
+      options.push({type: "startOption", name: name, value: value});
     }
 
     return options;
