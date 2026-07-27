@@ -994,14 +994,7 @@ export default class RegexParser {
       const signPosition = this.#position;
       const number = this.#parseSubroutineNumber();
 
-      if (this.#peek() !== ")") {
-        throw new RegexParseError(
-          "missing closing parenthesis for condition",
-          this.#position,
-        );
-      }
-
-      this.#position++;
+      this.#requireConditionClose();
 
       if (isRelative && number <= 0) {
         throw new RegexParseError(
@@ -1026,14 +1019,7 @@ export default class RegexParser {
 
       const {name, nameStart} = this.#parseSubpatternName(terminator);
 
-      if (this.#peek() !== ")") {
-        throw new RegexParseError(
-          "missing closing parenthesis for condition",
-          this.#position,
-        );
-      }
-
-      this.#position++;
+      this.#requireConditionClose();
       this.#validateNamedReference(name, nameStart);
 
       return {kind: "group", number: null, name: name};
@@ -1074,64 +1060,7 @@ export default class RegexParser {
     }
 
     if (word === "VERSION" && (this.#peek() === ">" || this.#peek() === "=")) {
-      let gte = false;
-
-      if (this.#peek() === ">") {
-        this.#position++;
-
-        if (this.#peek() !== "=") {
-          throw new RegexParseError(
-            "syntax error or number too big in (?(VERSION condition",
-            this.#position,
-          );
-        }
-
-        gte = true;
-      }
-
-      this.#position++;
-
-      const majorStart = this.#position;
-
-      while (this.#isDigit(this.#peek())) this.#position++;
-
-      if (this.#position === majorStart) {
-        throw new RegexParseError(
-          "syntax error or number too big in (?(VERSION condition",
-          this.#position,
-        );
-      }
-
-      const major = Number(this.#source.slice(majorStart, this.#position));
-      let minor = 0;
-
-      if (this.#peek() === ".") {
-        this.#position++;
-
-        const minorStart = this.#position;
-
-        while (this.#isDigit(this.#peek())) this.#position++;
-
-        if (this.#position === minorStart) {
-          throw new RegexParseError(
-            "syntax error or number too big in (?(VERSION condition",
-            this.#position,
-          );
-        }
-
-        minor = Number(this.#source.slice(minorStart, this.#position));
-      }
-
-      if (this.#peek() !== ")") {
-        throw new RegexParseError(
-          "syntax error or number too big in (?(VERSION condition",
-          this.#position,
-        );
-      }
-
-      this.#position++;
-
-      return {kind: "version", gte: gte, major: major, minor: minor};
+      return this.#parseVersionCondition();
     }
 
     if (word.length === 0) {
@@ -2141,6 +2070,53 @@ export default class RegexParser {
     return {type: "verb", verb: kind, name: name === "" ? null : name};
   }
 
+  // Parses a (?(VERSION>=n.m) or (?(VERSION=n.m) condition,
+  // with the position at the > or =.
+  #parseVersionCondition() {
+    const raiseSyntaxError = () => {
+      throw new RegexParseError(
+        "syntax error or number too big in (?(VERSION condition",
+        this.#position,
+      );
+    };
+
+    const scanNumber = () => {
+      const digitsStart = this.#position;
+
+      while (this.#isDigit(this.#peek())) this.#position++;
+
+      if (this.#position === digitsStart) raiseSyntaxError();
+
+      return Number(this.#source.slice(digitsStart, this.#position));
+    };
+
+    let gte = false;
+
+    if (this.#peek() === ">") {
+      this.#position++;
+
+      if (this.#peek() !== "=") raiseSyntaxError();
+
+      gte = true;
+    }
+
+    this.#position++;
+
+    const major = scanNumber();
+    let minor = 0;
+
+    if (this.#peek() === ".") {
+      this.#position++;
+      minor = scanNumber();
+    }
+
+    if (this.#peek() !== ")") raiseSyntaxError();
+
+    this.#position++;
+
+    return {kind: "version", gte: gte, major: major, minor: minor};
+  }
+
   #peek() {
     return this.#source[this.#position];
   }
@@ -2185,6 +2161,18 @@ export default class RegexParser {
         scanPosition + 2,
       );
     }
+  }
+
+  // Consumes the closing parenthesis of a condition, raising when absent.
+  #requireConditionClose() {
+    if (this.#peek() !== ")") {
+      throw new RegexParseError(
+        "missing closing parenthesis for condition",
+        this.#position,
+      );
+    }
+
+    this.#position++;
   }
 
   #requireGroupClose() {
