@@ -386,6 +386,9 @@ describe("Deserializer", () => {
       });
 
       describe("Regex struct", () => {
+        const buildRef = (seed) =>
+          Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [seed, 2, 3]);
+
         const buildRegexStruct = (rePattern, source, opts) =>
           Type.map([
             [Type.atom("__struct__"), Type.atom("Elixir.Regex")],
@@ -404,11 +407,7 @@ describe("Deserializer", () => {
           ]);
 
         it("deserializes to the sent struct", () => {
-          const ref = Type.reference(
-            ERTS.nodeTable.CLIENT_NODE,
-            0,
-            [101, 2, 3],
-          );
+          const ref = buildRef(101);
 
           const term = buildRegexStruct(
             buildRePattern(ref),
@@ -422,11 +421,7 @@ describe("Deserializer", () => {
         });
 
         it("registers the pattern under the incoming ref", () => {
-          const ref = Type.reference(
-            ERTS.nodeTable.CLIENT_NODE,
-            0,
-            [102, 2, 3],
-          );
+          const ref = buildRef(102);
 
           const term = buildRegexStruct(
             buildRePattern(ref),
@@ -443,11 +438,7 @@ describe("Deserializer", () => {
         });
 
         it("the registered pattern is runnable", () => {
-          const ref = Type.reference(
-            ERTS.nodeTable.CLIENT_NODE,
-            0,
-            [103, 2, 3],
-          );
+          const ref = buildRef(103);
 
           const term = buildRegexStruct(
             buildRePattern(ref),
@@ -476,11 +467,7 @@ describe("Deserializer", () => {
         });
 
         it("applies the compile options", () => {
-          const ref = Type.reference(
-            ERTS.nodeTable.CLIENT_NODE,
-            0,
-            [104, 2, 3],
-          );
+          const ref = buildRef(104);
 
           const term = buildRegexStruct(
             buildRePattern(ref),
@@ -506,11 +493,7 @@ describe("Deserializer", () => {
         });
 
         it("skips registration for an already known ref", () => {
-          const ref = Type.reference(
-            ERTS.nodeTable.CLIENT_NODE,
-            0,
-            [105, 2, 3],
-          );
+          const ref = buildRef(105);
 
           const existingEntry = {marker: "existing entry"};
 
