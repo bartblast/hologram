@@ -125,14 +125,22 @@ export default class RegexEngine {
       }
     }
 
-    const compiled = $.compile(source, effectiveOpts);
-
     // In latin-1 source the JS string indices are byte offsets already
-    if (compiled.error && effectiveOpts.unicode === true) {
+    return effectiveOpts.unicode === true
+      ? $.compileText(source, effectiveOpts)
+      : $.compile(source, effectiveOpts);
+  }
+
+  // Compiles a PCRE2 pattern from a JS string, converting error positions
+  // from UTF-16 indices to UTF-8 byte offsets.
+  static compileText(text, opts) {
+    const compiled = $.compile(text, opts);
+
+    if (compiled.error) {
       return {
         error: {
           message: compiled.error.message,
-          position: $.utf16IndexToByteOffset(source, compiled.error.position),
+          position: $.utf16IndexToByteOffset(text, compiled.error.position),
         },
       };
     }

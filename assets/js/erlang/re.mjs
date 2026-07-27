@@ -95,20 +95,7 @@ const Erlang_Re = {
       if (patternBytes !== null) {
         result = ERTS.regex.compileBytes(patternBytes, engineOpts);
       } else {
-        result = ERTS.regex.compile(patternText, engineOpts);
-
-        // Error positions are byte offsets in the pattern
-        if (result.error) {
-          result = {
-            error: {
-              message: result.error.message,
-              position: ERTS.regex.utf16IndexToByteOffset(
-                patternText,
-                result.error.position,
-              ),
-            },
-          };
-        }
+        result = ERTS.regex.compileText(patternText, engineOpts);
       }
     } else {
       const binary = Erlang["iolist_to_binary/1"](pattern);
@@ -826,19 +813,13 @@ const Erlang_Re = {
       // The option clash raises instead of returning a compile error tuple
       if (acc.engineOpts.never_utf) raiseArgumentError();
 
-      const result = ERTS.regex.compile(patternText, acc.engineOpts);
+      const result = ERTS.regex.compileText(patternText, acc.engineOpts);
 
       if (result.error) {
-        // Error positions are byte offsets in the pattern
-        const position = ERTS.regex.utf16IndexToByteOffset(
-          patternText,
-          result.error.position,
-        );
-
         Interpreter.raiseArgumentError(
           Interpreter.buildArgumentErrorMsg(
             2,
-            buildParseErrorBullet(result.error.message, position),
+            buildParseErrorBullet(result.error.message, result.error.position),
           ),
         );
       }

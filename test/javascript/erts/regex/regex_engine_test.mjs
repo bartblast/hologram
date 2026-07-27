@@ -247,6 +247,23 @@ describe("RegexEngine", () => {
     });
   });
 
+  describe("compileText()", () => {
+    it("compiles a pattern", () => {
+      const compiled = RegexEngine.compileText("a+b", {});
+
+      assert.equal(compiled.strategy, "native");
+      assert.instanceOf(compiled.regexp, RegExp);
+    });
+
+    it("converts parse error positions to byte offsets", () => {
+      const result = RegexEngine.compileText("é(", {unicode: true});
+
+      assert.deepEqual(result, {
+        error: {message: "missing closing parenthesis", position: 3},
+      });
+    });
+  });
+
   describe("decodeUtf8()", () => {
     const decode = (bytes) => RegexEngine.decodeUtf8(new Uint8Array(bytes));
 
