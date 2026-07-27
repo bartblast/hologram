@@ -3770,7 +3770,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Functions:** Anonymous Function (done), Function Capture (done), Local Function (done), Remote Function (done)
 
-**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (done), Regex Match =~ (in progress, 61%)
+**Operators:** Arithmetic (done), Boolean (done), Comparison (done), List ++/-- (done), String Concatenation <> (done), Pipe |> (done), Match = (done), Pin ^ (done), Range ../..// (done), Membership in (done), Module Attribute @ (done), Capture & (done), Type :: (done), Exponentiation ** (done), Regex Match =~ (done)
 
 **Guards:** Guards in all contexts (done)
 
@@ -3778,7 +3778,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **Bitstrings:** Computed-Size Matching (todo), Construction (done), Dynamic-Size Matching (todo), Fixed-Size Matching (done), UTF Matching (todo), UTF16 and UTF32 Encoding (todo)
 
-**Other:** Behaviours (done), Bitwise Module Operators (done), Error Handling (done), Essential Stdlib Functions (done), Processes (deferred), Protocols (done), Regular Expressions (todo)
+**Other:** Behaviours (done), Bitwise Module Operators (done), Error Handling (done), Essential Stdlib Functions (done), Processes (deferred), Protocols (done), Regular Expressions (done)
 
 ### Roadmap
 
@@ -3792,7 +3792,6 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **Dynamic Components** - Support for dynamically loading and rendering components.
 - **Local-First Support** - Implement local-first architecture with offline-capable local database, auto-sync, and conflict resolution for resilient applications.
 - **Navigate Between Pages from Commands** - Enable navigation to another page from within a command.
-- **Regular Expressions** - Transpile Elixir's PCRE-based regexes to JavaScript runtime and support Regex-related functions such as `=~`.
 - **Standalone Mode** - Enable a standalone mode that operates without Phoenix, with installer, asset pipeline & watchers, code reloader, clustering, and deployment-ready defaults.
 - **Template Engine Error Reporting** - Improve error reporting in the template engine to make debugging template issues more straightforward.
 - **Umbrella Applications** - Support Hologram in umbrella project layouts, resolving dependency and asset paths through Mix and watching source across all child apps for live reload.
