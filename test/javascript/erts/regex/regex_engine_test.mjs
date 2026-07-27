@@ -741,6 +741,46 @@ describe("RegexEngine", () => {
         {start: 2, end: 3, captures: [null]},
       );
     });
+
+    it("an exceeded match limit reports no match", () => {
+      assert.isNull(match("a", "a", {}, {matchLimit: 0}));
+    });
+
+    it("matches within the match limit", () => {
+      assert.deepEqual(match("a", "a", {}, {matchLimit: 100}), {
+        start: 0,
+        end: 1,
+        captures: [null],
+      });
+    });
+
+    it("the match limit stops runaway backtracking", () => {
+      assert.isNull(match("(a+)+b", "aaaaaaaaaax", {}, {matchLimit: 1}));
+    });
+
+    it("an exceeded recursion limit reports no match", () => {
+      assert.isNull(match("a", "a", {}, {matchLimitRecursion: 0}));
+    });
+
+    it("matches within the recursion limit", () => {
+      assert.deepEqual(match("a", "a", {}, {matchLimitRecursion: 100}), {
+        start: 0,
+        end: 1,
+        captures: [null],
+      });
+    });
+
+    it("a lower match limit verb beats the run limit", () => {
+      assert.isNull(
+        match("(*LIMIT_MATCH=5)(a+)+b", "aaaaaaaaaax", {}, {matchLimit: 1000}),
+      );
+    });
+
+    it("a lower run limit beats the match limit verb", () => {
+      assert.isNull(
+        match("(*LIMIT_MATCH=1000)(a+)+b", "aaaaaaaaaax", {}, {matchLimit: 1}),
+      );
+    });
   });
 
   describe("matchGlobal()", () => {

@@ -318,7 +318,9 @@ export default class RegexEngine {
   // attempt may start (at or before the first newline that follows the
   // start position), notbol and noteol make the subject boundaries not
   // count as line boundaries, and notempty/notemptyAtStart reject empty
-  // matches (everywhere or at the start position only).
+  // matches (everywhere or at the start position only). matchLimit and
+  // matchLimitRecursion bound the matching work, with an exceeded limit
+  // reported as no match - a limit verb in the pattern wins when lower.
   static match(compiled, subject, runOpts = {}) {
     const anchored = runOpts.anchored === true;
     const startPosition = runOpts.startPosition ?? 0;
@@ -328,9 +330,11 @@ export default class RegexEngine {
         ? $.#firstNewlinePosition(compiled.newlineType, subject, startPosition)
         : Infinity;
 
-    // The scan flags need match-time decisions a JS regexp can't express,
-    // so runs with them take the interpreter route
+    // The scan flags and limits need match-time decisions a JS regexp can't
+    // express, so runs with them take the interpreter route
     const needsInterpreter =
+      runOpts.matchLimit !== undefined ||
+      runOpts.matchLimitRecursion !== undefined ||
       runOpts.notbol === true ||
       runOpts.noteol === true ||
       runOpts.notempty === true ||
@@ -371,6 +375,8 @@ export default class RegexEngine {
       ...compiled.opts,
       anchored: anchored,
       groupMap: compiled.groupMap,
+      matchLimit: runOpts.matchLimit,
+      matchLimitRecursion: runOpts.matchLimitRecursion,
       maxStartPosition: maxStartPosition,
       notbol: runOpts.notbol === true,
       notempty: runOpts.notempty === true,
