@@ -4,25 +4,12 @@ defmodule Hologram.Runtime.DeserializerTest do
 
   @delimiter delimiter()
 
-  # Builds the serialized entries of a Regex struct, including the
-  # :re_version field on Elixir versions whose Regex struct tracks it.
   defp regex_struct_entries(client_re_pattern, source_hex, opts_data) do
-    version_entries =
-      if Map.has_key?(Regex.__struct__(), :re_version) do
-        client_version_hex = "b0" <> Base.encode16("8.44 2020-02-12", case: :lower)
-        client_re_version = %{"t" => "t", "d" => [client_version_hex, "alittle"]}
-
-        [["are_version", client_re_version]]
-      else
-        []
-      end
-
     [
       ["a__struct__", "aElixir.Regex"],
       ["aopts", %{"t" => "l", "d" => opts_data}],
       ["are_pattern", client_re_pattern],
       ["asource", source_hex]
-      | version_entries
     ]
   end
 
